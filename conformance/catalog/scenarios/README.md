@@ -4,7 +4,7 @@ Auto-generated index of the conformance scenarios. Each page carries the model's
 description, its diagram, how the instance is driven, and the outcome Atlas must
 produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 
-## Positive scenarios (30)
+## Positive scenarios (31)
 
 | Scenario | Features | Patterns |
 |---|---|---|
@@ -29,6 +29,7 @@ produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 | [subprocess](subprocess.md) | `embedded-subprocess` | — |
 | [multi-instance](multi-instance.md) | `multi-instance` | — |
 | [multi-instance-sequential](multi-instance-sequential.md) | `multi-instance-sequential` | — |
+| [standard-loop](standard-loop.md) | `standard-loop` | WCP-21 |
 | [call-activity](call-activity.md) | `call-activity` | — |
 | [compensation](compensation.md) | `compensation` | — |
 | [signal-boundary](signal-boundary.md) | `signal-boundary` | — |
@@ -39,7 +40,7 @@ produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 | [collection-data-object](collection-data-object.md) | `collection-data-object` | — |
 | [transaction-cancel](transaction-cancel.md) | `transaction-cancel` | — |
 
-## Negative models (3)
+## Negative models (4)
 
 Models that must be **rejected at compile** — the suite asserts the engine refuses
 them rather than executing something ill-defined.
@@ -49,3 +50,4 @@ them rather than executing something ill-defined.
 | [`neg-dangling-flow.bpmn`](../../models/neg-dangling-flow.bpmn) | a sequence flow targets an element that does not exist |
 | [`neg-boundary-bad-host.bpmn`](../../models/neg-boundary-bad-host.bpmn) | a boundary event attaches to a host that does not exist |
 | [`neg-unknown-message.bpmn`](../../models/neg-unknown-message.bpmn) | a receive task references a message that is not declared |
+| [`neg-loop-unbounded.bpmn`](../../models/neg-loop-unbounded.bpmn) | a standard loop has neither a loop condition nor a loop maximum, so it could never end |

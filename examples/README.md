@@ -16,6 +16,7 @@ against a live Atlas server (`0.1.0-dev`).
 | [`../api/web/order-to-cash-live.html`](../api/web/order-to-cash-live.html) | The **live** app — served by the Atlas server itself (`/order-to-cash-live.html`). It deploys the model, starts a real instance with your cart, and completes each task over the HTTP API. No business logic in the client; Atlas runs the process. |
 | [`../api/web/order-to-cash-jobs.html`](../api/web/order-to-cash-jobs.html) | The **live** app against the *service-task* model: it lists the parked jobs (`GET /instances/{key}/jobs`) and completes them (`POST /jobs/{key}/complete`) — the app acts as the job worker. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
+| [`bonitaet-mockup.bpmn`](bonitaet-mockup.bpmn) | **Bonitätsprüfung mit simuliertem Umsystem** (ADR-0120): ein `serviceTask` im **Mockup-Modus** (`atlas:mockupConnector`) — die Engine simuliert die Umsystem-Abfrage selbst, mit **zufälliger Antwortzeit** (`PT1S`–`PT4S`, als Timer), einer **geskripteten Antwort** (`resultExpression` → `bonitaet`) und einer **Ausfallquote** (`failRate` + `errorCode`), die einen **BPMN-Fehler** wirft, den eine **Error-Boundary** in einen manuellen Pfad leitet. Ein Exklusiv-Gateway verzweigt auf die simulierte Antwort. Zeigt, wie sich ein Prozess end-to-end durchspielen lässt, bevor das echte (per REST angebundene) Umsystem existiert — kein externer Worker nötig. Setzt man `failRate` auf 0, entfällt der Ausfall; `min == max` macht die Dauer fix. |
 | [`pruefung/`](pruefung/) | **Prüfung mit Zeitlimit und DMN-Bewertung** (ADR-0028 + ADR-0040 + DMN): ein Assessment als Prozess. Ein **User-Task** trägt das Prüfungsformular (vier Single-Choice-Fragen); ein unterbrechendes **Boundary-Timer-Event** (`PT45M`) setzt das Zeitlimit — läuft es ab, endet der Prozess in *„Zeit abgelaufen"*. Ein Skript zählt die Punkte, ein **Business-Rule-Task** bewertet sie über die DMN-Tabelle `Notenschluessel` (Bestehensgrenze + Notenstufen — fachlich pflegbar, nicht im Code), und ein **Exklusiv-Gateway** verzweigt auf `bestanden`. Zeigt, was Atlas einer reinen Prüfungssoftware voraushat: hartes Zeitlimit, auditierbarer DMN-Trace, ergebnisabhängige Folgeschritte. |
 | [`reisebuchung/`](reisebuchung/) | **Abhängige Formulare auf zwei Ebenen** (ADR-0028 + DMN): ein Reisebuchungs-Prozess, der (A) *im Formular* eine **kaskadierende** Zielauswahl und ein **bedingtes Feld** zeigt (form-js `valuesExpression` / `conditional.hide`), und (B) *im Prozess* je nach Daten unterschiedliche Formulare erzwingt — eine **DMN-Tabelle** entscheidet aus Reiseart + Alter, ob Visum- und/oder Einverständnis-Formular Pflicht sind, **Inclusive-Gateways** routen darauf. Zeigt sauber, welche „Abhängigkeit" ins Formular gehört und welche in den Prozess. Zwei Kunden-Apps unter `api/web/` (Fall B: Wizard über mehrere User-Tasks; [`fall-a/`](reisebuchung/fall-a/): **ein** User-Task, im Client geblättert). |
 
@@ -54,9 +55,9 @@ Order received
 
 The whole model runs to completion the moment you start an instance, because:
 
-- **Every activity is an inline FEEL script task** (`<script expression="…"
+- **Every activity is an inline FEEL script task** (`<zeebe:script expression="…"
   resultVariable="…"/>`). Atlas evaluates these *inside the engine* — unlike a
-  `serviceTask`, a `<jobScript>`, or a `businessRuleTask`, an inline script needs
+  `serviceTask`, an `<atlas:jobScript>`, or a `businessRuleTask`, an inline script needs
   no external worker, so the token never parks. (A `serviceTask` with no worker
   attached would sit active forever — correct engine behavior, but not what you
   want in a smoke test.)

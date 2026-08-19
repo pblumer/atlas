@@ -54,8 +54,64 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
   POSTs a starter draft keyed by the entered id, and navigates to it. Drives the real
   `mountEditor` against a mock `api`.
+- **`standard-loop-modeler.spec.mjs`** (ADR-0133): the **Loop section** in the Modeler's
+  Implement panel — the panel reads the ↻ standard loop an imported activity carries,
+  choosing a mode draws (or clears) the marker on the shape and exports the matching
+  `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
+  with the other. This is the icon-and-property sync check: both directions, in a real
+  browser, against the vendored bpmn-js.
+- **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
+  element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
+  its model carries and writes an edit back onto that element, blanking it drops the child
+  entirely, and the edit is undoable; the process (nothing selected), a pool *and* the process
+  it executes, a black-box pool and the collaboration each take their own. Assertions are on
+  the exported XML, because passthrough is the whole contract.
+- **`tasks-documentation.spec.mjs`** (ADR-0025 amended): a user task's documentation in the
+  **Tasks app** — the detail pane leads with the modeler's instruction (above the metadata
+  rows and the form), keeps the author's paragraph breaks, and shows no block at all for a
+  task whose element carries none. Drives the real app shell against a mocked `/api/v1`.
+- **`ops-documentation.spec.mjs`** (ADR-0025 amended): element documentation in the
+  **Operations instance replay** — the Details tab shows what the modeler wrote about the
+  selected element (paragraph breaks intact), the process's own when nothing is selected,
+  nothing at all for an undocumented element, and — for a branch this instance never took
+  — the element's identity plus its documentation instead of the old silent fallback to
+  the process panel. Reads it off the rendered model; no server call involved.
+
+- **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
+  documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
+  points at the exact byte offset of every object, so these build documents in the browser
+  and parse the bytes back: the xref lands on each object header, German text is encoded as
+  WinAnsi (not mojibake), `(`/`)`/`\` are escaped, long content flows onto numbered pages,
+  and a canvas JPEG is embedded untranscoded (`DCTDecode`) with a `/Length` that matches
+  what was written. Only a real browser can settle these — string encoding, `btoa`, and the
+  canvas JPEG encoder all behave differently outside one.
+
+- **`process-doc.spec.mjs`** (ADR-0143): the **documentation collector and layout**
+  (`api/web/process-doc.js`) against the real vendored bpmn-js — per-element
+  `<documentation>` and the `<textAnnotation>` notes associated with an element reach the
+  document, an annotation attached to nothing becomes a general note, lanes and unnamed
+  flows are left out, and the rasterized diagram is cropped to what is actually drawn.
+- **`doc-export-modeler.spec.mjs`** (ADR-0143): the **Documentation panel** in the Modeler
+  toolbar — publishing a numbered version with the model's prose and a real PDF, the
+  history reading newest first, and the per-version public link being minted and revoked.
+  Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
+
+## Rendering a conformance gallery diagram
+
+`render-diagram.mjs` + `render-diagram-harness.html` turn a conformance fixture into its
+catalog image (`api/web/conformance-diagrams/<name>.png`), rendered by the same vendored
+bpmn-js the Modeler uses so the picture shows the real markers. It is a hand-run asset
+tool, not part of the suite:
+
+```bash
+node server.mjs &
+node render-diagram.mjs ../conformance/models/standard-loop.bpmn \
+     ../api/web/conformance-diagrams/standard-loop.png
+```
+
+The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
 ## CI
 

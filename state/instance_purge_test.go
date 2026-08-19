@@ -42,7 +42,7 @@ func TestPurgeInstanceHistory(t *testing.T) {
 
 	// Purge the target.
 	tx = s.NewTransaction()
-	must(t, tx.PurgeInstanceHistory(piKey, defKey))
+	must(t, tx.PurgeInstanceHistory(piKey, defKey, 0))
 	commit(t, tx)
 
 	// The target and all its families are gone; the other instance is intact.
@@ -77,7 +77,7 @@ func TestPurgeInstanceHistoryIdempotent(t *testing.T) {
 	}
 	defer s.Close()
 	tx := s.NewTransaction()
-	if err := tx.PurgeInstanceHistory(model.NewKey(1, 99), 1); err != nil {
+	if err := tx.PurgeInstanceHistory(model.NewKey(1, 99), 1, 0); err != nil {
 		t.Fatalf("PurgeInstanceHistory on empty: %v", err)
 	}
 	commit(t, tx)

@@ -103,6 +103,28 @@ func (p project) effectiveRole(pr *Principal, authEnabled bool) string {
 	if pr.hasRole(RoleAdmin) {
 		return ScopeRoleOwner
 	}
+	// A deploy agent (ADR-0129) is a peer Atlas that published here, not a person.
+	// Sharing scopes cannot express it — there is no account to own or be a member
+	// of anything — and what it may do is already bounded, tightly, by the
+	// middleware allowlist: push a bundle, and read back what this server runs for
+	// an application. Viewer is what those reads need.
+	//
+	// Trade-off, accepted and worth stating: this is viewer on *every* application,
+	// not only the ones a given peer published, so a leaked token could read the
+	// deployment counts of applications it never shipped. The allowlist keeps that
+	// to exactly one read-only endpoint; narrowing it further would mean the
+	// receiver tracking which peer owns which application, which is state ADR-0129
+	// deliberately keeps on the publishing side.
+	if pr.hasRole(RoleDeployAgent) {
+		return ScopeRoleViewer
+	}
+	// A protected system project (ADR-0122) is visible to every authenticated
+	// principal so its platform processes can be found and started, but it grants
+	// no more than viewer here — mutation is separately refused for all callers by
+	// the protected guard, so no member/owner role on it is meaningful.
+	if p.Protected {
+		return ScopeRoleViewer
+	}
 	if p.OwnerID == "" {
 		return "" // legacy/ownerless: only admin manages it (handled above)
 	}
@@ -192,6 +214,10 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		writeError(w, code, msg)
 		return
 	}
+	if code, msg := protectedGuard(proj); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
 	if userID == proj.OwnerID {
 		writeError(w, http.StatusBadRequest, "the owner already has full access and cannot be added as a member")
 		return
@@ -249,6 +275,10 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleOwner)
 	if code != 0 {
+		writeError(w, code, msg)
+		return
+	}
+	if code, msg := protectedGuard(proj); code != 0 {
 		writeError(w, code, msg)
 		return
 	}

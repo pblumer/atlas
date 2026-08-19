@@ -17,12 +17,15 @@ import (
 // controls (hide "Share" from a viewer, "Delete" from a non-owner, …) without
 // re-deriving the rule client-side.
 type projectView struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Key is the portable application key (ADR-0134), empty until one is derived.
+	Key        string          `json:"key,omitempty"`
 	OwnerID    string          `json:"ownerId,omitempty"`
 	Visibility string          `json:"visibility"`
 	Members    []projectMember `json:"members"`
 	MyRole     string          `json:"myRole"`
+	Protected  bool            `json:"protected"`
 	CreatedAt  int64           `json:"createdAt"`
 	UpdatedAt  int64           `json:"updatedAt"`
 	Artifacts  int             `json:"artifacts"`
@@ -44,10 +47,12 @@ func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) proje
 	return projectView{
 		ID:         p.ID,
 		Name:       p.Name,
+		Key:        p.Key,
 		OwnerID:    p.OwnerID,
 		Visibility: vis,
 		Members:    members,
 		MyRole:     p.effectiveRole(principalFrom(r.Context()), s.authEnabled),
+		Protected:  p.Protected,
 		CreatedAt:  p.CreatedAt,
 		UpdatedAt:  p.UpdatedAt,
 		Artifacts:  artifacts,
@@ -99,7 +104,15 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		rec.OwnerID = p.UserID
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.projects.save(rec) })
+	s.do(func() {
+		// The portable key (ADR-0134) is assigned here so a new application has one
+		// from the start; it is derived from the name once and then never changes,
+		// because it is the identity a repository is matched on across servers.
+		if rec.Key, saveErr = s.deriveApplicationKey(rec); saveErr != nil {
+			return
+		}
+		saveErr = s.projects.save(rec)
+	})
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
 		return
@@ -213,6 +226,10 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
+		if code, msg := protectedGuard(rec); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
 		if payload.OwnerID != nil && s.authEnabled {
 			if _, ok, e := s.users.get(*payload.OwnerID); e != nil {
 				lookupErr = e
@@ -290,7 +307,28 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
-		delErr = s.projects.delete(id)
+		if code, msg := protectedGuard(rec); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
+		// Drop the application's release history *before* the application itself
+		// (ADR-0128). Unlike the artifacts — which deliberately survive and fall back
+		// to Ungrouped — a release is metadata *about* this application, reachable
+		// only through its id, so leaving the records behind would accumulate
+		// unreachable files. The deployed definitions themselves are untouched.
+		//
+		// The order matters for the failure case: releases first means a failed
+		// cleanup leaves the application intact, so a retry deletes both and
+		// self-heals. Deleting the application first would make the very orphans
+		// this cleanup exists to prevent, permanently — the retry would take the
+		// idempotent "already gone" path and never revisit the records.
+		if delErr = s.releases.deleteForApplication(id); delErr != nil {
+			return
+		}
+		if delErr = s.projects.delete(id); delErr != nil {
+			return
+		}
+		delete(s.appVersions, id)
 	})
 	switch {
 	case getErr != nil:

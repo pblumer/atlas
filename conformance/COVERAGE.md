@@ -27,6 +27,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Embedded subprocess | — | subprocess | ✅ |
 | Parallel multi-instance activity with output collection | — | multi-instance | ✅ |
 | Sequential multi-instance activity | — | multi-instance-sequential | ✅ |
+| Standard loop activity (repeat while a condition holds) | WCP-21 | standard-loop | ✅ |
 | Call activity invoking a child process | — | call-activity | ✅ |
 | Compensation via a boundary and a compensation throw | — | compensation | ✅ |
 | Interrupting boundary signal event | — | signal-boundary | ✅ |
@@ -49,6 +50,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | WCP-6 Multi-Choice | inclusive-gateway | ✅ |
 | WCP-7 Structured Synchronizing Merge | inclusive-gateway | ✅ |
 | WCP-16 Deferred Choice | event-based-gateway | ✅ |
+| WCP-21 Structured Loop | standard-loop | ✅ |
 
 ## Gaps
 
@@ -61,3 +63,4 @@ None — every registered feature and pattern has a covering scenario.
 | neg-dangling-flow | a sequence flow targets an element that does not exist |
 | neg-boundary-bad-host | a boundary event attaches to a host that does not exist |
 | neg-unknown-message | a receive task references a message that is not declared |
+| neg-loop-unbounded | a standard loop has neither a loop condition nor a loop maximum, so it could never end |

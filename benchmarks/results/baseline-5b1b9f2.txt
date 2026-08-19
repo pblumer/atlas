@@ -1,0 +1,142 @@
+# Atlas benchmark baseline — v0.2.0 programme B
+#
+# Commit:        5b1b9f2 (clean checkout of main)
+# Go:            go1.26.0 linux/amd64
+# GOMAXPROCS:    4
+# CPU:           Intel(R) Xeon(R) Processor, 4 cores — variable clock (observed 2.1–2.8 GHz across runs)
+# OS / kernel:   Linux 6.18.5-fc-v20
+# Durable store: ext4 on a virtual disk (/dev/vda) — where the WAL group-commit fsync lands
+# In-memory:     tmpfs (/dev/shm)
+# Command:       go test -run=^$ -bench=. -benchmem -benchtime=2000x -count=10 ./benchmarks/
+#
+# Captured in the Atlas CI / dev container — a SHARED, EPHEMERAL cloud VM whose CPU clock
+# varied between runs. The absolute numbers are dominated by disk fsync latency and are
+# illustrative and reproducible via the command above — NOT a universal product claim, not
+# a hardware reference, and not a cross-engine comparison. See ./README.md.
+#
+goos: linux
+goarch: amd64
+pkg: github.com/pblumer/atlas/benchmarks
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+BenchmarkHTTPLinearCreate-4                    	    2000	   1773578 ns/op	         9.000 events/op	       944.0 walB/op	   13835 B/op	     241 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1776807 ns/op	         9.000 events/op	       944.0 walB/op	   13744 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1908793 ns/op	         9.000 events/op	       944.0 walB/op	   13842 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1828321 ns/op	         9.000 events/op	       944.0 walB/op	   13815 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1834347 ns/op	         9.000 events/op	       944.0 walB/op	   13822 B/op	     238 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1700024 ns/op	         9.000 events/op	       944.0 walB/op	   13847 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1742216 ns/op	         9.000 events/op	       944.0 walB/op	   13775 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1959962 ns/op	         9.000 events/op	       944.0 walB/op	   13807 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1986673 ns/op	         9.000 events/op	       944.0 walB/op	   13763 B/op	     237 allocs/op
+BenchmarkHTTPLinearCreate-4                    	    2000	   1817080 ns/op	         9.000 events/op	       944.0 walB/op	   13792 B/op	     238 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2082010 ns/op	        12.00 events/op	      1239 walB/op	   16447 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2096734 ns/op	        12.00 events/op	      1239 walB/op	   16401 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2184883 ns/op	        12.00 events/op	      1239 walB/op	   16407 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2255437 ns/op	        12.00 events/op	      1239 walB/op	   16431 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2155018 ns/op	        12.00 events/op	      1239 walB/op	   16417 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2014497 ns/op	        12.00 events/op	      1239 walB/op	   16376 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2177203 ns/op	        12.00 events/op	      1239 walB/op	   16383 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2029878 ns/op	        12.00 events/op	      1239 walB/op	   16412 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2090874 ns/op	        12.00 events/op	      1239 walB/op	   16448 B/op	     311 allocs/op
+BenchmarkHTTPVariableGatewayCreate-4           	    2000	   2157525 ns/op	        12.00 events/op	      1239 walB/op	   16431 B/op	     311 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     57282 ns/op	         9.000 events/op	       944.0 walB/op	    4721 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     62179 ns/op	         9.000 events/op	       944.0 walB/op	    4751 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     58910 ns/op	         9.000 events/op	       944.0 walB/op	    4712 B/op	     147 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     61761 ns/op	         9.000 events/op	       944.0 walB/op	    4716 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     58953 ns/op	         9.000 events/op	       944.0 walB/op	    4723 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     59517 ns/op	         9.000 events/op	       944.0 walB/op	    4709 B/op	     147 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     58802 ns/op	         9.000 events/op	       944.0 walB/op	    4679 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     61687 ns/op	         9.000 events/op	       944.0 walB/op	    4730 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     63136 ns/op	         9.000 events/op	       944.0 walB/op	    4822 B/op	     148 allocs/op
+BenchmarkInMemoryLinearSelfCompleting-4        	    2000	     70008 ns/op	         9.000 events/op	       944.0 walB/op	    4729 B/op	     148 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    135260 ns/op	        10.00 events/op	      1050 walB/op	    5923 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    154030 ns/op	        10.00 events/op	      1050 walB/op	    5928 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    184897 ns/op	        10.00 events/op	      1050 walB/op	    5943 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    140898 ns/op	        10.00 events/op	      1050 walB/op	    5930 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    142716 ns/op	        10.00 events/op	      1050 walB/op	    5925 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    147656 ns/op	        10.00 events/op	      1050 walB/op	    5928 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    135123 ns/op	        10.00 events/op	      1050 walB/op	    5949 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    146202 ns/op	        10.00 events/op	      1050 walB/op	    5944 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    141279 ns/op	        10.00 events/op	      1050 walB/op	    5914 B/op	     184 allocs/op
+BenchmarkInMemoryServiceTaskLifecycle-4        	    2000	    151079 ns/op	        10.00 events/op	      1050 walB/op	    5912 B/op	     184 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     92635 ns/op	        12.00 events/op	      1239 walB/op	    6829 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     92586 ns/op	        12.00 events/op	      1239 walB/op	    6857 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     97354 ns/op	        12.00 events/op	      1239 walB/op	    6882 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     95135 ns/op	        12.00 events/op	      1239 walB/op	    6836 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     97608 ns/op	        12.00 events/op	      1239 walB/op	    6840 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     91975 ns/op	        12.00 events/op	      1239 walB/op	    6864 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     91618 ns/op	        12.00 events/op	      1239 walB/op	    6864 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     97866 ns/op	        12.00 events/op	      1239 walB/op	    6845 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     88204 ns/op	        12.00 events/op	      1239 walB/op	    6906 B/op	     211 allocs/op
+BenchmarkInMemoryVariableGatewayRouting-4      	    2000	     85845 ns/op	        12.00 events/op	      1239 walB/op	    6860 B/op	     211 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1920364 ns/op	        33.58 max-ms	         1.786 p50-ms	         2.818 p95-ms	         4.823 p99-ms	   13809 B/op	     238 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1859654 ns/op	        28.18 max-ms	         1.742 p50-ms	         2.637 p95-ms	         5.441 p99-ms	   13803 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1962976 ns/op	        28.84 max-ms	         1.850 p50-ms	         2.713 p95-ms	         4.861 p99-ms	   13751 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1894549 ns/op	        40.34 max-ms	         1.775 p50-ms	         2.633 p95-ms	         4.997 p99-ms	   13824 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1819749 ns/op	        16.62 max-ms	         1.713 p50-ms	         2.611 p95-ms	         3.677 p99-ms	   13864 B/op	     239 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1913038 ns/op	        14.65 max-ms	         1.749 p50-ms	         2.795 p95-ms	         4.732 p99-ms	   13826 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1673697 ns/op	        10.19 max-ms	         1.603 p50-ms	         2.258 p95-ms	         3.981 p99-ms	   13837 B/op	     238 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1632034 ns/op	        20.52 max-ms	         1.536 p50-ms	         2.262 p95-ms	         3.740 p99-ms	   13798 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1791996 ns/op	        30.99 max-ms	         1.631 p50-ms	         2.471 p95-ms	         6.399 p99-ms	   13860 B/op	     237 allocs/op
+BenchmarkLatencyHTTPLinearCreate-4             	    2000	   1710595 ns/op	        11.99 max-ms	         1.605 p50-ms	         2.513 p95-ms	         3.804 p99-ms	   13796 B/op	     237 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1095276 ns/op	         9.008 max-ms	         1.033 p50-ms	         1.459 p95-ms	         2.058 p99-ms	    4758 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1170882 ns/op	        41.49 max-ms	         1.051 p50-ms	         1.551 p95-ms	         2.741 p99-ms	    4761 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1201620 ns/op	        16.33 max-ms	         1.088 p50-ms	         1.684 p95-ms	         3.393 p99-ms	    4753 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1091080 ns/op	        11.80 max-ms	         1.019 p50-ms	         1.504 p95-ms	         2.265 p99-ms	    4750 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1053631 ns/op	        11.33 max-ms	         0.9816 p50-ms	         1.367 p95-ms	         2.903 p99-ms	    4788 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1155741 ns/op	         9.169 max-ms	         1.081 p50-ms	         1.555 p95-ms	         2.408 p99-ms	    4797 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1124453 ns/op	        11.16 max-ms	         1.043 p50-ms	         1.500 p95-ms	         2.214 p99-ms	    4746 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1189731 ns/op	        26.50 max-ms	         1.089 p50-ms	         1.553 p95-ms	         3.453 p99-ms	    4776 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1177740 ns/op	        12.75 max-ms	         1.100 p50-ms	         1.585 p95-ms	         2.686 p99-ms	    4739 B/op	     148 allocs/op
+BenchmarkLatencyEngineLinearSelfCompleting-4   	    2000	   1202368 ns/op	        13.92 max-ms	         1.119 p50-ms	         1.605 p95-ms	         2.446 p99-ms	    4737 B/op	     148 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     48598 ns/op	         9.000 events/op	       944.0 walB/op	   13243 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     41237 ns/op	         9.000 events/op	       944.0 walB/op	   13448 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     44603 ns/op	         9.000 events/op	       944.0 walB/op	    9736 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     42081 ns/op	         9.000 events/op	       944.0 walB/op	   13576 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     46517 ns/op	         9.000 events/op	       944.0 walB/op	   13550 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     44843 ns/op	         9.000 events/op	       944.0 walB/op	   13448 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     42618 ns/op	         9.000 events/op	       944.0 walB/op	    9860 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     43470 ns/op	         9.000 events/op	       944.0 walB/op	   14238 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     46777 ns/op	         9.000 events/op	       944.0 walB/op	   12956 B/op	      95 allocs/op
+BenchmarkRecoveryLinearCompleted-4             	    2000	     40784 ns/op	         9.000 events/op	       944.0 walB/op	   13591 B/op	      95 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     22393 ns/op	         5.000 events/op	       525.0 walB/op	    7502 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     25439 ns/op	         5.000 events/op	       525.0 walB/op	    7522 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     19969 ns/op	         5.000 events/op	       525.0 walB/op	    7112 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     21354 ns/op	         5.000 events/op	       525.0 walB/op	    7154 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     20113 ns/op	         5.000 events/op	       525.0 walB/op	    7297 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     19455 ns/op	         5.000 events/op	       525.0 walB/op	    7215 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     20758 ns/op	         5.000 events/op	       525.0 walB/op	    7297 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     19720 ns/op	         5.000 events/op	       525.0 walB/op	    7219 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     19194 ns/op	         5.000 events/op	       525.0 walB/op	    7296 B/op	      49 allocs/op
+BenchmarkRecoveryServiceTaskParked-4           	    2000	     21766 ns/op	         5.000 events/op	       525.0 walB/op	    7420 B/op	      49 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1287574 ns/op	         9.000 events/op	       944.0 walB/op	    4782 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1208564 ns/op	         9.000 events/op	       944.0 walB/op	    4784 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1128687 ns/op	         9.000 events/op	       944.0 walB/op	    4786 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1204089 ns/op	         9.000 events/op	       944.0 walB/op	    4694 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1116533 ns/op	         9.000 events/op	       944.0 walB/op	    4745 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1248038 ns/op	         9.000 events/op	       944.0 walB/op	    4726 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1171608 ns/op	         9.000 events/op	       944.0 walB/op	    4798 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1172882 ns/op	         9.000 events/op	       944.0 walB/op	    4766 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1111679 ns/op	         9.000 events/op	       944.0 walB/op	    4767 B/op	     148 allocs/op
+BenchmarkLinearSelfCompleting-4                	    2000	   1259962 ns/op	         9.000 events/op	       944.0 walB/op	    4767 B/op	     148 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1455430 ns/op	        10.00 events/op	      1050 walB/op	    5942 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1405326 ns/op	        10.00 events/op	      1050 walB/op	    5970 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1424084 ns/op	        10.00 events/op	      1050 walB/op	    5953 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1459328 ns/op	        10.00 events/op	      1050 walB/op	    5969 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1289062 ns/op	        10.00 events/op	      1050 walB/op	    5967 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1372410 ns/op	        10.00 events/op	      1050 walB/op	    5929 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1385362 ns/op	        10.00 events/op	      1050 walB/op	    5955 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1370603 ns/op	        10.00 events/op	      1050 walB/op	    5945 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1320641 ns/op	        10.00 events/op	      1050 walB/op	    5950 B/op	     184 allocs/op
+BenchmarkServiceTaskLifecycle-4                	    2000	   1343091 ns/op	        10.00 events/op	      1050 walB/op	    5944 B/op	     184 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1386102 ns/op	        12.00 events/op	      1239 walB/op	    6868 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1444036 ns/op	        12.00 events/op	      1239 walB/op	    6828 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1638922 ns/op	        12.00 events/op	      1239 walB/op	    6854 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1512161 ns/op	        12.00 events/op	      1239 walB/op	    6869 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1566807 ns/op	        12.00 events/op	      1239 walB/op	    6875 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1543081 ns/op	        12.00 events/op	      1239 walB/op	    6857 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1485241 ns/op	        12.00 events/op	      1239 walB/op	    6863 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1549812 ns/op	        12.00 events/op	      1239 walB/op	    6842 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1672548 ns/op	        12.00 events/op	      1239 walB/op	    6866 B/op	     211 allocs/op
+BenchmarkVariableGatewayRouting-4              	    2000	   1606200 ns/op	        12.00 events/op	      1239 walB/op	    6842 B/op	     211 allocs/op
+PASS
+ok  	github.com/pblumer/atlas/benchmarks	234.067s

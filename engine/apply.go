@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // eventSubTrigger is the element type of an armed event-subprocess trigger (ADR-0082).
@@ -81,6 +82,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.IncDefCompletedCount(v.process.ProcessDefKey),
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
+			// A definition-declared history TTL schedules the record's hard delete: index the
+			// finished instance by the purge due date the terminal event carries, so retention
+			// selects candidates by asking what is due instead of walking the whole history
+			// (ADR-0146). Zero means the definition declares no history TTL — nothing to index.
+			if err == nil && hist.PurgeDueDate > 0 {
+				err = tx.PutHistoryExpiry(hist.PurgeDueDate, h.Key)
+			}
 			// Releasing a message-start instance re-opens its correlation key so a later
 			// message can start a fresh one (ADR-0094).
 			if err == nil && v.process.CorrelationKey != "" {
@@ -98,7 +106,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// event — the instance key and the definition key it carries — so replay
 			// reproduces the identical deletion (I4/I6). Deleting an already-absent key is
 			// a no-op, so a re-applied purge (replay, or a double-enqueue) is idempotent.
-			return tx.PurgeInstanceHistory(h.Key, v.process.ProcessDefKey)
+			// The carried value also supplies the purge due date, so the scheduled-expiry
+			// entry that nominated this instance is dropped with it (ADR-0146).
+			return tx.PurgeInstanceHistory(h.Key, v.process.ProcessDefKey, v.process.PurgeDueDate)
 		}
 
 	case model.VTElementInstance:
@@ -125,7 +135,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
 				return err
 			}
-			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1); err != nil {
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, state.ReplayActivated); err != nil {
 				return err
 			}
 			// Maintain the per-(definition, element) live-token counter and the
@@ -136,7 +146,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			return tx.IncElementVisitAgg(v.element.ProcessDefKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
-			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
+			// Completion and termination are distinct token facts, not one "left the
+			// element" fact: a completed element hands its token to a successor, a
+			// terminated one (interrupted by a boundary event, torn down with its scope,
+			// cancelled) does not — nothing downstream ever activates from it. The replay
+			// fold needs to tell them apart, so each gets its own action code (ADR-0136).
+			action := state.ReplayCompleted
+			if h.Intent == model.IntentTerminated {
+				action = state.ReplayTerminated
+			}
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
 				return err
 			}
 			// Terminating an element clears any incident it carried (a stuck job's,

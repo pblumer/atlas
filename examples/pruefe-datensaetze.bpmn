@@ -2,7 +2,7 @@
 <!--
   prüfe Datensätze — Massenprüfung von CSV-Datensätzen gegen Geschäftsregeln,
   mit In-Prozess-Upload und Korrektur-Loop je fehlerhafter Zeile
-  (ADR-0084, ADR-0086, ADR-0087, ADR-0090).
+  (ADR-0084, ADR-0086, ADR-0087, ADR-0139).
 
   Start
    → User-Task "CSV hochladen"    (Formular csv-upload-form → Variable csvText)
@@ -13,7 +13,7 @@
   Der Upload ist ein Prozessschritt: der Quality Manager lädt die Datei im
   Formular des ersten User-Tasks hoch (die Tasks-App legt den Datei-Inhalt als
   `csvText` ab). Der CSV-Service-Task ist ein erstklassiger CSV-to-JSON-Connector
-  (`atlas:csvConnector`, ADR-0090): Quellvariable, Trennzeichen, Kopfzeile,
+  (`atlas:csvConnector`, ADR-0139): Quellvariable, Trennzeichen, Kopfzeile,
   Spalten und Ergebnisvariable sind am Task selbst hinterlegt — kein separater
   Spaltenkonfig-Script mehr. Er parst `csvText` gegen dieses Layout zu `rows`;
   danach läuft die Maschine an.
@@ -76,12 +76,12 @@
 
       <businessRuleTask id="regelpruefung" name="Regelprüfung">
         <extensionElements>
-          <calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
-          <ioMapping>
-            <input source="=row.email" target="email"/>
-            <input source="=row.group" target="group"/>
-            <input source="=row.license" target="license"/>
-          </ioMapping>
+          <zeebe:calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=row.email" target="email"/>
+            <zeebe:input source="=row.group" target="group"/>
+            <zeebe:input source="=row.license" target="license"/>
+          </zeebe:ioMapping>
         </extensionElements>
       </businessRuleTask>
 

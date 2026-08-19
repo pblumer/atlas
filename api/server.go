@@ -39,14 +39,17 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/remedy"
@@ -111,11 +114,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.1.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.2.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.1.0-dev"
+var Version = "0.2.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -126,9 +129,14 @@ type deployment struct {
 	ProcessID  string
 	Name       string // human-readable <process name="…">, for display
 	Version    int32
-	DeployedAt int64 // unix seconds, for the UI's "last changed" column
+	DeployedAt int64  // unix seconds, for the UI's "last changed" column
+	ProjectID  string // project the deployment's draft belonged to, "" when none
 	xml        []byte
 	cp         *compiler.CompiledProcess // for the live overlay's element-id mapping
+	// inactive mirrors the persisted deactivation flag (ADR-0119) so the process
+	// listing can report it without re-reading the sidecar. The processor holds the
+	// authoritative gate; this is the display copy, kept in sync on toggle and load.
+	inactive bool
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -161,6 +169,16 @@ type Server struct {
 	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
+	releases         *releaseStore        // durable sidecar for application releases (ADR-0128)
+	deployTokenStore *deployTokenStore    // durable sidecar for peer deploy tokens (ADR-0129)
+	deployTokens     *deployTokenIndex    // in-memory hash->token index, read on the handler goroutine
+	targets          *targetStore         // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0128)
+	processDocs      *processDocStore     // durable sidecar for process documentation versions (ADR-0143)
+	docVersions      map[string]int32     // bpmnProcessId → highest documentation version published (ADR-0143)
+	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
 	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -177,7 +195,7 @@ type Server struct {
 	sessions *sessionStore
 
 	// collab holds live collaborative-editing sessions on drafts in memory
-	// (ADR-0103). Like sessions it is reached from concurrent handler goroutines
+	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
 	// touches the engine — it is design-time coordination around a draft, not
 	// engine state.
@@ -239,7 +257,7 @@ type Server struct {
 	mailRegistry *mail.Registry
 
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
-	// SharePoint connector tasks (ADR-0105), built from the managed connector store at
+	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth
 	// credential resolved from the vault (ADR-0041). Read only while driving jobs on
 	// the run loop, so it needs no lock.
@@ -272,16 +290,103 @@ type Server struct {
 	osExportCfg  opensearch.Config
 	exporter     *opensearch.Exporter
 	exporterPoll time.Duration
+	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
+	// drives each export pass explicitly rather than racing a wall-clock cadence.
+	// exporterTicked, when non-nil, receives once after each triggered pass completes,
+	// so a test awaits the pass it triggered without polling. Both are nil in
+	// production (a real ticker drives the loop, nothing observes it). Set together by
+	// withExporterTrigger — the same deterministic-test seam as the retention sweep.
+	exporterTicks  <-chan time.Time
+	exporterTicked chan struct{}
 
 	// Retention (ADR-0115): hard-delete finished-instance history older than
 	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
-	// is deleted before it is archived. Off unless retentionMaxAge > 0 (WithRetention).
+	// is deleted before it is archived. retentionMaxAge is the server-wide default
+	// (WithRetention); a definition declaring atlas:historyTtl overrides it for its own
+	// instances and enables retention on its own (ADR-0144), so a zero here is not
+	// "retention off" but "off for everything that declares nothing".
 	// The sweep is bounded (retentionBatch per tick) and resumable (retentionCursor);
 	// all three are touched only on the run-loop goroutine (via do), so no lock.
 	retentionMaxAge   time.Duration
 	retentionInterval time.Duration
 	retentionBatch    int
 	retentionCursor   uint64
+
+	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
+	// eligibility cutoff. It is injected so a test can drive the cutoff
+	// deterministically instead of tuning durations against real time — the same
+	// discipline the engine applies to event timestamps (invariant I4). It defaults
+	// to the system clock; a test overrides it with withClock, sharing one clock
+	// with the engine so a finished instance's CompletedAt and the sweep's "now"
+	// come from a single controllable source.
+	now func() int64
+	// retentionTicks, when non-nil, replaces the retention sweep's real ticker so a
+	// test triggers each sweep explicitly rather than racing a wall-clock cadence.
+	// retentionSwept, when non-nil, receives once after each triggered sweep
+	// completes, so a test awaits the sweep it triggered without polling. Both are
+	// nil in production (a real ticker drives the sweep, nothing observes it). Set
+	// together by withRetentionTrigger.
+	retentionTicks <-chan time.Time
+	retentionSwept chan struct{}
+
+	// Recovery checkpoints (ADR-0131): on a fixed cadence, snapshot the applied state
+	// so a restart replays only the WAL suffix past it instead of the whole log — the
+	// bounded-recovery-time property. Off unless checkpointInterval > 0
+	// (WithCheckpoints); checkpointKeep bounds how many published checkpoints survive,
+	// since each one hard-links the SSTables it captured and so pins their disk.
+	// checkpointRoot is derived from the data dir through checkpoint.Dir, the same
+	// function startup recovery resolves, so the two can never disagree.
+	//
+	// The snapshot itself runs on the run loop (via do), which is what makes its
+	// position exact: no batch can be half-applied while it is taken (invariant I3).
+	// Pruning runs off the loop — it only removes directories this goroutine published.
+	checkpointRoot     string
+	checkpointInterval time.Duration
+	checkpointKeep     int
+	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
+	// test takes each checkpoint explicitly rather than racing a wall-clock cadence.
+	// checkpointDone, when non-nil, receives once after each triggered pass completes.
+	// Both are nil in production. Set together by withCheckpointTrigger — the same
+	// deterministic-test seam as the retention sweep and the exporter.
+	checkpointTicks <-chan time.Time
+	checkpointDone  chan struct{}
+
+	// compactWAL enables deleting the WAL segments a checkpoint and every consumer
+	// watermark make redundant (ADR-0131), on the same tick that takes the checkpoint —
+	// a fresh checkpoint is what licenses new deletion, so there is nothing to schedule
+	// separately. Opt-in (WithWALCompaction), like history retention (ADR-0115) and for
+	// the same reason: it is the one irreversible operation here.
+	compactWAL bool
+	// checkpointRequests carries on-demand pass requests from a handler to the checkpoint
+	// goroutine, each with its own reply channel (ADR-0131). Running them *on that
+	// goroutine* is the point: an operator's pass and a scheduled one then serialize by
+	// construction rather than by a lock, and both run the same code. It is nil when
+	// checkpointing is off, which is what makes the endpoint's refusal honest.
+	checkpointRequests chan chan checkpointPass
+	// lastPass is the most recent pass's outcome, for the status endpoint. Written by the
+	// checkpoint goroutine, read by handler goroutines, hence the mutex.
+	lastPassMu sync.Mutex
+	lastPass   *checkpointPass
+
+	// backupsInFlight counts whole-instance snapshots currently streaming (ADR-0109).
+	// A snapshot reads the WAL files off the run loop, so a compaction underneath one
+	// could delete a segment the archive still needs; a pass that sees a non-zero count
+	// skips and retries on the next tick.
+	//
+	// The ordering is what makes a zero reading safe rather than merely likely: a backup
+	// increments *before* it picks the checkpoint it will carry, so a pass that reads
+	// zero is one whose deletion the backup's later choice of checkpoint already accounts
+	// for — its suffix starts at or above the cut. Atomic because the two run on
+	// different goroutines.
+	backupsInFlight atomic.Int64
+
+	// metricsEnabled gates the Prometheus exposition at /metrics, and metrics is the
+	// registry it serves (ADR-0142). On by default (opt-out, like the API docs): the
+	// exposition carries only bounded-cardinality aggregates, so the cost of having it
+	// is a port an operator may not want open rather than data leaking. Built once at
+	// construction — a duplicate registration then fails the boot, not a scrape.
+	metricsEnabled bool
+	metrics        *metrics.Registry
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -312,6 +417,21 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
+// WithSystemProcesses bootstrap-deploys Atlas's own embedded platform processes
+// (user intake, access review, offboarding) into the protected system project at
+// startup (ADR-0122). Opt-in — the installed binary (cmd/atlas) enables it, while
+// the engine tests construct servers without it so a fresh instance still starts
+// with no deployments.
+func WithSystemProcesses() Option { return func(s *Server) { s.deploySysProcs = true } }
+
+// WithUserProvisioning enables the in-process user-provisioning connector
+// (create/set-password/disable Atlas logins) for the protected system project's
+// processes (ADR-0123). Opt-in and off by default: it deliberately, and narrowly,
+// reopens the ADR-0044/0049 boundary that no automated identity may manage users —
+// so an instance keeps the human-in-the-loop ADR-0122 behavior until an operator
+// turns this on. When off, a userConnector job has no worker and parks.
+func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning = true } }
+
 // WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0075).
 // A non-positive interval disables the bridge (useful in tests that drive it
 // directly). The default is 2s.
@@ -321,7 +441,7 @@ func WithInboundPollInterval(d time.Duration) Option {
 
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
 // writes a keepalive comment, the mechanism that detects a half-open browser
-// connection so its session participant is reaped (ADR-0103). A non-positive
+// connection so its session participant is reaped (ADR-0140). A non-positive
 // value restores the default (15s). Tests pass a short interval to exercise it.
 func WithCollabKeepaliveInterval(d time.Duration) Option {
 	return func(s *Server) {
@@ -385,18 +505,36 @@ func WithOpenSearchExportInterval(d time.Duration) Option {
 	}
 }
 
+// withExporterTrigger replaces the exporter loop's real ticker with an explicit tick
+// channel and, optionally, a completion channel signaled after each triggered export
+// pass. It is unexported — a test seam, not an operator knob — so a test drives export
+// passes deterministically: send on ticks, receive on ticked, then assert, with no
+// wall-clock cadence or polling (ADR-0114). Mirrors withRetentionTrigger.
+func withExporterTrigger(ticks <-chan time.Time, ticked chan struct{}) Option {
+	return func(s *Server) {
+		s.exporterTicks = ticks
+		s.exporterTicked = ticked
+	}
+}
+
 const (
-	// retentionSweepInterval is the default cadence of the history-retention sweep.
-	retentionSweepInterval = time.Minute
-	// retentionBatchDefault bounds how many finished instances one sweep tick evaluates,
+	// DefaultRetentionInterval is the default cadence of the history-retention sweep.
+	// Exported so the CLI can show it as the default of --retention-interval rather
+	// than restate a number that would drift from this one.
+	DefaultRetentionInterval = time.Minute
+	// DefaultRetentionBatch bounds how many finished instances one sweep tick evaluates,
 	// so the scan never blocks the run loop (ADR-0115 / ADR-0085 no-full-scan rule).
-	retentionBatchDefault = 1000
+	// Together the two bound the drain rate of a backlog: DefaultRetentionBatch per
+	// DefaultRetentionInterval. Exported for the CLI, like DefaultRetentionInterval.
+	DefaultRetentionBatch = 1000
 )
 
 // WithRetention enables history retention (ADR-0115): a finished instance whose
 // terminal event is older than maxAge and whose events are already exported (its
 // terminal position is at or below the safe position) is hard-deleted from the state
-// store. A non-positive maxAge leaves retention off — the opt-in default.
+// store. A non-positive maxAge leaves the server with no default age — the opt-in
+// default — and retention then applies only to definitions declaring their own
+// atlas:historyTtl (ADR-0144).
 func WithRetention(maxAge time.Duration) Option {
 	return func(s *Server) {
 		if maxAge > 0 {
@@ -427,6 +565,99 @@ func WithRetentionBatch(n int) Option {
 	}
 }
 
+// withClock overrides the server clock the retention sweep reads for its eligibility
+// cutoff (unix nanoseconds). It is unexported — a test seam, not an operator knob — so
+// a test can share one deterministic clock with the engine and make a finished
+// instance's age exact rather than tuned against real time (invariant I4).
+func withClock(now func() int64) Option {
+	return func(s *Server) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+// withRetentionTrigger replaces the retention sweep's real ticker with an explicit
+// tick channel and, optionally, a completion channel signaled after each triggered
+// sweep. It is unexported — a test seam — so a test drives sweeps deterministically:
+// send on ticks, receive on swept, then assert, with no wall-clock cadence or polling.
+func withRetentionTrigger(ticks <-chan time.Time, swept chan struct{}) Option {
+	return func(s *Server) {
+		s.retentionTicks = ticks
+		s.retentionSwept = swept
+	}
+}
+
+const (
+	// checkpointKeepDefault is how many published checkpoints survive a prune. More
+	// than one so a checkpoint found to be corrupt at restore time still has an older
+	// one behind it; few enough that the SSTables they pin stay bounded (ADR-0131).
+	checkpointKeepDefault = 3
+)
+
+// WithCheckpoints enables periodic recovery checkpoints at the given cadence
+// (ADR-0131). Each one snapshots the applied state, so a restart replays only the log
+// past it rather than from genesis — recovery time becomes a function of the cadence
+// instead of the log's whole length.
+//
+// It is purely additive: nothing is deleted, the WAL stays the source of truth, and a
+// missing, failed, or corrupt checkpoint only makes the next recovery slower (invariant
+// I2). A non-positive cadence leaves checkpointing off.
+func WithCheckpoints(every time.Duration) Option {
+	return func(s *Server) {
+		if every > 0 {
+			s.checkpointInterval = every
+		}
+	}
+}
+
+// WithCheckpointRetention sets how many published checkpoints are kept (ADR-0131). A
+// checkpoint hard-links the SSTables it captured, so keeping every one would pin every
+// file the store ever wrote; keeping a few leaves a fallback if the newest is corrupt.
+// A non-positive value restores the default.
+func WithCheckpointRetention(keep int) Option {
+	return func(s *Server) {
+		if keep > 0 {
+			s.checkpointKeep = keep
+		}
+	}
+}
+
+// WithoutMetrics turns off the Prometheus exposition at /metrics (ADR-0142). It is
+// served by default — a system meant to be operated should be observable without extra
+// configuration, and the exposition carries only bounded-cardinality aggregates — so
+// this is for an operator who does not want the surface open at all.
+func WithoutMetrics() Option {
+	return func(s *Server) { s.metricsEnabled = false }
+}
+
+// WithWALCompaction deletes the WAL segments a recovery checkpoint and every consumer
+// watermark make redundant (ADR-0131), bounding the log's disk instead of letting it
+// grow with all history. It has no effect without WithCheckpoints: the cut is derived
+// from a checkpoint, and compaction runs on the tick that takes one.
+//
+// It is opt-in, unlike checkpointing, for the same reason history retention is
+// (ADR-0115): this is the one step here that destroys data. The cut itself is
+// conservative — the newest **fully verified** checkpoint (manifest and state files) at
+// or below the store, floored by every consumer watermark, with a corrupt, foreign, or
+// ahead-of-store checkpoint licensing no deletion at all — but a conservative cut is
+// still a deletion, and an operator should choose it.
+func WithWALCompaction() Option {
+	return func(s *Server) { s.compactWAL = true }
+}
+
+// withCheckpointTrigger replaces the checkpoint loop's real ticker with an explicit
+// tick channel and, optionally, a completion channel signaled after each triggered
+// pass. It is unexported — a test seam, not an operator knob — so a test takes
+// checkpoints deterministically: send on ticks, receive on done, then assert, with no
+// wall-clock cadence or polling. Mirrors withRetentionTrigger.
+func withCheckpointTrigger(ticks <-chan time.Time, done chan struct{}) Option {
+	return func(s *Server) {
+		s.checkpointTicks = ticks
+		s.checkpointDone = done
+	}
+}
+
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
 // deployment and draft sidecar stores live in its "deployments" and "drafts"
@@ -452,6 +683,22 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
+	if err != nil {
+		return nil, err
+	}
+	processDocs, err := newProcessDocStore(filepath.Join(dataDir, "process-docs"))
+	if err != nil {
+		return nil, err
+	}
+	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
+	if err != nil {
+		return nil, err
+	}
+	deployTokenStore, err := newDeployTokenStore(filepath.Join(dataDir, "deploy-tokens"))
+	if err != nil {
+		return nil, err
+	}
+	targets, err := newTargetStore(filepath.Join(dataDir, "targets"))
 	if err != nil {
 		return nil, err
 	}
@@ -510,6 +757,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate:        newRateLimiter(20, 1),
 		projects:          projects,
+		releases:          releases,
+		deployTokenStore:  deployTokenStore,
+		deployTokens:      newDeployTokenIndex(),
+		targets:           targets,
+		appVersions:       map[string]int32{},
+		processDocs:       processDocs,
+		docVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
@@ -517,12 +771,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		marketplaceStore:  marketplaceStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
-		inboundPoll:       2 * time.Second,        // default cadence; WithInboundPollInterval overrides, 0 disables
-		inboundBatch:      defaultInboundBatch,    // per-poll ReadEvents cap; WithInboundBatchLimit overrides
-		exporterPoll:      5 * time.Second,        // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
-		retentionInterval: retentionSweepInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
-		retentionBatch:    retentionBatchDefault,  // finished instances evaluated per sweep tick
-		vaultEnabled:      true,                   // opt-out: built unless WithoutVault is passed (ADR-0070)
+		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
+		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
+		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
+		retentionBatch:    DefaultRetentionBatch,    // finished instances evaluated per sweep tick
+		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
+		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		sessions:          newSessionStore(defaultSessionTTL),
 		collab:            newCollabRegistry(),
@@ -531,7 +786,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnValidator:      dmn.NewValidator(resolver),
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
+		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 	}
+	// The retention sweep reads its eligibility cutoff from the system clock by
+	// default; the options below may replace it (withClock) for a deterministic
+	// test. Set here rather than in the literal above to keep the literal's comment
+	// alignment intact (invariant I4).
+	s.now = func() int64 { return time.Now().UnixNano() }
+	// The checkpoint root is derived, not configurable: recovery resolves the same
+	// path through checkpoint.Dir, and a knob here could only make them disagree
+	// (ADR-0131). Set outside the literal for the same alignment reason as above.
+	s.checkpointRoot = checkpoint.Dir(dataDir)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -568,6 +833,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 		s.internalToken = token
+	}
+	// Ensure the protected system project exists (ADR-0122). Like bootstrapAdmin,
+	// this runs on the constructing goroutine before the loop serves traffic, so it
+	// touches the project store directly within the single-writer discipline. It is
+	// idempotent, so it is safe on every start regardless of auth.
+	if err := s.ensureSystemProject(time.Now().Unix()); err != nil {
+		return nil, err
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
@@ -615,7 +887,28 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
+	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
+	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
+	// server drives jobs synchronously); it is gated at runtime to the system project.
+	if s.userProvisioning {
+		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler(s.store))
+	}
 	if err := s.loadDeployments(); err != nil {
+		return nil, err
+	}
+	// Rebuild the per-application release counter from the durable release records,
+	// so the next publish after a restart continues the sequence (ADR-0128).
+	if err := s.loadReleaseVersions(); err != nil {
+		return nil, err
+	}
+	// Same discipline for the per-process documentation counter, so an export after
+	// a restart continues the sequence instead of minting a second v1 (ADR-0143).
+	if err := s.loadProcessDocVersions(); err != nil {
+		return nil, err
+	}
+	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
+	// reads, so a peer's credential keeps working across a restart.
+	if err := s.loadDeployTokens(); err != nil {
 		return nil, err
 	}
 	// Push per-server call-activity overrides into the processor. Runs after
@@ -624,6 +917,23 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// (ADR-0105).
 	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
+	}
+	// Bootstrap-deploy Atlas's own platform processes into the protected system
+	// project (ADR-0122), when enabled. Runs after loadDeployments so its
+	// idempotency check sees the recovered deployments (a restart adds no versions),
+	// and before the loop serves traffic so the deploy path is single-writer-safe —
+	// the same discipline loadDeployments itself uses.
+	if s.deploySysProcs {
+		if err := s.ensureSystemProcesses(time.Now().Unix()); err != nil {
+			return nil, err
+		}
+		// Mint the public start link for the self-service registration process so a
+		// fresh instance's login screen offers a "Registrieren" link out of the box
+		// (ADR-0126). Runs after ensureSystemProcesses so the default process is
+		// deployed, and before the loop serves so the mint is single-writer-safe.
+		if err := s.ensureRegistrationLink(time.Now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
@@ -647,7 +957,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	go s.loop()
 	go s.timerScheduler(time.Second)
 	// The collaboration reaper evicts idle detached session participants (MCP
-	// agents that stopped polling) and releases their locks (ADR-0103). It runs off
+	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
 	go s.collabReaper(collabReapInterval)
@@ -669,12 +979,29 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		go s.exporterLoop(s.exporterPoll)
 	}
 	// History retention hard-deletes finished instances past the max age, gated on the
-	// exported (else durable) position (ADR-0115). Off unless a max age is configured.
-	// Like the other pollers it computes wall-clock time off the run loop and hops onto
-	// it via do() to touch the processor and its bounded, resumable cursor.
-	if s.retentionMaxAge > 0 {
+	// exported (else durable) position (ADR-0115). The sweeper always runs: retention is
+	// configured server-wide *or* per definition (atlas:historyTtl, ADR-0144), and a
+	// definition carrying one can be deployed at any moment — so the cheap standing tick
+	// is what makes a mid-flight deploy take effect. A tick with nothing due and no
+	// server-wide age costs one empty range scan of the expiry index (ADR-0146). Like the
+	// other pollers it
+	// computes wall-clock time off the run loop and hops onto it via do() to touch the
+	// processor and its bounded, resumable cursor.
+	s.wg.Add(1)
+	go s.retentionSweeper(s.retentionInterval)
+	// Recovery checkpoints bound restart time (ADR-0131). Off unless a cadence is
+	// configured. Unlike the pollers above, this one's actual work happens *on* the run
+	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
+	// goroutine exists to own the cadence and the off-loop pruning, not the snapshot.
+	if s.metricsEnabled {
+		if err := s.buildMetrics(); err != nil {
+			return nil, err
+		}
+	}
+	if s.checkpointInterval > 0 {
+		s.checkpointRequests = make(chan chan checkpointPass)
 		s.wg.Add(1)
-		go s.retentionSweeper(s.retentionInterval)
+		go s.checkpointLoop(s.checkpointInterval)
 	}
 	return s, nil
 }
@@ -684,47 +1011,92 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 // (OpenSearch unreachable, a transient index failure) is logged and retried on the
 // next tick — the exporter leaves its high-water mark unadvanced on failure, so no
 // record is skipped and delivery stays at-least-once.
+//
+// The trigger is a seam for deterministic tests: production runs a real ticker,
+// while a test injects an explicit tick channel (withExporterTrigger) so an export
+// pass runs exactly when the test says — no cadence to race, no polling. When
+// exporterTicked is set the loop signals it after each triggered pass so the test can
+// await completion. This mirrors the retention sweep's clock/ticker seam.
 func (s *Server) exporterLoop(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.exporterTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			if n, err := s.exporter.Tick(context.Background()); err != nil {
 				log.Printf("opensearch exporter: %v (will retry next tick)", err)
 			} else if n > 0 {
 				log.Printf("opensearch exporter: indexed %d record(s)", n)
+			}
+			if s.exporterTicked != nil {
+				select {
+				case s.exporterTicked <- struct{}{}:
+				case <-s.quit:
+					return
+				}
 			}
 		}
 	}
 }
 
 // retentionSweeper runs the history-retention sweep on a fixed cadence (ADR-0115).
-// Wall-clock "now" is read off the run loop; the sweep itself hops onto the loop via
-// do() so its scan, purge commands, and cursor are single-writer-safe.
+// Wall-clock "now" is read from s.now() off the run loop; the sweep itself hops onto
+// the loop via do() so its scan, purge commands, and cursor are single-writer-safe.
+//
+// The trigger and clock are seams for deterministic tests (invariant I4): production
+// runs a real ticker and the system clock, while a test injects an explicit tick
+// channel and a fixed clock (withRetentionTrigger/withClock) so a sweep fires exactly
+// when the test says and evaluates a time the test controls — no scheduling luck, no
+// wall-clock-tuned durations. When retentionSwept is set the sweeper signals it after
+// each triggered sweep so the test can await completion.
 func (s *Server) retentionSweeper(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.retentionTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
-			now := time.Now().UnixNano()
+		case <-ticks:
+			now := s.now()
 			s.do(func() { s.sweepRetention(now) })
+			if s.retentionSwept != nil {
+				select {
+				case s.retentionSwept <- struct{}{}:
+				case <-s.quit:
+					return
+				}
+			}
 		}
 	}
 }
 
-// sweepRetention evaluates one bounded, resumable window of finished instances and
-// hard-deletes those eligible: finished before now-maxAge AND provably exported (a
-// non-zero terminal position at or below the safe position). It runs inside a do()
-// turn, so the scan, the purge commands it enqueues, and the cursor advance are one
-// atomic single-writer step (ADR-0115). Errors are logged and retried next tick.
+// purgeTarget is one finished instance a sweep decided to hard-delete, carrying the
+// history value the purge command needs (its definition key, and the purge due date that
+// locates its schedule entry) so neither the command nor applyToState reads it again.
+type purgeTarget struct {
+	key uint64
+	pi  model.ProcessInstanceValue
+}
+
+// sweepRetention hard-deletes the finished instances that are eligible now, from two
+// sources: what a definition's own historyTtl scheduled (the due-date index, ADR-0146)
+// and — only when the operator configured a server-wide max age — what that age has
+// caught in the bounded key-order window (ADR-0115). Both apply the same export gate, so
+// nothing is deleted before it is archived. It runs inside a do() turn, so the scans, the
+// purge commands it enqueues, and the cursor advance are one atomic single-writer step.
+// Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
@@ -732,31 +1104,82 @@ func (s *Server) sweepRetention(now int64) {
 	if err != nil {
 		return
 	}
-	cutoff := now - s.retentionMaxAge.Nanoseconds()
-	type target struct {
-		key uint64
-		pi  model.ProcessInstanceValue
+	targets := s.scheduledPurges(now, safePos)
+	if s.retentionMaxAge > 0 {
+		targets = s.agedPurges(targets, now, safePos)
 	}
-	var targets []target
-	next, more, err := s.store.CompletedProcessInstancesFrom(s.retentionCursor, s.retentionBatch,
-		func(key uint64, v *model.ProcessInstanceValue) error {
-			// Eligible only when old enough AND export-provable: a zero CompletedPosition
-			// (a record written before this feature) is never provably exported, so it is
-			// conservatively skipped rather than deleted (ADR-0115).
-			if v.CompletedAt <= cutoff && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
-				targets = append(targets, target{key, *v})
-			}
-			return nil
-		})
-	if err != nil {
+	if len(targets) == 0 {
 		return
 	}
 	for i := range targets {
 		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
 	}
-	if len(targets) > 0 {
-		_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
-		log.Printf("retention: purged %d finished instance(s) past %s", len(targets), s.retentionMaxAge)
+	_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
+	// No single age to name: instances in one sweep may have come due under different
+	// per-definition TTLs, or under the server-wide age (ADR-0144).
+	log.Printf("retention: purged %d finished instance(s)", len(targets))
+}
+
+// scheduledPurges collects the instances whose declared history TTL has elapsed, by
+// range-scanning the due-date index up to now for at most one batch (ADR-0146). This is
+// what makes a tick cost what is *due* rather than what the history *holds*: an idle
+// server pays one empty scan, and a due instance is never delayed by the millions of
+// finished records that no policy can touch. An instance whose events are not yet
+// exported keeps its index entry and is re-offered on the next tick — the export gate
+// delays a purge, it never cancels one (ADR-0115).
+func (s *Server) scheduledPurges(now int64, safePos uint64) []purgeTarget {
+	var targets []purgeTarget
+	if _, err := s.store.DueHistoryExpiries(now, s.retentionBatch, func(_ int64, piKey uint64) error {
+		pi, ok, err := s.store.ProcessInstance(piKey)
+		if err != nil {
+			return err
+		}
+		// No record behind the entry: nothing to delete, and nothing to decide from.
+		if !ok {
+			return nil
+		}
+		if pi.CompletedPosition != 0 && pi.CompletedPosition <= safePos {
+			targets = append(targets, purgeTarget{piKey, *pi})
+		}
+		return nil
+	}); err != nil {
+		return nil
+	}
+	return targets
+}
+
+// agedPurges appends what the server-wide max age has caught, from one bounded, resumable
+// window of the history in key order (ADR-0115). That age has no schedule behind it — it
+// is a flag that can change between restarts, and it is the only thing that reaches
+// records finished before ADR-0146 indexed them — so this path still scans rather than
+// asks. A definition's own TTL wins over the age for its instances (ADR-0144), and an
+// instance already scheduled above is skipped so one sweep never purges it twice.
+func (s *Server) agedPurges(targets []purgeTarget, now int64, safePos uint64) []purgeTarget {
+	scheduled := make(map[uint64]struct{}, len(targets))
+	for i := range targets {
+		scheduled[targets[i].key] = struct{}{}
+	}
+	next, more, err := s.store.CompletedProcessInstancesFrom(s.retentionCursor, s.retentionBatch,
+		func(key uint64, v *model.ProcessInstanceValue) error {
+			if _, dup := scheduled[key]; dup {
+				return nil
+			}
+			// The max age is the instance's own definition's when it declares one, else the
+			// server-wide setting (ADR-0144); zero means nothing retains this instance.
+			maxAge := s.retentionAgeFor(v.ProcessDefKey)
+			if maxAge <= 0 {
+				return nil
+			}
+			// Eligible only when old enough AND export-provable: a zero CompletedPosition
+			// (a record written before this feature) is never provably exported, so it is
+			// conservatively skipped rather than deleted (ADR-0115).
+			if v.CompletedAt <= now-maxAge && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
+				targets = append(targets, purgeTarget{key, *v})
+			}
+			return nil
+		})
+	if err != nil {
+		return targets
 	}
 	// Advance the cursor; wrap to genesis at the end so the next pass re-evaluates
 	// instances that have since aged past the cutoff or become exported.
@@ -765,6 +1188,22 @@ func (s *Server) sweepRetention(now int64) {
 	} else {
 		s.retentionCursor = 0
 	}
+	return targets
+}
+
+// retentionAgeFor returns the retention max age in nanoseconds that governs a finished
+// instance of defKey: the definition's own atlas:historyTtl when it declares one
+// (ADR-0144), otherwise the server-wide max age. Zero means no retention applies and
+// the instance is kept indefinitely — the case for an undeployed definition (its
+// compiled process is gone, so only a server-wide setting can still reach it). Reads
+// the deployment registry, so it runs on the loop, inside the sweep's do() turn.
+func (s *Server) retentionAgeFor(defKey uint64) int64 {
+	if cp := s.processLookup(defKey); cp != nil {
+		if ttl := cp.HistoryTtlNanos(); ttl > 0 {
+			return ttl
+		}
+	}
+	return s.retentionMaxAge.Nanoseconds()
 }
 
 // retentionSafePosition is the highest log position safe to hard-delete up to: the
@@ -777,6 +1216,183 @@ func (s *Server) retentionSafePosition() (uint64, error) {
 		return s.exporter.HighWaterMark(), nil
 	}
 	return s.store.LastAppliedPosition()
+}
+
+// checkpointLoop publishes a recovery checkpoint on a fixed cadence and prunes the
+// ones it makes redundant (ADR-0131). A failed pass is logged and retried on the next
+// tick: a checkpoint is an optimization over the WAL, never a durability step, so
+// losing one costs a slower recovery and nothing else (invariant I2).
+//
+// The trigger is the same seam the retention sweep and exporter use — production runs
+// a real ticker, a test injects an explicit channel (withCheckpointTrigger) so a
+// checkpoint is taken exactly when the test says. When checkpointDone is set the loop
+// signals it after each triggered pass so the test can await completion.
+func (s *Server) checkpointLoop(every time.Duration) {
+	defer s.wg.Done()
+	ticks := s.checkpointTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
+	// last is the position most recently reported as published. An idle server
+	// re-publishes nothing (Publish is a no-op at an existing position), so tracking it
+	// keeps the cadence from logging the same line forever. Only this goroutine reads
+	// or writes it, so it stays a local.
+	var last uint64
+	for {
+		select {
+		case <-s.quit:
+			return
+		case reply := <-s.checkpointRequests:
+			// An operator asked for a pass (ADR-0131 slice 8). It runs *here*, on the same
+			// goroutine as the cadence, so an on-demand pass and a scheduled one can never
+			// overlap — and it is the same pass, not a second code path.
+			res := s.runCheckpointPass(&last)
+			select {
+			case reply <- res:
+			case <-s.quit:
+				return
+			}
+		case <-ticks:
+			s.runCheckpointPass(&last)
+			if s.checkpointDone != nil {
+				select {
+				case s.checkpointDone <- struct{}{}:
+				case <-s.quit:
+					return
+				}
+			}
+		}
+	}
+}
+
+// runCheckpointPass takes a checkpoint and, when compaction is enabled, compacts on the
+// same pass: the checkpoint just taken is what licenses any new deletion, so running the
+// two together keeps them in one order. It records the result for the status endpoint
+// and returns it for the operator who asked.
+//
+// last carries the position most recently *logged* as published. An idle server
+// re-publishes nothing (Publish is a no-op at an existing position), so tracking it keeps
+// the cadence from logging the same line forever. Only the checkpoint goroutine touches
+// it, so it needs no lock.
+func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
+	res := checkpointPass{At: s.now()}
+	pos, err := s.takeCheckpoint()
+	res.Position = pos
+	if err != nil {
+		res.CheckpointError = err.Error()
+	}
+	if pos != 0 && pos != *last {
+		*last = pos
+		log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
+	}
+	if s.compactWAL {
+		removed, note, cerr := s.compactLog()
+		res.SegmentsRemoved = removed
+		res.Note = note
+		if cerr != nil {
+			res.CompactionError = cerr.Error()
+		}
+	}
+	s.lastPassMu.Lock()
+	s.lastPass = &res
+	s.lastPassMu.Unlock()
+	return res
+}
+
+// takeCheckpoint publishes one checkpoint and prunes older ones, returning the position
+// it captured (zero when nothing was published — an idle server or a failed pass).
+//
+// The snapshot hops onto the run loop via do(): between batches, the store's applied
+// position and the state it holds agree exactly, which is precisely what makes a
+// checkpoint's consistency boundary meaningful (invariant I3). Pruning then runs off
+// the loop, keeping directory removal and an fsync out of the writer's way; it is safe
+// there because only this goroutine ever publishes into the root.
+func (s *Server) takeCheckpoint() (uint64, error) {
+	var pos uint64
+	var err error
+	s.do(func() {
+		var applied uint64
+		if applied, err = s.store.LastAppliedPosition(); err != nil || applied == 0 {
+			return // nothing durable yet: there is no state worth snapshotting
+		}
+		pos, err = s.proc.Checkpoint(s.checkpointRoot)
+	})
+	if err != nil {
+		log.Printf("checkpoint: %v (will retry next tick)", err)
+		return 0, err
+	}
+	if pos == 0 {
+		return 0, nil
+	}
+	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
+		// The checkpoint is published either way; a failed prune costs disk, not recovery,
+		// so it is reported without discarding the position that was captured.
+		log.Printf("checkpoint: prune: %v (will retry next tick)", err)
+		return pos, err
+	}
+	return pos, nil
+}
+
+// compactLog deletes the WAL segments the newest verified checkpoint and every consumer
+// watermark make redundant (ADR-0131). Everything about it is fail-closed: a watermark
+// that cannot be read, a snapshot in flight, or an error anywhere skips the pass
+// entirely, because the cost of skipping is disk and the cost of proceeding is a segment
+// recovery still needs.
+//
+// The deletion runs on the run loop (do): the WAL belongs to the single writer, which
+// may be rolling a segment at the same moment (invariant I3). It is bounded work — a few
+// unlinks and one directory fsync — and only for segments already proven redundant.
+// It returns how many segments went, and a note naming why a pass did nothing when the
+// reason is a deliberate hold rather than an error — so an operator who asked for a pass
+// gets an answer, not a silent zero.
+func (s *Server) compactLog() (int, string, error) {
+	// A whole-instance snapshot streams the WAL files off the run loop; deleting
+	// underneath one would ship an archive with a hole (ADR-0109). Skipping costs a tick.
+	if s.backupsInFlight.Load() > 0 {
+		return 0, "skipped: a whole-instance snapshot is streaming the WAL", nil
+	}
+	limits, err := s.consumerWatermarks()
+	if err != nil {
+		log.Printf("wal compaction: consumer watermark unavailable: %v (skipping this tick)", err)
+		return 0, "", err
+	}
+	var removed int
+	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
+	if err != nil {
+		log.Printf("wal compaction: %v (will retry next tick)", err)
+		return 0, "", err
+	}
+	if removed > 0 {
+		log.Printf("wal compaction: deleted %d WAL segment(s) already covered by a checkpoint and every consumer", removed)
+	}
+	return removed, "", nil
+}
+
+// consumerWatermarks is the highest position each consumer of the durable log has
+// provably read, which compaction may not delete past. It returns an error rather than a
+// short list when one cannot be read: a missing watermark must hold the log, never
+// silently stop constraining it.
+//
+// Only the OpenSearch exporter (ADR-0114) actually tails the WAL. History retention
+// (ADR-0115) reads the state store rather than the log, so its safe position never binds
+// tighter than the exporter's — it *is* the exporter's high-water mark when export is on
+// — but it is included when retention is enabled so the gate matches ADR-0131's rule
+// literally rather than by an argument that could stop holding.
+func (s *Server) consumerWatermarks() ([]uint64, error) {
+	var limits []uint64
+	if s.exporter != nil {
+		limits = append(limits, s.exporter.HighWaterMark())
+	}
+	if s.retentionMaxAge > 0 {
+		pos, err := s.retentionSafePosition()
+		if err != nil {
+			return nil, err
+		}
+		limits = append(limits, pos)
+	}
+	return limits, nil
 }
 
 // processLookup resolves a def key to its compiled process for the DMN worker. It
@@ -819,14 +1435,23 @@ func (s *Server) loadDeployments() error {
 				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
 			}
 		}
+		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+		// before timers tick, so a start timer restored from the log finds the definition
+		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+		// come back from the WAL), so this is the only place recovery re-applies the gate.
+		if rec.Inactive {
+			s.proc.SetProcessActive(rec.Key, false)
+		}
 		s.deployments[rec.Key] = &deployment{
 			Key:        rec.Key,
 			ProcessID:  rec.ProcessID,
 			Name:       rec.Name,
 			Version:    rec.Version,
 			DeployedAt: rec.DeployedAt,
+			ProjectID:  rec.ProjectID,
 			xml:        []byte(rec.XML),
 			cp:         cp,
+			inactive:   rec.Inactive,
 		}
 		s.order = append(s.order, rec.Key)
 		if rec.Version > s.versions[rec.ProcessID] {
@@ -866,7 +1491,7 @@ func (s *Server) timerScheduler(every time.Duration) {
 // collabReaper periodically evicts detached collaboration-session participants
 // (AI agents that joined over MCP and stopped polling) that have gone silent past
 // the TTL, releasing their locks so a crashed or forgotten agent never holds an
-// element forever (ADR-0103). Browser SSE participants are reaped on disconnect
+// element forever (ADR-0140). Browser SSE participants are reaped on disconnect
 // instead and are exempt. It runs off the run loop — the collab registry is its
 // own mutex-guarded, engine-independent state — so it never touches the processor.
 func (s *Server) collabReaper(every time.Duration) {
@@ -879,7 +1504,7 @@ func (s *Server) collabReaper(every time.Duration) {
 			return
 		case <-t.C:
 			if n := s.collab.reap(); n > 0 {
-				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0103)", n, collabParticipantTTL)
+				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collabParticipantTTL)
 			}
 		}
 	}
@@ -926,6 +1551,11 @@ func (s *Server) Close() {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	// The Prometheus exposition sits beside /healthz: same process, same port, and
+	// ungated for the same reason (ADR-0142).
+	if s.metricsEnabled {
+		mux.HandleFunc("GET /metrics", s.handleMetrics)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -951,6 +1581,7 @@ func (s *Server) Handler() http.Handler {
 	// Public, unauthenticated start links (ADR-0029). These live under /public/,
 	// outside the /api/v1 surface auth gates, and expose exactly one thing: the
 	// start form for one token. They are rate-limited in the handlers.
+	mux.HandleFunc("GET "+publicProcessDocPath+"{token}", s.handlePublicProcessDoc)
 	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
 	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)

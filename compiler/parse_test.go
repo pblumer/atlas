@@ -363,19 +363,20 @@ func TestParseTimerCatchEventErrors(t *testing.T) {
 }
 
 // TestParseUnsupportedElementMessage locks in the actionable error text for an element
-// Atlas can't run yet (an ad-hoc subprocess) rather than a confusing "unknown targetRef".
-// Send tasks were the original stand-in here; they compile now (ADR-0112), so this uses a
-// still-unsupported element to keep the safety net — and its message — under test.
+// Atlas can't run yet (a complex gateway) rather than a confusing "unknown targetRef".
+// Send tasks were the original stand-in here and compile now (ADR-0112); ad-hoc subprocesses
+// took their place and now execute too (ADR-0138), so this uses a still-unsupported element
+// to keep the safety net — and its message — under test.
 func TestParseUnsupportedElementMessage(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-		<startEvent id="s"/><adHocSubProcess id="Activity_1"/><endEvent id="e"/>
+		<startEvent id="s"/><complexGateway id="Activity_1"/><endEvent id="e"/>
 		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
 		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
 	_, err := Parse(1, 1, strings.NewReader(xml))
 	if err == nil {
-		t.Fatal("want error for an <adHocSubProcess>")
+		t.Fatal("want error for a <complexGateway>")
 	}
-	for _, want := range []string{"Activity_1", "adHocSubProcess", "service"} {
+	for _, want := range []string{"Activity_1", "complexGateway", "service"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}

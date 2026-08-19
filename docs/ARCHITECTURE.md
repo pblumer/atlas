@@ -258,7 +258,7 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 - **Core:** start/end events, sequence flows, exclusive/parallel/inclusive gateways, service tasks
 - **Events:** timer, message, signal, error; boundary events (interrupting and non-interrupting)
 - **Structure:** embedded subprocesses, event subprocesses, call activities
-- **Advanced:** multi-instance (sequential and parallel), compensation, transactions
+- **Advanced:** multi-instance (sequential and parallel), standard loops (repeat while a condition holds), compensation, transactions
 - **Data:** input/output mappings, variable scoping with copy-on-write propagation
 
 ## Failure handling and incidents

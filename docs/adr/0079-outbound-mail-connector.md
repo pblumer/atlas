@@ -1,6 +1,6 @@
 # ADR-0079: An outbound mail connector (SMTP first)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
@@ -100,6 +100,40 @@ additive to.**
   behind the same `Client`; HTML bodies and attachments; a per-send connection
   timeout; STARTTLS/implicit-TLS policy and certificate pinning options; input
   mappings so a template can be assembled from variables.
+
+## Amendment (2026-08-18): HTML bodies
+
+The follow-up named above — "HTML bodies" — is now shipped, as the smallest thing
+that could work: **one more model-authored field**, `bodyHtml` on
+`<atlas:mailConnector>`, beside the existing `body`.
+
+- It is a literal-or-FEEL value like every other message field, so markup can be
+  composed from the instance's variables (`=`-prefixed), and a broken expression is
+  a **deploy** error rather than a send-time one.
+- **What gets sent follows what the author wrote**, and nothing else changes for a
+  model that does not use it: text only → `text/plain` (byte-identical framing to
+  before); HTML only → `text/html`; **both → `multipart/alternative`**, plain text
+  first and markup last, the order that lets a client pick the richest part it can
+  render (RFC 2046 §5.1.4). The multipart boundary is *derived* from the
+  deterministic Message-ID and extended until it occurs in neither part — a boundary
+  appearing inside a body would truncate the mail, and deriving rather than drawing
+  it keeps the framing deterministic and testable without a clock or an RNG, as the
+  rest of `buildRFC822` already is.
+- The Microsoft Graph provider carries exactly one body with a declared content
+  type, so there the HTML body wins when present (`contentType: "HTML"`) and a
+  text-only message is unchanged.
+- In the Modeler the field is a **code field**: the shared HTML editor inline, and
+  the full Developer View on `F2` ([ADR-0145](0145-developer-view-for-code-fields.md))
+  — which is what makes authoring a real template in a property panel tolerable.
+
+Rejected while doing this: a `format` select that switches the *existing* body
+between text and HTML. It reads simpler in the panel but it throws away the
+plain-text alternative, and a notification that renders as raw tags in a text-only
+client is exactly the failure a mail connector should not have. Two fields cost one
+extra attribute and buy the correct MIME message.
+
+Still open from the original follow-up list: attachments, a per-send connection
+timeout, and TLS policy options.
 
 ## Pros and cons of the options
 

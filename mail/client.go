@@ -39,12 +39,18 @@ import (
 // retry carries the same RFC 5322 Message-ID and can be de-duplicated rather than
 // delivered twice.
 type Message struct {
-	From      string
-	To        []string
-	Cc        []string
-	Bcc       []string
-	Subject   string
-	Body      string
+	From    string
+	To      []string
+	Cc      []string
+	Bcc     []string
+	Subject string
+	Body    string
+	// HTML is the optional HTML body (ADR-0079, amended). When set alongside Body the
+	// message goes out as multipart/alternative — the plain text for clients that
+	// cannot or will not render HTML, the markup for those that can; alone it is a
+	// plain text/html message. Empty leaves the message exactly as it was before HTML
+	// bodies existed: one text/plain part.
+	HTML      string
 	MessageID string
 }
 
@@ -108,7 +114,7 @@ type sendFunc func(addr string, a smtp.Auth, from string, to []string, msg []byt
 // SMTPClient sends a Message over SMTP (the submission endpoint of any standards
 // compliant provider, including Google and Microsoft 365). It authenticates with the
 // connector's username/password when a username is configured, and frames the
-// message as a UTF-8 text/plain e-mail.
+// message as a UTF-8 MIME e-mail (text, HTML, or both — see buildRFC822).
 type SMTPClient struct {
 	conn Connector
 	send sendFunc
@@ -120,7 +126,7 @@ func NewSMTPClient(conn Connector) *SMTPClient {
 	return &SMTPClient{conn: conn, send: smtp.SendMail}
 }
 
-// Send frames m as a UTF-8 text/plain e-mail and submits it to the connector's SMTP
+// Send frames m as a UTF-8 MIME e-mail and submits it to the connector's SMTP
 // endpoint. The sender is the message's From, or the connector's default From when
 // the task authored none; a message with no sender and no default is a configuration
 // error. Recipients are the union of To, Cc and Bcc (the SMTP envelope); Bcc
@@ -168,12 +174,35 @@ func hostOf(endpoint string) string {
 	return endpoint
 }
 
-// buildRFC822 frames a message as an RFC 5322 / MIME text/plain e-mail with a UTF-8
-// body. The subject is MIME word-encoded so non-ASCII survives; To and Cc are
-// exposed as headers while Bcc is intentionally omitted (blind copy). No Date header
-// is written — the submission server stamps it — so the framing is deterministic and
+// mimeBoundary derives the multipart boundary for a message. It is a pure function
+// of the message — the deterministic Message-ID plus, if that is not enough, more
+// padding until the boundary occurs in neither body. A boundary that appears inside
+// a part would end it early and truncate the mail, so this is correctness, not
+// hygiene; deriving it (rather than drawing a random one) keeps buildRFC822
+// deterministic and testable without a clock or an RNG.
+func mimeBoundary(m Message) string {
+	base := "atlas-" + m.MessageID
+	if m.MessageID == "" {
+		base = "atlas-part"
+	}
+	b := base
+	for i := 0; strings.Contains(m.Body, b) || strings.Contains(m.HTML, b); i++ {
+		b = fmt.Sprintf("%s-%d", base, i)
+	}
+	return b
+}
+
+// buildRFC822 frames a message as an RFC 5322 / MIME e-mail with UTF-8 bodies. The
+// subject is MIME word-encoded so non-ASCII survives; To and Cc are exposed as
+// headers while Bcc is intentionally omitted (blind copy). No Date header is written
+// — the submission server stamps it — so the framing is deterministic and
 // unit-testable without a clock (invariant-friendly: this is a side effect, not
 // replayed state). The Message-ID carries the deterministic idempotency key.
+//
+// The content type follows the bodies the author wrote: text/plain alone (the shape
+// every message had before HTML bodies), text/html alone, or multipart/alternative
+// with the plain text first and the HTML last — the order that lets a client pick
+// the richest part it can render (RFC 2046 §5.1.4).
 func buildRFC822(m Message, from string) []byte {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
@@ -188,8 +217,24 @@ func buildRFC822(m Message, from string) []byte {
 		b.WriteString("Message-ID: <" + m.MessageID + "@atlas>\r\n")
 	}
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("\r\n")
-	b.WriteString(m.Body)
+
+	switch {
+	case m.HTML == "":
+		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		b.WriteString(m.Body)
+	case m.Body == "":
+		b.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
+		b.WriteString(m.HTML)
+	default:
+		boundary := mimeBoundary(m)
+		b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		b.WriteString(m.Body + "\r\n")
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
+		b.WriteString(m.HTML + "\r\n")
+		b.WriteString("--" + boundary + "--\r\n")
+	}
 	return []byte(b.String())
 }

@@ -18,15 +18,32 @@ type uiTheme struct {
 	Accent string `json:"accent"`
 }
 
-// settingsStore persists org-wide UI settings as a single JSON file, using the
+// registrationSetting is the org-wide self-service-registration configuration
+// (ADR-0126): which process the login screen's "Registrieren" link starts. Like
+// the theme it is design-time operator configuration, not engine state, so it
+// lives in its own sidecar JSON file.
+//
+// The stored record and its absence are distinct states: no file means "not
+// configured — fall back to the built-in default registration process", a stored
+// non-empty ProcessID means "use this process", and a stored empty ProcessID means
+// "an operator switched registration off". So getRegistration reports whether a
+// record exists, letting the handler tell default from off.
+type registrationSetting struct {
+	// ProcessID is the process whose public start form the login link opens, or ""
+	// when an operator has explicitly disabled registration.
+	ProcessID string `json:"processId"`
+}
+
+// settingsStore persists org-wide UI settings as JSON sidecar files, using the
 // same atomic-write + directory-fsync discipline as the other sidecar stores
-// (ADR-0019/0041). Unlike them it is a singleton — one instance-wide record, not a
-// set keyed by id — so it exposes plain get/save/clear rather than a CRUD-by-id
-// surface. Owned by the run-loop goroutine (accessed through s.do), so it needs no
-// locking, and it holds no secret material.
+// (ADR-0019/0041). Each setting is a singleton — one instance-wide record, not a
+// set keyed by id — so it exposes plain get/save/clear per setting rather than a
+// CRUD-by-id surface. Owned by the run-loop goroutine (accessed through s.do), so
+// it needs no locking, and it holds no secret material.
 type settingsStore struct {
-	dir  string
-	file string
+	dir     string
+	file    string // theme.json
+	regFile string // registration.json
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -34,7 +51,11 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("settingsstore: create dir: %w", err)
 	}
-	return &settingsStore{dir: dir, file: filepath.Join(dir, "theme.json")}, nil
+	return &settingsStore{
+		dir:     dir,
+		file:    filepath.Join(dir, "theme.json"),
+		regFile: filepath.Join(dir, "registration.json"),
+	}, nil
 }
 
 // getTheme returns the stored theme, or the zero value (the built-in default
@@ -68,4 +89,28 @@ func (s *settingsStore) clearTheme() error {
 		return fmt.Errorf("settingsstore: remove: %w", err)
 	}
 	return fsyncDir(s.dir)
+}
+
+// getRegistration returns the stored registration setting and whether a record
+// exists. A missing file returns (zero, false, nil): the caller reads that as "not
+// configured" and falls back to the built-in default process.
+func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
+	data, err := os.ReadFile(s.regFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return registrationSetting{}, false, nil
+		}
+		return registrationSetting{}, false, fmt.Errorf("settingsstore: read registration: %w", err)
+	}
+	var r registrationSetting
+	if err := json.Unmarshal(data, &r); err != nil {
+		return registrationSetting{}, false, fmt.Errorf("settingsstore: decode registration: %w", err)
+	}
+	return r, true, nil
+}
+
+// saveRegistration writes the registration setting durably, overwriting any
+// previous value. An empty ProcessID is a valid stored value meaning "disabled".
+func (s *settingsStore) saveRegistration(r registrationSetting) error {
+	return atomicWriteJSON(s.dir, s.regFile, r)
 }

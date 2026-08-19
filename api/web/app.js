@@ -5,6 +5,7 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
+import { enhanceTable } from "./table.js";
 
 const view = document.getElementById("view");
 
@@ -126,7 +127,24 @@ function viewLogin() {
           account, then sign in with it.
         </p>
       </div>
+      <p id="register-line" class="muted" style="margin-top:10px" hidden>
+        Noch kein Konto? <a id="register-link" href="#">Registrieren</a>
+      </p>
     </div>`;
+  // Self-service registration (ADR-0126): the login screen asks the server whether
+  // registration is enabled and, if so, reveals a link to the public start form of
+  // the configured intake process. The endpoint is public (served before login),
+  // and a failure or a disabled instance simply leaves the link hidden.
+  (async () => {
+    try {
+      const cfg = await api("GET", "/api/v1/settings/registration");
+      if (cfg && cfg.enabled && cfg.url) {
+        const line = document.getElementById("register-line");
+        document.getElementById("register-link").setAttribute("href", cfg.url);
+        line.hidden = false;
+      }
+    } catch { /* registration off or unreachable — leave the link hidden */ }
+  })();
   const f = document.getElementById("login-form");
   // Password recovery on a self-hosted, admin-managed instance is an admin
   // action (POST /users/{id}/password), not a self-service email flow — there is
@@ -292,7 +310,7 @@ const CONNECTORS = [
   {
     id: "sharepoint", name: "SharePoint", kind: "List item",
     desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
-    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
@@ -479,21 +497,68 @@ function initShell() {
   }).catch(() => { initHelpMenu(false); });
 }
 
-// initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
-// Scalar explorer (/api/docs) in a new tab when the server was started with docs
-// enabled; otherwise it shows an inert hint about --docs=false, so the missing
-// link is self-explanatory rather than a dead button (ADR-0043). The Conformance
-// Gallery entry is always shown — that page is a static asset served regardless
-// of the --docs flag. Open/close is handled by the shared delegated
-// .dropdown-toggle machinery above.
+// handbookHelp maps the current route to the most relevant handbook chapter, so
+// the "?" menu can offer help *for the view you're looking at* rather than only a
+// generic link. The checks mirror the router's order (most specific first); the
+// anchor is a section id in handbuch.html and the label is the (English, matching
+// the chrome) menu text. Adding a route here is all it takes to give it contextual
+// help — the handbook page and the menu wiring are unchanged.
+function handbookHelp(path) {
+  const H = (anchor, label) => ({ anchor, label });
+  if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
+  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
+  if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
+  if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
+  if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
+  if (path.startsWith("#/console/org")) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
+  return H("willkommen", "Welcome to Atlas");
+}
+
+// The help menu is built once (async, after /info resolves) but its contextual
+// entry has to follow navigation, which happens independently. We stash the docs
+// flag and the current route so either event can (re)render correctly regardless
+// of which lands first: initHelpMenu renders using the last route setChrome saw,
+// and setHelpContext refreshes the entry in place on every later navigation.
+let helpDocsEnabled = false;
+let helpRoutePath = "#/console";
+
+// setHelpContext points the "On this page" entry at the chapter for `path`. Safe
+// to call before the menu exists (early navigations) — it just records the route.
+function setHelpContext(path) {
+  helpRoutePath = path;
+  const ctx = document.getElementById("help-ctx");
+  if (!ctx) return;
+  const { anchor, label } = handbookHelp(path);
+  ctx.href = `/handbuch.html#${anchor}`;
+  ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
+}
+
+// initHelpMenu fills the top-bar "?" dropdown. It leads with a contextual
+// "On this page" link into the handbook chapter for the current view (see
+// handbookHelp), then the general references: the Handbook (a self-contained
+// bilingual page served regardless of the --docs flag), the Scalar API Explorer
+// (/api/docs) when docs are enabled — otherwise an inert hint about --docs=false
+// so the missing link is self-explanatory rather than a dead button (ADR-0043) —
+// and the Conformance Gallery (always shown; a static asset). Open/close is
+// handled by the shared delegated .dropdown-toggle machinery above.
 function initHelpMenu(docsEnabled) {
+  helpDocsEnabled = docsEnabled;
   const menu = document.getElementById("help-menu");
   if (!menu) return;
   const explorer = docsEnabled
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  menu.innerHTML = explorer + gallery;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const context = `<div class="mlabel">On this page</div>` +
+    `<a id="help-ctx" role="menuitem" target="_blank" rel="noopener" href="/handbuch.html"></a>` +
+    `<div class="sep"></div>`;
+  menu.innerHTML = context + handbook + explorer + gallery;
+  setHelpContext(helpRoutePath); // fill the contextual entry for the current view
 }
 
 function setChrome(appId, route) {
@@ -505,6 +570,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
+  setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
   const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
@@ -528,6 +594,7 @@ async function viewConsoleDashboard() {
       <div class="row">
         <a class="btn" href="#/modeler">Open Modeler</a>
         <a class="btn ghost" href="#/console/engine">View engine</a>
+        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
       </div>
     </div>
     <div class="grid2" style="margin-top:18px">
@@ -866,7 +933,7 @@ async function viewConsoleOrg() {
       endpoint is stored; the token is a <b>reference</b> resolved from the vault (or
       <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
       <div id="connector-form-slot" style="padding:0 18px"></div>
-      <table>
+      <table data-dt-key="connectors">
         <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
         <tbody id="connector-rows">${connectors.map(managedRow).join("")
           || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
@@ -906,7 +973,7 @@ async function viewConsoleOrg() {
         is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
         from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
         <div id="secret-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="secrets">
           <thead><tr><th>Secret</th><th></th></tr></thead>
           <tbody id="secret-rows">${secrets.map(secretRow).join("")
             || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
@@ -942,7 +1009,7 @@ async function viewConsoleOrg() {
           : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
           Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
             || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
@@ -1144,38 +1211,36 @@ function toggleSection(id, btn) {
   try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
-// viewModelerHome is the project landscape: a clean table of projects (each a
-// container of artifacts, ADR-0034) plus a collapsible list of deployed
-// definitions. Artifact editing happens inside a project (viewProjectDetail),
-// which keeps this overview tidy. "Create new" is a single dropdown.
+// viewModelerHome is the application landscape: a clean table of process
+// applications (each a container of artifacts — the ADR-0034 project reframed by
+// ADR-0128) plus a collapsible list of deployed definitions. Artifact editing
+// happens inside an application (viewProjectDetail), which keeps this overview
+// tidy. "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
-      <h1>Modeler</h1>
+      <h1>Applications</h1>
       ${dropdown("Create new", "btn", [
-        { label: "New project", icon: "📁", act: "new-project" },
+        { label: "New application", icon: "📦", act: "new-project" },
         { sep: true },
         { header: "Blank resources" },
         { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
+        { label: "Import source tree…", icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
-      <table>
+      <table data-dt-key="projects">
         <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
         <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
     <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-    <div class="card" style="padding:0">
-      <table>
-        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div></div>`;
+      <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+    </div>`;
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   const rows = document.getElementById("rows");
@@ -1185,7 +1250,7 @@ async function viewModelerHome() {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1209,20 +1274,20 @@ async function viewModelerHome() {
         { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
+        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
-        <td class="muted">${esc(fmtTime(p.updatedAt))}</td>
+        <td class="muted" data-sort="${p.updatedAt || 0}">${esc(fmtTime(p.updatedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
     const ungroupedRow = ungrouped.length ? `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Ungrouped</a>
-          <span class="muted" style="font-size:12px">· not in a project</span></div></td>
+        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Not assigned</a>
+          <span class="muted" style="font-size:12px">· not in an application</span></div></td>
         <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
       </tr>` : "";
 
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">No projects yet. Use <b>Create new</b> to add one.</td></tr>`;
+      `<tr><td colspan="4" class="empty">No applications yet. Use <b>Create new</b> to add one.</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -1232,37 +1297,104 @@ async function viewModelerHome() {
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
     if (act === "import") importArtifact("", renderProjects);
+    if (act === "import-source") importApplicationSource(renderProjects);
   });
+
+  // One deployed process = one row. A process may have several deployed versions;
+  // groupByProcess collapsed them, so the row shows the latest and a version count.
+  const deployRow = (g) => {
+    const older = g.versions.length > 1
+      ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+    const label = g.latest.name || g.processId;
+    const sub = g.latest.name
+      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+    // A deactivated definition stays deployed but does not auto-start new instances
+    // from its timer/message/signal start events (ADR-0119). Flag it and offer the
+    // inverse toggle.
+    const inactive = g.latest.active === false;
+    const badge = inactive
+      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      : "";
+    const toggleLabel = inactive ? "Activate" : "Deactivate";
+    const toggleTitle = inactive
+      ? "Resume automatic starts (timer/message/signal start events)"
+      : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
+    return `<tr>
+      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
+      <td>v${g.latest.version}${older}</td>
+      <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
+        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
+      </td>
+    </tr>`;
+  };
+  const deployTable = (gs) => `<div class="card" style="padding:0">
+      <table class="no-enhance">
+        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
+        <tbody>${gs.map(deployRow).join("")}</tbody>
+      </table>
+    </div>`;
 
   const render = async () => {
     try {
-      const groups = groupByProcess(await api("GET", "/api/v1/processes"));
+      const [procs, projects] = await Promise.all([
+        api("GET", "/api/v1/processes"),
+        api("GET", "/api/v1/applications"),
+      ]);
+      const groups = groupByProcess(procs);
       if (!groups.length) {
-        rows.innerHTML = `<tr><td colspan="4" class="empty">
-          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</td></tr>`;
+        rows.innerHTML = `<p class="empty" style="padding:14px">
+          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</p>`;
         return;
       }
-      rows.innerHTML = groups.map((g) => {
-        const older = g.versions.length > 1
-          ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
-        const label = g.latest.name || g.processId;
-        const sub = g.latest.name
-          ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-        return `<tr>
-          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${sub}</td>
-          <td>v${g.latest.version}${older}</td>
-          <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
-          <td style="text-align:right; white-space:nowrap">
-            <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-            <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
-          </td>
-        </tr>`;
-      }).join("");
+      // Group deployed definitions into the same project folders as design-time
+      // artifacts (ADR-0034): bucket by each process's projectId, ordering the
+      // buckets like the projects table above, then a trailing "Ungrouped" bucket for
+      // definitions with no (or an unknown) project. With no project at all, fall back
+      // to the plain flat table so a project-less install is unchanged.
+      const known = new Map(projects.map((p) => [p.id, p.name]));
+      const byProject = new Map();
+      for (const g of groups) {
+        const pid = g.latest.projectId && known.has(g.latest.projectId) ? g.latest.projectId : "";
+        if (!byProject.has(pid)) byProject.set(pid, []);
+        byProject.get(pid).push(g);
+      }
+      const buckets = [];
+      for (const p of projects) {
+        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📦", groups: byProject.get(p.id) });
+      }
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Not assigned", icon: "🗂", groups: byProject.get("") });
+
+      if (buckets.length === 1 && buckets[0].id === "ungrouped") {
+        rows.innerHTML = deployTable(buckets[0].groups);
+      } else {
+        rows.innerHTML = buckets.map((b) => {
+          const sec = "dep-" + b.id;
+          const open = sectionState(sec);
+          return `<div style="margin-bottom:14px">
+            <h3 style="margin:0 0 8px; font-size:15px">
+              <button class="section-toggle" aria-expanded="${open}" data-section="${esc(sec)}">
+                <span class="mi-icon">${b.icon}</span>${esc(b.name)}
+                <span class="muted" style="font-weight:normal">· ${b.groups.length}</span>
+              </button>
+            </h3>
+            <div class="section-body" id="sec-${esc(sec)}"${open ? "" : " hidden"}>${deployTable(b.groups)}</div>
+          </div>`;
+        }).join("");
+        for (const t of rows.querySelectorAll(".section-toggle"))
+          t.addEventListener("click", () => toggleSection(t.dataset.section, t));
+      }
       for (const b of rows.querySelectorAll("button[data-del]")) {
         b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
       }
+      for (const b of rows.querySelectorAll("button[data-toggle]")) {
+        b.addEventListener("click", () =>
+          toggleProcessActive(Number(b.dataset.toggle), b.dataset.active === "1", render));
+      }
     } catch (e) {
-      rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
+      rows.innerHTML = `<p class="empty" style="padding:14px">${esc(e.message)}</p>`;
     }
   };
   await Promise.all([renderProjects(), render()]);
@@ -1282,7 +1414,7 @@ async function viewProjectDetail(id) {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1290,12 +1422,12 @@ async function viewProjectDetail(id) {
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const proj = ungrouped ? { id: "ungrouped", name: "Ungrouped" } : projects.find((p) => p.id === id);
+    const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
     if (!proj) {
-      root.innerHTML = `<div class="card empty">This project no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
+      root.innerHTML = `<div class="card empty">This application no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
       return;
     }
-    setTitle(`${proj.name || "Project"} · Modeler`);
+    setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
 
@@ -1309,7 +1441,7 @@ async function viewProjectDetail(id) {
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [
       { header: "Move to" },
-      { label: "Ungrouped", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+      { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
       ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     ];
 
@@ -1330,7 +1462,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
         <td class="muted">Diagram</td>
-        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const refRow = (r) => {
@@ -1346,7 +1478,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc(r.name.toLowerCase())}">
         ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
-        <td class="muted">${esc(fmtTime(r.createdAt))}</td>
+        <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const formRow = (f) => {
@@ -1359,7 +1491,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
         <td class="muted">Form</td>
-        <td class="muted">${esc(fmtTime(f.savedAt))}</td>
+        <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
@@ -1376,31 +1508,42 @@ async function viewProjectDetail(id) {
     ];
 
     const projItems = ungrouped ? [] : [
+      { label: "Download source…", icon: "🗂", act: "srcexport" },
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
-      ...(isOwner ? [{ label: "Rename project", icon: "✎", act: "renproj" }] : []),
-      ...(isOwner ? [{ sep: true }, { label: "Delete project", icon: "🗑", act: "delproj", danger: true }] : []),
+      ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
+      ...(isOwner ? [{ sep: true }, { label: "Delete application", icon: "🗑", act: "delproj", danger: true }] : []),
     ];
     root.innerHTML = `
       <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
       <div class="between">
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Deploy</button>` : ""}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Publish</button>` : ""}
           ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
-      <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
-      <div class="card" style="padding:0">
-        <table>
-          <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
-          <tbody id="pd-rows">${bodyRows ||
-            `<tr><td colspan="4" class="empty">${canWrite
-              ? "No artifacts yet — use <b>Create new</b> to add one."
-              : "No artifacts in this project yet."}</td></tr>`}</tbody>
-        </table>
-      </div>`;
+      ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
+        <button data-pane="artifacts" class="active">Artifacts</button>
+        <button data-pane="deployments">Deployments</button>
+      </div>`}
+      <div id="pane-artifacts">
+        <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
+        <div class="card" style="padding:0">
+          <table data-dt-key="project-artifacts">
+            <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
+            <tbody id="pd-rows">${bodyRows ||
+              `<tr><td colspan="4" class="empty">${canWrite
+                ? "No artifacts yet — use <b>Create new</b> to add one."
+                : "No artifacts in this application yet."}</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+      ${ungrouped ? "" : `<div id="pane-deployments" hidden>
+        <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
+        <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      </div>`}`;
 
     const filter = document.getElementById("pd-filter");
     filter.addEventListener("input", () => {
@@ -1409,9 +1552,28 @@ async function viewProjectDetail(id) {
         tr.hidden = q !== "" && !tr.dataset.name.includes(q);
     });
 
+    // Tabs: Artifacts (design-time) and Deployments (what's live for this
+    // application, ADR-0128). The deployments pane loads lazily on first open.
+    const tabs = document.getElementById("pd-tabs");
+    if (tabs) {
+      let loadedDeployments = false;
+      tabs.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-pane]");
+        if (!b) return;
+        for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
+        document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
+        document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
+        if (b.dataset.pane === "deployments" && !loadedDeployments) {
+          loadedDeployments = true;
+          renderAppDeployments(id);
+        }
+      });
+    }
+
     onMenuAction(root, (act, b) => {
       switch (act) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
+        case "srcexport": downloadApplicationSource(id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -1427,9 +1589,162 @@ async function viewProjectDetail(id) {
       }
     });
     const deployBtn = document.getElementById("pd-deploy");
-    if (deployBtn) deployBtn.addEventListener("click", () => deployProject(id, render));
+    if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
   };
   await render();
+}
+
+// renderAppDeployments fills the Deployments tab: the application's published
+// version, its live definitions with per-definition instance counts, and its
+// release history (ADR-0128). One call each, both scoped to this application.
+async function renderAppDeployments(id) {
+  const host = document.getElementById("pd-deployments");
+  if (!host) return;
+  let view, releases;
+  try {
+    [view, releases] = await Promise.all([
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/deployments`),
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`),
+    ]);
+  } catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+
+  // Two independent facts, shown as two pills rather than one merged "state":
+  // whether this is the version that still starts instances (current vs
+  // superseded — deploying a new version retires the previous one's message,
+  // signal, and timer starts), and whether an operator paused it (ADR-0119).
+  // A superseded version keeps its running instances and can still be targeted
+  // deliberately, e.g. by a pinned call activity (ADR-0105).
+  const stateCell = (d) => {
+    const life = d.current
+      ? `<span class="pill ok" title="Newest version — starts new instances">current</span>`
+      : `<span class="pill" title="A newer version has taken over; running instances continue, this one no longer starts any by itself">superseded</span>`;
+    const paused = d.active ? "" :
+      ` <span class="pill warn" title="An operator paused this definition (ADR-0119)">paused</span>`;
+    return `<td>${life}${paused}</td>`;
+  };
+
+  const defRow = (d) => `<tr${d.current ? "" : ' class="muted-row"'}>
+    <td><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || d.processId)}</b></a></div>
+      <div class="muted" style="font-size:12px; padding-left:26px">${esc(d.processId)}</div></td>
+    <td><span class="chip">v${d.version}</span></td>
+    ${stateCell(d)}
+    <td class="muted">${d.running}</td>
+    <td class="muted">${d.finished}</td>
+    <td class="muted" data-sort="${d.deployedAt || 0}">${esc(fmtTime(d.deployedAt))}</td>
+  </tr>`;
+
+  // Current versions first, then each process's superseded versions newest-first,
+  // so the versions that actually run head the table instead of being buried.
+  const orderedDefs = [...view.definitions].sort((a, b) =>
+    (b.current - a.current) ||
+    a.processId.localeCompare(b.processId) ||
+    (b.version - a.version));
+
+  // Deployment targets (ADR-0129): what each peer server runs for this
+  // application. Fetched separately from the local view because it makes an
+  // outbound call per bound target — a peer being slow or down must not delay or
+  // empty the rest of the page, so a failure here renders as an unreachable row.
+  let targets = [];
+  try {
+    targets = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/targets`);
+  } catch { /* best-effort: the local view still renders without the target section */ }
+
+  const targetRow = (t) => {
+    // Three distinct states, because they mean different things operationally:
+    // never shipped there, shipped and answering, shipped and not answering.
+    let state, detail;
+    if (!t.bound) {
+      state = `<span class="pill">not deployed</span>`;
+      detail = `<span class="muted">—</span>`;
+    } else if (t.reachable) {
+      state = `<span class="pill ok">live</span>`;
+      detail = `<span class="chip">v${t.version || "?"}</span>`;
+    } else {
+      state = `<span class="pill err">unreachable</span>`;
+      detail = `<span class="muted" title="${esc(t.error || "")}">${esc(t.error || "no answer")}</span>`;
+    }
+    return `<tr${t.bound ? "" : ' class="muted-row"'}>
+      <td><div class="artifact-name"><span class="mi-icon">🛰</span><b>${esc(t.targetName)}</b></div>
+        <div class="muted" style="font-size:12px; padding-left:26px">${esc(t.baseUrl)}</div></td>
+      <td>${state}</td>
+      <td>${detail}</td>
+      <td class="muted">${t.reachable ? t.running : "—"}</td>
+      <td class="muted">${t.reachable ? t.finished : "—"}</td>
+    </tr>`;
+  };
+
+  const targetsSection = targets.length ? `
+    <h2 style="margin:22px 0 10px; font-size:15px">Deployment targets</h2>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Target</th><th>State</th><th>Version</th><th>Running</th><th>Finished</th></tr></thead>
+        <tbody>${targets.map(targetRow).join("")}</tbody>
+      </table>
+    </div>` : "";
+
+  const relRow = (r) => `<tr>
+    <td><span class="chip">v${r.version}</span></td>
+    <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
+    <td class="muted">${(r.members || []).length}</td>
+    <td class="muted">${esc(r.note || "—")}</td>
+    <td class="row-actions">${targets.length
+      ? `<button class="btn ghost sm" data-promote="${r.version}">Promote…</button>`
+      : ""}</td>
+  </tr>`;
+
+  host.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="stats">
+        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>Published version</span></div>
+        <div class="stat"><b>${view.processes}</b><span>Process${view.processes === 1 ? "" : "es"}</span></div>
+        <div class="stat"><b>${view.running}</b><span>Running instances</span></div>
+        <div class="stat"><b>${view.finished}</b><span>Finished instances</span></div>
+      </div>
+    </div>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Definition</th><th>Version</th><th>State</th><th>Running</th><th>Finished</th><th>Deployed</th></tr></thead>
+        <tbody>${orderedDefs.map(defRow).join("") ||
+          `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
+      </table>
+    </div>
+    ${targetsSection}
+    <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
+    <div class="card" style="padding:0" id="pd-releases">
+      <table>
+        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th><th></th></tr></thead>
+        <tbody>${releases.map(relRow).join("") ||
+          `<tr><td colspan="5" class="empty">No releases yet.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
+  for (const b of host.querySelectorAll("button[data-promote]"))
+    b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+}
+
+// promoteRelease ships an existing release to a chosen target (ADR-0129). The
+// release is already frozen, so this sends exactly what was published — the user
+// picks *where*, never *what*. Results come back per target, so a refusal by one
+// peer is reported as that peer's, not as a failed action.
+async function promoteRelease(appID, version, targets) {
+  const names = targets.map((t, i) => `${i + 1}) ${t.targetName}`).join("\n");
+  const answer = window.prompt(
+    `Promote v${version} to which target?\n\n${names}\n\nEnter a number:`, "1");
+  if (answer == null) return;
+  const pick = targets[Number(answer) - 1];
+  if (!pick) { toast("No such target", "err"); return; }
+
+  try {
+    const res = await api("POST",
+      `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/promote`,
+      { targetIds: [pick.targetId] });
+    const r = (res.results || [])[0];
+    if (r && r.ok) toast(`Promoted v${version} to ${pick.targetName}`, "ok");
+    else toast(`${pick.targetName}: ${(r && r.error) || "promotion failed"}`, "err");
+  } catch (e) {
+    toast("promotion failed: " + e.message, "err");
+  }
+  await renderAppDeployments(appID);
 }
 
 async function deleteDraft(processId, reload) {
@@ -1458,37 +1773,56 @@ async function deleteProcess(processId, groups, reload) {
   await reload();
 }
 
-// ---------- Projects (ADR-0034) ----------
+// toggleProcessActive activates or deactivates a deployed definition (ADR-0119). A
+// deactivated process stays deployed and keeps its running instances, but no longer
+// auto-starts new ones from its timer/message/signal start events. `key` is the latest
+// version's definition key; `inactive` is its current state (true → the click activates).
+async function toggleProcessActive(key, inactive, reload) {
+  const activate = inactive; // clicking "Activate" on an inactive one activates it
+  try {
+    await api("PUT", `/api/v1/processes/${key}/active`, { active: activate });
+    toast(activate ? "Process activated" : "Process deactivated — automatic starts paused", "ok");
+  } catch (e) {
+    toast("could not change activation: " + e.message, "err");
+  }
+  await reload();
+}
+
+// ---------- Applications (ADR-0034 project, reframed by ADR-0128) ----------
+// These call the canonical /api/v1/applications endpoints. The pre-rename
+// project paths still work as deprecated aliases for external callers, but the
+// UI is on the new names. The artifact tag stays `projectId` — ADR-0128 renames
+// the API/UI boundary only, not the on-disk shape.
 async function createProject(reload) {
-  const name = window.prompt("Project name");
+  const name = window.prompt("Application name");
   if (name == null) return; // cancelled
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("POST", "/api/v1/projects", { name: trimmed });
-    toast(`Created project "${trimmed}"`, "ok");
-  } catch (e) { toast("could not create project: " + e.message, "err"); }
+    await api("POST", "/api/v1/applications", { name: trimmed });
+    toast(`Created application "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create application: " + e.message, "err"); }
   await reload();
 }
 
 async function renameProject(id, current, reload) {
-  const name = window.prompt("Rename project", current);
+  const name = window.prompt("Rename application", current);
   if (name == null) return;
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
-    toast("Renamed project", "ok");
-  } catch (e) { toast("could not rename project: " + e.message, "err"); }
+    await api("PATCH", `/api/v1/applications/${encodeURIComponent(id)}`, { name: trimmed });
+    toast("Renamed application", "ok");
+  } catch (e) { toast("could not rename application: " + e.message, "err"); }
   await reload();
 }
 
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete project "${name}"? Its diagrams are kept and become Ungrouped.`)) return;
+  if (!window.confirm(`Delete application "${name}"? Its artifacts are kept and become Not assigned.`)) return;
   try {
-    await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
-    toast(`Deleted project "${name}"`, "ok");
-  } catch (e) { toast("could not delete project: " + e.message, "err"); }
+    await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
+    toast(`Deleted application "${name}"`, "ok");
+  } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
 }
 
@@ -1664,11 +1998,11 @@ function openShareModal(proj, users, degraded, reload) {
 
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
   const setVisibility = (v) => apply(() =>
-    api("PATCH", `/api/v1/projects/${encodeURIComponent(p.id)}`, { visibility: v }));
+    api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
   const setMember = (uid, role) => uid && apply(() =>
-    api("PUT", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
+    api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
   const removeMember = (uid) => apply(() =>
-    api("DELETE", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
+    api("DELETE", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
 
   function wire() {
     for (const b of body.querySelectorAll("[data-vis]"))
@@ -2164,37 +2498,121 @@ async function validateDmnRef(id) {
 // reference — and reflects each result plus an overall verdict.
 async function validateProject(projectId) {
   try {
-    const rep = await api("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/validate`);
+    const rep = await api("POST", `/api/v1/applications/${encodeURIComponent(projectId)}/validate`);
     for (const r of rep.references) applyRefStatus(r.id, r);
     toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
       rep.ok ? "ok" : "err");
-  } catch (e) { toast("could not validate project: " + e.message, "err"); }
+  } catch (e) { toast("could not validate application: " + e.message, "err"); }
 }
 
-// deployProject deploys the whole project: the server validates its DMN
+// deployProject publishes the whole application: the server validates its DMN
 // references (the deploy-time gate) and, only if all pass, deploys its BPMN
-// diagrams as runnable definitions. A refusal (409) carries the reason and the
-// per-reference results, which we surface without a reload; a success reloads so
-// the new definitions show under "Deployed". Uses a raw fetch so the refusal
-// body (which is not an {error} shape) is read instead of thrown away.
+// diagrams together as runnable definitions (the ADR-0128 headline "Publish"
+// action). A refusal (409) carries the reason and the per-reference results,
+// which we surface without a reload; a success reloads so the new definitions
+// show under "Deployed". Uses a raw fetch so the refusal body (which is not an
+// {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Deploy this project? Its DMN references are validated, then its BPMN diagrams are deployed as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
-    const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Deployed ${n} definition${n === 1 ? "" : "s"}` : "Nothing to deploy in this project", "ok");
+      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
       await reload();
       return;
     }
   } catch (e) {
-    toast("deploy failed: " + e.message, "err");
+    toast("publish failed: " + e.message, "err");
     return;
   }
   // Refused (or a server error): show why and reflect any DMN results in place.
-  toast(rep.reason || rep.error || "Deploy refused", "err");
+  toast(rep.reason || rep.error || "Publish refused", "err");
+  for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// downloadApplicationSource downloads the application's source tree (ADR-0134): a
+// manifest plus its drafts and forms as native .bpmn and .form.json files, in one
+// .tar.gz. A plain same-origin navigation, so the session cookie authenticates it,
+// exactly as the console's backup download does.
+function downloadApplicationSource(id) {
+  window.location.href = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+}
+
+// importApplicationSource reads a source tree back in. Which application it lands
+// in is not this dialog's choice: the tree's manifest carries the portable key, so
+// the server updates the application that key names or creates it when this server
+// has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
+// are reported back and left alone.
+function importApplicationSource(reload) {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ".gz,.tgz,application/gzip";
+  picker.addEventListener("change", async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    try {
+      const res = await fetch("/api/v1/applications/source", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || res.statusText);
+      const n = (data.processes || 0) + (data.forms || 0) + (data.decisions || 0);
+      toast(
+        `${data.created ? "Created" : "Updated"} ${data.name} — ${n} artifact${n === 1 ? "" : "s"}` +
+        (data.untracked && data.untracked.length
+          ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
+          : ""),
+        "ok");
+      await reload();
+    } catch (e) {
+      toast("Import failed: " + (e && e.message || e), "err");
+    }
+  });
+  picker.click();
+}
+
+// publishApplication is the ADR-0128 headline action: ship the whole application as
+// one bundle and record the release it becomes. It shows the version the publish
+// will mint (v(n) → v(n+1)) and takes an optional changelog note. A refused bundle
+// deploys nothing and records no release, so the version does not advance.
+async function publishApplication(id, reload) {
+  let next = 1;
+  try {
+    const releases = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`);
+    if (releases.length) next = releases[0].version + 1;
+  } catch { /* best-effort: fall back to "the next version" without a number */ }
+
+  const note = window.prompt(
+    `Publish this application as v${next}?\n\n` +
+    "Its DMN references are validated, then its artifacts are deployed together as " +
+    "one release.\n\nOptional note describing what changes:", "");
+  if (note == null) return; // cancelled
+
+  let rep;
+  try {
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    rep = await res.json();
+    if (res.ok && rep.deployed) {
+      const n = (rep.definitions || []).length;
+      const v = rep.release ? `v${rep.release.version}` : "";
+      toast(`Published ${v} — ${n} definition${n === 1 ? "" : "s"}`, "ok");
+      await reload();
+      return;
+    }
+  } catch (e) {
+    toast("publish failed: " + e.message, "err");
+    return;
+  }
+  toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
@@ -2251,7 +2669,7 @@ async function viewInstances() {
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
     <div class="card" id="proc-card" style="padding:0">
-      <table>
+      <table data-dt-key="instances">
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2262,8 +2680,9 @@ async function viewInstances() {
   let summary = new Map();
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
 
-  // renderRows draws the process rows, narrowed by the filter box (name or process
-  // id). Kept separate from load so filtering never refetches.
+  // renderRows draws the process rows, narrowed by the top filter box (name or process
+  // id). Column sorting and per-column filtering are handled by the shared table
+  // enhancer over the rendered rows, so this only builds the rows and their sort keys.
   function renderRows() {
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">
@@ -2272,19 +2691,25 @@ async function viewInstances() {
       return;
     }
     const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
-    const groups = q
+    const filtered = q
       ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
       : allGroups;
-    if (!groups.length) {
+    if (!filtered.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
-    tbody.innerHTML = groups.map((g) => {
+    tbody.innerHTML = filtered.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;
       const sub = g.latest.name
         ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
       const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
+      // A deactivated definition stays deployed and keeps its running instances, but does
+      // not auto-start new ones from its timer/message/signal start events (ADR-0119).
+      // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
+      const inactiveBadge = g.latest.active === false
+        ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+        : "";
       const versions = (g.versions.length === 1
         ? `v${g.latest.version}`
         : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
@@ -2298,11 +2723,11 @@ async function viewInstances() {
         ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
         : "";
       return `<tr>
-        <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
-        <td>${versions}</td>
-        <td>${running}</td>
-        <td>${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
+        <td data-sort="${g.versions.length}">${versions}</td>
+        <td data-sort="${s.running || 0}">${running}</td>
+        <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
+        <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
         <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
       </tr>`;
     }).join("");
@@ -2416,7 +2841,7 @@ async function viewInstances() {
         <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
         <td>v${r.version}</td>
         <td>${state}</td>
-        <td class="muted">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
+        <td class="muted" data-sort="${r.completedAt || r.createdAt || 0}">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
         <td>${hits}</td>
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
       </tr>`;
@@ -2425,7 +2850,7 @@ async function viewInstances() {
     varPanel.innerHTML = `
       <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
       <div class="card" style="padding:0">
-        <table class="var-results">
+        <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
           <tbody>${body}</tbody>
         </table>
@@ -2463,7 +2888,7 @@ async function viewDecisions() {
     inputs it saw, the outputs it produced, and the rule trace — or open a process to
     watch the instances that drove it.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decisions">
         <thead><tr><th>Decision</th><th>Evaluation</th><th>Used by</th><th>Evaluations</th><th>Last evaluated</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2499,7 +2924,7 @@ async function viewDecisions() {
           <td>${locus}</td>
           <td>${procs}</td>
           <td>${evals}</td>
-          <td class="muted">${esc(fmtNano(d.lastEvaluatedAt))}</td>
+          <td class="muted" data-sort="${d.lastEvaluatedAt || 0}">${esc(fmtNano(d.lastEvaluatedAt))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -2534,7 +2959,7 @@ async function viewCallActivities() {
     An override keys on the called process id, so it applies to every caller of that
     target listed here.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="call-activities">
         <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2554,7 +2979,8 @@ async function viewCallActivities() {
         const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
           + ` <span class="muted">v${r.callerVersion}</span>`;
         const binding = `<span class="pill">${esc(r.binding)}</span>`
-          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "")
+          + (r.loop ? ' <span class="pill muted">loop</span>' : "");
         // Propagation: "all" both ways is the Zeebe default; call it out only where a
         // direction is isolated (off), since that changes what crosses the boundary.
         const vars = (r.propagateAllParent && r.propagateAllChild)
@@ -2666,7 +3092,7 @@ async function viewIncidents() {
     still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="incidents">
         <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2698,7 +3124,7 @@ async function viewIncidents() {
           <td>${inst}</td>
           <td>${el}</td>
           <td>${cause}</td>
-          <td>${fmtNano(r.raisedAt)}</td>
+          <td data-sort="${r.raisedAt || 0}">${fmtNano(r.raisedAt)}</td>
           <td>${esc(r.message || "—")}</td>
           <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
         </tr>`;
@@ -2756,7 +3182,7 @@ async function viewDecisionDetail(id) {
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decision-evals">
         <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2825,7 +3251,7 @@ async function viewDecisionDetail(id) {
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
         return `<tr>
-          <td class="muted">${esc(fmtNano(r.at))}</td>
+          <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
           <td class="muted">${esc(r.elementId || "—")}</td>
           <td>${pills}</td>
@@ -3098,6 +3524,7 @@ async function viewTasks(preselectKey) {
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              ${t.lane ? `<span class="chip" title="Lane">${esc(t.lane)}</span>` : ""}
               <span class="chip">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
@@ -3386,6 +3813,13 @@ async function viewTasks(preselectKey) {
           <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
         </div>
       </div>`;
+    // The element's <bpmn:documentation> (ADR-0025) is the modeler's instruction for
+    // whoever picks the task up — what to check, which rule applies, when to refuse. It
+    // leads the detail, above the metadata rows, because it is what the assignee needs
+    // before doing anything; a task whose element carries none simply shows no block.
+    const docBlock = (t.documentation || "").trim()
+      ? `<div class="tasks-doc"><h2>What to do</h2><p>${esc(t.documentation.trim())}</p></div>`
+      : "";
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -3395,11 +3829,13 @@ async function viewTasks(preselectKey) {
           <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
         </div>
       </header>
+      ${docBlock}
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
         ${row("Assignee", esc(t.assignee || "—"))}
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
@@ -3773,7 +4209,7 @@ function viewComingSoon(appId) {
 async function resolveProject(projectId) {
   if (!projectId) return null;
   try {
-    const projects = await api("GET", "/api/v1/projects");
+    const projects = await api("GET", "/api/v1/applications");
     const p = projects.find((x) => x.id === projectId);
     return p ? { id: p.id, name: p.name } : null;
   } catch { return null; }
@@ -3864,7 +4300,7 @@ async function viewDmnViewer(refId) {
   const resolveBack = async () => {
     if (!projId) return;
     try {
-      const projects = await api("GET", "/api/v1/projects");
+      const projects = await api("GET", "/api/v1/applications");
       const p = (projects || []).find((x) => x.id === projId);
       const el = document.getElementById("dmn-back");
       if (p && el && !superseded(gen)) el.textContent = `← ${p.name}`;
@@ -4233,6 +4669,22 @@ async function route() {
     location.hash = "#/console";
   } catch (e) {
     view.innerHTML = `<div class="card empty"><h1>Something went wrong</h1><p class="muted">${esc(e.message)}</p></div>`;
+  } finally {
+    // One integration point for every data table: after a view renders, give each of
+    // its tables shared column sorting + a per-column filter row (table.js). A table
+    // opts out with class "no-enhance"; enhanceTable itself skips any table without a
+    // header row and never double-enhances, so this is safe to run on every route.
+    enhanceViewTables();
+  }
+}
+
+// enhanceViewTables applies the shared sort/filter enhancer to every eligible table
+// currently in the main view. It runs once per navigation (not as a live observer),
+// so it never watches the modeler's heavy SVG; each enhanced table then keeps itself
+// current via its own lightweight tbody observer as rows refresh.
+function enhanceViewTables() {
+  for (const t of view.querySelectorAll("table:not(.no-enhance)")) {
+    enhanceTable(t, { key: t.dataset.dtKey || undefined });
   }
 }
 

@@ -1,0 +1,14 @@
+{
+  "name": "standard-loop",
+  "model": "standard-loop.bpmn",
+  "features": [
+    "standard-loop"
+  ],
+  "patterns": [
+    "WCP-21"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

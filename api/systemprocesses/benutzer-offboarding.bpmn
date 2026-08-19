@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Benutzerverwaltung: Benutzer offboarden
+
+  Gegenstueck zur Aufnahme: ein neuer Benutzer wird geregelt deaktiviert.
+  Gleiches Muster wie proc_benutzer_aufnahme - der Prozess koordiniert und
+  dokumentiert; die privilegierte Sperrung bleibt eine Admin-Handlung
+  (User-Task), weil die Benutzerverwaltung admin-gated ist (ADR-0044/0049).
+  Die Bestaetigungs-Mail laeuft automatisch ueber den Mail-Connector.
+
+  Start (Formular off-antrag: benutzername, letzter_tag, grund, email)
+   -> User-Task "Konto sperren"        (Admin sperrt in der Konsole, bestaetigt; Formular off-sperren)
+   -> Service-Task "Bestaetigung senden" (Mail-Connector)
+   -> Ende "Offboarding abgeschlossen"
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_benutzer_offboarding" targetNamespace="http://atlas/examples">
+  <process id="proc_benutzer_offboarding" name="Benutzerverwaltung: Benutzer offboarden" isExecutable="true">
+
+    <startEvent id="start" name="Offboarding beantragt">
+      <extensionElements>
+        <zeebe:formDefinition formId="off-antrag"/>
+      </extensionElements>
+      <outgoing>f_start_sperren</outgoing>
+    </startEvent>
+
+    <userTask id="konto_sperren" name="Konto sperren">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="benutzerverwaltung"/>
+        <zeebe:formDefinition formId="off-sperren"/>
+      </extensionElements>
+      <incoming>f_start_sperren</incoming>
+      <outgoing>f_sperren_mail</outgoing>
+    </userTask>
+
+    <serviceTask id="bestaetigung_mail" name="Bestaetigung senden">
+      <extensionElements>
+        <atlas:mailConnector connector="Patrick Blumer"
+          to="=email"
+          subject="Offboarding durchgefuehrt"
+          body="=&quot;Hallo,\n\ndas Konto '&quot; + benutzername + &quot;' wurde zum &quot; + letzter_tag + &quot; deaktiviert.\n\nGrund: &quot; + grund + &quot;\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
+      </extensionElements>
+      <incoming>f_sperren_mail</incoming>
+      <outgoing>f_mail_ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="ende" name="Offboarding abgeschlossen">
+      <incoming>f_mail_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_sperren" sourceRef="start" targetRef="konto_sperren"/>
+    <sequenceFlow id="f_sperren_mail" sourceRef="konto_sperren" targetRef="bestaetigung_mail"/>
+    <sequenceFlow id="f_mail_ende" sourceRef="bestaetigung_mail" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_benutzer_offboarding">
+    <bpmndi:BPMNPlane id="BPMNPlane_benutzer_offboarding" bpmnElement="proc_benutzer_offboarding">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="konto_sperren_di" bpmnElement="konto_sperren">
+        <omgdc:Bounds x="240" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bestaetigung_mail_di" bpmnElement="bestaetigung_mail">
+        <omgdc:Bounds x="390" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="540" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="512" y="145" width="94" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_sperren_di" bpmnElement="f_start_sperren">
+        <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sperren_mail_di" bpmnElement="f_sperren_mail">
+        <omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_mail_ende_di" bpmnElement="f_mail_ende">
+        <omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="540" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

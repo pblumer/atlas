@@ -1,7 +1,7 @@
 // Package sharepoint integrates Microsoft SharePoint as a server-registered Atlas
 // connector: a BPMN SharePoint connector task creates a list item in a
 // model-authored site and list through a configured provider via the job path
-// (ADR-0105), mirroring how the mail package delegates a send to a registry-managed
+// (ADR-0141), mirroring how the mail package delegates a send to a registry-managed
 // provider (ADR-0079). The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //
@@ -19,13 +19,13 @@
 //
 // The transport is Microsoft Graph ([GraphClient]), authenticated with an OAuth2
 // bearer token acquired app-only (client-credentials) or via a pre-obtained refresh
-// token (ADR-0105), reusing the same grant shapes as the native mail providers
+// token (ADR-0141), reusing the same grant shapes as the native mail providers
 // (ADR-0093).
 //
 // Delivery is at-least-once: a crash between "Graph created the item" and "job
 // completed" replays the create, which — unlike an idempotent mail Message-ID — can
 // produce a duplicate list item. De-duplication of created items is a follow-up
-// (ADR-0105).
+// (ADR-0141).
 package sharepoint
 
 import "context"

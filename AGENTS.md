@@ -89,7 +89,7 @@ Packages may not all exist yet — the project is at Milestone 0 (see [`ROADMAP.
 3. **Check the invariants** above against your plan *before* writing code.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
-6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and update [`docs/adr/README.md`](docs/adr/README.md).
+6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and update [`docs/adr/README.md`](docs/adr/README.md). Take the next free number — **not** one another branch may already have claimed; `go test ./docs/adr` checks that numbers are unique and that the index matches the directory, and it runs in the normal test sweep.
 
 ## Testing conventions
 

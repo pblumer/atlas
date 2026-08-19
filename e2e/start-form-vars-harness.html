@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas start-form variables e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
+         diagram whose start event links a form, to verify the Variables panel
+         surfaces the linked form's input fields (grouped under "Form") alongside the
+         process's own variables (ADR-0028). Mounted in deployment mode (key set,
+         draftId null) so no live collaboration SSE is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // A process whose start event links the form "csv-upload-form", and which also
+      // declares one start variable (orderId) — so the panel shows both a "Form" and
+      // a "Process" group.
+      const START_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_csv" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="csv-proc" name="CSV Import" isExecutable="true">
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="orderId" type="string" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="csv-upload-form" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f0</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="csv-proc">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="320" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="320" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The linked form's schema. Layout-only components (text) carry no key; a plain
+      // group's field (header) lives in the enclosing scope; a dynamic list binds an
+      // array under its `path` (rows), so its inner field (cell) is not a top-level
+      // variable. Expected surfaced fields: filename, delimiter, header, rows.
+      const FORM = {
+        id: "csv-upload-form",
+        name: "CSV Upload",
+        schema: {
+          type: "default",
+          components: [
+            { type: "textfield", key: "filename", label: "File name" },
+            { type: "number", key: "delimiter", label: "Delimiter" },
+            { type: "text", text: "Just a caption — no key" },
+            { type: "group", components: [{ type: "checkbox", key: "header", label: "Has header" }] },
+            { type: "dynamiclist", path: "rows", components: [{ type: "textfield", key: "cell" }] },
+          ],
+        },
+      };
+
+      window.__calls = [];
+      const api = async (method, url) => {
+        window.__calls.push({ method, url });
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return START_XML;
+        if (method === "GET" && /\/forms\/csv-upload-form$/.test(url)) return FORM;
+        if (method === "GET" && /\/forms$/.test(url)) return [{ id: FORM.id, name: FORM.name }];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -6,9 +6,12 @@ import { attachFeelEditor } from "./feel.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { installDevShortcut, markDevField } from "./dev-view.js";
+import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachCollab } from "./collab.js";
+import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -19,6 +22,10 @@ import { attachCollab } from "./collab.js";
 // glyph shown on the task shape in the Implement view so the executable language is
 // legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
 // it runs (see makeImplementBadges).
+// The HTML language descriptor, used for the markup fields in the connector catalog
+// (the mail body). Resolved once — the registry is static.
+const htmlLang = devLang("html");
+
 const JOB_LANGS = {
   powershell: {
     label: "PowerShell (job worker)", short: "PowerShell",
@@ -69,7 +76,7 @@ function loadBpmn() {
           fetch("vendor/bpmn/zeebe.json").then((r) => r.json()),
           fetch("atlas-moddle.json").then((r) => r.json()),
         ]);
-        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe, atlas } });
+        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe: patchZeebeModdle(zeebe), atlas } });
       } catch (e) {
         reject(new Error("failed to load the moddle extensions: " + e.message));
       }
@@ -78,6 +85,22 @@ function loadBpmn() {
     document.head.appendChild(s);
   });
   return bpmnReady;
+}
+
+// patchZeebeModdle declares the handful of attributes Atlas reads from a zeebe
+// extension element that the upstream descriptor does not know (ADR-0135): a
+// business rule task's <zeebe:calledDecision retries="…">, the retry budget the
+// compiler has always parsed there. The vendored zeebe.json stays a pristine copy of
+// zeebe-bpmn-moddle (see vendor/bpmn/README.md), so the difference lives here, in
+// code, where it is visible — rather than as an invisible edit to a vendored file.
+// Declaring it as a plain attribute (not an atlas:-prefixed one) is what keeps the
+// round-trip honest: a hand-authored retries="5" is read back into the panel.
+function patchZeebeModdle(zeebe) {
+  const cd = (zeebe.types || []).find((t) => t.name === "CalledDecision");
+  if (cd && !(cd.properties || []).some((p) => p.name === "retries")) {
+    cd.properties.push({ name: "retries", type: "String", isAttr: true });
+  }
+  return zeebe;
 }
 
 // newModeler/newViewer construct a bpmn-js instance with the moddle extensions
@@ -144,8 +167,9 @@ function calleeXML(pid, name) {
 }
 
 let current; // active modeler/viewer, destroyed on remount
+let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
-let collab; // active live collaboration session (ADR-0103), closed on remount
+let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
 // it right after its own cleanup() and re-checks it after each await, so a slow
 // mount that a newer navigation has superseded bails out *before* it builds a
@@ -165,6 +189,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
   generation++; // supersede any in-flight mount (see `generation` above)
+  if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -176,7 +201,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
-// isValidTtl mirrors the engine's instance-TTL parser (ADR-0085, compiler/duration.go):
+// isValidTtl mirrors the engine's TTL parser (ADR-0085 instance TTL, ADR-0145 history
+// TTL; compiler/duration.go):
 // the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
 // positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
 // to warn while authoring; the deploy is the authority that rejects a bad value.
@@ -459,9 +485,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
+        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
-        <button class="btn" id="deploy">Deploy</button>
+        <button class="btn neutral" id="docexport" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)">Documentation</button>
+        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
         <button class="btn play" id="sim-play">&#9654; Play</button>
@@ -485,6 +513,18 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
+      </div>
+      <div class="start-panel" id="doc-panel" hidden>
+        <label class="field"><span>Title</span>
+          <input id="doc-title" placeholder="Leave empty to use the process name"/></label>
+        <label class="field"><span>Note for this version</span>
+          <input id="doc-note" placeholder="What changed, or what this version was signed off for"/></label>
+        <div class="row">
+          <button class="btn" id="doc-publish">Publish version</button>
+          <button class="btn neutral" id="doc-cancel">Close</button>
+          <span class="err" id="doc-err"></span>
+        </div>
+        <div class="doc-history" id="doc-history"></div>
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
@@ -574,13 +614,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
-  wireEditorVars(root, modeler);
+  wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
 
   // Only a saved draft has a stable id to key a live session on; a fresh unsaved
-  // diagram or a read-only deployment does not co-edit (ADR-0103).
+  // diagram or a read-only deployment does not co-edit (ADR-0140).
   if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
 }
 
@@ -591,14 +631,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
-  "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
-const UNSUPPORTED_EVENT_DEFS = {
-  "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
-  "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
-  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
-};
+const UNSUPPORTED_EVENT_DEFS = {};
 
 // unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
 // null if it can. It keys off the element type and any event definitions it carries.
@@ -1162,19 +1197,225 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// collectDiagramVariables statically analyses the diagram for the variables it
-// writes and where — the data behind the Variables panel (like Camunda's). Each
-// entry is { name, origin, originId, source }: the variable name, the element that
-// writes it (name/id and the id to select it), and how (start variable, script
-// result, decision result, output mapping). De-duplicated by name, sorted.
-function collectDiagramVariables(modeler) {
+// devVariables is variablesForCompletion's richer sibling for the Developer View
+// (ADR-0145): the same static analysis, but each variable also carries *which scope*
+// it belongs to, so the modal can group them the way a developer thinks about them —
+// what this element reads, what it writes, and what the instance carries. The
+// element-local scopes are collected first and win the de-duplication, so a name that
+// is both an input mapping here and a process variable shows where it matters.
+function devVariables(modeler, element) {
   const out = [];
   const seen = new Set();
-  const push = (name, origin, originId, source) => {
+  const push = (name, detail, scope) => {
     name = (name || "").trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    out.push({ name, origin, originId, source });
+    out.push({ name, detail, scope });
+  };
+  try {
+    const bo = element && element.businessObject;
+    const io = bo && findExt(bo, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      push(p.target, p.source ? "input mapping ← " + p.source : "input mapping", "input");
+    }
+    for (const p of (io && io.outputParameters) || []) {
+      push(p.target, p.source ? "output mapping ← " + p.source : "output mapping", "output");
+    }
+    const s = bo && findExt(bo, "zeebe:Script");
+    if (s && s.resultVariable) push(s.resultVariable, "FEEL script result", "output");
+    const js = bo && findExt(bo, "atlas:JobScript");
+    if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
+    const cd = bo && findExt(bo, "zeebe:CalledDecision");
+    if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
+  } catch { /* best-effort */ }
+  try {
+    for (const v of collectDiagramVariables(modeler)) {
+      const scope = v.category === "Form" ? "form"
+        : /^data object/.test(v.source || "") ? "data"
+        : "process";
+      const detail = v.originId && v.origin ? `${v.source} · ${v.origin}` : v.source;
+      push(v.name, detail, scope);
+    }
+  } catch { /* best-effort */ }
+  return out;
+}
+
+// sampleCache memoizes the live-values lookup per process id for this editing
+// session: opening the Developer View on ten fields of one diagram is one pair of
+// requests, not ten, and switching between the instances in the picker costs
+// nothing at all. The Reload button passes force:true to bypass it, which is how an
+// author picks up an instance they started while the Modeler was open.
+const sampleCache = new Map(); // processId -> Promise<instanceSample[]>
+
+// How many instances the picker offers. Enough to find the one that took the branch
+// being written about, few enough that the <select> stays usable.
+const MAX_SAMPLE_INSTANCES = 50;
+
+// instanceSamples reads the values the diagram's variables actually hold, from a
+// real instance of this very process. `opts.instanceKey` picks one of the offered
+// instances (default: the most relevant one — a running instance first, else the
+// newest finished one); `opts.force` re-reads from the server.
+// Returns null when the process was never deployed or has never run — the modal
+// treats that as "no samples", not as an error.
+async function instanceSamples(modeler, api, opts = {}) {
+  const bo = rootProcess(modeler);
+  const processId = bo && bo.id;
+  if (!processId || !api) return null;
+  if (opts.force) sampleCache.delete(processId);
+  if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
+
+  let rows;
+  try { rows = await sampleCache.get(processId); }
+  catch (e) { sampleCache.delete(processId); throw e; }
+  if (!rows || !rows.length) return null;
+
+  const chosen = rows.find((r) => r.key === opts.instanceKey) || rows[0];
+  return {
+    instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+    values: chosen.values,
+    // The picker only needs each instance's identity; the values ride along in the
+    // cache so switching is a re-render, not a fetch.
+    instances: rows.map((r) => ({ key: r.key, state: r.state, version: r.version, createdAt: r.createdAt })),
+  };
+}
+
+// fetchSamples resolves the diagram's process id to deployed versions and reads one
+// version's instances. GET /instances?process= already returns each instance's
+// root-scope variables, so this is two requests and no per-variable round trip.
+// The newest version is preferred, but a version deployed a minute ago has no
+// instances yet — then its predecessor's values still describe the same variables,
+// so the walk continues rather than reporting nothing.
+async function fetchSamples(api, processId) {
+  const procs = await api("GET", "/api/v1/processes");
+  const versions = (procs || [])
+    .filter((p) => p.processId === processId)
+    .sort((a, b) => b.version - a.version);
+
+  for (const v of versions) {
+    let rows;
+    try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
+    catch { return []; }
+    const found = (rows || [])
+      .filter((r) => r.processDefKey === v.key)
+      // Running instances first (their values are the live ones), then newest first.
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
+      .slice(0, MAX_SAMPLE_INSTANCES)
+      .map((r) => {
+        const values = {};
+        for (const vv of r.variables || []) {
+          if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
+        }
+        return { key: r.key, state: r.state, version: r.version, createdAt: r.createdAt, values };
+      });
+    if (found.length) return found;
+  }
+  return [];
+}
+
+// devViewContext answers "what does the Developer View need to know" at the moment
+// F2 is pressed: the variables in scope for the current selection, and the server
+// round trips the field's language offers — FEEL validates and evaluates in the
+// engine, a job script runs through the real interpreter.
+function devViewContext(modeler, api, field) {
+  const element = (() => {
+    try { return (modeler.get("selection").get() || [])[0]; } catch { return null; }
+  })();
+  const ctx = { variables: devVariables(modeler, element) };
+  const lang = field.dataset.devlang;
+  if (!api) return ctx;
+  // Live values for those variables, read lazily from a real instance of this
+  // process — what the names actually hold beats guessing from the name.
+  ctx.samples = (o) => instanceSamples(modeler, api, o);
+  if (lang === "feel") {
+    ctx.validate = (expression) => api("POST", "/api/v1/feel/validate", { expression });
+    ctx.evaluate = (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables });
+    // An fx field stores its expression '=' prefixed; the marker stays dimmed and
+    // protected in the modal exactly as it is inline (ADR-0067).
+    if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
+  } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
+    ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  }
+  return ctx;
+}
+
+// formFieldCache maps a linked form's id to its input-field keys once fetched:
+// null marks a fetch in flight (so each form is requested once), otherwise
+// { name, fields } — the form's display name and its variable-bearing field keys.
+// collectDiagramVariables reads it synchronously; ensureFormFields fills it.
+const formFieldCache = new Map();
+
+// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
+// Every form-js input component carries a `key` — the variable it reads and writes;
+// layout-only components (text, image, spacer, separator, …) have none. A repeating
+// container (dynamic list / group with a `path`) binds an array under that path, so
+// surface the path rather than descending into its per-row template. A plain group
+// is layout only, so recurse — its fields live in the enclosing scope. Each key
+// appears once, in document order.
+function formFieldKeys(schema) {
+  const keys = [];
+  const seen = new Set();
+  const add = (k) => {
+    k = (k || "").trim();
+    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
+  };
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
+      if (typeof c.key === "string") add(c.key);
+      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
+    }
+  };
+  if (schema && Array.isArray(schema.components)) walk(schema.components);
+  return keys;
+}
+
+// linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
+// (start forms and user-task forms). Best-effort — a registry hiccup yields none.
+function linkedFormIds(modeler) {
+  const ids = [];
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const fd = findExt(el.businessObject, "zeebe:FormDefinition");
+      if (fd && fd.formId) ids.push(fd.formId);
+    });
+  } catch { /* best-effort */ }
+  return ids;
+}
+
+// ensureFormFields fetches the schema of each not-yet-cached form id, records its
+// field keys, then calls onLoaded so the caller can re-render with the new
+// variables. Each form is requested once (its cache slot is reserved as null while
+// in flight); a missing or failed load caches as no fields so it isn't retried in a
+// loop. No-op without an `api`.
+function ensureFormFields(api, ids, onLoaded) {
+  if (!api) return;
+  for (const id of new Set(ids)) {
+    if (!id || formFieldCache.has(id)) continue;
+    formFieldCache.set(id, null); // reserve: in flight, don't refetch
+    api("GET", "/api/v1/forms/" + encodeURIComponent(id))
+      .then((def) => {
+        formFieldCache.set(id, { name: (def && def.name) || id, fields: formFieldKeys(def && def.schema) });
+      })
+      .catch(() => { formFieldCache.set(id, { name: id, fields: [] }); })
+      .then(() => { try { if (onLoaded) onLoaded(); } catch { /* best-effort */ } });
+  }
+}
+
+// collectDiagramVariables statically analyses the diagram for the variables it
+// writes and where — the data behind the Variables panel (like Camunda's). Each
+// entry is { name, origin, originId, source, category }: the variable name, the
+// element that writes it (name/id and the id to select it), how (start variable,
+// linked-form field, script result, decision result, output mapping), and which
+// panel section it groups under. De-duplicated by name, sorted.
+function collectDiagramVariables(modeler) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, origin, originId, source, category = "Process") => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, origin, originId, source, category });
   };
   try {
     const rootBo = rootProcess(modeler);
@@ -1205,6 +1446,18 @@ function collectDiagramVariables(modeler) {
         const st = (bo.dataState && bo.dataState.name) || "";
         push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
       }
+      // A linked form (start form or user-task form, ADR-0028) contributes each of
+      // its input fields as a variable: a start form's fields become the instance's
+      // start variables, a task form's become variables when the task completes. The
+      // schema is fetched lazily (ensureFormFields); until it lands the form adds
+      // nothing here. Grouped under "Form" so it reads as its own panel section.
+      const fd = findExt(bo, "zeebe:FormDefinition");
+      if (fd && fd.formId) {
+        const cached = formFieldCache.get(fd.formId);
+        if (cached && cached.fields) {
+          for (const key of cached.fields) push(key, cached.name || fd.formId, bo.id, "form field", "Form");
+        }
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1215,7 +1468,7 @@ function collectDiagramVariables(modeler) {
 // the list, and it refreshes as the diagram changes while open — a modeling aid
 // that answers "what variables exist here and who writes them" without running
 // anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
-function wireEditorVars(root, modeler) {
+function wireEditorVars(root, modeler, api) {
   const panel = root.querySelector("#vars-panel");
   const toggle = root.querySelector("#vars-toggle");
   const closeBtn = root.querySelector("#vars-close");
@@ -1223,28 +1476,76 @@ function wireEditorVars(root, modeler) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
+  // Which variable groups (Form / Process) the author collapsed — persisted so the
+  // choice sticks across edits and reopening. Groups are collapsible only when there
+  // is more than one (a linked form splits Form from Process), so a header doubles as
+  // its toggle.
+  const GKEY = "atlas.vars.collapsedGroups";
+  let collapsedCats;
+  try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
+  const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
+
+  // One variable row. Draggable so its name can be dropped into any text field to
+  // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
+  // the browser's native drop-to-insert does the work with no per-field wiring.
+  const rowHTML = (v) => {
+    // A data object isn't "written by" an element — it *is* the element, so its
+    // source label itself is the click-to-select target. A form field names its form
+    // (also click-to-select). Other sources name the writing element.
+    let meta;
+    if (v.source === "form field") {
+      meta = `form field · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+    } else if (v.origin === "Data object") {
+      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`;
+    } else {
+      meta = `${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}`;
+    }
+    return `<div class="var-row" draggable="true" data-var="${esc(v.name)}" title="Drag into a field to insert">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${meta}</div></div>`;
+  };
+
   const render = () => {
+    // Warming the form-schema cache here (fired on every diagram change) also feeds
+    // the completion/picker lists, which read the same collectDiagramVariables.
+    ensureFormFields(api, linkedFormIds(modeler), render);
     if (panel.hidden) return;
     const q = (filter.value || "").trim().toLowerCase();
     const vars = collectDiagramVariables(modeler).filter((v) =>
-      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
+      (v.source || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => {
-      // A data object isn't "written by" an element — it *is* the element, so its source
-      // label itself is the click-to-select target; other sources name the writing element.
-      const meta = v.origin === "Data object"
-        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
-        : `${esc(v.source)}${v.originId
-            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-            : ` · ${esc(v.origin)}`}`;
-      return `<div class="var-row">
-        <div class="var-name">${esc(v.name)}</div>
-        <div class="var-meta">${meta}</div></div>`;
-    }).join("");
+    // Group by category so a linked form's fields read as their own section
+    // ("Form"), the process's own variables under "Process". With only one group
+    // (the common no-form case) keep the familiar flat list — no lone header.
+    const groups = new Map();
+    for (const v of vars) {
+      const g = v.category || "Process";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(v);
+    }
+    const order = ["Form", "Process"];
+    const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+    const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    list.innerHTML = cats.length === 1
+      ? groups.get(cats[0]).map(rowHTML).join("")
+      : cats.map((cat) => {
+          const col = collapsedCats.has(cat);
+          return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
+            <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
+              <span class="vg-chevron" aria-hidden="true">▸</span>
+              <span class="vg-title">${esc(cat)}</span>
+              <span class="vg-count">${groups.get(cat).length}</span>
+            </button>
+            <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
+          </div>`;
+        }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -1258,6 +1559,18 @@ function wireEditorVars(root, modeler) {
   });
   filter.addEventListener("input", render);
   list.addEventListener("click", (e) => {
+    const gh = e.target.closest(".vars-group-head");
+    if (gh) {
+      const grp = gh.closest(".vars-group");
+      const cat = grp && grp.dataset.cat;
+      if (cat) {
+        const col = grp.classList.toggle("collapsed");
+        gh.setAttribute("aria-expanded", col ? "false" : "true");
+        if (col) collapsedCats.add(cat); else collapsedCats.delete(cat);
+        saveCats();
+      }
+      return;
+    }
     const o = e.target.closest(".var-origin");
     if (!o) return;
     const el = modeler.get("elementRegistry").get(o.dataset.el);
@@ -1266,7 +1579,18 @@ function wireEditorVars(root, modeler) {
       try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
     }
   });
-  // Keep the open panel current as the diagram is edited.
+  list.addEventListener("dragstart", (e) => {
+    const row = e.target.closest(".var-row");
+    if (!row || !e.dataTransfer) return;
+    // Plain-text payload: dropping onto a text input/textarea natively inserts the
+    // variable name at the drop point — no drop handler needed on each field.
+    e.dataTransfer.setData("text/plain", row.dataset.var || "");
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  // Keep the open panel current as the diagram is edited; warm the cache once now
+  // (import.done has already fired by the time this wires up) so completion sees a
+  // linked form's fields even before the panel is first opened.
+  render();
   modeler.on("element.changed", render);
   modeler.on("elements.changed", render);
   modeler.on("import.done", render);
@@ -1283,10 +1607,13 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   attachFeelEditor(ta, { variables: vars, validate });
   const wrap = ta.closest(".code-editor");
   if (!wrap) return;
+  // F2 lifts the expression into the Developer View — the same editor with the
+  // in-scope variables, the FEEL function reference and its help pages (ADR-0145).
+  markDevField(ta, "feel");
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
+  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
   if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
   wrap.after(hint);
   if (!evaluate) return;
@@ -1380,9 +1707,11 @@ function enhanceScript(body, modeler, api, variables) {
   const language = (flang && flang.value) || "powershell";
   const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
 
+  markDevField(ta, language);
+
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -1463,6 +1792,10 @@ export function attachExpressionToggle(el, opts = {}) {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    // Only an expression field is a code field: a literal value has nothing for the
+    // Developer View to help with, so F2 stays inert until fx is on.
+    if (expr) markDevField(el, "feel");
+    else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
       // it), but is shown as a dimmed, read-only prefix — it can't be typed away, and
@@ -1533,6 +1866,84 @@ function removeExt(modeler, element, type) {
   if (next.length === ext.values.length) return;
   ext.values = next;
   modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// Documentation is BPMN's own place for prose about an element: a <bpmn:documentation>
+// child that every process, pool, task, gateway, event, sequence flow and data object
+// may carry. Atlas treats it as pure passthrough (ADR-0025) — the compiler ignores it
+// and the codec preserves it — so documenting a model never changes what it runs. It is
+// the one property *every* element has, which is why the panel offers it beside the name
+// and id of whatever is selected rather than as a per-type section.
+
+// readDocumentation returns a business object's documentation as one string. BPMN allows
+// several <documentation> children (one per text format); an imported model may carry
+// them, so read them all — joined by a blank line — even though the panel writes one.
+function readDocumentation(bo) {
+  return ((bo && bo.documentation) || [])
+    .map((d) => (d && d.text) || "")
+    .filter((t) => t.trim() !== "")
+    .join("\n\n");
+}
+
+// writeDocumentation stores text as the business object's single <bpmn:documentation>
+// child, dropping the child entirely when the text is blank so an emptied field leaves
+// no empty element behind in the XML. It goes through the modeling API, so documenting
+// an element joins undo/redo and marks the diagram dirty like any other edit —
+// updateProperties when the documented object is the selected shape itself, and
+// updateModdleProperties when it is not (the process a pool executes).
+function writeDocumentation(modeler, element, bo, text) {
+  const modeling = modeler.get("modeling");
+  const value = (text || "").trim();
+  let docs = [];
+  if (value) {
+    const doc = modeler.get("moddle").create("bpmn:Documentation", { text: value });
+    doc.$parent = bo;
+    docs = [doc];
+  }
+  if (bo === element.businessObject) modeling.updateProperties(element, { documentation: docs });
+  else modeling.updateModdleProperties(element, bo, { documentation: docs });
+}
+
+// documentationField renders the documentation editor for one business object. `id`
+// keeps the field unique when a panel documents two things at once (a pool and the
+// process it executes); `placeholder` names what is worth writing there.
+function documentationField(bo, id = "f-doc", placeholder = "What this step is for, when it applies, who owns it…") {
+  return `<label class="field doc-field"><span>Documentation</span>
+      <textarea id="${id}" rows="3" placeholder="${esc(placeholder)}">${esc(readDocumentation(bo))}</textarea></label>`;
+}
+
+// wireDocumentation binds a documentation field rendered by documentationField. Like
+// the name field it saves on change (blur), not per keystroke, so typing a paragraph
+// isn't interrupted by a panel rebuild.
+function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
+  const f = body.querySelector("#" + id);
+  if (!f) return;
+  // Documentation is prose that ends up in the task view, the replay and the
+  // exported process document (ADR-0143) — Markdown, and worth a real editor.
+  markDevField(f, "markdown", { title: "Documentation" });
+  f.addEventListener("change", (e) => {
+    try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
+  });
+}
+
+// RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0135): how
+// many attempts the engine grants the job before a failure parks the token behind an
+// incident (ADR-0061). It is one field description appended to every catalog kind,
+// so the property reads, saves and validates identically whichever implementation a
+// task has — the plain job worker stores it on <zeebe:taskDefinition retries>, a
+// connector on its own extension's retries attribute, and the compiler reads both.
+const RETRIES_FIELD = {
+  key: "retries", label: "Retries", type: "number", min: 1, placeholder: "3",
+  hint: "How often the engine hands this task's job to a worker before giving up — the first attempt plus one per remaining count. When they are used up the failure raises an incident that parks the token until an operator resolves it. Leave empty for the default (3); 1 means a single attempt with no retry.",
+};
+
+// withRetries appends the retry-budget section to a catalog kind's fields. Every
+// kind that runs as a job takes it; the mockup kind does not (ADR-0120: the engine
+// simulates that task itself and creates no job, so there is nothing to hand out
+// again — its failure simulation raises the incident directly).
+function withRetries(kind) {
+  if (kind.id === "mockup") return kind;
+  return { ...kind, fields: [...kind.fields, { group: "Failure handling" }, RETRIES_FIELD] };
 }
 
 // SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
@@ -1621,6 +2032,7 @@ const SERVICE_TASK_KINDS = [
       { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
     ],
   },
   {
@@ -1687,7 +2099,7 @@ const SERVICE_TASK_KINDS = [
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white web strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
-    ext: "atlas:WebScrapeConnector",
+    ext: "atlas:WebscrapeConnector",
     fields: [
       { group: "Page" },
       { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The page to fetch. A value may be a FEEL expression (fx) over the instance's variables." },
@@ -1698,7 +2110,28 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
     ],
   },
-];
+  {
+    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
+    // task's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white beaker strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#647488"/><path d="M6.3 3.2v3.4L3.9 11a1 1 0 0 0 .9 1.5h6.4a1 1 0 0 0 .9-1.5L9.7 6.6V3.2" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.6 3.2h4.8M5.4 8.4h5.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:MockupConnector",
+    fields: [
+      { group: "Duration" },
+      { key: "minDuration", label: "Min duration", placeholder: "PT1S", hint: "ISO-8601 duration (e.g. PT1S, PT5M). The engine waits a random time in [min, max] before completing. For a fixed time, set only this." },
+      { key: "maxDuration", label: "Max duration", placeholder: "leave empty for a fixed duration", hint: "ISO-8601 duration. Omit to make the duration exactly the minimum." },
+      { group: "Result (input → output)" },
+      { key: "resultExpression", label: "Result expression", placeholder: `={ status: "ok", id: orderId }`, fx: true, rows: 4, hint: "A FEEL expression evaluated over the instance's variables and written to the result variable — the input→output script, e.g. a simulated REST/Umsystem response. Press Ctrl+Space for variable completion." },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The process variable the result expression is written into. Required when a result expression is set." },
+      { group: "Failure simulation" },
+      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails instead of completing — for exercising error/retry paths." },
+      { key: "errorCode", label: "BPMN error code", placeholder: "leave empty to raise an incident", hint: "When set, a failure throws a BPMN error with this code — caught by a matching error boundary event or error event subprocess. Leave empty to raise a technical incident (resolvable, retries with a fresh draw) instead." },
+      { key: "failMessage", label: "Incident message", placeholder: "umsystem unavailable", hint: "The incident message when a failure raises an incident (i.e. when no error code is set)." },
+    ],
+  },
+].map(withRetries);
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
 // detected by which connector extension it carries; the plain job worker is the
@@ -1763,6 +2196,12 @@ function stKindFieldsHTML(cur, ext) {
           <div class="st-map-rows">${rowsHTML}</div>
           <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
         </div></div>`;
+    } else if (f.type === "number") {
+      // A count, not free text (the retry budget): a spinner with the engine's own
+      // lower bound, so the field cannot express a value the compiler refuses.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
+               value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
@@ -1770,6 +2209,11 @@ function stKindFieldsHTML(cur, ext) {
         return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else if (f.type === "html") {
+      // A markup field: the same textarea the save wiring reads, upgraded to an HTML
+      // code editor below (and F2-able into the Developer View, ADR-0145).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
@@ -1842,10 +2286,16 @@ function sendTaskKindHTML(modeler, bo) {
 // extension, so the compiler sees exactly one connector kind (ADR-0067).
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
+  // The retry budget is a property of the task, not of the implementation it happens
+  // to have (ADR-0135), so it survives a switch of kind even though each kind stores
+  // it on its own extension — swapping a job worker for a REST connector must not
+  // silently reset the task to the default three attempts.
+  const prev = findExt(element.businessObject, serviceTaskKind(element.businessObject).ext) || {};
   for (const other of SERVICE_TASK_KINDS) {
     if (other.id !== kind.id) removeExt(modeler, element, other.ext);
   }
   const defaults = {};
+  if (prev.retries && kind.fields.some((f) => f.key === "retries")) defaults.retries = prev.retries;
   for (const f of kind.fields) {
     if (f.type === "select" && f.options && f.options.length) {
       const v = selectOption(f.options[0]).v;
@@ -1979,7 +2429,7 @@ function mappingGroupHTML(kind, params) {
     : { title: "Output mapping", wrap: "io-outputs",
         hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
   const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
-  return `<div class="io-group" data-kind="${kind}" data-standalone-group="1">
+  return `<div class="io-group" data-kind="${kind}" data-group="${meta.title}" data-standalone-group="1">
     <div class="io-group-head">
       <span class="io-group-title">${meta.title}</span>
       <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
@@ -2042,20 +2492,38 @@ function saveIOMappings(modeler, element, inRows, outRows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
-// multiInstanceHTML renders the Multi-instance section for an activity (ADR-0077):
-// the sequential/parallel mode, and — once on — whether the loop runs over a
-// collection or a fixed count, the per-iteration input element, an optional output
-// collection/element, and an optional completion condition. It reads the activity's
+// loopMode reports which loop marker an activity carries — the value of the Mode
+// select and, one to one, the marker bpmn-js draws on the shape: "none" (no marker),
+// "loop" (bpmn:StandardLoopCharacteristics, the ↻ icon, ADR-0133), or "parallel" /
+// "sequential" (bpmn:MultiInstanceLoopCharacteristics, the ∥ / ≡ icons, ADR-0077).
+// Every reader of the loop section goes through this, so the panel can never disagree
+// with the icon: whatever set the characteristics — this panel, the context pad's
+// marker toggle, or an imported file — reads back as the mode that drew it.
+function loopMode(bo) {
+  const lc = bo.loopCharacteristics;
+  if (!lc) return "none";
+  if (lc.$type === "bpmn:StandardLoopCharacteristics") return "loop";
+  if (lc.$type === "bpmn:MultiInstanceLoopCharacteristics") return lc.isSequential ? "sequential" : "parallel";
+  return "none";
+}
+
+// multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
+// standard loop (ADR-0133) or a parallel/sequential multi-instance (ADR-0077) — and
+// the fields that mode needs. For a multi-instance: whether it runs over a collection
+// or a fixed count, the per-iteration input element, an optional output
+// collection/element, and an optional completion condition, read from the activity's
 // bpmn:MultiInstanceLoopCharacteristics (bo.loopCharacteristics) and its nested
-// <zeebe:loopCharacteristics> plus <loopCardinality>/<completionCondition>. Changing
-// the mode or the collection/count choice re-renders the panel so the right fields
-// show; FEEL values are stored '=' prefixed (stripped for display), matching the
-// io-mapping editor. The whole block only shows for the activity types the compiler
-// supports (service/script/user tasks, call activities, subprocesses).
+// <zeebe:loopCharacteristics> plus <loopCardinality>/<completionCondition>. For a
+// standard loop: the repeat-while condition, when it is checked, and the iteration
+// cap, read from bpmn:StandardLoopCharacteristics. Changing the mode or the
+// collection/count choice re-renders the panel so the right fields show; FEEL values
+// are stored '=' prefixed (stripped for display), matching the io-mapping editor. The
+// whole block only shows for the activity types the compiler supports (service/script/
+// user tasks, call activities, subprocesses).
 function multiInstanceHTML(bo) {
   const mi = bo.loopCharacteristics;
-  const on = !!(mi && mi.$type === "bpmn:MultiInstanceLoopCharacteristics");
-  const mode = !on ? "none" : (mi.isSequential ? "sequential" : "parallel");
+  const mode = loopMode(bo);
+  const on = mode === "parallel" || mode === "sequential";
   const loop = on && mi.extensionElements
     ? (mi.extensionElements.values || []).find((v) => v.$type === "zeebe:LoopCharacteristics")
     : null;
@@ -2069,14 +2537,16 @@ function multiInstanceHTML(bo) {
   const src = cardBody && !ic ? "cardinality" : "collection";
   const strip = (s) => (s || "").replace(/^=\s*/, "");
 
-  let html = `<h3>Multi-instance</h3>
+  let html = `<h3>Loop</h3>
     <label class="field"><span>Mode</span>
       <select id="f-mi-mode">
         <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
-        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Parallel — all iterations at once</option>
-        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Sequential — one after another</option>
+        <option value="loop" ${mode === "loop" ? "selected" : ""}>Loop — repeat while a condition holds</option>
+        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Multi-instance parallel — all iterations at once</option>
+        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Multi-instance sequential — one after another</option>
       </select></label>`;
   if (mode === "none") return html;
+  if (mode === "loop") return html + standardLoopHTML(mi, strip);
 
   html += `<label class="field"><span>Iterate over</span>
       <select id="f-mi-src">
@@ -2106,6 +2576,27 @@ function multiInstanceHTML(bo) {
   return html;
 }
 
+// standardLoopHTML renders the fields of a BPMN standard loop — the ↻ marker
+// (ADR-0133): the FEEL condition the loop repeats while, when that condition is
+// checked (testBefore: before the first run makes it a while loop that may skip the
+// activity entirely; after each run is BPMN's default repeat-until, which always runs
+// once), and an optional iteration cap. sl is the bpmn:StandardLoopCharacteristics.
+function standardLoopHTML(sl, strip) {
+  const cond = sl && sl.loopCondition ? (sl.loopCondition.body || "") : "";
+  const max = sl && sl.loopMaximum != null ? String(sl.loopMaximum) : "";
+  const before = !!(sl && sl.testBefore);
+  return `<label class="field"><span>Repeat while (FEEL)</span>
+      <input type="text" id="f-mi-loopcond" value="${esc(strip(cond))}" placeholder="not(approved)"/></label>
+    <label class="field"><span>Check the condition</span>
+      <select id="f-mi-testbefore">
+        <option value="after" ${before ? "" : "selected"}>After each run — the activity always runs at least once</option>
+        <option value="before" ${before ? "selected" : ""}>Before each run — the activity may be skipped entirely</option>
+      </select></label>
+    <label class="field"><span>Max iterations <span class="muted">(optional)</span></span>
+      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="no limit"/></label>
+    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both. Without a cap the engine stops a loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more — a backstop for a condition that never turns false, not a limit on a cap you set yourself.</p>`;
+}
+
 // saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics
 // from the panel fields (ADR-0077). Mode "none" drops it entirely; otherwise it
 // rebuilds the whole element — the isSequential flag, a nested <zeebe:loopCharacteristics>
@@ -2121,6 +2612,24 @@ function saveMultiInstance(modeler, element, vals) {
     return;
   }
   const feel = (v) => { v = (v || "").trim(); return v === "" ? "" : (v.startsWith("=") ? v : "= " + v); };
+  // A standard loop is the other BPMN marker (ADR-0133) — its own element, with the
+  // condition, the testBefore flag, and the cap. Written whole like the multi-instance
+  // one, so switching modes or clearing a field never leaves a stale sibling behind.
+  if (vals.mode === "loop") {
+    const props = {};
+    if (vals.testBefore) props.testBefore = true;
+    const max = parseInt(vals.loopMaximum, 10);
+    if (max > 0) props.loopMaximum = max;
+    const sl = moddle.create("bpmn:StandardLoopCharacteristics", props);
+    sl.$parent = bo;
+    if (vals.loopCondition) {
+      const cond = moddle.create("bpmn:FormalExpression", { body: feel(vals.loopCondition) });
+      cond.$parent = sl;
+      sl.loopCondition = cond;
+    }
+    modeling.updateProperties(element, { loopCharacteristics: sl });
+    return;
+  }
   const mi = moddle.create("bpmn:MultiInstanceLoopCharacteristics", { isSequential: vals.mode === "sequential" });
   mi.$parent = bo;
 
@@ -2601,6 +3110,155 @@ function wireErrorsManager(body, modeler, rerenderRoot) {
   });
 }
 
+// --- Escalation authoring (ADR-0125) ---
+// An escalation is raised by an escalation throw or end event and caught by the nearest
+// enclosing escalation boundary or event subprocess with a matching code. Unlike an error, an
+// escalation catch may be non-interrupting (the handler runs alongside the still-running
+// activity) and an uncaught escalation is benign. These helpers mirror the error ones, keyed on
+// the escalation code — a code-less escalation is a catch-all when caught, an uncoded raise when
+// thrown.
+
+// escalationDefOf returns an event's bpmn:EscalationEventDefinition, or null.
+function escalationDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:EscalationEventDefinition") || null;
+}
+
+// linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
+// jumps to the link intermediate catch of the same name in the same scope — an off-page
+// connector / goto (ADR-0133).
+function linkDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
+}
+
+// linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
+function linkFieldsHTML(led, hint) {
+  return `<h3>Link</h3>
+    <label class="field"><span>Link name</span>
+      <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// conditionalDefOf returns an event's bpmn:ConditionalEventDefinition, or null. A conditional
+// event fires when its boolean FEEL condition over the process's variables becomes true —
+// re-evaluated on every variable change (ADR-0137).
+function conditionalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ConditionalEventDefinition") || null;
+}
+
+// conditionalFieldsHTML renders the FEEL condition field for a conditional catch, boundary, or
+// event-subprocess start. The condition is a boolean FEEL expression over the scope's variables;
+// the event fires when it becomes true (ADR-0137). ced is the bpmn:ConditionalEventDefinition.
+function conditionalFieldsHTML(ced, hint) {
+  const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
+  return `<h3>Condition (FEEL)</h3>
+    <label class="field"><span>Expression</span>
+      <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// listEscalations returns every <bpmn:escalation> declared on the model's definitions.
+function listEscalations(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Escalation") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createEscalation adds a fresh <bpmn:escalation> with the given code and returns it.
+function createEscalation(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const esc_ = moddle.create("bpmn:Escalation");
+  esc_.id = "Escalation_" + Math.random().toString(36).slice(2, 8);
+  esc_.escalationCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    esc_.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), esc_];
+  }
+  return esc_;
+}
+
+// linkEscalation points an escalation event definition at an escalation (undo/redo tracked).
+function linkEscalation(modeler, element, eed, esc_) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { escalationRef: esc_ || undefined }); } catch { /* stale */ }
+}
+
+// deleteEscalation removes an escalation and clears any event still referencing it, so a
+// deleted escalation never leaves a dangling escalationRef (which would fail to compile).
+function deleteEscalation(modeler, escId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== escId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = escalationDefOf(el.businessObject);
+    if (eed && eed.escalationRef && eed.escalationRef.id === escId) {
+      try { modeling.updateModdleProperties(el, eed, { escalationRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// escalationFieldsHTML renders the escalation picker for an escalation throw/end event or an
+// escalation boundary / event subprocess: a dropdown of the model's shared escalations (plus
+// "new") and — once one is chosen — its code, shared so a raiser and its catchers stay in sync.
+// Matching is by code; a code-less escalation is a catch-all. eed is the
+// bpmn:EscalationEventDefinition.
+function escalationFieldsHTML(modeler, eed, hint) {
+  const current = eed.escalationRef;
+  const options = listEscalations(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.escalationCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Escalation code</span>
+      <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Escalation</h3>
+    <label class="field"><span>Escalation</span>
+      <select id="f-escref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New escalation…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// escalationsManagerHTML lists the model's escalations for central management (add, edit code,
+// delete).
+function escalationsManagerHTML(modeler) {
+  const escs = listEscalations(modeler);
+  const rows = escs.length
+    ? escs.map((e) => `
+        <div class="esc-row" data-id="${esc(e.id)}">
+          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="escalation code"/>
+          <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
+  return `<h3>Escalations</h3>
+    ${rows}
+    <button type="button" class="btn ghost" id="esc-add">＋ Add escalation</button>
+    <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
+}
+
+// wireEscalationsManager binds the Escalations management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireEscalationsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#esc-add");
+  if (add) add.addEventListener("click", () => { createEscalation(modeler, "ESCALATION_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".esc-row").forEach((row) => {
+    const id = row.dataset.id;
+    const escl = () => listEscalations(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".esc-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = escl(); if (e) e.escalationCode = codeIn.value.trim(); });
+    const del = row.querySelector(".esc-del");
+    if (del) del.addEventListener("click", () => { deleteEscalation(modeler, id); rerenderRoot(); });
+  });
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -2608,6 +3266,27 @@ function rootProcess(modeler) {
     const bo = modeler.get("canvas").getRootElement().businessObject;
     return bo && /:Process$/.test(bo.$type || "") ? bo : null;
   } catch { return null; }
+}
+
+// processBusinessObject returns the <bpmn:process> business object a rendered diagram
+// holds for the given process id: the root itself when the diagram is a single process,
+// or the matching pool's processRef when it is a collaboration — a running instance
+// always belongs to exactly one of a collaboration's processes. Falls back to the first
+// pool that carries a process, so a diagram whose ids have drifted still shows something
+// rather than nothing.
+function processBusinessObject(viewer, processId) {
+  const bo = rootProcess(viewer);
+  if (bo) return bo;
+  let first = null, match = null;
+  try {
+    viewer.get("elementRegistry").forEach((el) => {
+      const p = el.businessObject;
+      if (!p || !/:Participant$/.test(p.$type || "") || !p.processRef) return;
+      if (!first) first = p.processRef;
+      if (processId && p.processRef.id === processId) match = p.processRef;
+    });
+  } catch { return null; }
+  return match || first;
 }
 
 // isCollaborationRoot reports whether the diagram root is a collaboration (pools),
@@ -2842,7 +3521,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
 // collapsible body. It works on the already-rendered panel, so every element type's
 // markup is grouped by one function instead of each branch knowing about grouping.
 // Nodes are moved as whole subtrees, so field listeners and rich editors survive.
-function groupifyPanel(body, collapsed) {
+function groupifyPanel(body, ctl) {
   const heads = [...body.children].filter((n) => n.tagName === "H3");
   if (!heads.length) return;
   // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
@@ -2852,7 +3531,8 @@ function groupifyPanel(body, collapsed) {
   for (const h3 of heads) {
     const title = h3.textContent.trim();
     const group = document.createElement("div");
-    group.className = "pgroup" + (collapsed.has(title) ? " collapsed" : "");
+    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
+    group.dataset.group = title;
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "pgroup-body";
     let n = h3.nextSibling;
@@ -2877,14 +3557,25 @@ function groupifyPanel(body, collapsed) {
       dot.title = "has content";
       head.appendChild(dot);
     }
-    head.addEventListener("click", () => {
-      const isCol = group.classList.toggle("collapsed");
-      if (isCol) collapsed.add(title); else collapsed.delete(title);
-    });
+    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
     body.insertBefore(group, h3);
     group.appendChild(head);
     group.appendChild(bodyWrap);
     body.removeChild(h3);
+  }
+  // A subtle expand-all / collapse-all control, added once there is more than one
+  // collapsible group (the <h3> sections plus any standalone I/O-mapping groups), so
+  // the author can open or clear the whole panel in one click.
+  const total = body.querySelectorAll(".pgroup, .io-group").length;
+  if (total >= 2 && !body.querySelector(".pgroup-tools")) {
+    const tools = document.createElement("div");
+    tools.className = "pgroup-tools";
+    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand">Expand all</button>`
+      + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
+      + `<button type="button" class="pgroup-all" data-all="collapse">Collapse all</button>`;
+    tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
+    tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
+    body.insertBefore(tools, body.firstChild);
   }
 }
 
@@ -2900,12 +3591,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
   // with a chevron and a filled dot when it carries content. groupifyPanel runs
   // after each (re-)render via a MutationObserver, so no per-element branch has to
   // know about grouping; collapse state persists across renders in `collapsed`.
-  const collapsed = new Set();
+  // Property groups start collapsed on open — all but General — so a freshly selected
+  // element shows its identity, not every section at once (the author's request).
+  // `choice` remembers explicit toggles for this editing session, shared across element
+  // selections; untouched groups fall back to the default. It resets when the editor
+  // remounts, so reopening a file collapses the panel again.
+  const DEFAULT_OPEN = new Set(["General"]);
+  const choice = new Map(); // group title -> true(collapsed)/false(open), only when toggled
+  const groupCtl = {
+    isCollapsed: (title) => choice.has(title) ? choice.get(title) : !DEFAULT_OPEN.has(title),
+    onToggle: (title, col) => choice.set(title, col),
+    // Expand/collapse every group now on screen (both <h3> sections and standalone
+    // I/O-mapping groups) and record each so re-renders keep the chosen state.
+    setAll: (col) => {
+      for (const g of body.querySelectorAll(".pgroup, .io-group")) {
+        g.classList.toggle("collapsed", col);
+        const t = (g.dataset.group || "").trim();
+        if (t) choice.set(t, col);
+      }
+    },
+  };
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, collapsed); } finally { groupifying = false; }
+    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -2948,7 +3658,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
@@ -2960,6 +3671,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
       wirePoolId(body, element);
+      wireDocumentation(body, modeler, element, bo);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -2979,6 +3691,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
       <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
+      <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
       ${startVarsHTML}`;
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
@@ -2991,6 +3705,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const v = (e.target.value || "").trim();
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
+    wireDocumentation(body, modeler, element, bo);
+    wireDocumentation(body, modeler, element, proc, "f-procdoc");
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
   }
 
@@ -3033,15 +3749,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
-          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
+          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
+          <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
+          <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
-          ${errorsManagerHTML(modeler)}`;
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -3063,28 +3784,43 @@ function wireProperties(root, modeler, api, projectId, toast) {
           if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
         });
+        body.querySelector("#f-phttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Validated exactly like the instance TTL: warn while authoring, but store what
+          // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
+          if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
+        });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
         });
+        wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
       // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
+          ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
-          ${errorsManagerHTML(modeler)}`;
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
+        wireDocumentation(body, modeler, collabEl, collabEl.businessObject);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -3121,6 +3857,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const tab = activeTab(root);
     const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
+    // A user task's documentation is read by a person at runtime (the Tasks app shows it
+    // as the work instruction, ADR-0025), so the field is framed for that audience.
+    const isUserTask = bo.$type === "bpmn:UserTask";
     const src = bo.sourceRef;
     // A conditional branch is a flow out of an exclusive/inclusive gateway. Its
     // name is the descriptive label (Design); its conditionExpression is the FEEL
@@ -3133,7 +3872,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
+      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. The engine never acts on it, but it is part of the model, so it travels with every deploy, export and version.${isUserTask ? " On a <b>user task</b> it is more than a note: the Tasks app shows it to the assignee as the <b>work instruction</b>, above the form — so write it to the person who will do the work." : ""}</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -3188,10 +3929,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // an activity, so it takes the shared message picker (the receive task holds its
         // messageRef directly, which messageRefHolder resolves for the field handlers).
         html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+        html += multiInstanceHTML(bo); // wait for the message once per iteration
       } else if (bo.$type === "bpmn:SendTask") {
         // The single outbound element (ADR-0112): a kind picker chooses what it sends —
         // Message (a correlating throw), or a connector / job worker (a job it waits on).
         html += sendTaskKindHTML(modeler, bo);
+        // A message-kind send task is a throw, not an activity the engine can loop
+        // (the compiler skips it), so the loop section is offered only for the
+        // job-backed kinds — matching what actually runs.
+        if (sendTaskKind(bo).id !== "message") html += multiInstanceHTML(bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -3231,6 +3977,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
+              <h3>Failure handling</h3>
+              <label class="field"><span>Retries</span>
+                <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
+              <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
               <div class="feel-test" data-run-lang="${lang}">
                 <label class="field"><span>Test — sample variables (JSON)</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
@@ -3285,6 +4035,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
             <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <h3>Failure handling</h3>
+            <label class="field"><span>Retries</span>
+              <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
+            <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
@@ -3322,8 +4076,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // with their own editor above, so it is excluded here.
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
-          html += multiInstanceHTML(bo); // ADR-0077: run this task once per collection element
         }
+        // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
+        // standard loop) — including the ones with no implementation of their own: an
+        // undefined or manual task repeats its pass-through, a business rule task
+        // re-evaluates its decision. The section is offered wherever the engine honours
+        // the marker, so the panel and the icon agree on every activity.
+        html += multiInstanceHTML(bo);
       } else if (bo.$type === "bpmn:SubProcess") {
         // An embedded subprocess is a scope, so it takes the same generic
         // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
@@ -3333,6 +4092,27 @@ function wireProperties(root, modeler, api, projectId, toast) {
         html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
+      } else if (bo.$type === "bpmn:AdHocSubProcess") {
+        // An ad-hoc subprocess is a scope whose contained activities run on demand, in any
+        // order, rather than being sequenced from a start event (ADR-0143). What it needs
+        // configuring is how it *finishes*: an optional boolean FEEL completion condition
+        // re-evaluated after each contained activity completes, and whether a holding
+        // condition cancels the still-running activities. Ordering is parallel — every entry
+        // activity starts at once; sequential is refused at deploy, so it is not offered.
+        const cancelRemaining = bo.cancelRemainingInstances !== false;
+        html += `<h3>Ad-hoc subprocess</h3>
+          <p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+        html += `<h3>Completion condition (FEEL)</h3>
+          <label class="field"><span>Expression</span>
+            <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
+          <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
+        html += `<label class="field"><span>When it completes</span>
+            <select id="f-adhoccancel">
+              <option value="true" ${cancelRemaining ? "selected" : ""}>Cancel the activities still running</option>
+              <option value="false" ${cancelRemaining ? "" : "selected"}>Let them finish first</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Applies when the completion condition becomes true while other contained activities are still running.</p>`;
+        html += ioMappingsHTML(bo);
       } else if (bo.$type === "bpmn:CallActivity") {
         // A call activity invokes a *separate* deployed process as a child instance
         // (ADR-0076). It is configured by its <zeebe:calledElement>: which process to
@@ -3373,6 +4153,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const link = linkDefOf(bo);
+        const cond = conditionalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
@@ -3381,18 +4163,28 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+        } else if (link) {
+          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
+        } else if (cond) {
+          html += conditionalFieldsHTML(cond, "The event waits until this boolean condition over the instance's variables becomes true — re-evaluated on every variable change — then continues. If it already holds when the token arrives, it passes straight through.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Conditional</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const link = linkDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+        } else if (link) {
+          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -3403,6 +4195,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
@@ -3435,8 +4229,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
             html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event fires while the activity runs, when this boolean condition over the instance's variables becomes true — re-evaluated on every variable change. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler once while the activity keeps going.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> boundary event, then configure its trigger here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> boundary event, then configure its trigger here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
@@ -3448,6 +4246,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
           html += `<h3>Event subprocess trigger</h3>
@@ -3474,8 +4274,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
             html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event subprocess fires when this boolean condition over the scope's variables becomes true — re-evaluated on every variable change. Interrupting terminates the scope's other work first; non-interrupting runs this handler once alongside the still-running scope.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> trigger, then configure it here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> trigger, then configure it here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
@@ -3512,6 +4316,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
@@ -3519,11 +4324,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this end event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, then this path ends. Unlike an error end, a matching catch may be non-interrupting, and an uncaught escalation is harmless (no incident).");
         } else if (cancel) {
           // A cancel end event is only meaningful inside a transaction (ADR-0108).
           html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> end event.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -3532,6 +4339,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
       html += `<p class="muted" style="font-size:12px">${has
         ? "A FEEL condition is set on this branch — edit it in the <b>Implement</b> tab."
         : "Set this branch's FEEL condition in the <b>Implement</b> tab."}</p>`;
+    }
+    // A loop marker on an element that has no Loop section above is one Atlas does not
+    // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
+    // the diagram claim behavior it doesn't have (ADR-0133).
+    if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
+      html += `<h3>Loop</h3>
+        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;
 
@@ -3547,6 +4361,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    wireDocumentation(body, modeler, element, bo);
 
     // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
     // new id (unique, a valid identifier) and rewrites the references that point at this
@@ -3663,6 +4479,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const fpsbody = body.querySelector("#f-psbody");
     const fpsresult = body.querySelector("#f-psresult");
+    const fpsretries = body.querySelector("#f-psretries");
     const saveJobScript = () => savePreservingPanel(() => {
       // The selected language is the source of truth; keep it on the extension so
       // the compiler maps it to the right worker's job type.
@@ -3671,10 +4488,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         language,
         source: fpsbody.value || "",
         resultVariable: (fpsresult.value || "").trim(),
+        // A script runs as a job, so it carries the same retry budget as any other
+        // job-backed task (ADR-0135); cleared means the engine's default, written as
+        // no attribute at all.
+        retries: ((fpsretries && fpsretries.value) || "").trim() || undefined,
       });
     });
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
+    if (fpsretries) fpsretries.addEventListener("change", saveJobScript);
 
     // The script field is upgraded to the shared code editor (highlighting,
     // completion, gutter, error markers) and its Run panel wired in the Implement
@@ -3726,7 +4548,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (f.type === "map") { props[f.key] = readMapField(f); continue; }
         // A showIf-hidden field isn't rendered; leave its stored value untouched.
         const el = body.querySelector("#f-st-" + f.key);
-        if (el) props[f.key] = (el.value || "").trim();
+        if (!el) continue;
+        const v = (el.value || "").trim();
+        // A cleared count means "the engine's default" — drop the attribute rather
+        // than write an empty one, so the exported XML says what the task means.
+        props[f.key] = (f.type === "number" && v === "") ? undefined : v;
       }
       upsertExt(modeler, element, stKind.ext, props);
     });
@@ -3751,6 +4577,19 @@ function wireProperties(root, modeler, api, projectId, toast) {
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
       stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
+    // Markup fields (the mail connector's HTML body) get the shared code editor with
+    // the HTML language module — tag/attribute colouring and variable completion
+    // inline, the full Developer View on F2 (ADR-0145).
+    for (const f of stKind.fields) {
+      if (f.type !== "html") continue;
+      const el = body.querySelector("#f-st-" + f.key);
+      if (!el) continue;
+      // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
+      // the property column is narrow, so horizontal scrolling would hide most of the
+      // template. The Developer View is where it gets a gutter and the full width.
+      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, "html", { title: f.label });
     }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;
@@ -3778,6 +4617,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
     const fbinding = body.querySelector("#f-brt-binding");
+    const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
     // the called decision, so editing the id/result variable never drops it.
     const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
@@ -3785,6 +4625,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
       decisionId: (fdecision.value || "").trim(),
       resultVariable: (fresultvar.value || "").trim(),
       bindingType: currentBinding(),
+      // Evaluating a decision is a job like any other, so the task carries the same
+      // retry budget (ADR-0135); cleared means the engine's default, written as no
+      // attribute at all.
+      retries: ((fbrtretries && fbrtretries.value) || "").trim() || undefined,
     });
     const saveDecision = () => savePreservingPanel(() => {
       upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
@@ -3792,6 +4636,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
     if (fbinding) fbinding.addEventListener("change", saveDecision);
+    if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
     // choice is the presence of the atlas:temisConnector extension the compiler
@@ -3889,9 +4734,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
         savePreservingPanel(() => {
           upsertExt(modeler, element, "zeebe:CalledDecision", {
+            // Picking a decision fills in the id and result variable; everything else
+            // the task already carries (binding, retry budget) survives the pick.
+            ...calledDecisionProps(),
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
-            bindingType: currentBinding(),
           });
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
@@ -4013,16 +4860,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const kind = group.dataset.kind;
         const wrap = group.querySelector(".io-map-list");
         [...wrap.querySelectorAll(".io-map")].forEach((card) => wireCard(card, group));
+        // Start collapsed on open like the other groups (all but General), and share the
+        // panel's collapse memory so a re-render keeps the author's chosen state.
+        group.classList.toggle("collapsed", groupCtl.isCollapsed(group.dataset.group || ""));
         // Section collapse: clicking the head toggles it, but not via the add button.
         group.querySelector(".io-group-head").addEventListener("click", (e) => {
           if (e.target.closest(".io-group-add")) return;
-          group.classList.toggle("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), group.classList.toggle("collapsed"));
         });
         // Add an auto-named, expanded card (Camunda-style) and focus its name so the
         // author can rename it immediately; save so it persists even if left as-is.
         group.querySelector(".io-group-add").addEventListener("click", (e) => {
           e.stopPropagation();
           group.classList.remove("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), false);
           const idx = wrap.querySelectorAll(".io-map").length;
           const tmp = document.createElement("div");
           tmp.innerHTML = ioMapCardHTML(kind, idx, "", ioMapDefaultName(kind));
@@ -4132,10 +4983,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
 
-    // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
-    // rewritten on any field change so editing one field never leaves a stale sibling.
-    // Mode and the collection/count choice re-render the panel (fields appear/vanish);
-    // the text fields save on blur.
+    // Loop (ADR-0077 multi-instance, ADR-0133 standard loop): the whole loop
+    // characteristics element is rewritten on any field change so editing one field
+    // never leaves a stale sibling. Mode, the collection/count choice, and the
+    // condition-check choice re-render the panel (fields appear/vanish); the text
+    // fields save on blur. Writing the element is what makes bpmn-js redraw the
+    // marker, so the icon follows the Mode select by construction.
     const fmiMode = body.querySelector("#f-mi-mode");
     if (fmiMode) {
       const v = (sel) => { const el = body.querySelector(sel); return el ? (el.value || "").trim() : ""; };
@@ -4148,12 +5001,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
         outputCollection: v("#f-mi-outputCollection"),
         outputElement: v("#f-mi-outputElement"),
         completion: v("#f-mi-completion"),
+        loopCondition: v("#f-mi-loopcond"),
+        loopMaximum: v("#f-mi-loopmax"),
+        testBefore: v("#f-mi-testbefore") === "before",
       }));
       fmiMode.addEventListener("change", () => { saveMI(); show(element); });
       const fmiSrc = body.querySelector("#f-mi-src");
       if (fmiSrc) fmiSrc.addEventListener("change", () => { saveMI(); show(element); });
       ["#f-mi-inputCollection", "#f-mi-inputElement", "#f-mi-cardinality",
-        "#f-mi-outputCollection", "#f-mi-outputElement", "#f-mi-completion"].forEach((sel) => {
+        "#f-mi-outputCollection", "#f-mi-outputElement", "#f-mi-completion",
+        "#f-mi-loopcond", "#f-mi-loopmax", "#f-mi-testbefore"].forEach((sel) => {
         const el = body.querySelector(sel);
         if (el) el.addEventListener("change", saveMI);
       });
@@ -4356,6 +5213,40 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (eed && eed.errorRef) eed.errorRef.errorCode = (ferrcode.value || "").trim();
       });
     }
+    const fescref = body.querySelector("#f-escref");
+    if (fescref) {
+      fescref.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (!eed) return;
+        const v = fescref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkEscalation(modeler, element, eed, createEscalation(modeler, ""));
+          } else if (v === "") {
+            linkEscalation(modeler, element, eed, null);
+          } else {
+            linkEscalation(modeler, element, eed, listEscalations(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen escalation
+      });
+    }
+    const fesccode = body.querySelector("#f-esccode");
+    if (fesccode) {
+      fesccode.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (eed && eed.escalationRef) eed.escalationRef.escalationCode = (fesccode.value || "").trim();
+      });
+    }
+    const flinkname = body.querySelector("#f-linkname");
+    if (flinkname) {
+      flinkname.addEventListener("change", () => {
+        const led = linkDefOf(element.businessObject);
+        if (led) {
+          try { modeling.updateModdleProperties(element, led, { name: (flinkname.value || "").trim() }); } catch { /* stale */ }
+        }
+      });
+    }
 
     const fcond = body.querySelector("#f-cond");
     if (fcond) {
@@ -4389,6 +5280,53 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }));
     }
 
+    // A conditional event's FEEL predicate lives on its bpmn:ConditionalEventDefinition as a
+    // <condition> FormalExpression body (ADR-0137). Clearing it removes the condition (the
+    // compiler then rejects the empty predicate at deploy, surfaced in the Problems panel).
+    const fcondition = body.querySelector("#f-condition");
+    if (fcondition) {
+      fcondition.addEventListener("change", () => savePreservingPanel(() => {
+        const ced = conditionalDefOf(element.businessObject);
+        if (!ced) return;
+        const raw = (fcondition.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateModdleProperties(element, ced, { condition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = ced;
+        try { modeling.updateModdleProperties(element, ced, { condition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+
+    // An ad-hoc subprocess's completion condition lives on the container as a
+    // <completionCondition> FormalExpression, and cancelRemainingInstances is a plain
+    // attribute (ADR-0143). Clearing the condition removes it, so the subprocess finishes
+    // when every contained activity is done.
+    const fadhoccond = body.querySelector("#f-adhoccond");
+    if (fadhoccond) {
+      fadhoccond.addEventListener("change", () => savePreservingPanel(() => {
+        const raw = (fadhoccond.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateProperties(element, { completionCondition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = element.businessObject;
+        try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+    const fadhoccancel = body.querySelector("#f-adhoccancel");
+    if (fadhoccancel) {
+      fadhoccancel.addEventListener("change", () => savePreservingPanel(() => {
+        // Only the non-default (false) is written, so a default ad-hoc stays attribute-free.
+        const cancel = fadhoccancel.value === "true";
+        try { modeling.updateProperties(element, { cancelRemainingInstances: cancel ? undefined : false }); } catch { /* stale */ }
+      }));
+    }
+
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
     // completion + live validation + a Test panel). The textareas keep their
     // identity, so the change-to-save handlers wired above are untouched.
@@ -4400,6 +5338,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-condition", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-adhoccond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
@@ -4409,6 +5349,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
   }
+
+  // F2 in any code-bearing field of this page opens the Developer View (ADR-0145).
+  // The context is resolved at press time, so it always describes the element that
+  // is selected now rather than whatever was rendered when the panel was built.
+  installDevShortcut(document, (field) => devViewContext(modeler, api, field));
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
 
@@ -4564,7 +5509,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
-      // deferred change (held back to protect these edits) can sync in (ADR-0103).
+      // deferred change (held back to protect these edits) can sync in (ADR-0140).
       if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");
@@ -4572,6 +5517,41 @@ function wireActions(root, modeler, api, toast, projectId) {
       saveBtn.disabled = false;
     }
   });
+
+  // Auto-layout re-flows the diagram: the current model is sent to the server,
+  // which discards its diagram interchange and regenerates a clean left-to-right
+  // layout (the same generator that lays out a layout-less deployed model), then
+  // the reflowed model is re-imported. Purely a rendering convenience — it moves
+  // shapes and edges, never touching the semantic model — so a tangle of a
+  // hand-drawn diagram can be straightened out in one click.
+  const layoutBtn = root.querySelector("#autolayout");
+  layoutBtn.addEventListener("click", async () => {
+    layoutBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const relaid = await api("POST", "/api/v1/layout", xml, true);
+      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      modeler.get("canvas").zoom("fit-viewport");
+      toast("Diagram auto-laid out", "ok");
+    } catch (e) {
+      toast("auto-layout failed: " + e.message, "err");
+    } finally {
+      layoutBtn.disabled = false;
+    }
+  });
+
+  // F8 triggers the same auto-layout (the shortcut is otherwise unbound). Captured
+  // at the document so it works wherever focus sits in the editor; cleanup() removes
+  // it on navigation away. Ignored while a layout is already running or when the
+  // user is typing in a field, so it never eats an F8 meant for something else.
+  onLayoutKey = (e) => {
+    if (e.key !== "F8" || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const el = document.activeElement;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    e.preventDefault();
+    if (!layoutBtn.disabled) layoutBtn.click();
+  };
+  document.addEventListener("keydown", onLayoutKey, true);
 
   root.querySelector("#export").addEventListener("click", async () => {
     try {
@@ -4583,6 +5563,141 @@ function wireActions(root, modeler, api, toast, projectId) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) { toast("export failed: " + e.message, "err"); }
+  });
+
+  // Documentation (ADR-0143): publish the process as a structured PDF — the
+  // diagram plus every element's prose — as an immutable numbered version, and
+  // manage the revocable public link that puts a version in front of readers who
+  // have no Atlas account. The document is produced here in the browser, where
+  // the authoritative picture already lives; the panel is the whole surface.
+  const docBtn = root.querySelector("#docexport");
+  const docPanel = root.querySelector("#doc-panel");
+  const docErr = root.querySelector("#doc-err");
+  const docHistory = root.querySelector("#doc-history");
+  const docPublish = root.querySelector("#doc-publish");
+  const closeDoc = () => { docPanel.hidden = true; docErr.textContent = ""; };
+
+  // renderDocHistory draws one process's published versions, newest first, each
+  // with its download and its sharing state. Sharing is per version, so every
+  // row carries its own control.
+  const renderDocHistory = (versions) => {
+    if (!versions.length) {
+      docHistory.innerHTML = `<p class="muted doc-empty">No version published yet.</p>`;
+      return;
+    }
+    docHistory.innerHTML = versions.map((v) => {
+      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const by = v.createdBy ? " · " + esc(v.createdBy) : "";
+      const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
+      const share = v.shareUrl
+        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
+           <button class="btn neutral small" data-unshare="${esc(v.id)}">Revoke</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}">Share…</button>`;
+      return `<div class="doc-version">
+        <div class="doc-version-head">
+          <b>v${v.version}</b>
+          <span class="muted">${esc(when)}${by} · ${v.elementCount} elements</span>
+        </div>
+        ${note}
+        <div class="row">
+          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
+          ${share}
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+    // Retention (ADR-0143): every version keeps a PDF, so an old archive grows
+    // without bound. Offer a one-click prune to the newest few when there is
+    // enough history to be worth trimming.
+    if (versions.length > 1) {
+      docHistory.innerHTML += `<div class="doc-prune row">
+        <span class="muted">Keep newest</span>
+        <input id="doc-keep" type="number" min="1" value="5" style="width:4em"/>
+        <button class="btn neutral small" id="doc-prune">Prune older versions</button>
+      </div>`;
+    }
+  };
+
+  // loadDocHistory reads the history for whatever process the diagram currently
+  // declares. A diagram that has never been documented simply has none.
+  const loadDocHistory = async () => {
+    const collection = collectDocumentation(modeler);
+    if (!collection.processId) { docHistory.innerHTML = ""; return; }
+    try {
+      const versions = await api("GET", `/api/v1/processes/${encodeURIComponent(collection.processId)}/documentation`);
+      renderDocHistory(versions || []);
+    } catch (e) {
+      docHistory.innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  };
+
+  const openDoc = async () => {
+    docPanel.hidden = false;
+    docErr.textContent = "";
+    const bo = rootProcess(modeler);
+    const titleField = root.querySelector("#doc-title");
+    if (!titleField.value) titleField.value = (bo && bo.name) || "";
+    docHistory.innerHTML = `<p class="muted doc-empty">Loading…</p>`;
+    await loadDocHistory();
+  };
+
+  docBtn.addEventListener("click", () => { docPanel.hidden ? openDoc() : closeDoc(); });
+  root.querySelector("#doc-cancel").addEventListener("click", closeDoc);
+
+  docPublish.addEventListener("click", async () => {
+    docPublish.disabled = true;
+    docErr.textContent = "";
+    try {
+      await exportDocumentation({
+        modeler, api,
+        title: root.querySelector("#doc-title").value.trim(),
+        note: root.querySelector("#doc-note").value.trim(),
+      });
+      root.querySelector("#doc-note").value = "";
+      toast("Documentation version published", "ok");
+      await loadDocHistory();
+    } catch (e) {
+      docErr.textContent = e.message;
+    } finally {
+      docPublish.disabled = false;
+    }
+  });
+
+  // Sharing, revoking, deleting a version, and pruning are delegated: the history
+  // is re-rendered on every change, so binding per row would leak listeners.
+  docHistory.addEventListener("click", async (e) => {
+    const attr = (name) => e.target.getAttribute && e.target.getAttribute(name);
+    const shareId = attr("data-share");
+    const unshareId = attr("data-unshare");
+    const deleteId = attr("data-delete");
+    const prune = e.target.id === "doc-prune";
+    if (!shareId && !unshareId && !deleteId && !prune) return;
+
+    // Deleting a version and pruning both destroy a published artifact and its
+    // PDF, so both confirm first — this is not a click to make lightly.
+    if (deleteId && !confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+
+    let keep = 0;
+    let processId = "";
+    if (prune) {
+      const keepField = docHistory.querySelector("#doc-keep");
+      keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
+      processId = collectDocumentation(modeler).processId;
+      if (!processId) return;
+      if (!confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+    }
+
+    e.target.disabled = true;
+    try {
+      if (shareId) await api("POST", `/api/v1/documentation/${encodeURIComponent(shareId)}/share`);
+      else if (unshareId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(unshareId)}/share`);
+      else if (deleteId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(deleteId)}`);
+      else if (prune) await api("POST", `/api/v1/processes/${encodeURIComponent(processId)}/documentation/prune`, { keep });
+      await loadDocHistory();
+    } catch (err) {
+      docErr.textContent = err.message;
+      e.target.disabled = false;
+    }
   });
 
   // Deploy opens a panel that offers two actions: "Deploy only" makes the model
@@ -4668,7 +5783,11 @@ function wireActions(root, modeler, api, toast, projectId) {
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const dep = await api("POST", "/api/v1/deployments", xml, true);
+      // Carry the editor's project so the deployment files under the same folder as
+      // its draft on the Modeler home (ADR-0034); omitted when editing outside a
+      // project, which deploys to Ungrouped.
+      const depPath = "/api/v1/deployments" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const dep = await api("POST", depPath, xml, true);
       const all = dep.deployments || [{ key: dep.key, processId: dep.processId, version: dep.version }];
       if (all.length > 1) {
         // A collaboration deploys one definition per pool; which pool to start is
@@ -5859,7 +6978,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
         <div style="flex:1"></div>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
-        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
       <div class="replay-bar">
         <button class="btn play" id="play">&#9654; Play</button>
@@ -5933,6 +7052,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // the DOM, which now belongs to the newer mount.
   if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
+  // Return to this process's instance view — the Live view the replay was opened from —
+  // rather than all the way to the top-level Instances list (still one click away in the
+  // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
+  root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -6067,17 +7190,44 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
   }
 
+  // docOf reads an element's <bpmn:documentation> — what the modeler wrote about this
+  // step — straight off the rendered model (ADR-0025). The replay already imported the
+  // diagram, so the prose is in the browser: answering "what is this element for?" in
+  // Operations costs no extra request and works for every element, run or not.
+  const docOf = (elId) => {
+    const el = elId ? registry.get(elId) : null;
+    return el ? readDocumentation(el.businessObject) : "";
+  };
+  // docBlock renders that prose below the property list — a block, not a <dd>, because
+  // it is paragraphs rather than a value. Nothing at all when the element is undocumented.
+  const docBlock = (text) => (text ? `<div class="ops-doc"><h4>Documentation</h4><p>${esc(text)}</p></div>` : "");
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
     if (!selEik) {
+      // An element the operator clicked that this instance never reached has no step to
+      // report — but it does have an identity and, often, the documentation explaining
+      // what it would have done. Show that instead of silently falling back to the
+      // process panel, which looked like the click had missed.
+      if (selElId) {
+        const el = registry.get(selElId);
+        const bo = (el && el.businessObject) || {};
+        detailEl.innerHTML = `<dl class="ops-props">
+          <dt>Element</dt><dd>${esc(bo.name || selElId)}</dd>
+          <dt>Type</dt><dd>${esc(shortType(bo.$type) || "—")}</dd>
+          <dt>Element ID</dt><dd class="mono">${esc(selElId)}</dd>
+          <dt class="hint" colspan>Not reached in this instance.</dt>
+        </dl>${docBlock(docOf(selElId))}`;
+        return;
+      }
       detailEl.innerHTML = `<dl class="ops-props">
         <dt>Process</dt><dd>${esc(titleEl.textContent)}</dd>
         <dt>Instance Key</dt><dd class="mono">${esc(String(key))}</dd>
         <dt>State</dt><dd>${esc(stateEl.textContent)}</dd>
         <dt>Elements executed</dt><dd>${steps.length}</dd>
         <dt class="hint" colspan>Select an element in the diagram or the history to inspect it.</dt>
-      </dl>`;
+      </dl>${docBlock(readDocumentation(processBusinessObject(viewer, tl.processId)))}`;
       return;
     }
     const s = stepByEik(selEik);
@@ -6098,7 +7248,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
       ${from}${rel}${child}
-    </dl>`;
+    </dl>${docBlock(docOf(s.elementId))}`;
   }
 
   // A JSON variable's stored value is a JSON string; these read its shape without

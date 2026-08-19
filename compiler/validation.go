@@ -76,6 +76,12 @@ const (
 	// A start-event FEEL schedule is compiler-constant (references no variables, ADR-0056), so it
 	// evaluates the same way at deploy as at arm and can be checked without an instance.
 	RuleTimerStartSchedule = "timer.start-schedule"
+	// RuleLoopUnbounded marks a standard loop whose only bound is its FEEL condition
+	// (ADR-0133): nothing in the model says how often it may run, so a condition that
+	// never turns false loops until the instance is cancelled. A warning, not an error
+	// — such a loop is legal BPMN and often correct — and the engine's safety ceiling
+	// stops a runaway; the warning is what turns the bound into a stated decision.
+	RuleLoopUnbounded = "loop.unbounded"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -122,6 +128,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
+	ps = append(ps, checkLoopBounds(cp)...)
 	return ps
 }
 
@@ -157,13 +164,14 @@ func HasErrors(ps []Problem) bool {
 // Problem, not an error — but the signature keeps an error so a future source
 // that does I/O can report a read failure distinctly from a modeling one.
 func ValidateModel(r io.Reader) ([]Problem, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
 	}
 	resolveMsg := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
+	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
 	var ps []Problem
 	executable := 0
@@ -174,7 +182,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveOp)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them
@@ -276,6 +284,14 @@ func checkReachability(cp *CompiledProcess) []Problem {
 				if isStartEvent(cp.nodes[id].Type) && cp.nodes[id].FlowScope == n {
 					push(int32(id))
 				}
+			}
+		}
+		// An ad-hoc subprocess has no start event: entering it activates its entry
+		// activities, so a reached ad-hoc makes those reached and the walk continues
+		// from each (ADR-0138).
+		if cp.nodes[n].Type == TypeAdHocSubProcess {
+			for _, id := range cp.AdHocEntries(n) {
+				push(id)
 			}
 		}
 	}
@@ -548,6 +564,33 @@ func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
 	return ps
 }
 
+// checkLoopBounds warns about a standard loop that states no bound of its own
+// (ADR-0133): with a <loopCondition> but no loopMaximum, how often the activity runs
+// is decided entirely at runtime, and a condition that never turns false would repeat
+// until the instance is cancelled. The engine caps such a loop with a safety ceiling
+// and raises an incident rather than spinning, so this is a warning — the model still
+// deploys and runs — nudging the author to say the bound out loud instead of leaning
+// on the engine's backstop. A multi-instance needs no such warning: its collection or
+// cardinality is the bound.
+func checkLoopBounds(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		idx := cp.nodes[id].MultiInstance
+		if idx < 0 {
+			continue
+		}
+		d := &cp.multiInstances[idx]
+		if !d.Standard || d.LoopMaximum > 0 {
+			continue
+		}
+		ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleLoopUnbounded,
+			fmt.Sprintf("%s repeats while its loop condition holds and sets no maximum: "+
+				"if the condition never turns false the engine stops it after %d runs with an incident. "+
+				"Set a loop maximum to state the bound.", describeNode(cp, int32(id)), SafeLoopCeiling)))
+	}
+	return ps
+}
+
 // scopeHasCancelEnd reports whether any cancel end event sits directly in the scope rooted at
 // the transaction node id.
 func scopeHasCancelEnd(cp *CompiledProcess, txID int32) bool {
@@ -601,7 +644,7 @@ func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
 		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
-		TypeSubProcess, TypeCallActivity:
+		TypeMockupTask, TypeSubProcess, TypeAdHocSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false

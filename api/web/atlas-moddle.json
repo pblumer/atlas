@@ -36,6 +36,7 @@
       "properties": [
         { "name": "language", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
         { "name": "source", "type": "String", "isBody": true }
       ]
     },
@@ -59,7 +60,8 @@
         { "name": "query", "type": "String", "isAttr": true },
         { "name": "reduceSpec", "type": "String", "isAttr": true },
         { "name": "limit", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -74,6 +76,7 @@
         { "name": "authUsername", "type": "String", "isAttr": true },
         { "name": "authApiKeyName", "type": "String", "isAttr": true },
         { "name": "authSecret", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
         { "name": "headers", "type": "HttpHeader", "isMany": true },
         { "name": "queryParameters", "type": "QueryParam", "isMany": true }
       ]
@@ -89,7 +92,9 @@
         { "name": "bcc", "type": "String", "isAttr": true },
         { "name": "from", "type": "String", "isAttr": true },
         { "name": "subject", "type": "String", "isAttr": true },
-        { "name": "body", "type": "String", "isAttr": true }
+        { "name": "body", "type": "String", "isAttr": true },
+        { "name": "bodyHtml", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -101,7 +106,8 @@
         { "name": "delimiter", "type": "String", "isAttr": true },
         { "name": "hasHeader", "type": "String", "isAttr": true },
         { "name": "columns", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -113,6 +119,7 @@
         { "name": "site", "type": "String", "isAttr": true },
         { "name": "list", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
         { "name": "fields", "type": "ItemField", "isMany": true }
       ]
     },
@@ -132,6 +139,7 @@
         { "name": "connector", "type": "String", "isAttr": true },
         { "name": "form", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
         { "name": "fields", "type": "RemedyField", "isMany": true }
       ]
     },
@@ -144,14 +152,29 @@
       ]
     },
     {
-      "name": "WebScrapeConnector",
+      "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
       "properties": [
         { "name": "url", "type": "String", "isAttr": true },
         { "name": "selector", "type": "String", "isAttr": true },
         { "name": "attribute", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "MockupConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "minDuration", "type": "String", "isAttr": true },
+        { "name": "maxDuration", "type": "String", "isAttr": true },
+        { "name": "resultExpression", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "failRate", "type": "String", "isAttr": true },
+        { "name": "failMessage", "type": "String", "isAttr": true },
+        { "name": "errorCode", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -175,7 +198,8 @@
       "extends": ["bpmn:Process"],
       "properties": [
         { "name": "versionTag", "type": "String", "isAttr": true },
-        { "name": "instanceTtl", "type": "String", "isAttr": true }
+        { "name": "instanceTtl", "type": "String", "isAttr": true },
+        { "name": "historyTtl", "type": "String", "isAttr": true }
       ]
     }
   ]

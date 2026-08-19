@@ -24,11 +24,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/opensearch"
@@ -133,6 +135,7 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
+	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
 	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh; on by default, --powershell=false to disable (executes arbitrary interpreter code)")
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
@@ -144,7 +147,25 @@ func runServe(args []string) error {
 	osURL := fs.String("opensearch-url", os.Getenv("ATLAS_OPENSEARCH_URL"), "base URL of an OpenSearch cluster to mirror the event log into (ADR-0114); empty disables the exporter. Credentials come from ATLAS_OPENSEARCH_USERNAME/ATLAS_OPENSEARCH_PASSWORD")
 	osIndex := fs.String("opensearch-index", envOr("ATLAS_OPENSEARCH_INDEX", opensearch.DefaultIndex), "OpenSearch index the exporter writes events to")
 	// History retention (ADR-0115): opt-in, off unless a positive max-age is set.
-	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables retention")
+	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables the server-wide age, and retention then applies only to processes declaring their own atlas:historyTtl (ADR-0144)")
+	// The sweep's cadence and per-tick batch bound how fast a backlog drains: batch per
+	// interval. The defaults suit steady state; a bulk run that leaves tens of thousands
+	// of finished instances behind is why they are reachable at all.
+	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
+	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
+	// Recovery checkpoints (ADR-0131): on by default, because bounded restart time is
+	// the point of them. They only ever add a shortcut — the WAL stays the source of
+	// truth and a missing or unusable checkpoint just means a full replay — so unlike
+	// the exporter and retention there is nothing here to opt into.
+	checkpointInterval := fs.Duration("checkpoint-interval", 5*time.Minute, "how often to snapshot applied state so a restart replays only the log past it (ADR-0131); 0 disables checkpointing")
+	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
+	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
+	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
+	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
+	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
+	// not want reachable rather than data leaking.
+	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -155,7 +176,8 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout, osCfg, *retentionAge)
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -168,16 +190,43 @@ func envOr(key, def string) string {
 
 // envDuration parses a duration from the environment variable, or 0 when it is
 // unset, empty, or malformed.
-func envDuration(key string) time.Duration {
+func envDuration(key string) time.Duration { return envDurationOr(key, 0) }
+
+// envDurationOr parses a duration from the environment variable, or def when it is
+// unset, empty, or malformed. A flag whose default is a real value (rather than "off")
+// uses this, so a typo in the environment leaves the documented default standing
+// instead of silently zeroing the setting.
+func envDurationOr(key string, def time.Duration) time.Duration {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}
 	}
-	return 0
+	return def
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration) error {
+// envIntOr parses an int from the environment variable, or def when it is unset,
+// empty, or malformed. The integer counterpart of envDurationOr.
+func envIntOr(key string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// retentionConfig is the history-retention configuration the CLI assembles: the
+// server-wide max age (ADR-0115), plus the sweep's cadence and per-tick batch, which
+// together bound how fast a backlog of finished instances drains. Grouped because they
+// are one operator decision, and because they are only ever passed on together.
+type retentionConfig struct {
+	maxAge   time.Duration
+	interval time.Duration
+	batch    int
+}
+
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -213,16 +262,24 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	}
 	defer store.Close()
 
-	// One partition for now (single-node). Recover replays the log into the
-	// store before we accept traffic.
+	// One partition for now (single-node). Recovery replays the log into the store
+	// before we accept traffic, starting after the newest usable checkpoint under
+	// <data-dir>/checkpoints instead of at genesis (ADR-0131). The root is resolved
+	// through checkpoint.Dir, the same function the server's checkpoint cadence
+	// publishes through, so the two can never point at different directories. A
+	// missing, corrupt, or too-new checkpoint simply falls back to a full replay.
+	engine.BuildVersion = api.Version // metadata recorded in the checkpoints we publish
 	proc := engine.New(1, wl, store, nil)
-	if err := proc.Recover(); err != nil {
+	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}
 
-	apiOpts := []api.Option{api.WithLogBuffer(logs)}
+	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses()}
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
+	}
+	if !metricsOn {
+		apiOpts = append(apiOpts, api.WithoutMetrics())
 	}
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
@@ -230,16 +287,36 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		log.Printf("opensearch exporter enabled: indexing events into %s at %s", osExport.Index, osExport.URL)
 	}
 	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
-	if retentionMaxAge > 0 {
-		apiOpts = append(apiOpts, api.WithRetention(retentionMaxAge))
+	// The cadence and batch apply either way: retention also runs for a process that
+	// declares its own atlas:historyTtl, with no server-wide age set (ADR-0144).
+	apiOpts = append(apiOpts, api.WithRetentionInterval(retention.interval), api.WithRetentionBatch(retention.batch))
+	if retention.maxAge > 0 {
 		gate := "durable position"
 		if osExport.Enabled() {
 			gate = "OpenSearch export"
 		}
-		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s", retentionMaxAge, gate)
+		apiOpts = append(apiOpts, api.WithRetention(retention.maxAge))
+		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s, up to %d per %s",
+			retention.maxAge, gate, retention.batch, retention.interval)
+	}
+	// Periodic recovery checkpoints keep restart time a function of the cadence rather
+	// than of the whole log's length (ADR-0131). Nothing is deleted by them.
+	if checkpointInterval > 0 {
+		apiOpts = append(apiOpts, api.WithCheckpoints(checkpointInterval), api.WithCheckpointRetention(checkpointKeep))
+		log.Printf("recovery checkpoints enabled: snapshotting applied state every %s, keeping %d", checkpointInterval, checkpointKeep)
+		// Compaction rides the checkpoint tick, so it needs one to ride (ADR-0131).
+		if compactWAL {
+			apiOpts = append(apiOpts, api.WithWALCompaction())
+			log.Printf("wal compaction enabled: deleting segments already covered by a checkpoint and every consumer watermark")
+		}
+	} else if compactWAL {
+		log.Printf("WARNING: --compact-wal has no effect without checkpointing; set --checkpoint-interval to a positive duration to enable it (ADR-0131)")
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
+	}
+	if userProvisioning {
+		apiOpts = append(apiOpts, api.WithUserProvisioning())
 	}
 	if !vault {
 		apiOpts = append(apiOpts, api.WithoutVault())
@@ -297,6 +374,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		log.Printf("listening on %s (UI at %s/, MCP at %s/mcp)", addr, base, base)
 		if docs {
 			log.Printf("API explorer at %s/api/docs (OpenAPI at %s/api/v1/openapi.json)", base, base)
+		}
+		if metricsOn {
+			log.Printf("Prometheus metrics at %s/metrics (unauthenticated; proxy it if exposed beyond the host)", base)
 		}
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err

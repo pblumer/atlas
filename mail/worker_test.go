@@ -333,3 +333,70 @@ func TestMailHandlerElementInstanceGone(t *testing.T) {
 		t.Fatalf("handler for a vanished element instance: err=%v, want nil", err)
 	}
 }
+
+// compileFEEL compiles one FEEL source into the compiled form a connector field
+// carries, failing the test rather than the assertion when the source is bad.
+func compileFEEL(t *testing.T, src string) *expr.Compiled {
+	t.Helper()
+	e, err := expr.CompileAuto(src)
+	if err != nil {
+		t.Fatalf("compile %q: %v", src, err)
+	}
+	return e
+}
+
+// TestMailConnectorHTMLBody is the vertical slice for an HTML body: the worker
+// resolves it like every other field — literal or FEEL over the instance's
+// variables — and hands both halves to the provider, which frames them as
+// multipart/alternative.
+func TestMailConnectorHTMLBody(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := mailProcess(t, compiler.MailConfig{
+		Connector: "office365",
+		To:        compiler.RestExpr{Literal: "ops@example.com"},
+		Subject:   compiler.RestExpr{Literal: "Order shipped"},
+		Body:      compiler.RestExpr{Literal: "On its way."},
+		BodyHTML:  compiler.RestExpr{Expr: compileFEEL(t, `"<p>Hallo " + customer + "</p>"`)},
+		Retries:   3,
+	})
+	rc := &recordingClient{}
+	reg := mail.NewRegistry()
+	reg.Register("office365", rc)
+
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "customer", Kind: model.VarString, Text: "Anna"}); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.sent) != 1 {
+		t.Fatalf("messages sent = %d, want 1", len(rc.sent))
+	}
+	m := rc.sent[0]
+	if m.Body != "On its way." {
+		t.Errorf("Body = %q, want the plain-text alternative untouched", m.Body)
+	}
+	if m.HTML != "<p>Hallo Anna</p>" {
+		t.Errorf("HTML = %q, want the FEEL-composed markup", m.HTML)
+	}
+}
+
+// A mail task with no HTML body leaves it empty, so nothing about an existing
+// process's message changes.
+func TestMailConnectorWithoutHTMLBody(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := mailProcess(t, compiler.MailConfig{
+		Connector: "office365",
+		To:        compiler.RestExpr{Literal: "ops@example.com"},
+		Body:      compiler.RestExpr{Literal: "On its way."},
+		Retries:   3,
+	})
+	rc := &recordingClient{}
+	reg := mail.NewRegistry()
+	reg.Register("office365", rc)
+
+	if err := drive(t, cp, jobType, reg, store, log); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if rc.sent[0].HTML != "" {
+		t.Errorf("HTML = %q, want empty for a text-only task", rc.sent[0].HTML)
+	}
+}

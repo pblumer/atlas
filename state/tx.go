@@ -277,6 +277,15 @@ func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue
 	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
 }
 
+// PutHistoryExpiry schedules a finished instance's hard delete at its purge due date
+// (ADR-0146): CompletedAt + the definition's atlas:historyTtl, frozen on the terminal
+// event and carried by it, so replay writes the identical entry. The entry has no value
+// — the due date and the instance key are the key, and the instance's history record
+// holds everything the purge needs. Written from applyToState only.
+func (t *Tx) PutHistoryExpiry(dueDate int64, piKey uint64) error {
+	return t.b.Set(keyHistoryExpiry(dueDate, piKey), nil, nil)
+}
+
 // PurgeInstanceHistory hard-deletes a finished instance from the state store: the
 // terminal history record and every per-instance history/live family addressable
 // from the instance key (and its definition key), so no orphaned rows outlive it
@@ -291,7 +300,16 @@ func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue
 // no live incident). Sub-scope variables/data objects that outlived their activity are
 // not reached — a finished instance's live state is root-scoped (== the instance key)
 // in practice.
-func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64) error {
+func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) error {
+	// The scheduled-expiry entry that nominated this instance goes with it, so the index
+	// never points at a record that is gone (ADR-0146). A zero due date means the
+	// instance had no history TTL — it was purged by the server-wide max age — and there
+	// is no entry to drop.
+	if purgeDueDate != 0 {
+		if err := t.b.Delete(keyHistoryExpiry(purgeDueDate, piKey), nil); err != nil {
+			return err
+		}
+	}
 	for _, prefix := range [][]byte{
 		// The terminal history record is a full key, a strict prefix of no other, so a
 		// prefix delete over it removes exactly that record — uniform with the families.
@@ -733,6 +751,7 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 
 // RecordElementReplay retains an activation or consumption with its durable
 // token lineage. It is derived only from the lifecycle event by applyToState.
+// action is one of ReplayActivated / ReplayCompleted / ReplayTerminated.
 func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID int32, elementKey, tokenID, parentTokenID uint64, sourceFlowID int32, action byte) error {
 	t.scratch = appendBE32(t.scratch[:0], uint32(elementID))
 	t.scratch = appendBE64(t.scratch, elementKey)

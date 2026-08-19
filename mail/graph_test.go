@@ -184,3 +184,25 @@ func TestGmailClientErrors(t *testing.T) {
 		}
 	})
 }
+
+// Graph carries one body with a declared content type, so an HTML body is sent as
+// contentType "HTML" — and a text-only message keeps sending "Text" (covered by
+// TestGraphClientSend), which is what every pre-HTML task does.
+func TestGraphClientHTMLBody(t *testing.T) {
+	a := newAPIServer(t)
+	c := NewGraphClient(staticToken("gtok"), a.srv.URL, "bot@example.com")
+	err := c.Send(context.Background(), Message{
+		To: []string{"a@example.com"}, Subject: "Hi",
+		Body: "Hello there.", HTML: "<p>Hello <b>there</b>.</p>",
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	var payload graphSendMail
+	if err := json.Unmarshal(a.body, &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload.Message.Body.ContentType != "HTML" || payload.Message.Body.Content != "<p>Hello <b>there</b>.</p>" {
+		t.Errorf("body = %+v, want the markup declared as HTML", payload.Message.Body)
+	}
+}

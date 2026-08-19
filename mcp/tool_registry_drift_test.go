@@ -26,63 +26,71 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":                  "GET /api/v1/info",
-	"atlas_stats":                 "GET /api/v1/stats",
-	"atlas_deploy":                "POST /api/v1/deployments",
-	"atlas_list_processes":        "GET /api/v1/processes",
-	"atlas_get_process_xml":       "GET /api/v1/processes/{key}/xml",
-	"atlas_delete_process":        "DELETE /api/v1/processes/{key}",
-	"atlas_process_runtime":       "GET /api/v1/processes/{key}/runtime",
-	"atlas_call_activities":       "GET /api/v1/call-activities",
-	"atlas_create_instance":       "POST /api/v1/processes/{key}/instances",
-	"atlas_list_instances":        "GET /api/v1/instances",
-	"atlas_cancel_instance":       "DELETE /api/v1/instances/{key}",
-	"atlas_cancel_instances":      "POST /api/v1/processes/{key}/cancel-instances",
-	"atlas_create_project":        "POST /api/v1/projects",
-	"atlas_list_projects":         "GET /api/v1/projects",
-	"atlas_delete_project":        "DELETE /api/v1/projects/{id}",
-	"atlas_save_draft":            "POST /api/v1/drafts",
-	"atlas_save_form":             "POST /api/v1/forms",
-	"atlas_upload_decision_model": "POST /api/v1/dmn-models",
-	"atlas_register_decision":     "POST /api/v1/dmnrefs",
-	"atlas_deploy_project":        "POST /api/v1/projects/{id}/deploy",
-	"atlas_list_tasks":            "GET /api/v1/tasks",
-	"atlas_get_task":              "GET /api/v1/tasks/{key}",
-	"atlas_complete_task":         "POST /api/v1/tasks/{key}/complete",
-	"atlas_claim_task":            "POST /api/v1/tasks/{key}/claim",
-	"atlas_unclaim_task":          "POST /api/v1/tasks/{key}/unclaim",
-	"atlas_publish_message":       "POST /api/v1/messages",
-	"atlas_complete_job":          "POST /api/v1/jobs/{key}/complete",
-	"atlas_fail_job":              "POST /api/v1/jobs/{key}/fail",
-	"atlas_list_incidents":        "GET /api/v1/incidents",
-	"atlas_resolve_incident":      "POST /api/v1/incidents/{key}/resolve",
-	"atlas_instance_variables":    "GET /api/v1/instances/{key}/variables",
-	"atlas_instance_jobs":         "GET /api/v1/instances/{key}/jobs",
-	"atlas_instance_timeline":     "GET /api/v1/instances/{key}/timeline",
-	"atlas_instances_summary":     "GET /api/v1/instances/summary",
-	"atlas_search_instances":      "GET /api/v1/instances/search",
-	"atlas_instance_data_objects": "GET /api/v1/instances/{key}/data-objects",
-	"atlas_terminate_instances":   "POST /api/v1/instances/terminate",
-	"atlas_instance_decisions":    "GET /api/v1/instances/{key}/decisions",
-	"atlas_deployed_decisions":    "GET /api/v1/decisions/deployed",
-	"atlas_dmnref_graph":          "GET /api/v1/dmnrefs/{id}/graph",
-	"atlas_get_decision_model":    "GET /api/v1/dmn-models/{ref}/xml",
-	"atlas_collaboration_runtime": "GET /api/v1/collaborations/{key}/runtime",
-	"atlas_list_drafts":           "GET /api/v1/drafts",
-	"atlas_get_draft_xml":         "GET /api/v1/drafts/{id}/xml",
-	"atlas_join_session":          "POST /api/v1/drafts/{id}/session/join",
-	"atlas_session_poll":          "POST /api/v1/drafts/{id}/session/poll",
-	"atlas_session_lock":          "POST /api/v1/drafts/{id}/session/lock",
-	"atlas_session_change":        "POST /api/v1/drafts/{id}/session/change",
-	"atlas_session_presence":      "POST /api/v1/drafts/{id}/session/presence",
-	"atlas_leave_session":         "POST /api/v1/drafts/{id}/session/leave",
-	"atlas_list_forms":            "GET /api/v1/forms",
-	"atlas_get_form":              "GET /api/v1/forms/{id}",
-	"atlas_list_decision_refs":    "GET /api/v1/dmnrefs",
-	"atlas_list_decisions":        "GET /api/v1/decisions",
-	"atlas_decision_evaluations":  "GET /api/v1/decisions/{id}/evaluations",
-	"atlas_variable_audit":        "GET /api/v1/instances/{key}/variable-audit",
-	"atlas_assignable_users":      "GET /api/v1/users/assignable",
+	"atlas_info":                    "GET /api/v1/info",
+	"atlas_stats":                   "GET /api/v1/stats",
+	"atlas_deploy":                  "POST /api/v1/deployments",
+	"atlas_list_processes":          "GET /api/v1/processes",
+	"atlas_get_process_xml":         "GET /api/v1/processes/{key}/xml",
+	"atlas_delete_process":          "DELETE /api/v1/processes/{key}",
+	"atlas_process_runtime":         "GET /api/v1/processes/{key}/runtime",
+	"atlas_call_activities":         "GET /api/v1/call-activities",
+	"atlas_create_instance":         "POST /api/v1/processes/{key}/instances",
+	"atlas_list_instances":          "GET /api/v1/instances",
+	"atlas_cancel_instance":         "DELETE /api/v1/instances/{key}",
+	"atlas_cancel_instances":        "POST /api/v1/processes/{key}/cancel-instances",
+	"atlas_create_project":          "POST /api/v1/projects",
+	"atlas_list_projects":           "GET /api/v1/projects",
+	"atlas_delete_project":          "DELETE /api/v1/projects/{id}",
+	"atlas_create_application":      "POST /api/v1/applications",
+	"atlas_list_applications":       "GET /api/v1/applications",
+	"atlas_delete_application":      "DELETE /api/v1/applications/{id}",
+	"atlas_save_draft":              "POST /api/v1/drafts",
+	"atlas_save_form":               "POST /api/v1/forms",
+	"atlas_upload_decision_model":   "POST /api/v1/dmn-models",
+	"atlas_register_decision":       "POST /api/v1/dmnrefs",
+	"atlas_deploy_project":          "POST /api/v1/projects/{id}/deploy",
+	"atlas_deploy_application":      "POST /api/v1/applications/{id}/deploy",
+	"atlas_publish_application":     "POST /api/v1/applications/{id}/publish",
+	"atlas_application_releases":    "GET /api/v1/applications/{id}/releases",
+	"atlas_application_deployments": "GET /api/v1/applications/{id}/deployments",
+	"atlas_list_tasks":              "GET /api/v1/tasks",
+	"atlas_get_task":                "GET /api/v1/tasks/{key}",
+	"atlas_complete_task":           "POST /api/v1/tasks/{key}/complete",
+	"atlas_claim_task":              "POST /api/v1/tasks/{key}/claim",
+	"atlas_unclaim_task":            "POST /api/v1/tasks/{key}/unclaim",
+	"atlas_publish_message":         "POST /api/v1/messages",
+	"atlas_complete_job":            "POST /api/v1/jobs/{key}/complete",
+	"atlas_fail_job":                "POST /api/v1/jobs/{key}/fail",
+	"atlas_list_incidents":          "GET /api/v1/incidents",
+	"atlas_resolve_incident":        "POST /api/v1/incidents/{key}/resolve",
+	"atlas_instance_variables":      "GET /api/v1/instances/{key}/variables",
+	"atlas_instance_jobs":           "GET /api/v1/instances/{key}/jobs",
+	"atlas_instance_timeline":       "GET /api/v1/instances/{key}/timeline",
+	"atlas_instances_summary":       "GET /api/v1/instances/summary",
+	"atlas_search_instances":        "GET /api/v1/instances/search",
+	"atlas_instance_data_objects":   "GET /api/v1/instances/{key}/data-objects",
+	"atlas_terminate_instances":     "POST /api/v1/instances/terminate",
+	"atlas_instance_decisions":      "GET /api/v1/instances/{key}/decisions",
+	"atlas_deployed_decisions":      "GET /api/v1/decisions/deployed",
+	"atlas_dmnref_graph":            "GET /api/v1/dmnrefs/{id}/graph",
+	"atlas_get_decision_model":      "GET /api/v1/dmn-models/{ref}/xml",
+	"atlas_collaboration_runtime":   "GET /api/v1/collaborations/{key}/runtime",
+	"atlas_list_drafts":             "GET /api/v1/drafts",
+	"atlas_get_draft_xml":           "GET /api/v1/drafts/{id}/xml",
+	"atlas_delete_draft":            "DELETE /api/v1/drafts/{id}",
+	"atlas_join_session":            "POST /api/v1/drafts/{id}/session/join",
+	"atlas_session_poll":            "POST /api/v1/drafts/{id}/session/poll",
+	"atlas_session_lock":            "POST /api/v1/drafts/{id}/session/lock",
+	"atlas_session_change":          "POST /api/v1/drafts/{id}/session/change",
+	"atlas_session_presence":        "POST /api/v1/drafts/{id}/session/presence",
+	"atlas_leave_session":           "POST /api/v1/drafts/{id}/session/leave",
+	"atlas_list_forms":              "GET /api/v1/forms",
+	"atlas_get_form":                "GET /api/v1/forms/{id}",
+	"atlas_list_decision_refs":      "GET /api/v1/dmnrefs",
+	"atlas_list_decisions":          "GET /api/v1/decisions",
+	"atlas_decision_evaluations":    "GET /api/v1/decisions/{id}/evaluations",
+	"atlas_variable_audit":          "GET /api/v1/instances/{key}/variable-audit",
+	"atlas_assignable_users":        "GET /api/v1/users/assignable",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -101,15 +109,33 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/backup/full":   "admin whole-instance snapshot download, not an agent action",
 	"POST /api/v1/restore/full": "admin whole-instance snapshot upload, not an agent action",
 
+	// Recovery checkpoints and WAL compaction (ADR-0131): storage housekeeping an
+	// operator watches and occasionally forces before a restart. Same category as
+	// backup/restore — it concerns the data directory, not the processes running in it,
+	// and the control deletes WAL segments when compaction is on.
+	"GET /api/v1/checkpoints":  "admin recovery-checkpoint status, not an agent action",
+	"POST /api/v1/checkpoints": "admin on-demand checkpoint/compaction, not an agent action",
+
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like connectors — an agent reads the resolution via atlas_call_activities but
 	// does not set server-local routing. requireAdmin-gated.
 	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
 	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
 
+	// Deactivating/activating a deployed process (ADR-0119): operator config that pauses
+	// automatic (timer/message/signal) starts, the same category as a call-activity
+	// override — an operator action from the Console, not an agent scenario step.
+	"PUT /api/v1/processes/{key}/active": "process deactivation is operator config, not an agent action",
+
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
+
+	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
+	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
+	// directly (or relies on server-side ensureDiagramLayout on read), so it does
+	// not drive a scenario through this.
+	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
 
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
@@ -125,9 +151,11 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
 
 	// Design-time edit: agents create artifacts and can read them back (list/get
-	// are exposed), but mutating existing ones is the UI's job.
+	// are exposed), but mutating existing ones is the UI's job. Deleting a draft is
+	// the one exception (atlas_delete_draft): an agent can *create* drafts, so
+	// leaving it no way to remove one makes every generated or throwaway diagram
+	// permanent litter that only a human can clear.
 	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
-	"DELETE /api/v1/drafts/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
@@ -136,7 +164,7 @@ var mcpOmittedRoutes = map[string]string{
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
-	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0103)",
+	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
@@ -148,6 +176,15 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/projects/{id}/members/{userId}":    "access control is an admin/UI concern",
 	"DELETE /api/v1/projects/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/projects/{id}/validate":           "modeler-time validation is a UI concern",
+
+	// Process application edit/membership (ADR-0128): the canonical /applications
+	// surface. Create/list/delete/deploy are exposed as atlas_*_application tools
+	// (see mcpToolRoutes); the rest mirror the omission of their /projects twins —
+	// metadata edit, access control, and modeler-time validation are UI concerns.
+	"PATCH /api/v1/applications/{id}":                   "application metadata edit is a UI concern",
+	"PUT /api/v1/applications/{id}/members/{userId}":    "access control is an admin/UI concern",
+	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
+	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	"GET /api/v1/connectors":                             "connector infrastructure is admin config",
@@ -167,6 +204,55 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/marketplace/installed":              "marketplace management is a UI concern",
 	"DELETE /api/v1/marketplace/installed/{id}":      "marketplace management is a UI concern",
 
+	// Peer deploy tokens and bundle import (ADR-0129): issuing a machine credential
+	// is credential storage (admin-gated, same category as secrets), and the import
+	// endpoint is a server-to-server transport authenticated by a deploy token — an
+	// MCP agent publishes through atlas_publish_application, never by hand-posting a
+	// bundle. Exposing either as a tool would hand an agent a capability the ADR
+	// deliberately scoped to peers and admins.
+	"POST /api/v1/deploy-tokens":        "issuing a peer credential is admin-only credential management, not an agent action",
+	"GET /api/v1/deploy-tokens":         "credential listing is admin-only, not an agent action",
+	"DELETE /api/v1/deploy-tokens/{id}": "credential revocation is admin-only, not an agent action",
+	"POST /api/v1/applications/import":  "server-to-server bundle transport authenticated by a deploy token; agents publish via atlas_publish_application",
+
+	// Deployment targets and promotion (ADR-0129, sending side): a target names
+	// another server and the credential to reach it — admin config in the same
+	// category as connectors. Promotion ships work to a *different* engine, often a
+	// production one; that is an operator's decision with consequences outside this
+	// server, not a step an agent drives while building a scenario. An agent
+	// publishes locally via atlas_publish_application and stops there.
+	"POST /api/v1/targets":                                      "peer target configuration is admin config, not an agent action",
+	"GET /api/v1/targets":                                       "peer target configuration is admin config, not an agent action",
+	"DELETE /api/v1/targets/{id}":                               "peer target configuration is admin config, not an agent action",
+	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
+	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
+
+	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
+	// application's whole working set, in the same category as backup/restore. An
+	// agent authors through the granular tools it already has (atlas_save_draft,
+	// atlas_save_form, atlas_register_decision), where each change is one legible
+	// step; handing it an archive that silently rewrites every artifact of an
+	// application at once is neither reviewable nor something an agent needs.
+	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+
+	// Process documentation (ADR-0138): the document is *produced in the browser*,
+	// where bpmn-js holds the authoritative picture — an agent has no rendered
+	// diagram to publish, so the create route is not a capability it can exercise.
+	// The reads are of the produced artifact rather than of the model: an agent
+	// that wants to know what a process does reads the model itself via
+	// atlas_get_draft_xml / atlas_get_process_xml. Sharing is a publication
+	// decision — it puts a process in front of an audience outside Atlas — and
+	// belongs to the human making it.
+	"POST /api/v1/processes/{processId}/documentation":       "the document is rendered in the browser; an agent has no diagram raster to publish",
+	"GET /api/v1/processes/{processId}/documentation":        "history of a published artifact; an agent reads the model itself via atlas_get_process_xml",
+	"GET /api/v1/documentation/{id}":                         "a published artifact's record; an agent reads the model itself via atlas_get_process_xml",
+	"GET /api/v1/documentation/{id}/pdf":                     "binary document download is not an agent capability",
+	"POST /api/v1/documentation/{id}/share":                  "publishing a process to an audience outside Atlas is a human decision, not an agent action",
+	"DELETE /api/v1/documentation/{id}/share":                "revoking a publication is a human decision, not an agent action",
+	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
+	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
@@ -176,6 +262,12 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
 	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
 	"DELETE /api/v1/settings/theme": "UI branding is a Console concern, not an agent action",
+
+	// Self-service registration config (ADR-0126): a login-screen/admin concern,
+	// not an agent action.
+	"GET /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
+	"PUT /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
+	"DELETE /api/v1/settings/registration": "registration config is a Console/login concern, not an agent action",
 
 	// Auth + user administration: security surface, deliberately off-limits.
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",

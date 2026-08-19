@@ -52,6 +52,11 @@ type processResp struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
+	// ProjectID names the project this definition's draft belonged to at deploy time,
+	// so the Modeler home groups deployed definitions into the same project folders as
+	// design-time artifacts (ADR-0034). Empty for a definition deployed outside a
+	// project, which the UI shows under "Ungrouped".
+	ProjectID string `json:"projectId,omitempty"`
 	// CollaborationKey groups a collaboration's pools: when non-zero, this process
 	// is a pool of a collaboration and the value is the stable key the Operations
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
@@ -67,6 +72,11 @@ type processResp struct {
 	Executable bool `json:"executable"`
 	// VersionTag is the process's atlas:versionTag revision label, empty when unset.
 	VersionTag string `json:"versionTag,omitempty"`
+	// Active reports whether the definition may auto-start new instances from its
+	// timer/message/signal start events. A deactivated definition (false) stays
+	// deployed and keeps its running instances, but does not self-start (ADR-0119).
+	// Always emitted so the UI can render the active/inactive control unambiguously.
+	Active bool `json:"active"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -520,14 +530,40 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the project this deploy files under, so the Modeler home groups the
+	// deployed definition into the same folder as its draft (ADR-0034). An explicit
+	// ?projectId= (the editor sends its current project) wins and, when non-empty,
+	// must name an existing project; without the param we inherit the matching draft's
+	// project so an API/MCP deploy of a project draft still lands in its folder. A
+	// deploy with neither is Ungrouped.
+	projectID := r.URL.Query().Get("projectId")
+	hasProjectParam := r.URL.Query().Has("projectId")
+	pid, _ := processIdentity(body)
 	var (
-		resp       deployResp
-		compErr    error
-		persistErr error
+		resp           deployResp
+		compErr        error
+		persistErr     error
+		projErr        error
+		unknownProject bool
 	)
 	s.do(func() {
+		if !hasProjectParam {
+			if d, ok, e := s.drafts.get(pid); e == nil && ok {
+				projectID = d.ProjectID
+			}
+		} else if projectID != "" {
+			_, ok, e := s.projects.get(projectID)
+			if e != nil {
+				projErr = e
+				return
+			}
+			if !ok {
+				unknownProject = true
+				return
+			}
+		}
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix(), projectID)
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -539,6 +575,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	switch {
+	case projErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+	case unknownProject:
+		writeError(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		writeError(w, http.StatusBadRequest, compErr.Error())
@@ -565,7 +605,11 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // deployment record and registered in the DMN registry under the process key, so
 // the tasks run now and re-register on restart (ADR-0014/ADR-0034). The caller is
 // responsible for having validated it; a compile failure here is a server error.
-func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+//
+// projectID files every process the model deploys under a project, so the Modeler
+// home can group deployed definitions the way it groups design-time artifacts
+// (ADR-0034). Empty for a deploy made outside a project.
+func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID string) (deployed []deployedProcess, compErr, persistErr error) {
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -593,6 +637,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			XML:        string(body),
 			DMNXMLs:    dmnStrings,
 		}); err != nil {
@@ -623,6 +668,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			xml:        body,
 			cp:         cp,
 		}
@@ -653,10 +699,12 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Name:             d.Name,
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
+				ProjectID:        d.ProjectID,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
+				Active:           !d.inactive,
 			})
 		}
 	})
@@ -686,6 +734,27 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
+// handleLayout regenerates a posted model's diagram layout: it discards whatever
+// diagram interchange the BPMN carries and returns the model with a freshly
+// generated left-to-right layout, backing the Modeler's "Auto-layout" button. Like
+// validate it is a pure transform — no key minted, no definition registered, no
+// state touched — so it runs off the run-loop goroutine. A model whose layout can't
+// be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
+// unreadable body is a 4xx, matching the deploy and validate endpoints.
+func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write(relayoutDiagram(body))
+}
+
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
 // definition by key on every batch.
@@ -697,15 +766,23 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found      bool
+		protected  bool
 		running    int
 		scanErr    error
 		persistErr error
 	)
 	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
+		d, ok := s.deployments[key]
+		if !ok {
 			return
 		}
 		found = true
+		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
+		// refuse deletion for every caller.
+		if s.systemPIDs[d.ProcessID] {
+			protected = true
+			return
+		}
 		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey == key {
 				running++
@@ -733,6 +810,8 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:
@@ -741,6 +820,74 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSetProcessActive activates or deactivates a deployed definition (ADR-0119).
+// A deactivated definition stays deployed and keeps its running instances, but no
+// longer auto-starts new ones when its timer, message, or signal start events fire —
+// the operator has paused it (e.g. a timer-driven process). Reactivating restores
+// automatic starts. The flag persists in the deployment sidecar and is re-applied on
+// restart. Body: {"active": bool}.
+func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+		return
+	}
+	var (
+		found      bool
+		loadErr    error
+		persistErr error
+	)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+		// No-op fast path: an unchanged flag rewrites nothing (idempotent PUT).
+		if d.inactive == !body.Active {
+			return
+		}
+		// Read the full record so the rewrite preserves the XML and DMN models the
+		// in-memory deployment does not hold, then flip the flag. Durable before visible
+		// (I2, ADR-0019): persist first, then apply to the engine and the display copy.
+		rec, ok, err := s.deploys.load(key)
+		if err != nil {
+			loadErr = err
+			return
+		}
+		if !ok {
+			// The registry and the sidecar have diverged (should not happen); treat it as
+			// not found rather than silently applying an unpersisted change.
+			found = false
+			return
+		}
+		rec.Inactive = !body.Active
+		if err := s.deploys.save(rec); err != nil {
+			persistErr = err
+			return
+		}
+		s.proc.SetProcessActive(key, body.Active)
+		d.inactive = !body.Active
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case loadErr != nil:
+		writeError(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
 	}
 }
 
@@ -1175,6 +1322,12 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// consumes every waiting arrival in a single transition. Only a leaf
 		// completion (an end event, no outgoing flow) removes its token at once,
 		// yielding the one legitimate empty frame that marks the instance done.
+		//
+		// A *termination* is never deferred. An element torn down by an interrupting
+		// boundary event, a cancelled instance, or a terminate end event hands its
+		// token to no one — its outgoing flow is never taken — so waiting for a
+		// successor would leave a ghost token parked on it forever, outliving the
+		// instance itself (ADR-0136).
 		active := map[uint64]timelineToken{}
 		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
@@ -1194,7 +1347,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		}
 		for _, rr := range replayRows {
 			v := rr.v
-			if v.Action == 1 {
+			switch {
+			case v.Action == state.ReplayActivated:
 				activations[rr.pos] = v
 				// This activation is the successor of any deferred completion on its
 				// incoming flow's source node: those tokens move into it now.
@@ -1214,17 +1368,28 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
-				// A leaf has no successor to move into: remove it at once.
+			case v.Action == state.ReplayTerminated, d.cp.Node(v.ElementID).OutgoingCount == 0:
+				// Nothing will activate from here — a termination hands its token on to
+				// no one, and a leaf has no successor to move into — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
 				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
 				emitFrame(rr.pos, rr.at)
-			} else {
+			default:
 				// Defer: keep the token visible until its successor activates.
 				endAt[v.ElementInstanceKey] = rr.at
 				pending[v.ElementInstanceKey] = v
 			}
+		}
+		// A finished instance holds no element instance, so it can hold no token: drop
+		// anything still deferred and show the empty terminal frame. Live folds resolve
+		// every deferral above; this catches history written before terminations were
+		// recorded distinctly (ADR-0136), which would otherwise strand a ghost token on
+		// the last frame of an already-completed instance.
+		if len(active) > 0 && pi.State != model.PIActive && len(replayRows) > 0 {
+			last := replayRows[len(replayRows)-1]
+			active = map[uint64]timelineToken{}
+			emitFrame(last.pos, last.at)
 		}
 
 		// Walk the steps in order, advancing through every variable change at or
@@ -1480,11 +1645,15 @@ func nativeVar(v *model.VariableValue) any {
 	}
 }
 
-// handleInstanceVariables returns a process instance's variables as a typed JSON
-// object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a bound form
-// so a field whose key matches a variable is prefilled (ADR-0028). An instance
-// with no variables (or an unknown key) yields an empty object, not a 404: the
-// endpoint is a convenience read, not an existence check.
+// handleInstanceVariables returns the variables visible at an instance scope as a
+// typed JSON object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a
+// bound form so a field whose key matches a variable is prefilled (ADR-0028). The
+// key may be a process-instance root or a task's element-instance scope; the read
+// resolves up the enclosing-scope chain (ADR-0068), so a user task without its own
+// input-mapped locals still prefills from the process variables it inherits — the
+// same set the token itself sees. An instance with no variables (or an unknown
+// key) yields an empty object, not a 404: the endpoint is a convenience read, not
+// an existence check.
 func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -1494,7 +1663,7 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
+		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
 			out[v.Name] = nativeVar(v)
 			return nil
 		})
@@ -2567,14 +2736,23 @@ type taskResp struct {
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
 	Name               string `json:"name,omitempty"`
-	Assignee           string `json:"assignee,omitempty"`
-	CandidateGroups    string `json:"candidateGroups,omitempty"`
-	FormID             string `json:"formId,omitempty"`
+	// Documentation is the element's <bpmn:documentation> — the work instruction the
+	// modeler wrote for whoever picks the task up (ADR-0025). Design-time metadata: the
+	// engine never reads it, the Tasks app shows it above the form.
+	Documentation   string `json:"documentation,omitempty"`
+	Assignee        string `json:"assignee,omitempty"`
+	CandidateGroups string `json:"candidateGroups,omitempty"`
+	FormID          string `json:"formId,omitempty"`
 	// Priority is the task's importance from the model (default 50); the inbox
 	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
 	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
+	// Lane is the organizational lane the task's element is drawn in (ADR-0121), leaf name
+	// for a flat model; LanePath is the outermost-to-leaf path for a nested lane. Both empty
+	// when the task is in no lane. Metadata only — the Tasks app groups/labels by it.
+	Lane     string   `json:"lane,omitempty"`
+	LanePath []string `json:"lanePath,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -2714,7 +2892,8 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 
 // enrichTask turns a user-task job into the response row the inbox and the
 // single-task lookup both return: the job's key and instance, plus the element's
-// name, assignment metadata, form, priority and due date from the compiled process.
+// name, documentation, assignment metadata, form, priority and due date from the
+// compiled process.
 // It is the one place that shape is built, so the list and the by-key fetch can never
 // drift. Callers run it inside s.do (it reads the store and the deployments map).
 func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
@@ -2729,9 +2908,18 @@ func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
 			tr.ProcessID = d.ProcessID
 			cp := d.cp
 			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+			// The organizational lane the task is drawn in (ADR-0121) — metadata for
+			// grouping in the inbox: the leaf name plus the outermost-to-leaf path.
+			if path := cp.LanePath(ei.ElementId); len(path) > 0 {
+				tr.Lane = path[len(path)-1]
+				tr.LanePath = path
+			}
 			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 				detail := cp.UserTask(n.Detail)
 				tr.Name = cp.Intern(detail.Name)
+				// What the task is actually asking the person to do, if the modeler
+				// wrote it down (ADR-0025).
+				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
 				// The assignee is the job's runtime value (claim/unclaim rewrite it,
 				// ADR-0042); candidate groups stay the compile-time attribute.
 				tr.Assignee = jv.Assignee
@@ -3164,6 +3352,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	var (
 		saveErr, projErr error
 		unknownProject   bool
+		protectedProject bool
 	)
 	s.do(func() {
 		if !hasProjectParam {
@@ -3172,13 +3361,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				rec.ProjectID = existing.ProjectID
 			}
 		} else if projectID != "" {
-			_, ok, e := s.projects.get(projectID)
+			proj, ok, e := s.projects.get(projectID)
 			if e != nil {
 				projErr = e
 				return
 			}
 			if !ok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse authoring a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3189,6 +3384,8 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
@@ -3238,6 +3435,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found, unknownProject    bool
+		protectedProject         bool
 		getErr, projErr, saveErr error
 		view                     draftResp
 	)
@@ -3252,13 +3450,19 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if payload.ProjectID != "" {
-			_, pok, pe := s.projects.get(payload.ProjectID)
+			proj, pok, pe := s.projects.get(payload.ProjectID)
 			if pe != nil {
 				projErr = pe
 				return
 			}
 			if !pok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse moving a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3277,6 +3481,8 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 	default:
