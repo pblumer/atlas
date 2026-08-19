@@ -51,6 +51,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
@@ -947,6 +948,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// authentication secret is a *reference* the worker resolves at call time from the
 	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
 	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret))
+	// A SCIM 2.0 connector task provisions/reads an identity resource against a
+	// model-authored service provider (ADR-0152). Like REST the base URL and resource
+	// live in the model and the authentication secret is a *reference* the worker
+	// resolves at call time (resolveConnectorSecret, ADR-0041); unlike REST it speaks
+	// SCIM (application/scim+json, resource-path URLs, filtered search). One worker
+	// serves every process under the reserved SCIM job type.
+	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, scim.Handler(store, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret))
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
 	// records is ingested and validated on the engine with the file arriving through a

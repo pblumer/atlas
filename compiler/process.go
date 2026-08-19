@@ -523,6 +523,23 @@ type ConnectorTaskDetail struct {
 	UserDisplayName RestExpr
 	UserRoles       RestExpr
 	UserPassword    RestExpr
+	// SCIM connector fields (JobType == ScimJobType, ADR-0152). ScimBaseURL is the
+	// service provider's SCIM v2 base endpoint and ScimResource the resource-type path
+	// segment ("Users"/"Groups") — each a literal-or-FEEL value evaluated over the
+	// instance's variables at call time. ScimOp is the interned operation
+	// ("create"|"get"|"replace"|"patch"|"delete"|"search"), which the worker maps to an
+	// HTTP method. ScimResourceID addresses a single resource (get/replace/patch/
+	// delete); ScimFilter is the SCIM filter for a search. ScimBody is the interned name
+	// of the process variable holding the create/replace/patch payload (interned "" →
+	// the whole variable scope, mirroring REST). Each is the zero value for a non-SCIM
+	// task; ResultVar (above) receives the JSON response and Auth (above) the
+	// bearer/basic/apiKey credential reference. Read only by the in-process SCIM worker.
+	ScimBaseURL    RestExpr
+	ScimResource   RestExpr
+	ScimOp         int32
+	ScimResourceID RestExpr
+	ScimFilter     RestExpr
+	ScimBody       int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

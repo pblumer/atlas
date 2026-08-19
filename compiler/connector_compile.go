@@ -69,6 +69,77 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.WebScrape.Retries },
 		compile: compileWebScrapeConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Scim != nil },
+		retries: func(st xmlServiceTask) string { return st.Scim.Retries },
+		compile: compileScimConnectorTask,
+	},
+}
+
+// scimOps is the set of SCIM 2.0 operations a connector task can author. create/get/
+// replace/patch/delete/search map to the provider's POST/GET/PUT/PATCH/DELETE and a
+// filtered GET (RFC 7644 §3).
+var scimOps = map[string]bool{"create": true, "get": true, "replace": true, "patch": true, "delete": true, "search": true}
+
+// compileScimConnectorTask compiles an <atlas:scimConnector> task: it performs a SCIM
+// 2.0 resource operation against a model-authored service-provider endpoint via the
+// job path (ADR-0152), not an external service-task worker. Like REST the base URL
+// lives in the model and credentials never do; unlike REST it speaks SCIM (resource
+// paths, operations, filtered search). A get/replace/patch/delete needs a resource
+// id; the payload for create/replace/patch is a named body variable or the whole
+// instance scope.
+func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Scim
+	if strings.TrimSpace(cn.BaseUrl) == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs a baseUrl", st.Id)
+	}
+	if strings.TrimSpace(cn.Resource) == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs a resource (e.g. Users)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs an operation (create, get, replace, patch, delete, or search)", st.Id)
+	}
+	if !scimOps[op] {
+		return 0, fmt.Errorf("compiler: scim connector task %q has an unknown operation %q (want create, get, replace, patch, delete, or search)", st.Id, cn.Operation)
+	}
+	if strings.TrimSpace(cn.ResourceId) == "" {
+		switch op {
+		case "get", "replace", "patch", "delete":
+			return 0, fmt.Errorf("compiler: scim connector task %q operation %q needs a resourceId", st.Id, op)
+		}
+	}
+	baseURL, err := connectorValue(st.Id, "scim connector", "baseUrl", cn.BaseUrl)
+	if err != nil {
+		return 0, err
+	}
+	resource, err := connectorValue(st.Id, "scim connector", "resource", cn.Resource)
+	if err != nil {
+		return 0, err
+	}
+	resourceID, err := connectorValue(st.Id, "scim connector", "resourceId", cn.ResourceId)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "scim connector", "filter", cn.Filter)
+	if err != nil {
+		return 0, err
+	}
+	auth, err := connectorAuth(st.Id, "scim connector", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddScimConnectorTask(ScimConfig{
+		BaseURL:    baseURL,
+		Resource:   resource,
+		Op:         op,
+		ResourceID: resourceID,
+		Filter:     filter,
+		BodyVar:    strings.TrimSpace(cn.BodyVariable),
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Auth:       auth,
+		Retries:    retries,
+	}), nil
 }
 
 // firstNonBlank returns the first value that is not empty once trimmed — the

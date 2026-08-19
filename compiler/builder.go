@@ -211,6 +211,21 @@ const TemisDecisionJobType = "io.atlas.temis.decision"
 // deployed process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0050).
 const TemisDecisionJobTypeIndex int32 = 3
 
+// ScimJobType is the reserved job type a SCIM 2.0 connector task carries. Like the
+// REST connector it authors its endpoint in the model — the SCIM base URL and
+// resource type — and names a server-side secret for authentication (ADR-0041); the
+// in-process SCIM connector worker subscribes to it to perform the resource
+// operation off the hot path and write the response back, the same way the REST
+// worker subscribes to RestJobType (ADR-0152).
+const ScimJobType = "io.atlas.scim"
+
+// ScimJobTypeIndex is the interned index ScimJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it seventeenth (after the sixteen job
+// types above), so it is always 16. This lets a single in-process SCIM worker
+// subscribe by one global index across every deployed process, the same way the REST
+// worker uses RestJobTypeIndex (ADR-0152).
+const ScimJobTypeIndex int32 = 16
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -304,6 +319,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
 	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
 	b.intern(UserConnectorJobType) // reserve UserConnectorJobTypeIndex == 15
+	b.intern(ScimJobType)          // reserve ScimJobTypeIndex == 16
 	return b
 }
 
@@ -812,6 +828,57 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 	}
 	raw, _ := json.Marshal(a) // a fixed struct of strings always marshals
 	return b.intern(string(raw))
+}
+
+// ScimConfig is the deploy-time configuration of a SCIM 2.0 connector task
+// (ADR-0152). BaseURL and Resource address the service provider and resource type
+// ("Users"/"Groups"); Op is the operation ("create"|"get"|"replace"|"patch"|
+// "delete"|"search"); ResourceID (get/replace/patch/delete) and Filter (search)
+// carry literal-or-FEEL values (the parser compiles the FEEL ones); BodyVar names the
+// process variable holding the create/replace/patch payload (empty → the whole
+// variable scope); Auth references a server-side secret; ResultVar receives the JSON
+// response (empty → discard it).
+type ScimConfig struct {
+	BaseURL    RestExpr
+	Resource   RestExpr
+	Op         string
+	ResourceID RestExpr
+	Filter     RestExpr
+	BodyVar    string
+	ResultVar  string
+	Auth       RestAuth
+	Retries    int32
+}
+
+// AddScimConnectorTask adds a SCIM 2.0 connector task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved ScimJobType so the in-process SCIM worker picks it up, evaluates any FEEL
+// base-url/resource/id/filter values over the instance's variables, performs the
+// resource operation against the provider, writes the JSON response into ResultVar
+// (empty = discard), and completes the job (ADR-0152). The base URL and resource live
+// in the model; credentials never do (Auth references a server-side secret,
+// ADR-0041).
+func (b *Builder) AddScimConnectorTask(cfg ScimConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:        b.intern(ScimJobType),
+		Connector:      -1, // SCIM carries its endpoint in the model, not a registry name
+		Subject:        -1, // not a clio task
+		EventType:      -1,
+		ClioQuery:      -1,
+		ReduceSpec:     -1,
+		Method:         -1, // the SCIM operation, not an HTTP method, is authored
+		ResultVar:      b.intern(cfg.ResultVar),
+		Auth:           b.internAuth(cfg.Auth),
+		Retries:        cfg.Retries,
+		ScimBaseURL:    cfg.BaseURL,
+		ScimResource:   cfg.Resource,
+		ScimOp:         b.intern(cfg.Op),
+		ScimResourceID: cfg.ResourceID,
+		ScimFilter:     cfg.Filter,
+		ScimBody:       b.intern(cfg.BodyVar),
+	})
+	return b.addNode(TypeConnectorTask, detail)
 }
 
 // MailConfig is the deploy-time configuration of an outbound mail connector task
