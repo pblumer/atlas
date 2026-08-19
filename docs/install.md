@@ -428,8 +428,35 @@ history.
 | `/` | Web UI — modeler, operations, tasks, and the in-app handbook |
 | `/api/v1/…` | JSON API |
 | `/api/docs` | API explorer (disable with `--docs=false`) |
-| `/healthz` | Liveness check; never gated by `--auth` |
+| `/healthz` | Liveness — is the process alive. Unconditional; never gated by `--auth` |
+| `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
 | `/mcp` | Model Context Protocol endpoint — **not authenticated at the transport level** |
+
+#### Health and readiness
+
+`/healthz` and `/readyz` answer different questions and are not interchangeable.
+
+`GET /healthz` always returns `200 ok`. That is the point: the only remedy a liveness
+probe has is a restart, so it must not fail for anything a restart would not fix. Point
+a liveness probe here.
+
+`GET /readyz` returns `200 ok` only when this instance can actually serve, and `503`
+with a one-line reason otherwise:
+
+| Reason | What it means |
+|--------|---------------|
+| `server is shutting down` | Shutdown has begun; work handed to it now would be dropped |
+| `startup recovery has not finished` | The log has not been replayed, so state does not yet describe reality |
+| `state store is not readable: …` | A point read of the state store failed |
+| `the partition writer is not responding` | The goroutine that owns the engine did not answer within two seconds — a blocked fsync on a hung volume looks like this |
+
+Point a readiness probe (and, in Kubernetes, the startup probe) here. Neither endpoint is
+gated by `--auth`, because a kubelet carries no session.
+
+Note that the server does not open its listening port until startup recovery has
+finished, so a probe that gets a connection refused during a restart is seeing that
+replay. Give the startup probe enough budget to wait it out rather than restarting into
+a replay that then starts over — the bundled Helm chart allows ten minutes.
 
 ## The data directory
 

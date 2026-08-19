@@ -120,6 +120,9 @@ func TestRequiresAuth(t *testing.T) {
 		{"/", false},
 		{"/index.html", false},
 		{"/healthz", false},
+		// A kubelet has no session either, and a readiness probe that 401s would take
+		// the pod out of rotation for good the moment --auth is turned on (ADR-0142).
+		{"/readyz", false},
 		// A Prometheus scrape carries no session, so gating /metrics would silently
 		// break monitoring the moment --auth is turned on (ADR-0142).
 		{"/metrics", false},

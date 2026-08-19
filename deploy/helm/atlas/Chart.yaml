@@ -4,7 +4,7 @@ description: A durable, high-throughput BPMN 2.x workflow engine — the single-
 type: application
 
 # Chart version — bump on every change to the chart itself (SemVer).
-version: 0.1.1
+version: 0.2.0
 
 # The Atlas version this chart deploys by default. Used as the image tag when
 # image.tag is left empty, so the default install pulls the immutable

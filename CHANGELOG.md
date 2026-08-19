@@ -55,6 +55,33 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **A readiness probe that means something** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 7): `GET /readyz`, separate from
+  `/healthz` and unauthenticated like it. The audit that opened this slice found the split
+  was not merely missing but wrong — the bundled Helm chart pointed the startup, liveness
+  **and** readiness probes at `/healthz`, which returns an unconditional `ok`, so a pod
+  whose state store could not answer a read, or whose single writer was wedged, said `ok`
+  and kept receiving traffic.
+
+  `/readyz` returns `503` with a one-line reason while the server is shutting down, while
+  startup recovery is incomplete, while a point read of the state store fails, and while
+  the run-loop goroutine does not answer within two seconds. That last check is the one
+  `/healthz` structurally cannot make: a blocked fsync on a hung volume leaves the process
+  alive and answering HTTP while the writer is stuck. It is an empty closure with a
+  deadline — a probe must fail rather than hang alongside what it is probing.
+
+  **`/healthz` is unchanged and stays unconditional**, with a test guarding it from the
+  other side: the only remedy a liveness probe has is a restart, so it must not fail for
+  anything a restart would not fix. A liveness probe that waited for recovery would kill a
+  pod mid-replay, and every restart makes that replay start over.
+
+  Chart (0.2.0): readiness and startup now probe `/readyz`, liveness stays on `/healthz`,
+  and the startup budget goes from 60s to 10m — the server does not open its port until
+  recovery finishes, so the old budget restarted a slow replay into a replay that started
+  over. Draining on shutdown is *not* solved here: the reason exists and fires, but the
+  process stops accepting connections at SIGTERM anyway, so a pre-stop grace period is
+  what would make a readiness-based drain observable.
+
 - **The backlog, the job flow, and what a restart cost** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slices 4–6): three additions that
   together answer "is anything stuck, is anything moving, and how long was this down?"
