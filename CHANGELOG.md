@@ -12,6 +12,19 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN**: the new
+  `atlas import-mim` command converts a MIM/FIM XOML workflow — or an
+  `Export-FIMConfig` XML that embeds one — into deployable BPMN 2.0. Control flow
+  (Sequence, IfElse, Parallel, While) maps to native flow nodes and gateways, and
+  leaf activities map by intent (Approval → user task, Notification → service
+  task, and so on). The translation is loss-aware: any construct without a
+  faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
+  extension element and listed, with a `native`/`preserved`/`manual-review`
+  status, in a per-node report. Every generated model is checked against the
+  compiler so it always deploys. Library: `mimimport`.
+
 ## [0.2.0] — 2026-08-19
 
 Milestone 1's BPMN surface is essentially complete: this release lands the last

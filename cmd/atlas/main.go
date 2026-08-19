@@ -35,6 +35,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/mcp"
+	"github.com/pblumer/atlas/mimimport"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -64,6 +65,10 @@ func main() {
 	case "reset-password":
 		if err := runResetPassword(args); err != nil {
 			fatal("atlas reset-password", err)
+		}
+	case "import-mim":
+		if err := runImportMIM(args); err != nil {
+			fatal("atlas import-mim", err)
 		}
 	case "help", "-h", "--help":
 		usage()
@@ -98,6 +103,7 @@ Usage:
   atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
   atlas reset-password [flags] USER Reset a local user's password from the shell
+  atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.
@@ -524,6 +530,67 @@ func resetPasswordValue(fromStdin bool) (password string, generated bool, err er
 		return "", false, fmt.Errorf("generate password: %w", err)
 	}
 	return hex.EncodeToString(b), true, nil
+}
+
+// runImportMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow —
+// or an Export-FIMConfig wrapper that embeds one — into Atlas-deployable BPMN
+// 2.0. The BPMN goes to stdout (or --out); a per-node conversion report goes to
+// stderr so the lossy points are visible without polluting the model on stdout.
+func runImportMIM(args []string) error {
+	fs := flag.NewFlagSet("import-mim", flag.ExitOnError)
+	out := fs.String("out", "", "write the BPMN to this file instead of stdout")
+	name := fs.String("name", "", "process name to use (default: the workflow's display name)")
+	quiet := fs.Bool("quiet", false, "do not print the conversion report to stderr")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: atlas import-mim [flags] [FILE]
+
+Convert a MIM/FIM workflow (XOML, or an Export-FIMConfig XML that embeds it) into
+BPMN 2.0. With no FILE, or "-", the XOML is read from stdin. Constructs without a
+faithful BPMN counterpart are preserved in <atlas:mimSource> and listed in the
+report; re-check the model in the Modeler before deploying.
+
+Examples:
+  atlas import-mim workflow.xoml > workflow.bpmn
+  Export-FIMConfig ... | atlas import-mim --name Onboarding --out onboarding.bpmn
+
+Flags:
+`)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	var r io.Reader = os.Stdin
+	if rest := fs.Args(); len(rest) > 0 && rest[0] != "-" {
+		if len(rest) != 1 {
+			fs.Usage()
+			return fmt.Errorf("expected at most one FILE argument, got %d", len(rest))
+		}
+		f, err := os.Open(rest[0])
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		r = f
+	}
+
+	res, err := mimimport.Convert(r, *name)
+	if err != nil {
+		return err
+	}
+
+	if *out == "" {
+		if _, err := os.Stdout.Write(res.BPMN); err != nil {
+			return err
+		}
+	} else if err := os.WriteFile(*out, res.BPMN, 0o644); err != nil {
+		return err
+	}
+	if !*quiet {
+		fmt.Fprint(os.Stderr, res.Report.String())
+	}
+	return nil
 }
 
 // fatal reports a top-level command failure and exits non-zero. It replaces log.Fatalf
