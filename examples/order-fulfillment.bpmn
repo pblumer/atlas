@@ -9,7 +9,8 @@
   as a deterministic smoke/regression scenario — see examples/README.md for the
   expected per-element visit counts.
 -->
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+            xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <process id="order-fulfillment" name="Order Fulfillment (Atlas showcase)" isExecutable="true">
 
     <!-- Entry point. -->
@@ -19,7 +20,7 @@
          worker is needed and the token never parks here. -->
     <scriptTask id="register_order" name="Register order">
       <extensionElements>
-        <script expression="= {amount: 4200, region: &quot;EU&quot;, priority: true, items: 7}" resultVariable="order"/>
+        <zeebe:script expression="= {amount: 4200, region: &quot;EU&quot;, priority: true, items: 7}" resultVariable="order"/>
       </extensionElements>
     </scriptTask>
 
@@ -27,7 +28,7 @@
          between automatic steps. riskScore = 4200/100 + 7 = 49. -->
     <scriptTask id="score_risk" name="Score risk">
       <extensionElements>
-        <script expression="= order.amount / 100 + order.items" resultVariable="riskScore"/>
+        <zeebe:script expression="= order.amount / 100 + order.items" resultVariable="riskScore"/>
       </extensionElements>
     </scriptTask>
 
@@ -39,12 +40,12 @@
     <parallelGateway id="fanout" name="Handle in parallel"/>
     <scriptTask id="reserve_stock" name="Reserve stock">
       <extensionElements>
-        <script expression="= order.items" resultVariable="reservedUnits"/>
+        <zeebe:script expression="= order.items" resultVariable="reservedUnits"/>
       </extensionElements>
     </scriptTask>
     <scriptTask id="prepare_invoice" name="Prepare invoice">
       <extensionElements>
-        <script expression="= order.amount * 1.19" resultVariable="grossAmount"/>
+        <zeebe:script expression="= order.amount * 1.19" resultVariable="grossAmount"/>
       </extensionElements>
     </scriptTask>
     <!-- Synchronizing parallel join: waits for BOTH branches before continuing. -->
@@ -56,17 +57,17 @@
     <inclusiveGateway id="notify_split" name="Which notifications?" default="flow_notify_standard"/>
     <scriptTask id="notify_priority" name="Priority handling">
       <extensionElements>
-        <script expression="= &quot;expedited&quot;" resultVariable="handling"/>
+        <zeebe:script expression="= &quot;expedited&quot;" resultVariable="handling"/>
       </extensionElements>
     </scriptTask>
     <scriptTask id="notify_eu" name="EU compliance check">
       <extensionElements>
-        <script expression="= true" resultVariable="euChecked"/>
+        <zeebe:script expression="= true" resultVariable="euChecked"/>
       </extensionElements>
     </scriptTask>
     <scriptTask id="notify_standard" name="Standard notification">
       <extensionElements>
-        <script expression="= &quot;standard&quot;" resultVariable="notice"/>
+        <zeebe:script expression="= &quot;standard&quot;" resultVariable="notice"/>
       </extensionElements>
     </scriptTask>
     <!-- Synchronizing inclusive join: waits for exactly the branches that were
@@ -78,7 +79,7 @@
     <!-- Fast-track branch for low-value orders (not taken by the seeded case). -->
     <scriptTask id="auto_approve" name="Auto-approve small order">
       <extensionElements>
-        <script expression="= &quot;fast-tracked&quot;" resultVariable="decision"/>
+        <zeebe:script expression="= &quot;fast-tracked&quot;" resultVariable="decision"/>
       </extensionElements>
     </scriptTask>
     <endEvent id="order_fast_tracked" name="Order fast-tracked"/>

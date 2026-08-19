@@ -55,11 +55,11 @@
 
     <businessRuleTask id="pflichten" name="Pflichten ermitteln">
       <extensionElements>
-        <calledDecision decisionId="ReisePflichten" resultVariable="pflichten" retries="3"/>
-        <ioMapping>
-          <input source="=reiseart" target="reiseart"/>
-          <input source="=alter" target="alter"/>
-        </ioMapping>
+        <zeebe:calledDecision decisionId="ReisePflichten" resultVariable="pflichten" retries="3"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=reiseart" target="reiseart"/>
+          <zeebe:input source="=alter" target="alter"/>
+        </zeebe:ioMapping>
       </extensionElements>
       <incoming>f_alter_pflichten</incoming>
       <outgoing>f_pflichten_split</outgoing>
