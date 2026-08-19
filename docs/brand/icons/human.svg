@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- A person: the work Atlas hands to someone rather than to a worker. -->
+  <circle cx="128" cy="80" r="36" stroke="#2563EB" stroke-width="18"/>
+  <path d="M46 216c0-45 37-72 82-72s82 27 82 72" stroke="#2563EB" stroke-width="18" stroke-linecap="round"/>
+</svg>

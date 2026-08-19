@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- A rule table with the row that hit marked. -->
+  <rect x="30" y="46" width="196" height="164" rx="20" stroke="#2563EB" stroke-width="18"/>
+  <path d="M30 100H226M30 156H226M108 100V210" stroke="#2563EB" stroke-width="14"/>
+  <circle cx="69" cy="128" r="15" fill="#2563EB"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- Many strands resolving into one path — BPMN reduced to a flat graph at deploy time. -->
+  <path d="M32 76H96M32 128H96M32 180H96" stroke="#2563EB" stroke-width="18" stroke-linecap="round"/>
+  <path d="M96 76 148 128 96 180" stroke="#2563EB" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M148 128H224" stroke="#2563EB" stroke-width="26" stroke-linecap="round"/>
+</svg>
