@@ -240,8 +240,24 @@ This ADR is **not implemented in one change**. The slices:
    path, which changes what the log contains and so belongs in its own change; it is
    arguably a log-fidelity improvement in its own right, since today an incident can
    vanish with nothing in the log saying so.
-5. Job protocol counters (activations, completions, failures, retries, timeouts),
-   landing with or after the ADR-0007 work.
+5. **Landed (partly)** — **job lifecycle counters**: `atlas_jobs_created_total`,
+   `_completed_total`, `_failed_total` and `_canceled_total`, counted from the batch's
+   own records after it is durable and carried on `BatchStats`, so they inherit slice 2's
+   durability ordering and its single call per batch. The count walks records already in
+   cache into locals, so it allocates nothing, and it runs only when metrics are attached.
+
+   Counting them *here* rather than in `applyToState` is the point: `applyToState` runs
+   identically on replay (invariant I4), so a counter incremented there would be
+   double-counted by every recovery.
+
+   Four pre-resolved counters, not one labelled by outcome. The label's values would be a
+   closed enum and so permitted, but resolving a child per batch is what rule 1 forbids,
+   and four fields cost nothing.
+
+   **Activations, lease expiries and timeouts are absent**, not zero: the lease-based
+   worker protocol (ADR-0007, programme F) does not exist yet, so there are no events to
+   count. A permanent zero on a timeout counter reads as "nothing is timing out", which
+   would be true and misleading. They land with that protocol.
 6. Recovery duration and replayed event count, exported once recovery can report them
    without changing its shape.
 7. Readiness semantics: a readiness probe distinct from liveness that fails while

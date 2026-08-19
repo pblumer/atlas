@@ -518,3 +518,61 @@ func TestOpenJobsGaugeIgnoresReputs(t *testing.T) {
 		t.Fatalf("open jobs = %v after failing (re-putting) the one job, want 1", got)
 	}
 }
+
+// TestJobLifecycleCounters: the throughput view of the job protocol — how many jobs
+// were created, finished, failed and cancelled — as cumulative counters, next to the
+// open-jobs gauge that says how many are waiting right now. A gauge alone cannot answer
+// "is anything moving?"; a counter alone cannot answer "how big is the backlog?".
+func TestJobLifecycleCounters(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(2)
+
+	exposition := scrape(t, h)
+	if got := sampleValue(t, exposition, "atlas_jobs_created_total"); got != 2 {
+		t.Fatalf("jobs created = %v after two parked instances, want 2", got)
+	}
+	for _, name := range []string{"atlas_jobs_completed_total", "atlas_jobs_failed_total", "atlas_jobs_canceled_total"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v before anything finished, want 0", name, got)
+		}
+	}
+
+	var keys []uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("activatable jobs = %d, want 2", len(keys))
+	}
+
+	// Complete one, fail the other with retries left.
+	if code, body := h.x.do(http.MethodPost,
+		"/api/v1/jobs/"+strconv.FormatUint(keys[0], 10)+"/complete", "{}"); code != http.StatusOK {
+		t.Fatalf("complete status=%d body=%s", code, body)
+	}
+	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(keys[1], 10)+"/fail",
+		`{"retries":2,"errorMessage":"transient"}`); code != http.StatusOK {
+		t.Fatalf("fail status=%d body=%s", code, body)
+	}
+
+	after := scrape(t, h)
+	if got := sampleValue(t, after, "atlas_jobs_completed_total"); got != 1 {
+		t.Errorf("jobs completed = %v, want 1", got)
+	}
+	if got := sampleValue(t, after, "atlas_jobs_failed_total"); got != 1 {
+		t.Errorf("jobs failed = %v, want 1", got)
+	}
+	// A failure with retries left does not close the job, so creation is unchanged and
+	// one job is still open — the counters and the gauge tell a consistent story.
+	if got := sampleValue(t, after, "atlas_jobs_created_total"); got != 2 {
+		t.Errorf("jobs created = %v after a retryable failure, want the original 2", got)
+	}
+	if got := sampleValue(t, after, "atlas_open_jobs"); got != 1 {
+		t.Errorf("open jobs = %v after one completion and one retryable failure, want 1", got)
+	}
+}

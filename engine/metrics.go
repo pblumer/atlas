@@ -39,6 +39,29 @@ type BatchStats struct {
 	SyncSeconds float64
 	// CommitSeconds is how long making the batch's state visible took.
 	CommitSeconds float64
+	// Jobs is what the batch did to the job lifecycle (ADR-0142 slice 5).
+	Jobs JobStats
+}
+
+// JobStats counts the job-lifecycle transitions one batch made durable. It rides on
+// BatchStats rather than a separate call so it inherits the same durability ordering:
+// a job is counted as created only once the event that created it is on disk.
+//
+// The lease-based worker protocol (ADR-0007) is not built yet, so activations, lease
+// expiries and timeouts have no events to count and are absent rather than reported as
+// a permanent zero — a zero timeout counter on an engine that cannot time out reads as
+// "nothing is timing out", which is true but misleading.
+type JobStats struct {
+	// Created counts jobs that became available to a worker.
+	Created int
+	// Completed counts jobs a worker finished successfully.
+	Completed int
+	// Failed counts worker-reported failures. A failure with retries left leaves the
+	// job open for another attempt; one without parks it with an incident (ADR-0061).
+	Failed int
+	// Canceled counts jobs removed without being worked — their element was
+	// interrupted, terminated, or its instance cancelled.
+	Canceled int
 }
 
 // Metrics observes the batch loop. Every method is called from the single-writer

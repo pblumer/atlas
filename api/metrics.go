@@ -238,6 +238,14 @@ type engineMetrics struct {
 	syncFailures   prometheus.Counter
 	commitFailures prometheus.Counter
 	queueDepth     prometheus.Gauge
+	// Job lifecycle (ADR-0142 slice 5). Four pre-resolved counters rather than one
+	// labelled by outcome: the values would be a closed enum and so allowed, but a
+	// label lookup per batch is exactly what rule 1 forbids, and four fields cost
+	// nothing.
+	jobsCreated   prometheus.Counter
+	jobsCompleted prometheus.Counter
+	jobsFailed    prometheus.Counter
+	jobsCanceled  prometheus.Counter
 }
 
 func newEngineMetrics() *engineMetrics {
@@ -265,6 +273,10 @@ func newEngineMetrics() *engineMetrics {
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
 		syncFailures:   counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
 		commitFailures: counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
+		jobsCreated:    counter("jobs_created_total", "Jobs that became available to a worker."),
+		jobsCompleted:  counter("jobs_completed_total", "Jobs a worker finished successfully."),
+		jobsFailed:     counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
+		jobsCanceled:   counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
 		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metrics.Namespace, Name: "command_queue_depth",
 			Help: "Commands queued for the partition writer after the last batch, including its follow-ups.",
@@ -276,6 +288,7 @@ func (m *engineMetrics) collectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		m.batches, m.commands, m.events, m.batchEvents, m.syncSeconds,
 		m.commitSeconds, m.syncFailures, m.commitFailures, m.queueDepth,
+		m.jobsCreated, m.jobsCompleted, m.jobsFailed, m.jobsCanceled,
 	}
 }
 
@@ -289,6 +302,12 @@ func (m *engineMetrics) BatchCommitted(s engine.BatchStats) {
 	m.batches.Inc()
 	m.commands.Add(float64(s.Commands))
 	m.queueDepth.Set(float64(s.QueueDepth))
+	// Job transitions the batch made durable. Adding zero is free and keeps the branch
+	// count down, so these are unconditional.
+	m.jobsCreated.Add(float64(s.Jobs.Created))
+	m.jobsCompleted.Add(float64(s.Jobs.Completed))
+	m.jobsFailed.Add(float64(s.Jobs.Failed))
+	m.jobsCanceled.Add(float64(s.Jobs.Canceled))
 	if s.Events == 0 {
 		return
 	}

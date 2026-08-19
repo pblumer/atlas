@@ -716,12 +716,42 @@ func (p *Processor) processBatch() error {
 			QueueDepth:    len(p.queue),
 			SyncSeconds:   syncSeconds,
 			CommitSeconds: commitSeconds,
+			Jobs:          p.jobStats(),
 		})
 	}
 	for _, se := range p.sideEffects {
 		p.notifyJobAvailable(se.jobType)
 	}
 	return nil
+}
+
+// jobStats counts the job-lifecycle transitions in the batch just committed (ADR-0142
+// slice 5). It walks records already in cache and counts into locals, so it allocates
+// nothing (invariant I1), and it runs only when metrics are attached.
+//
+// Reading the intents here rather than in applyToState is deliberate: applyToState must
+// stay deterministic and side-effect-free because it runs identically on replay
+// (invariant I4), and a counter incremented there would be double-counted by every
+// recovery.
+func (p *Processor) jobStats() JobStats {
+	var s JobStats
+	for i := range p.batchRecords {
+		h := &p.batchRecords[i].header
+		if h.ValueType != model.VTJob {
+			continue
+		}
+		switch h.Intent {
+		case model.IntentJobCreated:
+			s.Created++
+		case model.IntentJobCompleted:
+			s.Completed++
+		case model.IntentJobFailed:
+			s.Failed++
+		case model.IntentJobCanceled:
+			s.Canceled++
+		}
+	}
+	return s
 }
 
 func (p *Processor) processOne(cmd Command) {
