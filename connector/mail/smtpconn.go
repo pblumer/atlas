@@ -8,6 +8,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // submissionsPort is the implicit-TLS submission port (RFC 8314 "submissions"): a
@@ -17,11 +19,6 @@ import (
 // SMTP at 465 leaves both sides waiting for the other, which is a hang and not an
 // error — so the port selects how the connection is opened.
 const submissionsPort = "465"
-
-// defaultSMTPTimeout bounds a connection whose caller set no deadline of its own. A
-// submission server that has not greeted, authenticated, and accepted a message
-// within this is not going to.
-const defaultSMTPTimeout = 30 * time.Second
 
 // dialSMTP opens a session to addr and takes it as far as a message can be sent
 // through it: connect (with TLS from the first byte on the submissions port),
@@ -36,11 +33,18 @@ const defaultSMTPTimeout = 30 * time.Second
 // refusal is a useful answer, not an obstacle — but "unencrypted connection" says
 // nothing about what to do, so it is translated below.
 func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth) (*smtp.Client, error) {
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultSMTPTimeout)
-		defer cancel()
+	// Every outbound connector call is bounded by the shared budget (ADR-0149): the
+	// mail worker runs on the run-loop goroutine, so a submission host that accepts
+	// the connection and then stops answering would hold the engine's single writer.
+	// A caller's own deadline can make that shorter but never longer, which is what
+	// keeps the bound a property of the connector rather than of its callers.
+	deadline := time.Now().Add(nettimeout.Default)
+	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
 	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel() // bounds the dial; the session below is bounded by the connection deadline
+
 	host := hostOf(addr)
 	dialer := &net.Dialer{}
 
@@ -56,11 +60,9 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", addr, err)
 	}
-	// net/smtp predates context: the deadline is carried onto the connection so a
-	// server that stops answering mid-session fails instead of hanging.
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
-	}
+	// net/smtp predates context: one absolute deadline on the connection bounds the
+	// whole exchange, so no later phase can hang past the budget either.
+	_ = conn.SetDeadline(deadline)
 
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
@@ -74,6 +76,12 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 		}
 	}
 	if auth != nil {
+		// A server that does not offer AUTH would take the credential as an unknown
+		// command; saying so names the mismatch instead of reporting a syntax error.
+		if ok, _ := c.Extension("AUTH"); !ok {
+			_ = c.Close()
+			return nil, fmt.Errorf("%s offers no AUTH, but this connector has a username configured", addr)
+		}
 		if err := c.Auth(auth); err != nil {
 			_ = c.Close()
 			if strings.Contains(err.Error(), "unencrypted connection") {
@@ -93,7 +101,23 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 // connector's transport settings reach it while its signature stays [sendFunc] — the
 // seam a test substitutes.
 func (c *SMTPClient) submit(ctx context.Context, addr string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	sess, err := dialSMTP(ctx, addr, c.conn.ImplicitTLS, auth)
+	return sendMailCtx(ctx, addr, c.conn.ImplicitTLS, auth, from, to, msg)
+}
+
+// sendMailWithin runs the transport with the budget injected and no implicit TLS, so
+// a test can drive the hang paths in milliseconds instead of waiting out the real
+// budget (ADR-0149's tests reach the transport through here).
+func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	return sendMailCtx(ctx, addr, false, a, from, to, msg)
+}
+
+// sendMailCtx walks the envelope over a session from dialSMTP. Address validation is
+// net/smtp's own: Client.Mail and Client.Rcpt each call validateLine, so an address
+// carrying CR or LF is refused before it can inject an SMTP command.
+func sendMailCtx(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth, from string, to []string, msg []byte) error {
+	sess, err := dialSMTP(ctx, addr, implicitTLS, auth)
 	if err != nil {
 		return err
 	}

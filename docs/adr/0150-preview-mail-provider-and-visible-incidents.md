@@ -171,6 +171,10 @@ about. The probe and the send share the front half of it, which is what makes th
 meaningful; a check that exercised a different path could only tell you about that path.
 It also closes an ADR-0079 follow-up in passing: the transport takes the caller's
 context, so a send is bounded by the job that asked for it rather than by the network.
+It carries ADR-0149's budget unchanged — that decision bounded the same send for a
+different reason, and the two met here: the budget is the ceiling, a caller's own
+deadline can only lower it, and the transport that applies it is now also the one the
+check walks.
 
 One behavior is inherited rather than chosen: `net/smtp` refuses PLAIN auth on an
 unencrypted connection (outside localhost) rather than putting a password on the wire.
@@ -225,3 +229,4 @@ against such a server answers with what it means — no STARTTLS offered, use 58
 - relates to ADR-0080 (bounded, O(elements) runtime overlay reads)
 - relates to ADR-0041 (managed connectors and the secret model)
 - relates to ADR-0148 (untrusted markup is rendered sandboxed, never inlined)
+- relates to ADR-0149 (the outbound call budget this transport applies)

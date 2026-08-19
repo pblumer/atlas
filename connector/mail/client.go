@@ -129,7 +129,9 @@ type SMTPClient struct {
 }
 
 // NewSMTPClient builds an SMTP mail client for a configured connector, backed by the
-// [submit] transport.
+// [submit] transport: net/smtp's SendMail flow under the shared connector call
+// budget (ADR-0149), extended to reach an implicit-TLS submissions server, which
+// SendMail cannot (ADR-0150).
 func NewSMTPClient(conn Connector) *SMTPClient {
 	conn.ImplicitTLS = conn.ImplicitTLS || portOf(conn.Endpoint) == submissionsPort
 	c := &SMTPClient{conn: conn}

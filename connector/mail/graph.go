@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // graphDefaultBase is the Microsoft Graph v1.0 API base a connector uses when it
@@ -32,7 +34,7 @@ func NewGraphClient(tokens TokenSource, baseURL, sender string) *GraphClient {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = graphDefaultBase
 	}
-	return &GraphClient{http: http.DefaultClient, tokens: tokens, baseURL: baseURL, sender: sender}
+	return &GraphClient{http: nettimeout.HTTPClient(), tokens: tokens, baseURL: baseURL, sender: sender}
 }
 
 type graphRecipient struct {

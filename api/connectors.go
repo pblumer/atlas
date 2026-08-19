@@ -12,6 +12,7 @@ import (
 
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
@@ -613,10 +614,11 @@ func (s *Server) handleClearMailOutbox(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// connectorTestTimeout bounds a connector check. A submission server or a token
-// endpoint that has not answered within this is a failed check as far as the person
-// waiting in front of the form is concerned.
-const connectorTestTimeout = 20 * time.Second
+// connectorTestTimeout backstops a connector check. Each attempt inside it is already
+// bounded by the shared connector call budget (ADR-0149) — this only bounds a check
+// that somehow outlives its own transport, so that a person waiting in front of the
+// form always gets an answer.
+const connectorTestTimeout = 2 * nettimeout.Default
 
 // connectorTestReq is the body of a connector check: the connector's own fields — the
 // same shape a create takes, so the form can check what is *typed*, before it is

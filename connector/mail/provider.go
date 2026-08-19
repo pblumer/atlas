@@ -3,9 +3,10 @@ package mail
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Provider identifiers for a managed mail connector. SMTP (the default) reaches any
@@ -98,7 +99,7 @@ func oauthTokenSource(provider string, cfg ProviderConfig) (TokenSource, error) 
 		return nil, fmt.Errorf("mail: %s credential is not valid JSON: %w", provider, err)
 	}
 	applyProviderDefaults(provider, &b, cfg.Sender)
-	return newTokenSource(b, http.DefaultClient, nil)
+	return newTokenSource(b, nettimeout.HTTPClient(), nil)
 }
 
 // applyProviderDefaults fills a credential bundle's token URL, scope, and (for a Gmail
