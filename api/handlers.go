@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -731,7 +732,7 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	_, _ = w.Write(ensureDiagramLayout(raw))
+	_, _ = w.Write(layout.Ensure(raw))
 }
 
 // handleLayout regenerates a posted model's diagram layout: it discards whatever
@@ -752,7 +753,7 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	_, _ = w.Write(relayoutDiagram(body))
+	_, _ = w.Write(layout.Regenerate(body))
 }
 
 // handleDeleteProcess removes a deployed definition (one version). It refuses if

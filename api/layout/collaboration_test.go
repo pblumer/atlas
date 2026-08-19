@@ -1,4 +1,4 @@
-package api
+package layout
 
 import (
 	"strings"
@@ -35,7 +35,7 @@ func TestGenerateCollaborationDIBlackBoxPool(t *testing.T) {
 
 // TestGenerateCollaborationDINothingUsable covers the any==false return: a
 // collaboration whose only participant has no id is skipped entirely, so no
-// diagram is produced and ensureDiagramLayout leaves the source unchanged.
+// diagram is produced and Ensure leaves the source unchanged.
 func TestGenerateCollaborationDINothingUsable(t *testing.T) {
 	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <collaboration id="C"><participant name="anonymous"/></collaboration>
@@ -43,8 +43,8 @@ func TestGenerateCollaborationDINothingUsable(t *testing.T) {
 	if _, ok := generateDI(src); ok {
 		t.Fatal("generateDI: want not-ok when every participant is skipped")
 	}
-	if got := ensureDiagramLayout(src); strings.Contains(string(got), "BPMNDiagram") {
-		t.Fatal("ensureDiagramLayout injected a diagram it couldn't build")
+	if got := Ensure(src); strings.Contains(string(got), "BPMNDiagram") {
+		t.Fatal("Ensure injected a diagram it couldn't build")
 	}
 }
 

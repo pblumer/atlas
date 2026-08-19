@@ -1,4 +1,15 @@
-package api
+// Package layout generates BPMN diagram interchange (BPMN-DI) for models that
+// carry none, and regenerates it for models whose layout a user has tangled.
+// It is the server-side auto-layout the Modeler's "Auto-layout" button calls and
+// the fallback that lets a semantic-only deployed model still render (ADR-0124),
+// implemented as the layered pipeline — rank, order, place, route — whose
+// invariants ADR-0127 pins down.
+//
+// The package is deliberately free of any engine or server dependency: it reads
+// BPMN XML with its own minimal structs and writes BPMN-DI back, nothing more. It
+// runs when a human fetches or re-arranges a model, never on the processor's hot
+// path.
+package layout
 
 import (
 	"bytes"
@@ -18,7 +29,7 @@ const (
 	nsOmgDI  = "http://www.omg.org/spec/DD/20100524/DI"
 )
 
-// ensureDiagramLayout returns src unchanged if it already carries BPMN diagram
+// Ensure returns src unchanged if it already carries BPMN diagram
 // interchange (a <BPMNDiagram>); otherwise it generates a simple left-to-right
 // layered layout and injects one so bpmn-js can render the model. It is
 // best-effort: on any parse or structural problem it returns src unchanged.
@@ -26,7 +37,7 @@ const (
 // This runs when the UI fetches a model's XML — a rendering concern, never the
 // engine hot path — so models deployed as pure semantic XML (no layout) still
 // show up in the editor and the live overlay.
-func ensureDiagramLayout(src []byte) []byte {
+func Ensure(src []byte) []byte {
 	if bytes.Contains(src, []byte("BPMNDiagram")) {
 		return src // already laid out
 	}
@@ -37,23 +48,23 @@ func ensureDiagramLayout(src []byte) []byte {
 	return injectBeforeDefinitionsClose(src, di)
 }
 
-// relayoutDiagram discards whatever diagram interchange the model already carries
+// Regenerate discards whatever diagram interchange the model already carries
 // and generates a fresh left-to-right layout in its place. It backs the Modeler's
 // "Auto-layout" button: a diagram a user has tangled by hand is re-flowed by the
 // same generator that lays out a layout-less deployed model. Only shape and edge
 // coordinates change — the semantic model (processes, flows, ids) is untouched.
 //
-// Best-effort, like ensureDiagramLayout: if a new layout can't be generated (the
+// Best-effort, like Ensure: if a new layout can't be generated (the
 // XML won't parse, or the model has no layout-relevant nodes) src is returned
 // unchanged rather than stripped of the layout it had.
-func relayoutDiagram(src []byte) []byte {
+func Regenerate(src []byte) []byte {
 	// generateDI reads only the semantic elements, so it ignores any existing DI;
 	// generate first and only strip the old layout once we have a replacement.
 	di, ok := generateDI(src)
 	if !ok {
 		return src
 	}
-	return injectBeforeDefinitionsClose(stripDiagramLayout(src), di)
+	return injectBeforeDefinitionsClose(stripDiagram(src), di)
 }
 
 // BPMN diagram-interchange blocks to strip before regenerating layout. Two shapes
@@ -67,10 +78,10 @@ var (
 	bpmnDiagramBlock     = regexp.MustCompile(`(?is)<\s*([a-z0-9_.]+:)?BPMNDiagram\b.*?</\s*([a-z0-9_.]+:)?BPMNDiagram\s*>`)
 )
 
-// stripDiagramLayout removes every BPMN diagram-interchange block from src, leaving
+// stripDiagram removes every BPMN diagram-interchange block from src, leaving
 // the semantic model behind. Whitespace around a removed block is left as-is; the
 // regenerated layout is injected separately, before </definitions>.
-func stripDiagramLayout(src []byte) []byte {
+func stripDiagram(src []byte) []byte {
 	src = bpmnDiagramSelfClose.ReplaceAll(src, nil)
 	src = bpmnDiagramBlock.ReplaceAll(src, nil)
 	return src

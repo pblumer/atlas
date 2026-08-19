@@ -1,4 +1,4 @@
-package api
+package layout
 
 import (
 	"strings"
@@ -17,7 +17,7 @@ const semanticOnly = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
 </definitions>`
 
 func TestEnsureDiagramLayoutInjects(t *testing.T) {
-	out := string(ensureDiagramLayout([]byte(semanticOnly)))
+	out := string(Ensure([]byte(semanticOnly)))
 	for _, want := range []string{
 		"<bpmndi:BPMNDiagram",
 		`bpmnElement="order"`,
@@ -40,7 +40,7 @@ func TestEnsureDiagramLayoutInjects(t *testing.T) {
 func TestEnsureDiagramLayoutPreservesExisting(t *testing.T) {
 	withDI := semanticOnly[:len(semanticOnly)-len("</definitions>")] +
 		`<bpmndi:BPMNDiagram id="x"/></definitions>`
-	out := ensureDiagramLayout([]byte(withDI))
+	out := Ensure([]byte(withDI))
 	if string(out) != withDI {
 		t.Fatalf("existing DI must be left untouched")
 	}
@@ -53,7 +53,7 @@ func TestEnsureDiagramLayoutPreservesExisting(t *testing.T) {
 func TestEnsureDiagramLayoutBestEffort(t *testing.T) {
 	// Not BPMN at all → returned unchanged rather than mangled.
 	junk := []byte(`<html><body>nope</body></html>`)
-	if string(ensureDiagramLayout(junk)) != string(junk) {
+	if string(Ensure(junk)) != string(junk) {
 		t.Fatalf("non-BPMN input should be returned unchanged")
 	}
 }

@@ -1,4 +1,4 @@
-package api
+package layout
 
 import (
 	"regexp"
@@ -179,7 +179,7 @@ func TestStripDiagramLayout(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out := string(stripDiagramLayout([]byte(tc.src)))
+			out := string(stripDiagram([]byte(tc.src)))
 			if strings.Contains(out, "BPMNDiagram") || strings.Contains(out, "BPMNPlane") || strings.Contains(out, "BPMNShape") {
 				t.Fatalf("diagram interchange not fully stripped:\n%s", out)
 			}
@@ -199,7 +199,7 @@ func TestStripDiagramLayoutTwoDiagrams(t *testing.T) {
 		`<keep/>` +
 		`<bpmndi:BPMNDiagram id="b"><bpmndi:BPMNPlane/></bpmndi:BPMNDiagram>` +
 		`</definitions>`
-	out := string(stripDiagramLayout([]byte(src)))
+	out := string(stripDiagram([]byte(src)))
 	if strings.Contains(out, "BPMNDiagram") {
 		t.Fatalf("both diagrams should be stripped:\n%s", out)
 	}
@@ -220,7 +220,7 @@ func TestRelayoutDiagramRegenerates(t *testing.T) {
 		`<omgdc:Bounds x="0" y="0" width="36" height="36"/></bpmndi:BPMNShape>` +
 		`</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></definitions>`
 
-	out := string(relayoutDiagram([]byte(withStaleDI)))
+	out := string(Regenerate([]byte(withStaleDI)))
 	if strings.Contains(out, `id="stale"`) {
 		t.Fatalf("stale diagram should have been discarded:\n%s", out)
 	}
@@ -256,7 +256,7 @@ func TestRelayoutDiagramBestEffort(t *testing.T) {
 		`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p"><bpmndi:BPMNDiagram id="d"/></process></definitions>`,
 	}
 	for _, src := range cases {
-		if got := string(relayoutDiagram([]byte(src))); got != src {
+		if got := string(Regenerate([]byte(src))); got != src {
 			t.Fatalf("expected unchanged input for %q, got %q", src, got)
 		}
 	}
