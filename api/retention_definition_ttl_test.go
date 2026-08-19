@@ -141,3 +141,40 @@ func TestRetentionDefinitionTTLOverridesGlobalMaxAge(t *testing.T) {
 		t.Error("instance past the server-wide max age was not purged")
 	}
 }
+
+// TestRetentionPurgesDueInstanceRegardlessOfHistorySize is the field regression that
+// ADR-0146 fixes. Under the key-order sweep the per-tick batch was a *scan* budget:
+// finished instances that could never be eligible still consumed it, so a due instance
+// sitting behind them waited a whole pass — nine hours on the install that reported it.
+// Here the batch is set to 1, the harshest budget there is, and several ineligible
+// records are put ahead of the due one in key order. Asking the due-date index rather
+// than the history, the sweep must still purge it on the very next tick.
+func TestRetentionPurgesDueInstanceRegardlessOfHistorySize(t *testing.T) {
+	const t0 = int64(10 * time.Hour)
+	const ttl = 30 * time.Minute
+	h := newRetentionHarness(t, t0, WithRetentionBatch(1)) // no server-wide age at all
+	plainKey := h.deployXML(retentionBPMN)
+	ttlKey := h.deployXML(ttlRetentionBPMN)
+
+	// The "history" a real server carries: finished instances of a definition with no
+	// retention policy, all with lower keys than the one that will come due.
+	var ballast []uint64
+	for i := 0; i < 5; i++ {
+		k := h.createParkedOf(plainKey)
+		h.terminate(k)
+		ballast = append(ballast, k)
+	}
+	withTTL := h.createParkedOf(ttlKey)
+	h.terminate(withTTL)
+
+	h.clk.set(t0 + int64(ttl))
+	h.sweep() // one tick, batch of one
+	if h.has(withTTL) {
+		t.Error("a due instance was not purged on the first sweep — the batch is being spent on ineligible records")
+	}
+	for _, k := range ballast {
+		if !h.has(k) {
+			t.Errorf("instance %d of a definition without retention was purged", k)
+		}
+	}
+}

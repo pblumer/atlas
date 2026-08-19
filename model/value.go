@@ -252,6 +252,12 @@ type ProcessInstanceValue struct {
 	// highest position — so history retention can prove every event is exported
 	// (CompletedPosition <= exported position) before hard-deleting the instance.
 	CompletedPosition uint64
+	// PurgeDueDate is when history retention is scheduled to hard-delete this finished
+	// instance: CompletedAt + the definition's atlas:historyTtl, 0 when it declares none
+	// (ADR-0146). Frozen on the terminal event so applyToState can index the instance by
+	// it — and read back from the purge event to drop that index entry — without either
+	// fold reading a clock or a definition.
+	PurgeDueDate int64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -270,7 +276,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.CorrelationKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
-	return binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
+	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -302,10 +309,15 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	if len(tail) >= 16 {
 		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
 	}
-	// CompletedPosition is the newest appended field: a record written before it ends
+	// CompletedPosition is a later appended field: a record written before it ends
 	// after the expiry due date and leaves it zero (no terminal position recorded).
 	if len(tail) >= 24 {
 		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
+	}
+	// PurgeDueDate is the newest appended field: a record written before it ends after
+	// the completed position and leaves it zero (no history TTL scheduled it).
+	if len(tail) >= 32 {
+		v.PurgeDueDate = int64(binary.LittleEndian.Uint64(tail[24:]))
 	}
 	return nil
 }

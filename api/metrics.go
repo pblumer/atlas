@@ -38,6 +38,8 @@ type durabilityCollector struct {
 	lastPassRemoved  *prometheus.Desc
 	walSegments      *prometheus.Desc
 	walBytes         *prometheus.Desc
+	activeInstances  *prometheus.Desc
+	liveTokens       *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
 }
@@ -59,6 +61,10 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		lastPassRemoved: d("checkpoint_last_pass_segments_removed", "WAL segments the last pass compacted away."),
 		walSegments:     d("wal_segments", "Segment files currently in the write-ahead log."),
 		walBytes:        d("wal_bytes", "Bytes currently held by the write-ahead log."),
+		activeInstances: d("active_process_instances",
+			"Process instances currently running, summed from the per-definition counters (ADR-0080)."),
+		liveTokens: d("live_element_tokens",
+			"Element instances currently holding a live token, summed from the per-definition-element counters (ADR-0080)."),
 		exporterPosition: d("exporter_position",
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
@@ -76,6 +82,8 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastPassRemoved
 	ch <- c.walSegments
 	ch <- c.walBytes
+	ch <- c.activeInstances
+	ch <- c.liveTokens
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -131,6 +139,18 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	segments, bytes := s.walFootprint()
 	gauge(c.walSegments, float64(segments))
 	gauge(c.walBytes, float64(bytes))
+
+	// Runtime population, from the maintained per-definition counters rather than a walk
+	// of the runtime set: a scrape every fifteen seconds must not cost more the busier
+	// the engine gets, which is exactly what the authoritative scan would do (ADR-0142,
+	// ADR-0080/0085). Unreadable means omitted, not zero — an absent series is a gap and
+	// an alert, a fabricated zero reads as an idle engine.
+	if n, err := s.store.TotalActiveInstances(); err == nil {
+		gauge(c.activeInstances, float64(n))
+	}
+	if n, err := s.store.TotalLiveTokens(); err == nil {
+		gauge(c.liveTokens, float64(n))
+	}
 
 	// Lag is only meaningful with an exporter. A zero on a server that exports nothing
 	// would read exactly like a caught-up one.

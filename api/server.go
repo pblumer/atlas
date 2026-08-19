@@ -986,8 +986,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// exported (else durable) position (ADR-0115). The sweeper always runs: retention is
 	// configured server-wide *or* per definition (atlas:historyTtl, ADR-0144), and a
 	// definition carrying one can be deployed at any moment — so the cheap standing tick
-	// is what makes a mid-flight deploy take effect. A tick with neither configured
-	// returns immediately (sweepRetention's early-out). Like the other pollers it
+	// is what makes a mid-flight deploy take effect. A tick with nothing due and no
+	// server-wide age costs one empty range scan of the expiry index (ADR-0146). Like the
+	// other pollers it
 	// computes wall-clock time off the run loop and hops onto it via do() to touch the
 	// processor and its bounded, resumable cursor.
 	s.wg.Add(1)
@@ -1085,33 +1086,88 @@ func (s *Server) retentionSweeper(every time.Duration) {
 	}
 }
 
-// sweepRetention evaluates one bounded, resumable window of finished instances and
-// hard-deletes those eligible: finished before now minus the max age that governs them
-// — their own definition's history TTL, else the server-wide age (ADR-0144) — AND
-// provably exported (a non-zero terminal position at or below the safe position). It
-// runs inside a do()
-// turn, so the scan, the purge commands it enqueues, and the cursor advance are one
-// atomic single-writer step (ADR-0115). Errors are logged and retried next tick.
+// purgeTarget is one finished instance a sweep decided to hard-delete, carrying the
+// history value the purge command needs (its definition key, and the purge due date that
+// locates its schedule entry) so neither the command nor applyToState reads it again.
+type purgeTarget struct {
+	key uint64
+	pi  model.ProcessInstanceValue
+}
+
+// sweepRetention hard-deletes the finished instances that are eligible now, from two
+// sources: what a definition's own historyTtl scheduled (the due-date index, ADR-0146)
+// and — only when the operator configured a server-wide max age — what that age has
+// caught in the bounded key-order window (ADR-0115). Both apply the same export gate, so
+// nothing is deleted before it is archived. It runs inside a do() turn, so the scans, the
+// purge commands it enqueues, and the cursor advance are one atomic single-writer step.
+// Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
-	// Nothing is retained on age anywhere: no server-wide max age and no deployed
-	// definition declaring its own history TTL (ADR-0144). The standing tick costs one
-	// map walk and stops here — no store read, no scan.
-	if s.retentionMaxAge <= 0 && !s.anyDefinitionRetention() {
-		return
-	}
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()
 	if err != nil {
 		return
 	}
-	type target struct {
-		key uint64
-		pi  model.ProcessInstanceValue
+	targets := s.scheduledPurges(now, safePos)
+	if s.retentionMaxAge > 0 {
+		targets = s.agedPurges(targets, now, safePos)
 	}
-	var targets []target
+	if len(targets) == 0 {
+		return
+	}
+	for i := range targets {
+		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
+	}
+	_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
+	// No single age to name: instances in one sweep may have come due under different
+	// per-definition TTLs, or under the server-wide age (ADR-0144).
+	log.Printf("retention: purged %d finished instance(s)", len(targets))
+}
+
+// scheduledPurges collects the instances whose declared history TTL has elapsed, by
+// range-scanning the due-date index up to now for at most one batch (ADR-0146). This is
+// what makes a tick cost what is *due* rather than what the history *holds*: an idle
+// server pays one empty scan, and a due instance is never delayed by the millions of
+// finished records that no policy can touch. An instance whose events are not yet
+// exported keeps its index entry and is re-offered on the next tick — the export gate
+// delays a purge, it never cancels one (ADR-0115).
+func (s *Server) scheduledPurges(now int64, safePos uint64) []purgeTarget {
+	var targets []purgeTarget
+	if _, err := s.store.DueHistoryExpiries(now, s.retentionBatch, func(_ int64, piKey uint64) error {
+		pi, ok, err := s.store.ProcessInstance(piKey)
+		if err != nil {
+			return err
+		}
+		// No record behind the entry: nothing to delete, and nothing to decide from.
+		if !ok {
+			return nil
+		}
+		if pi.CompletedPosition != 0 && pi.CompletedPosition <= safePos {
+			targets = append(targets, purgeTarget{piKey, *pi})
+		}
+		return nil
+	}); err != nil {
+		return nil
+	}
+	return targets
+}
+
+// agedPurges appends what the server-wide max age has caught, from one bounded, resumable
+// window of the history in key order (ADR-0115). That age has no schedule behind it — it
+// is a flag that can change between restarts, and it is the only thing that reaches
+// records finished before ADR-0146 indexed them — so this path still scans rather than
+// asks. A definition's own TTL wins over the age for its instances (ADR-0144), and an
+// instance already scheduled above is skipped so one sweep never purges it twice.
+func (s *Server) agedPurges(targets []purgeTarget, now int64, safePos uint64) []purgeTarget {
+	scheduled := make(map[uint64]struct{}, len(targets))
+	for i := range targets {
+		scheduled[targets[i].key] = struct{}{}
+	}
 	next, more, err := s.store.CompletedProcessInstancesFrom(s.retentionCursor, s.retentionBatch,
 		func(key uint64, v *model.ProcessInstanceValue) error {
+			if _, dup := scheduled[key]; dup {
+				return nil
+			}
 			// The max age is the instance's own definition's when it declares one, else the
 			// server-wide setting (ADR-0144); zero means nothing retains this instance.
 			maxAge := s.retentionAgeFor(v.ProcessDefKey)
@@ -1122,21 +1178,12 @@ func (s *Server) sweepRetention(now int64) {
 			// (a record written before this feature) is never provably exported, so it is
 			// conservatively skipped rather than deleted (ADR-0115).
 			if v.CompletedAt <= now-maxAge && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
-				targets = append(targets, target{key, *v})
+				targets = append(targets, purgeTarget{key, *v})
 			}
 			return nil
 		})
 	if err != nil {
-		return
-	}
-	for i := range targets {
-		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
-	}
-	if len(targets) > 0 {
-		_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
-		// No single age to name any more: instances in one sweep may have aged out under
-		// different per-definition TTLs (ADR-0144).
-		log.Printf("retention: purged %d finished instance(s)", len(targets))
+		return targets
 	}
 	// Advance the cursor; wrap to genesis at the end so the next pass re-evaluates
 	// instances that have since aged past the cutoff or become exported.
@@ -1145,6 +1192,7 @@ func (s *Server) sweepRetention(now int64) {
 	} else {
 		s.retentionCursor = 0
 	}
+	return targets
 }
 
 // retentionAgeFor returns the retention max age in nanoseconds that governs a finished
@@ -1160,18 +1208,6 @@ func (s *Server) retentionAgeFor(defKey uint64) int64 {
 		}
 	}
 	return s.retentionMaxAge.Nanoseconds()
-}
-
-// anyDefinitionRetention reports whether any deployed definition declares a history TTL
-// (ADR-0144) — the condition that makes a sweep worth running when the server itself
-// configures no max age. Same loop-only access rule as retentionAgeFor.
-func (s *Server) anyDefinitionRetention() bool {
-	for _, d := range s.deployments {
-		if d.cp != nil && d.cp.HistoryTtlNanos() > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // retentionSafePosition is the highest log position safe to hard-delete up to: the
