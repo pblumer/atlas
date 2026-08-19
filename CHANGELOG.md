@@ -12,6 +12,41 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **An incident is now visible — and resolvable — on the diagram**
+  ([ADR-0150](docs/adr/0150-incidents-on-the-diagram.md)): a parked token used to render
+  exactly like a working one. Both views an operator actually works in now show the fault
+  where it happened. The **live view** outlines the stuck element in red, badges it
+  `⚠ incident`, counts the incidents in scope in its toolbar, and lists them beside the
+  variables — each card naming the element, quoting the failure message and offering
+  **Resolve…**; with *All instances* selected the scope is the whole version, so "is
+  anything in production stuck?" is answered by opening the version (each card links to
+  that instance's replay, and each instance row carries a `⚠ n` chip). The **step-by-step
+  replay** keeps the stuck element outlined at every position of the playhead, flags its
+  row in the Instance History, counts incidents beside the instance state, and resolves
+  from the Details panel. The badge, the card and the resolve dialog are one shared
+  module, so the Operations incidents table now uses the same dialog (which can explain
+  that a timer incident re-arms and ignores the retry count) instead of a `window.prompt`.
+
+- **`GET /api/v1/incidents` can be scoped**: `?instance=` for one process instance,
+  `?process=` for one deployed definition. A view that wants its own incidents no longer
+  pulls every incident on the server and hopes its own survive the 5000-row page cap.
+
+### Changed
+
+- **Breaking (HTTP API): `elementId` in the incident list is now the BPMN diagram id.**
+  The list previously returned the *compiled-graph* element index under that name, which
+  no view can draw with and which contradicts every other endpoint, where `elementId` is
+  the diagram id. The integer survives under its own name, `elementIndex`. The list also
+  gained `processDefKey`, `processId` and `type` (`"job"` or `"timer"`), all resolved on
+  read — the durable `IncidentValue` is unchanged, so `applyToState` and replay are
+  untouched.
+
+- **The incidents table's instance link works.** It fed a *process instance* key to the
+  live view's *definition* route, so the link never landed on the instance it named; it
+  now opens that instance on its version's live diagram, with a replay link beside it.
+
 ## [0.2.0] — 2026-08-19
 
 Milestone 1's BPMN surface is essentially complete: this release lands the last

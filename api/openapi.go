@@ -277,7 +277,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),

@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { incidentPill, fmtRaised, resolveIncidentFlow } from "./incidents.js";
 
 const view = document.getElementById("view");
 
@@ -3150,12 +3151,13 @@ function overrideCell(r) {
 // this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
 // a *job* incident (a service-task job whose retries ran out and parked) and a
 // job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the live instance and
-// resolves in place over POST /incidents/{elementInstanceKey}/resolve: a job incident
-// re-activates its job with a fresh retry budget; a timer incident re-arms the element
-// against the instance's current variables (re-raising if it still fails). The list
-// shares the task list's ceiling and flags a capped page the same way (X-Incidents-
-// Truncated), newest scan order.
+// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
+// diagram and to that instance's replay (ADR-0150), and resolves in place over POST
+// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
+// fresh retry budget; a timer incident re-arms the element against the instance's
+// current variables (re-raising if it still fails). The list shares the task list's
+// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
+// order.
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
@@ -3178,12 +3180,13 @@ async function viewIncidents() {
     </div>`;
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // raisedAt is ns
+  let current = []; // the rendered page, so a Resolve click has the whole incident
 
   const load = async () => {
     try {
       const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
       const rows = (data && data.incidents) || [];
+      current = rows;
       note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
         ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
         : "";
@@ -3191,21 +3194,25 @@ async function viewIncidents() {
         tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r) => {
-        const inst = `<a href="#/operations/p/${r.processInstanceKey}">${r.processInstanceKey}</a>`;
-        // The element instance key (the resolve key) is the row's identity; the compiled
-        // element index rides along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Compiled element index #${r.elementId}">${r.elementInstanceKey}</span>`;
-        const cause = r.jobKey
-          ? `<span class="pill err"><span class="dot"></span>job</span> <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>`
-          : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+      tbody.innerHTML = rows.map((r, i) => {
+        // The instance opens on the live diagram of its own version, with the token
+        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+        const inst = r.processDefKey
+          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+        // The element is named by its diagram id — what the modeler and the diagram
+        // call it; the element instance key (the resolve key) and the compiled index
+        // ride along as a title for anyone cross-referencing the graph.
+        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
         return `<tr>
           <td>${inst}</td>
           <td>${el}</td>
           <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${fmtNano(r.raisedAt)}</td>
+          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}</td>
-          <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
+          <td style="text-align:right"><button class="btn sm" data-resolve="${i}">Resolve…</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3214,24 +3221,14 @@ async function viewIncidents() {
   };
 
   // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). Resolving
-  // prompts for the retry budget the re-activated job gets (default 1); a timer
-  // incident re-arms and ignores the count.
+  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
+  // and the POST are the shared incident flow every surface uses (ADR-0150).
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve]");
     if (!btn) return;
-    const key = btn.dataset.resolve;
-    const v = prompt("Resume with how many retries? (a timer incident re-arms and ignores this)", "1");
-    if (v === null) return;
-    const n = parseInt(v, 10);
-    if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive number of retries", "warn"); return; }
-    try {
-      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: n });
-      toast("Incident resolved", "ok");
-    } catch (err) {
-      toast(err.message || "Resolve failed", "warn");
-    }
-    await load();
+    const incident = current[Number(btn.dataset.resolve)];
+    if (!incident) return;
+    if (await resolveIncidentFlow({ api, toast, incident })) await load();
   });
 
   document.getElementById("refresh").addEventListener("click", load);

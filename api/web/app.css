@@ -729,6 +729,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
 }
 .legend-swatch.history { border-top: 2px dashed var(--muted); }
+.legend-swatch.incident { border-top: 3px solid var(--danger); }
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
@@ -847,6 +848,39 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .task-link.inline {
   display: inline-flex; padding: 2px 7px; font-size: 12px; gap: 4px;
   margin-right: 6px; vertical-align: middle;
+}
+/* Incidents beside the diagram (ADR-0150): the live view's side panel and the
+   replay's Details tab render the same card, so "what is stuck, why, and resolve
+   it" reads identically wherever an operator meets it. */
+.vp-incidents, .ops-inc { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.vp-inc-head, .ops-inc > h4 {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font: 600 11px/1.6 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--danger);
+}
+.vp-inc-head .inc-back { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.inc-card {
+  border: 1px solid var(--danger); border-left-width: 3px; border-radius: var(--radius);
+  background: var(--danger-soft); padding: 7px 10px 8px; font-size: 13px;
+}
+.inc-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.inc-card-name { font-weight: 600; word-break: break-word; }
+.inc-card .inc-inst { margin-left: auto; color: var(--danger); font-weight: 600; text-decoration: none; }
+.inc-card .inc-inst:hover { text-decoration: underline; }
+.inc-card-msg { margin: 4px 0 6px; font: 12px/1.5 ui-monospace, monospace; word-break: break-word; }
+.inc-card-foot { display: flex; align-items: center; gap: 8px; }
+.inc-card-when { font-size: 11px; color: var(--muted); }
+.inc-card-foot .btn { margin-left: auto; }
+/* Per-instance incident count in the live view's all-instances list. */
+.inc-chip {
+  font: 700 11px/1.6 system-ui, sans-serif; color: var(--danger);
+  background: var(--danger-soft); border-radius: 999px; padding: 0 7px;
+}
+/* The resolve dialog quotes the failure that raised the incident. */
+.inc-modal-msg {
+  margin: 0 0 10px; padding: 7px 9px; border-radius: var(--radius);
+  background: var(--danger-soft); color: var(--danger);
+  font: 12px/1.5 ui-monospace, monospace; word-break: break-word;
 }
 .var-panel .vp-table { width: 100%; }
 .var-panel .vp-table td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -983,6 +1017,23 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .token-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
 .token-chip i { display:inline-grid; place-items:center; width:20px; height:20px; border:3px solid var(--token-color); border-radius:50%; font-style:normal; font-weight:800; }
 .atlas-token-waiting .djs-visual > :first-child { stroke:#d55e00 !important; stroke-width:5px !important; stroke-dasharray:6 4; }
+/* An element holding an unresolved incident (ADR-0150). Declared after the token
+   markers and before the selection one, so a stuck element reads as stuck whichever
+   token state it is in, while the operator's own selection still wins. */
+.djs-element.atlas-incident .djs-visual > :nth-child(1) {
+  stroke: var(--danger) !important; stroke-width: 3px !important; stroke-dasharray: none !important;
+}
+/* "⚠ incident" badge on that element: opens it in the side panel / Details tab,
+   where it can be resolved without leaving the diagram. */
+.incident-badge {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: var(--danger); color: #fff; border: none; border-radius: 999px;
+  height: 20px; padding: 0 9px; cursor: pointer;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.incident-badge:hover { filter: brightness(1.1); }
+.incident-badge.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px var(--danger); }
 /* The element the operator selected to inspect: a filled accent-tinted outline,
    the Operate "this node is selected" affordance. */
 .djs-element.atlas-selected .djs-visual > :nth-child(1) {
@@ -1036,6 +1087,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-hrow.root { font-size: 13px; }
 .ops-hrow .ops-hicon { width: 16px; text-align: center; color: var(--ok); }
 .ops-hrow .ops-hicon.live { color: var(--accent); }
+.ops-hrow .ops-hicon.inc { color: var(--danger); }
+.ops-hrow.inc .ops-hname { color: var(--danger); font-weight: 600; }
 .ops-hrow .ops-hicon.proc { color: var(--muted); }
 .ops-hrow:not(.root):not(.done) .ops-hname { color: var(--text); }
 .ops-hname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

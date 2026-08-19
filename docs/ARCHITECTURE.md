@@ -265,6 +265,8 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 
 When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
 
+An incident is surfaced where the operator already is ([ADR-0150](adr/0150-incidents-on-the-diagram.md)): besides the Operations incidents list, the live view and the step-by-step replay mark the stuck element on the diagram, show the failure beside it, and resolve it in place. The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
+
 ## Observability
 
 Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it Atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.

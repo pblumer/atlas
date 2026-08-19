@@ -2030,10 +2030,17 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           complete timeline per instance.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
-          Ursache und löst ihn auf – die Instanz läuft weiter.</li>
+          Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene
+          Element ist auch in der <b>Live-Ansicht</b> und im <b>Replay</b> rot markiert und mit
+          <code>⚠</code> beschriftet, die Meldung steht neben dem Diagramm, und <b>Auflösen</b> ist genau dort
+          ein Klick. In der Live-Ansicht zeigt „All instances“ alle steckengebliebenen Instanzen einer Version auf
+          einmal.</li>
         <li data-l="en"><b><a href="/#/operations/incidents">Incidents</a></b> – when a token can't proceed (job
           failed, expression error, missing variable), an <b>incident</b> is raised. You fix the cause and resolve
-          it – the instance resumes.</li>
+          it – the instance resumes. You don't have to go to the list for that: the stuck element is marked red and
+          badged <code>⚠</code> in the <b>live view</b> and the <b>replay</b> too, the message sits
+          beside the diagram, and <b>Resolve</b> is one click right there. In the live view, "All instances" shows
+          every stuck instance of a version at once.</li>
         <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
           mit Ein- und Ausgaben.</li>
         <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with

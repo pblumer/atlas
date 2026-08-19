@@ -486,9 +486,12 @@ func runtimeTools() []Tool {
 		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
-				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, jobKey, elementId, " +
-				"raisedAt, and message. Optional 'limit' bounds the page. Returns {incidents, truncated}; when " +
-				"'truncated' is true, more incidents exist than were returned — resolve some or raise the limit.",
+				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +
+				"processId, jobKey, elementId (the BPMN id of the stuck element; elementIndex is its compiled " +
+				"index), type (\"job\" or \"timer\"), raisedAt, and message. Optional 'instance' / 'process' " +
+				"scope the list to one process instance or one deployed definition, and 'limit' bounds the page. " +
+				"Returns {incidents, truncated}; when 'truncated' is true, more incidents exist than were " +
+				"returned — resolve some, scope the query, or raise the limit.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -497,14 +500,29 @@ func runtimeTools() []Tool {
 						"minimum":     1,
 						"description": "Maximum incidents to return (API default is generous, capped at 5000).",
 					},
+					"instance": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Only incidents of this process instance key.",
+					},
+					"process": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Only incidents of instances of this deployed definition key.",
+					},
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
-				path := "/api/v1/incidents"
-				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
-					return "", err
-				} else if present {
-					path += "?limit=" + strconv.FormatUint(limit, 10)
+				path, sep := "/api/v1/incidents", "?"
+				for _, name := range []string{"limit", "instance", "process"} {
+					v, present, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if present {
+						path += sep + name + "=" + strconv.FormatUint(v, 10)
+						sep = "&"
+					}
 				}
 				body, headers, err := c.getWithHeaders(path)
 				if err != nil {
