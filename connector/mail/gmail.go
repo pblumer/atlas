@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // gmailDefaultBase is the Gmail v1 API base a connector uses when it authors no
@@ -30,7 +32,7 @@ func NewGmailClient(tokens TokenSource, baseURL, sender string) *GmailClient {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = gmailDefaultBase
 	}
-	return &GmailClient{http: http.DefaultClient, tokens: tokens, baseURL: baseURL, sender: sender}
+	return &GmailClient{http: nettimeout.HTTPClient(), tokens: tokens, baseURL: baseURL, sender: sender}
 }
 
 func (c *GmailClient) Send(ctx context.Context, m Message) error {

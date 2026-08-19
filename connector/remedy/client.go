@@ -39,6 +39,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Entry is one Remedy entry a connector task creates. Form is the Remedy form the
@@ -116,10 +118,13 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a Remedy REST client for a configured connector, backed by
-// http.DefaultClient. A configurable timeout is a follow-up (ADR-0106).
+// NewHTTPClient builds a Remedy REST client for a configured connector, bounded
+// by the shared connector call budget (nettimeout.Default). The worker runs on the
+// run-loop goroutine, so an unbounded call would let a hung ITSM host stall the
+// whole engine; see the nettimeout package doc. A per-connector configurable
+// timeout is a follow-up (ADR-0106).
 func NewHTTPClient(conn Connector) *HTTPClient {
-	return &HTTPClient{conn: conn, http: http.DefaultClient}
+	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }
 
 // CreateEntry obtains a JWT, POSTs the entry to its form, reads the created entry's

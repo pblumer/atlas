@@ -27,10 +27,16 @@ package mail
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"mime"
+	"net"
 	"net/smtp"
 	"strings"
+	"time"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Message is one e-mail an outbound mail connector task sends. To is the required
@@ -121,9 +127,80 @@ type SMTPClient struct {
 }
 
 // NewSMTPClient builds an SMTP mail client for a configured connector, backed by
-// net/smtp's SendMail.
+// [sendMailBounded] — net/smtp's SendMail flow with the connector call budget
+// applied, so a hung submission host cannot stall the run loop.
 func NewSMTPClient(conn Connector) *SMTPClient {
-	return &SMTPClient{conn: conn, send: smtp.SendMail}
+	return &SMTPClient{conn: conn, send: sendMailBounded}
+}
+
+// sendMailBounded is net/smtp's SendMail with a deadline. SendMail itself dials
+// and converses with no timeout whatsoever, and the mail worker runs on the
+// run-loop goroutine — so a submission host that accepts the TCP connection and
+// then stops answering would park the engine's single writer indefinitely (see
+// the nettimeout package doc). An HTTP client's Timeout does not help here: this
+// is a raw TCP conversation, so the bound is a dial timeout plus an absolute
+// deadline on the connection, which covers every later read and write too.
+//
+// It otherwise mirrors SendMail's sequence — greeting, STARTTLS when offered,
+// AUTH when a mechanism is supplied, then the envelope and data — using only the
+// exported net/smtp API. SendMail's address validation is preserved: Client.Mail
+// and Client.Rcpt each call validateLine themselves, so a CR/LF-bearing address
+// is still rejected before it can inject an SMTP command.
+func sendMailBounded(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	return sendMailWithin(nettimeout.Default, addr, a, from, to, msg)
+}
+
+// sendMailWithin is sendMailBounded with the budget injected, so a test can drive
+// the hang paths in milliseconds instead of waiting out the real budget.
+func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	conn, err := (&net.Dialer{Timeout: budget}).Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// One absolute deadline for the whole exchange: the budget bounds the send as
+	// a unit, so no individual phase can hang past it.
+	if err := conn.SetDeadline(time.Now().Add(budget)); err != nil {
+		return err
+	}
+	host := hostOf(addr)
+	c, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
+			return err
+		}
+	}
+	if a != nil {
+		if ok, _ := c.Extension("AUTH"); !ok {
+			return errors.New("smtp: server doesn't support AUTH")
+		}
+		if err := c.Auth(a); err != nil {
+			return err
+		}
+	}
+	if err := c.Mail(from); err != nil {
+		return err
+	}
+	for _, rcpt := range to {
+		if err := c.Rcpt(rcpt); err != nil {
+			return err
+		}
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(msg); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
 }
 
 // Send frames m as a UTF-8 MIME e-mail and submits it to the connector's SMTP

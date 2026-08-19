@@ -3,9 +3,10 @@ package sharepoint
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // graphScope is the default OAuth2 scope a SharePoint connector requests when a
@@ -48,7 +49,7 @@ func oauthTokenSource(cfg ProviderConfig) (TokenSource, error) {
 		return nil, fmt.Errorf("sharepoint: credential is not valid JSON: %w", err)
 	}
 	applyGraphDefaults(&b)
-	return newTokenSource(b, http.DefaultClient, nil)
+	return newTokenSource(b, nettimeout.HTTPClient(), nil)
 }
 
 // applyGraphDefaults fills a credential bundle's token URL (from the tenant) and
