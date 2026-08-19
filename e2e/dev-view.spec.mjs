@@ -338,6 +338,54 @@ test("the splitter resizes the side panel, and the width is remembered", async (
   expect(Math.round(await width())).toBe(Math.round(after));
 });
 
+// The collapse is written synchronously when it is toggled, so — unlike the modal's
+// geometry once was — it cannot be lost to an immediate close. These pin the two
+// decisions around it that a later change could plausibly undo.
+test("expanding from the rail is itself remembered", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-side-toggle").click();
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).toHaveClass(/collapsed/);
+
+  // Picking a tab expands — and that is a choice, not a one-off.
+  await page.locator(".dev-tab[data-tab='help']").click();
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+});
+
+test("resetting the layout leaves the collapse alone but clears the width", async ({ page }) => {
+  await openFeel(page);
+  const sideWidth = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const def = await sideWidth();
+
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 90, split.y + split.height / 2, { steps: 6 });
+  await page.mouse.up();
+  expect(await sideWidth()).toBeGreaterThan(def);
+
+  await page.locator(".dev-side-toggle").click();
+  await page.locator(".dev-head").dblclick();
+
+  // The collapse is a mode with its own button — a layout reset is not a request to
+  // undo it. The authored width, which a drag put there, is gone.
+  await expect(page.locator(".dev-side")).toHaveClass(/collapsed/);
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.sidewidth"))).toBeNull();
+  await page.locator(".dev-side-toggle").click();
+  expect(await sideWidth()).toBe(def);
+});
+
+test("an unreadable collapse setting opens the panel rather than guessing", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("atlas.devview.side", "banana"));
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+  await expect(page.locator(".dev-pane-vars")).toBeVisible();
+});
+
 // The splitter's width is written on pointerup and on each key press — no debounce
 // stands between the gesture and the store, which is why (unlike the modal's own
 // geometry) it cannot be lost to an immediate close. These pin that: the drag case
