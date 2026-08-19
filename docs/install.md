@@ -384,6 +384,8 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
 | `--metrics` | `true` | Serve the Prometheus exposition at `/metrics` |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
+| `--trace-endpoint` | `$OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector base URL to export request traces to; empty disables tracing — see [Traces](#traces) |
+| `--trace-sample-ratio` | `0.1` | Fraction of traces to record, `0` to `1` |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
 | `--opensearch-index` | `$ATLAS_OPENSEARCH_INDEX` | Index the exporter writes to |
 | `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables. A process may override it with its own `atlas:historyTtl` (ADR-0144) |
@@ -423,6 +425,8 @@ history.
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
 | `ATLAS_TEMIS_CONNECTORS` | Comma-separated connector names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN` |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the REST connector named `<REF>` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
+| `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
 
 ### Endpoints
 
@@ -506,6 +510,42 @@ Event names are treated as an API: renaming one is a breaking change and appears
 _Changed_ in the [changelog](../CHANGELOG.md). Secrets never become fields — the seeded
 admin password stays inside the message text precisely because a field is what a log
 shipper extracts and keeps.
+
+### Traces
+
+Off unless you point Atlas at a collector. `--trace-endpoint=http://collector:4318`
+(or the standard `OTEL_EXPORTER_OTLP_ENDPOINT`) turns on OpenTelemetry tracing for the
+`/api/v1` surface; Atlas posts to `<endpoint>/v1/traces` in OTLP's JSON encoding, which
+every OTLP/HTTP receiver accepts.
+
+```bash
+atlas serve --trace-endpoint http://collector:4318 --trace-sample-ratio 0.1
+```
+
+What you get, and what you deliberately do not:
+
+| | |
+|---|---|
+| **Traced** | Every `/api/v1` request, as a server span named for its route |
+| **Not traced** | `/healthz`, `/readyz`, `/metrics`, and the static UI — they run on a timer forever and would bury the spans you are looking for |
+| **Not traced** | The engine's batch loop. A span costs an allocation, a clock read and a lock; the single writer takes none of them, and a test enforces it |
+
+A span is named for the **route pattern** — `GET /api/v1/instances/{key}` — never the URL
+that matched it, so the number of distinct span names is fixed by the code rather than
+growing with your instances. The attributes are the method, the route and the response
+status; the raw target and query string are not recorded.
+
+Incoming **W3C `traceparent`** headers are honored, so a request that arrives from
+another traced service continues that trace instead of starting a new one. A caller that
+already decided to sample is always respected, whatever `--trace-sample-ratio` says — a
+half-recorded distributed trace is worse than none.
+
+Sampling applies to traces Atlas starts. `0.1` records one in ten; `0` records nothing;
+`1` records everything, which is fine for a quiet server and expensive for a busy one.
+
+If the collector is down, slow, or rejecting payloads, requests are unaffected: export
+happens on its own goroutine after the response is sent. That makes a collector outage an
+observability problem rather than an availability one.
 
 ## The data directory
 

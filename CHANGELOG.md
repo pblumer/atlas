@@ -55,6 +55,42 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **Distributed traces, opt-in** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
+  collector — `--trace-endpoint http://collector:4318`, or the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` — and every `/api/v1` request is exported as an
+  OpenTelemetry server span. Off unless configured. Metrics say *that* a request was
+  slow; a trace says *where* the time went, and an incoming W3C `traceparent` is
+  continued, so a request arriving from another traced service lands in that trace
+  instead of starting an island.
+
+  **The engine is not traced, and a test enforces it.** A span costs an allocation, a
+  clock read and a lock — nothing next to an HTTP request, all three per batch on the
+  goroutine that owns the partition. `TestTheWriterIsNeverInstrumented` fails if
+  `engine`, `state`, `wal`, `model`, `compiler` or `checkpoint` ever imports a tracing
+  package. Probes and the metrics scrape are not traced either: they run forever on a
+  timer and would bury the spans someone is looking for.
+
+  **Span names are bounded by the code, not by traffic** — the same rule the metric
+  labels are under. A span is named for the route *pattern*
+  (`GET /api/v1/instances/{key}`), never the URL that matched it, and the attributes are
+  method, route and status; the raw target and query string are not recorded, so a key
+  cannot ride along into a backend's index.
+
+  The exporter is written here rather than taken off the shelf, and that is the
+  dependency decision: the official OTLP exporter pulls in protobuf and — even in its
+  HTTP form — gRPC, 66 gRPC packages and about 13MB of binary, for a service that speaks
+  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so Atlas takes
+  the OpenTelemetry API and SDK for the parts that are spec-bound and subtle (span model,
+  sampling, batching, W3C propagation) and writes the serializer. Measured: **+1.7MB and
+  five modules, no protobuf, no gRPC.**
+
+  Three deliberate limits: a 4xx is not an error (it is the caller being told no, and
+  counting it as a server failure makes the error rate meaningless), a caller that
+  already sampled is always honored whatever `--trace-sample-ratio` says (a
+  half-recorded distributed trace is worse than none), and a collector that is down
+  cannot take the server with it — export runs on its own goroutine after the response.
+
 - **Logs with names you can alert on** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line Atlas
   writes now carries a stable `event=` name beside the sentence, and the values that used

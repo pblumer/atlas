@@ -37,6 +37,7 @@ import (
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/tracing"
 	"github.com/pblumer/atlas/wal"
 )
 
@@ -75,6 +76,11 @@ func main() {
 }
 
 func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }
+
+// traceShutdownTimeout bounds the flush of buffered spans on the way out. Short on
+// purpose: a collector that is down must not hold up an operator's restart, and the
+// spans it would have received are the least valuable thing in the process.
+const traceShutdownTimeout = 3 * time.Second
 
 // loopbackURL turns a listen address (":8080", "0.0.0.0:8080", "localhost:8080")
 // into a URL the process can use to reach its own HTTP server. A wildcard or
@@ -163,6 +169,12 @@ func runServe(args []string) error {
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
 	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// Distributed traces (ADR-0142), off unless a collector is configured. The endpoint
+	// is the OTLP/HTTP base URL — Atlas posts to <endpoint>/v1/traces — and the standard
+	// OTEL_EXPORTER_OTLP_ENDPOINT is honored so a deployment that already sets it for
+	// everything else does not need an Atlas-specific flag.
+	traceEndpoint := fs.String("trace-endpoint", envOr("OTEL_EXPORTER_OTLP_ENDPOINT", ""), "OTLP/HTTP collector base URL, e.g. http://collector:4318, to export request traces to (ADR-0142); empty disables tracing")
+	traceRatio := fs.Float64("trace-sample-ratio", tracing.DefaultSampleRatio, "fraction of traces to record, 0 to 1. A caller that already sampled a trace is always honored, so a distributed trace is never half-recorded")
 	// How logs are rendered (ADR-0142). Text is the default because the console audience
 	// is the one Atlas has always had; json is for a deployment shipping logs somewhere
 	// that would otherwise need a parsing rule of its own. Either way every line carries
@@ -183,7 +195,13 @@ func runServe(args []string) error {
 		Index:    strings.TrimSpace(*osIndex),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat))
+	trace := tracing.Config{
+		Endpoint:    *traceEndpoint,
+		ServiceName: envOr("OTEL_SERVICE_NAME", "atlas"),
+		Version:     api.Version,
+		SampleRatio: *traceRatio,
+	}
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -232,7 +250,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -240,6 +258,22 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat); err != nil {
 		return err
 	}
+
+	// Traces, when a collector is configured (ADR-0142). Set up before anything else so a
+	// bad endpoint fails the boot here rather than after the data directory is open, and
+	// shut down last so whatever is buffered is flushed on the way out.
+	tp, err := tracing.Setup(traceCfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), traceShutdownTimeout)
+		defer cancel()
+		if err := tp.Shutdown(shutCtx); err != nil {
+			logging.Warn(logging.TracingShutdownFailed, "flushing buffered spans on shutdown failed",
+				slog.String("error", err.Error()))
+		}
+	}()
 
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
@@ -284,6 +318,11 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	}
 
 	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses()}
+	if tp.Enabled() {
+		apiOpts = append(apiOpts, api.WithTracing())
+		logging.Info(logging.TracingEnabled, "exporting request traces to an OTLP collector",
+			slog.String("endpoint", traceCfg.Endpoint), slog.Float64("sampleRatio", traceCfg.SampleRatio))
+	}
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
 	}
