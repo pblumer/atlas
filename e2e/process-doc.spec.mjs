@@ -205,6 +205,82 @@ test("exporting publishes the document, the prose, and the source in one request
   expect(call.pdfBytes).toBeGreaterThan(5000);
 });
 
+test("a flow's FEEL condition reaches the document as code, read from the real model", async ({ page }) => {
+  const c = await page.evaluate(() => window.__doc.collectDocumentation(window.__modeler));
+  const byId = Object.fromEntries(c.elements.map((e) => [e.id, e]));
+  // The branch conditions the modeller wrote onto the gateway's flows are the
+  // rule a reader needs to see why a token went one way; they travel as code.
+  expect(byId.f2.code).toEqual([{ label: "Condition", language: "feel", source: "= genehmigt = true" }]);
+  expect(byId.f3.code).toEqual([{ label: "Condition", language: "feel", source: "= genehmigt = false" }]);
+  // A task with no code carries none, rather than an empty field.
+  expect(byId.Task_pruefen.code).toEqual([]);
+});
+
+test("codeFieldsOf reads a script task's job source and a FEEL condition verbatim", async ({ page }) => {
+  const out = await page.evaluate(() => {
+    const script = window.__doc.codeFieldsOf({
+      extensionElements: { values: [{ $type: "atlas:JobScript", language: "powershell", source: "if ($budget -gt 1000) {\n    Approve-Request\n}" }] },
+    });
+    // A plain BPMN <bpmn:script> body is read too, so imported models document.
+    const imported = window.__doc.codeFieldsOf({ script: "return true", scriptFormat: "javascript" });
+    // A condition-bearing flow.
+    const cond = window.__doc.codeFieldsOf({ conditionExpression: { body: "= amount > 10", language: "feel" } });
+    // Nothing to say for an element with no code.
+    const none = window.__doc.codeFieldsOf({ name: "plain" });
+    return { script, imported, cond, none };
+  });
+  // The source keeps its indentation — a script whose whitespace is mangled is one
+  // a reader cannot trust.
+  expect(out.script).toEqual([{ label: "Script", language: "powershell", source: "if ($budget -gt 1000) {\n    Approve-Request\n}" }]);
+  expect(out.imported).toEqual([{ label: "Script", language: "javascript", source: "return true" }]);
+  expect(out.cond).toEqual([{ label: "Condition", language: "feel", source: "= amount > 10" }]);
+  expect(out.none).toEqual([]);
+});
+
+test("wantsLandscape turns the page only for a diagram that needs the width", async ({ page }) => {
+  const r = await page.evaluate(() => ({
+    extreme: window.__doc.wantsLandscape({ width: 3000, height: 800 }, 4),
+    wideBusy: window.__doc.wantsLandscape({ width: 1600, height: 1000 }, 12),
+    wideSmall: window.__doc.wantsLandscape({ width: 1600, height: 1000 }, 3),
+    tall: window.__doc.wantsLandscape({ width: 800, height: 1200 }, 40),
+    missing: window.__doc.wantsLandscape(null, 40),
+  }));
+  // A very wide diagram is unreadable in portrait at any size — turn the page.
+  expect(r.extreme).toBe(true);
+  // A wide *and* busy diagram earns landscape; a wide but small one reads fine in
+  // portrait and stays in the flow of the document.
+  expect(r.wideBusy).toBe(true);
+  expect(r.wideSmall).toBe(false);
+  // A tall diagram gains nothing from landscape, however busy.
+  expect(r.tall).toBe(false);
+  expect(r.missing).toBe(false);
+});
+
+test("the document sets code in a monospace face and gives a wide diagram a landscape page", async ({ page }) => {
+  const raw = await page.evaluate(() => {
+    const elements = Array.from({ length: 12 }, (_, i) => ({
+      id: "n" + i, type: "bpmn:Task", name: "N" + i,
+      documentation: "", annotations: [], lane: "", code: [],
+    }));
+    elements[0].code = [{ label: "Script", language: "powershell", source: "Write-Host 'hi'\n    Get-Item C:\\temp" }];
+    const collection = { processId: "p", processName: "P", processDocumentation: "", generalNotes: [], elements };
+    const diagram = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), width: 3000, height: 800 };
+    const bytes = window.__doc.buildDocumentationPdf({ collection, diagram, title: "P", version: 1 });
+    return window.__asLatin1(bytes);
+  });
+
+  // Code is set in Courier, and the script's text — indentation and all — is in
+  // the document.
+  expect(raw).toContain("/BaseFont /Courier");
+  expect(raw).toContain("Write-Host");
+  expect(raw).toContain("Get-Item C:\\\\temp"); // the backslash is PDF-escaped
+
+  // The wide diagram sits on a landscape sheet, while the rest of the document
+  // stays portrait — one document, two page sizes.
+  expect(raw).toContain("MediaBox [0 0 841.89 595.28]");
+  expect(raw).toContain("MediaBox [0 0 595.28 841.89]");
+});
+
 test("a diagram with no process is refused rather than published empty", async ({ page }) => {
   const message = await page.evaluate(async () => {
     const fakeModeler = {

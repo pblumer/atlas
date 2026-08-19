@@ -20,6 +20,22 @@ import (
 // from these records at startup, the discipline loadDeployments and
 // loadReleaseVersions already follow.
 
+// processDocCode is one code-bearing field of an element, snapshotted at publish
+// time: a script task's job source (PowerShell/Python/JavaScript, ADR-0047), a
+// FEEL condition or expression (ADR-0067), and the like. The document reproduces
+// it verbatim so a reader can audit what a step actually runs, not merely what it
+// is named — the prose says *what*, the code says *how*.
+type processDocCode struct {
+	// Label names the field the code came from, e.g. "Script" or "Condition".
+	Label string `json:"label"`
+	// Language is the code's language id (e.g. "powershell", "feel"), empty when
+	// the field does not declare one.
+	Language string `json:"language,omitempty"`
+	// Source is the code itself, kept with its original whitespace so indentation
+	// survives into the document.
+	Source string `json:"source"`
+}
+
 // processDocElement is one BPMN element as it was documented: the prose a reader
 // needs about it, snapshotted at publish time so a later edit to the model cannot
 // rewrite what an already-published version says.
@@ -36,6 +52,10 @@ type processDocElement struct {
 	// Lane names the swimlane the element sits in, empty when the model has none
 	// (ADR-0121).
 	Lane string `json:"lane,omitempty"`
+	// Code is the code-bearing fields of the element (scripts, FEEL expressions),
+	// in the order a reader should meet them. Empty for the many elements that
+	// carry no code.
+	Code []processDocCode `json:"code,omitempty"`
 }
 
 // processDoc is one published documentation version of a process: immutable
@@ -234,6 +254,37 @@ func (s *processDocStore) byShareToken(token string) (processDoc, bool, error) {
 		}
 	}
 	return processDoc{}, false, nil
+}
+
+// pruneProcess enforces a retention limit on one process's documentation history:
+// it keeps the newest `keep` versions and deletes the rest, returning the ids it
+// removed (newest-kept-first order is irrelevant to the caller, so the returned
+// ids are just those pruned). It is the bounded-growth follow-up ADR-0143 flagged:
+// every version keeps a PDF, so an unpruned archive grows without limit.
+//
+// keep is clamped at zero — a negative limit would otherwise delete history it was
+// asked to retain. keep >= the number of versions prunes nothing. Deleting the
+// oldest is deliberate: history is answered newest-first, and the reason to prune
+// is that ancient versions are the ones no longer worth their bytes.
+func (s *processDocStore) pruneProcess(processID string, keep int) ([]string, error) {
+	if keep < 0 {
+		keep = 0
+	}
+	versions, err := s.forProcess(processID) // newest version first
+	if err != nil {
+		return nil, err
+	}
+	if len(versions) <= keep {
+		return nil, nil
+	}
+	var pruned []string
+	for _, rec := range versions[keep:] {
+		if err := s.delete(rec.ID); err != nil {
+			return pruned, err
+		}
+		pruned = append(pruned, rec.ID)
+	}
+	return pruned, nil
 }
 
 // delete removes a version and its document. A missing file is not an error, so

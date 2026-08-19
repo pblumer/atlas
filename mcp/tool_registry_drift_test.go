@@ -244,13 +244,14 @@ var mcpOmittedRoutes = map[string]string{
 	// atlas_get_draft_xml / atlas_get_process_xml. Sharing is a publication
 	// decision — it puts a process in front of an audience outside Atlas — and
 	// belongs to the human making it.
-	"POST /api/v1/processes/{processId}/documentation": "the document is rendered in the browser; an agent has no diagram raster to publish",
-	"GET /api/v1/processes/{processId}/documentation":  "history of a published artifact; an agent reads the model itself via atlas_get_process_xml",
-	"GET /api/v1/documentation/{id}":                   "a published artifact's record; an agent reads the model itself via atlas_get_process_xml",
-	"GET /api/v1/documentation/{id}/pdf":               "binary document download is not an agent capability",
-	"POST /api/v1/documentation/{id}/share":            "publishing a process to an audience outside Atlas is a human decision, not an agent action",
-	"DELETE /api/v1/documentation/{id}/share":          "revoking a publication is a human decision, not an agent action",
-	"DELETE /api/v1/documentation/{id}":                "pruning published history is a human decision, not an agent action",
+	"POST /api/v1/processes/{processId}/documentation":       "the document is rendered in the browser; an agent has no diagram raster to publish",
+	"GET /api/v1/processes/{processId}/documentation":        "history of a published artifact; an agent reads the model itself via atlas_get_process_xml",
+	"GET /api/v1/documentation/{id}":                         "a published artifact's record; an agent reads the model itself via atlas_get_process_xml",
+	"GET /api/v1/documentation/{id}/pdf":                     "binary document download is not an agent capability",
+	"POST /api/v1/documentation/{id}/share":                  "publishing a process to an audience outside Atlas is a human decision, not an agent action",
+	"DELETE /api/v1/documentation/{id}/share":                "revoking a publication is a human decision, not an agent action",
+	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
+	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",

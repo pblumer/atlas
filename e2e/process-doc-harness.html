@@ -21,10 +21,11 @@
       import {
         collectDocumentation, buildDocumentationPdf, exportDocumentation,
         svgToJpeg, sizeOfSvg, typeLabel, documentationOf, trimToContent,
+        codeFieldsOf, wantsLandscape,
       } from "/process-doc.js";
 
       const XML = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_doc" targetNamespace="http://atlas/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_doc" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="reisebuchung" name="Reisebuchung" isExecutable="true">
     <bpmn:documentation>Bucht eine Reise für einen Kunden — von der Anfrage bis zur Abrechnung.</bpmn:documentation>
     <bpmn:laneSet id="ls">
@@ -51,8 +52,8 @@
     <bpmn:endEvent id="End_1"><bpmn:incoming>f3</bpmn:incoming><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Task_pruefen"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Task_pruefen" targetRef="Gw_1"/>
-    <bpmn:sequenceFlow id="f2" name="ja" sourceRef="Gw_1" targetRef="Task_buchen"/>
-    <bpmn:sequenceFlow id="f3" name="nein" sourceRef="Gw_1" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f2" name="ja" sourceRef="Gw_1" targetRef="Task_buchen"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="feel">= genehmigt = true</bpmn:conditionExpression></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f3" name="nein" sourceRef="Gw_1" targetRef="End_1"><bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="feel">= genehmigt = false</bpmn:conditionExpression></bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f4" sourceRef="Task_buchen" targetRef="End_1"/>
     <bpmn:textAnnotation id="note_iata"><bpmn:text>Benötigt IATA-Zugang</bpmn:text></bpmn:textAnnotation>
     <bpmn:association id="assoc_1" sourceRef="Task_buchen" targetRef="note_iata"/>
@@ -79,7 +80,7 @@
 
       const modeler = new window.BpmnJS({ container: document.getElementById("canvas") });
       window.__modeler = modeler;
-      window.__doc = { collectDocumentation, buildDocumentationPdf, exportDocumentation, svgToJpeg, sizeOfSvg, typeLabel, documentationOf, trimToContent };
+      window.__doc = { collectDocumentation, buildDocumentationPdf, exportDocumentation, svgToJpeg, sizeOfSvg, typeLabel, documentationOf, trimToContent, codeFieldsOf, wantsLandscape };
 
       window.__asLatin1 = (bytes) => {
         let s = "";

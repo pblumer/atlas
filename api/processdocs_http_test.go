@@ -373,6 +373,59 @@ func TestProcessDocumentationDeleteVersion(t *testing.T) {
 	}
 }
 
+// TestProcessDocumentationPrune proves the retention endpoint keeps the newest
+// `keep` versions and prunes the rest — ADR-0143's bounded-growth follow-up — and
+// that a pruned version's PDF stops downloading. It also proves the guard rails:
+// keep is required, and a negative keep is refused rather than deleting history.
+func TestProcessDocumentationPrune(t *testing.T) {
+	ts := newTestServer(t)
+	var ids []string
+	for i := 0; i < 4; i++ {
+		ids = append(ids, createDoc(t, ts, "reisebuchung", "Reisebuchung")["id"].(string))
+	}
+	// A second process must be untouched by pruning the first.
+	otherID := createDoc(t, ts, "rechnung", "Rechnung")["id"].(string)
+
+	code, body := doReq(t, ts, http.MethodPost,
+		"/api/v1/processes/reisebuchung/documentation/prune", `{"keep":1}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("prune = %d %s, want 200", code, body)
+	}
+	var resp struct {
+		Deleted []string `json:"deleted"`
+		Kept    int      `json:"kept"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode prune: %v (%s)", err, body)
+	}
+	if len(resp.Deleted) != 3 || resp.Kept != 1 {
+		t.Fatalf("prune removed %d (kept %d), want 3 removed keeping 1: %s", len(resp.Deleted), resp.Kept, body)
+	}
+	// The three oldest are gone — their PDFs 404 — and the newest still downloads.
+	for _, id := range ids[:3] {
+		if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/documentation/"+id+"/pdf", "", ""); code != http.StatusNotFound {
+			t.Errorf("pruned version %s pdf = %d, want 404", id, code)
+		}
+	}
+	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/documentation/"+ids[3]+"/pdf", "", ""); code != http.StatusOK {
+		t.Errorf("kept version pdf = %d, want 200", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/documentation/"+otherID, "", ""); code != http.StatusOK {
+		t.Errorf("other process version = %d, want the prune to leave it alone", code)
+	}
+
+	// keep is required, and a negative keep is a 400 rather than a silent wipe.
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/reisebuchung/documentation/prune", `{}`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("prune without keep = %d, want 400", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/reisebuchung/documentation/prune", `{"keep":-1}`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("prune keep=-1 = %d, want 400", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/reisebuchung/documentation/prune", `{bad`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("prune with bad JSON = %d, want 400", code)
+	}
+}
+
 // TestProcessDocumentationRecordsItsAuthor proves a published version carries who
 // published it. Historization without attribution is half an answer: "what did
 // this look like in March" is usually asked next to "and who signed it off".
