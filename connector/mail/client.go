@@ -146,14 +146,62 @@ func NewSMTPClient(conn Connector) *SMTPClient {
 // exported net/smtp API. SendMail's address validation is preserved: Client.Mail
 // and Client.Rcpt each call validateLine themselves, so a CR/LF-bearing address
 // is still rejected before it can inject an SMTP command.
+//
+// It also reaches submission endpoints SendMail cannot: an endpoint on the SMTPS
+// port speaks TLS from the first byte, which SendMail (always plaintext) can only
+// hang against. See usesImplicitTLS.
 func sendMailBounded(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
 	return sendMailWithin(nettimeout.Default, addr, a, from, to, msg)
 }
 
+// implicitTLSPort is the IANA-registered SMTPS port. A server on 465 expects a TLS
+// handshake immediately, with no plaintext greeting and no STARTTLS (RFC 8314).
+const implicitTLSPort = "465"
+
+// usesImplicitTLS reports whether addr should be reached with implicit TLS
+// (SMTPS) rather than a plaintext connection upgraded by STARTTLS.
+//
+// The decision is made by port, because the connector configuration carries no TLS
+// mode: an operator supplies only "host:port". Port 465 is unambiguous — it is
+// registered for exactly this and serves nothing else — so keying off it makes the
+// common submission endpoints work with no extra configuration. Isolating the
+// choice here also means an explicit per-connector override, should one be added,
+// changes only this function's caller.
+//
+// Getting this wrong hangs rather than fails cleanly: a plaintext client waits for
+// a greeting the TLS server will never send while the server waits for a
+// ClientHello, until the deadline expires.
+func usesImplicitTLS(addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	return err == nil && port == implicitTLSPort
+}
+
 // sendMailWithin is sendMailBounded with the budget injected, so a test can drive
-// the hang paths in milliseconds instead of waiting out the real budget.
+// the hang paths in milliseconds instead of waiting out the real budget. The
+// transport is chosen from the endpoint's port (see usesImplicitTLS).
 func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	conn, err := (&net.Dialer{Timeout: budget}).Dial("tcp", addr)
+	return sendMailOver(budget, addr, usesImplicitTLS(addr), nil, a, from, to, msg)
+}
+
+// sendMailOver is the send with the transport decision and TLS settings injected,
+// so a test can exercise the implicit-TLS path against a throwaway certificate on
+// an ordinary port (465 is privileged and unavailable to tests).
+func sendMailOver(budget time.Duration, addr string, implicitTLS bool, tlsCfg *tls.Config, a smtp.Auth, from string, to []string, msg []byte) error {
+	host := hostOf(addr)
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{ServerName: host}
+	}
+	dialer := &net.Dialer{Timeout: budget}
+
+	var conn net.Conn
+	var err error
+	if implicitTLS {
+		// TLS from the first byte. DialWithDialer applies the dialer's timeout to
+		// the handshake as well, so a server that stalls mid-handshake is bounded too.
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsCfg)
+	} else {
+		conn, err = dialer.Dial("tcp", addr)
+	}
 	if err != nil {
 		return err
 	}
@@ -163,15 +211,18 @@ func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string,
 	if err := conn.SetDeadline(time.Now().Add(budget)); err != nil {
 		return err
 	}
-	host := hostOf(addr)
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			return err
+	// STARTTLS only upgrades a plaintext connection; on an implicit-TLS connection
+	// the session is already encrypted and the server offers no such extension.
+	if !implicitTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsCfg); err != nil {
+				return err
+			}
 		}
 	}
 	if a != nil {
