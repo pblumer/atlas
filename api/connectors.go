@@ -97,7 +97,7 @@ func envTemisClients() map[string]temis.Client {
 // connector store, so callers run it on the run-loop goroutine (the store's owner).
 func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
 	clients := envTemisClients()
-	recs, err := s.connectors.loadAll()
+	recs, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
 // buildTemisClients; clio has no environment base (its endpoints are managed only).
 func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 	clients := map[string]clio.Client{}
-	recs, err := s.connectors.loadAll()
+	recs, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 // native provider, the OAuth credential JSON bundle held in the vault (I6).
 func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	clients := map[string]mail.Client{}
-	recs, err := s.connectors.loadAll()
+	recs, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 // JSON bundle held in the vault (I6), never a value in a model.
 func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) {
 	clients := map[string]sharepoint.Client{}
-	recs, err := s.connectors.loadAll()
+	recs, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ type remedyCredentials struct {
 // vault (I6).
 func (s *Server) buildRemedyClients() (map[string]remedy.Client, error) {
 	clients := map[string]remedy.Client{}
-	recs, err := s.connectors.loadAll()
+	recs, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 		recs    []connector
 		loadErr error
 	)
-	s.do(func() { recs, loadErr = s.connectors.loadAll() })
+	s.do(func() { recs, loadErr = s.connectors.LoadAll() })
 	if loadErr != nil {
 		writeError(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
 		return
@@ -346,7 +346,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		saveErr error
 	)
 	s.do(func() {
-		existing, e := s.connectors.loadAll()
+		existing, e := s.connectors.LoadAll()
 		if e != nil {
 			saveErr = e
 			return
@@ -357,7 +357,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if saveErr = s.connectors.save(rec); saveErr != nil {
+		if saveErr = s.connectors.Save(rec); saveErr != nil {
 			return
 		}
 		saveErr = s.rebuildConnectorRegistries()
@@ -399,7 +399,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var e error
-		rec, found, e = s.connectors.get(id)
+		rec, found, e = s.connectors.Get(id)
 		if e != nil {
 			saveErr = e
 			return
@@ -419,7 +419,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
 		}
-		if saveErr = s.connectors.save(rec); saveErr != nil {
+		if saveErr = s.connectors.Save(rec); saveErr != nil {
 			return
 		}
 		saveErr = s.rebuildConnectorRegistries()
@@ -441,7 +441,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var delErr error
 	s.do(func() {
-		if delErr = s.connectors.delete(id); delErr != nil {
+		if delErr = s.connectors.Delete(id); delErr != nil {
 			return
 		}
 		delErr = s.rebuildConnectorRegistries()
@@ -499,7 +499,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { conn, ok, loadErr = s.connectors.get(connID) })
+	s.do(func() { conn, ok, loadErr = s.connectors.Get(connID) })
 	if loadErr != nil {
 		writeError(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
 		return
@@ -544,7 +544,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		}
 		if setRef {
 			conn.CredentialsRef = ref
-			if saveErr = s.connectors.save(conn); saveErr != nil {
+			if saveErr = s.connectors.Save(conn); saveErr != nil {
 				return
 			}
 		}

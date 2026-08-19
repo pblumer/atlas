@@ -36,11 +36,11 @@ func TestFormStoreRoundTripAndOrder(t *testing.T) {
 		{ID: "b", Name: "B", SavedAt: 300, Schema: `{"b":1}`},
 		{ID: "c", Name: "C", SavedAt: 200, Schema: `{"c":1}`},
 	} {
-		if err := fs.save(r); err != nil {
+		if err := fs.Save(r); err != nil {
 			t.Fatalf("save %s: %v", r.ID, err)
 		}
 	}
-	got, err := fs.loadAll()
+	got, err := fs.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestFormStoreRoundTripAndOrder(t *testing.T) {
 			t.Errorf("position %d = %q, want %q", i, got[i].ID, w)
 		}
 	}
-	rec, ok, err := fs.get("b")
+	rec, ok, err := fs.Get("b")
 	if err != nil || !ok || rec.Schema != `{"b":1}` {
 		t.Fatalf("get b = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -62,13 +62,13 @@ func TestFormStoreRoundTripAndOrder(t *testing.T) {
 // TestFormStoreOverwrite proves re-saving an id replaces the record.
 func TestFormStoreOverwrite(t *testing.T) {
 	fs := newForms(t)
-	if err := fs.save(form{ID: "p", Name: "First", SavedAt: 1, Schema: `{"v":1}`}); err != nil {
+	if err := fs.Save(form{ID: "p", Name: "First", SavedAt: 1, Schema: `{"v":1}`}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := fs.save(form{ID: "p", Name: "Second", SavedAt: 2, Schema: `{"v":2}`}); err != nil {
+	if err := fs.Save(form{ID: "p", Name: "Second", SavedAt: 2, Schema: `{"v":2}`}); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := fs.loadAll()
+	got, err := fs.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -80,19 +80,19 @@ func TestFormStoreOverwrite(t *testing.T) {
 // TestFormStoreGetMissAndDelete covers a missing get and idempotent delete.
 func TestFormStoreGetMissAndDelete(t *testing.T) {
 	fs := newForms(t)
-	if _, ok, err := fs.get("nope"); err != nil || ok {
+	if _, ok, err := fs.Get("nope"); err != nil || ok {
 		t.Fatalf("get missing = (ok=%v, err=%v), want (false, nil)", ok, err)
 	}
-	if err := fs.delete("nope"); err != nil {
+	if err := fs.Delete("nope"); err != nil {
 		t.Fatalf("delete missing: %v, want nil (idempotent)", err)
 	}
-	if err := fs.save(form{ID: "p", SavedAt: 1, Schema: `{}`}); err != nil {
+	if err := fs.Save(form{ID: "p", SavedAt: 1, Schema: `{}`}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := fs.delete("p"); err != nil {
+	if err := fs.Delete("p"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := fs.get("p"); ok {
+	if _, ok, _ := fs.Get("p"); ok {
 		t.Fatal("get after delete: still present")
 	}
 }
@@ -101,17 +101,17 @@ func TestFormStoreGetMissAndDelete(t *testing.T) {
 // not hex-named form records.
 func TestFormStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	fs := newForms(t)
-	if err := fs.save(form{ID: "real", SavedAt: 1, Schema: `{}`}); err != nil {
+	if err := fs.Save(form{ID: "real", SavedAt: 1, Schema: `{}`}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// A non-hex-named .json and a non-.json file are both ignored.
-	if err := os.WriteFile(filepath.Join(fs.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fs.Dir(), "notes.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write txt: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(fs.dir, "zzz.json"), []byte("{}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fs.Dir(), "zzz.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write non-hex json: %v", err)
 	}
-	got, err := fs.loadAll()
+	got, err := fs.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -124,13 +124,13 @@ func TestFormStoreLoadAllSkipsForeignFiles(t *testing.T) {
 // by planting a corrupt record at a valid hex-named path.
 func TestFormStoreDecodeErrors(t *testing.T) {
 	fs := newForms(t)
-	if err := os.WriteFile(fs.fileFor("bad"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(fs.FileFor("bad"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("write corrupt: %v", err)
 	}
-	if _, _, err := fs.get("bad"); err == nil {
+	if _, _, err := fs.Get("bad"); err == nil {
 		t.Error("get on corrupt record: want an error")
 	}
-	if _, err := fs.loadAll(); err == nil {
+	if _, err := fs.LoadAll(); err == nil {
 		t.Error("loadAll with a corrupt record: want an error")
 	}
 }
@@ -140,17 +140,17 @@ func TestFormStoreDecodeErrors(t *testing.T) {
 // non-empty directory (ReadFile and Remove both fail on it).
 func TestFormStoreReadAndDeleteErrors(t *testing.T) {
 	fs := newForms(t)
-	path := fs.fileFor("dir")
+	path := fs.FileFor("dir")
 	if err := os.Mkdir(path, 0o755); err != nil {
 		t.Fatalf("mkdir record path: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(path, "child"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write child: %v", err)
 	}
-	if _, _, err := fs.get("dir"); err == nil {
+	if _, _, err := fs.Get("dir"); err == nil {
 		t.Error("get on a directory path: want an error")
 	}
-	if err := fs.delete("dir"); err == nil {
+	if err := fs.Delete("dir"); err == nil {
 		t.Error("delete of a non-empty directory: want an error")
 	}
 }

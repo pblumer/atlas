@@ -107,7 +107,7 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:     time.Now().Unix(),
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.targets.save(rec) })
+	s.do(func() { saveErr = s.targets.Save(rec) })
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create target: "+saveErr.Error())
 		return
@@ -123,7 +123,7 @@ func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []deploymentTarget
-		if recs, loadErr = s.targets.loadAll(); loadErr != nil {
+		if recs, loadErr = s.targets.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, rec := range recs {
@@ -144,7 +144,7 @@ func (s *Server) handleDeleteTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var delErr error
-	s.do(func() { delErr = s.targets.delete(r.PathValue("id")) })
+	s.do(func() { delErr = s.targets.Delete(r.PathValue("id")) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "delete target: "+delErr.Error())
 		return
@@ -222,7 +222,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 
 		creds = map[string]string{}
 		for _, tid := range payload.TargetIDs {
-			tgt, ok, err := s.targets.get(tid)
+			tgt, ok, err := s.targets.Get(tid)
 			if err != nil {
 				loadErr = err
 				return
@@ -274,7 +274,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	if len(learned) > 0 {
 		s.do(func() {
 			for tid, remoteAppID := range learned {
-				tgt, ok, err := s.targets.get(tid)
+				tgt, ok, err := s.targets.Get(tid)
 				if err != nil || !ok {
 					continue // the target was deleted mid-flight; the promotion still happened
 				}
@@ -285,7 +285,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				tgt.Bindings[appID] = remoteAppID
-				_ = s.targets.save(tgt) // a lost binding costs a re-learn, not correctness
+				_ = s.targets.Save(tgt) // a lost binding costs a re-learn, not correctness
 			}
 		})
 	}
@@ -431,7 +431,7 @@ func (s *Server) handleApplicationTargets(w http.ResponseWriter, r *http.Request
 		loadErr error
 	)
 	s.do(func() {
-		if targets, loadErr = s.targets.loadAll(); loadErr != nil {
+		if targets, loadErr = s.targets.LoadAll(); loadErr != nil {
 			return
 		}
 		creds = make(map[string]string, len(targets))

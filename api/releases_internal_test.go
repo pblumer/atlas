@@ -24,7 +24,7 @@ func TestReleaseStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newReleaseStore: %v", err)
 	}
-	if err := rs.save(applicationRelease{ID: "a1", ApplicationID: "app", Version: 1}); err != nil {
+	if err := rs.Save(applicationRelease{ID: "a1", ApplicationID: "app", Version: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Foreign entries the loader must skip.
@@ -38,7 +38,7 @@ func TestReleaseStoreLoadAllSkipsForeignFiles(t *testing.T) {
 		t.Fatalf("write non-hex json: %v", err)
 	}
 
-	all, err := rs.loadAll()
+	all, err := rs.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestReleaseStoreLoadAllOrdersNewestFirst(t *testing.T) {
 		{ID: "r2", ApplicationID: "b", Version: 2},
 		{ID: "r9", ApplicationID: "a", Version: 1},
 	} {
-		if err := rs.save(rec); err != nil {
+		if err := rs.Save(rec); err != nil {
 			t.Fatalf("save %s: %v", rec.ID, err)
 		}
 	}
@@ -91,7 +91,7 @@ func TestReleaseStoreOrdersEqualVersionsById(t *testing.T) {
 		t.Fatalf("newReleaseStore: %v", err)
 	}
 	for _, id := range []string{"zz", "aa", "mm"} {
-		if err := rs.save(applicationRelease{ID: id, ApplicationID: "app", Version: 7}); err != nil {
+		if err := rs.Save(applicationRelease{ID: id, ApplicationID: "app", Version: 7}); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
@@ -113,23 +113,23 @@ func TestDeleteForApplicationRemoveError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newReleaseStore: %v", err)
 	}
-	if err := rs.save(applicationRelease{ID: "victim", ApplicationID: "app", Version: 1}); err != nil {
+	if err := rs.Save(applicationRelease{ID: "victim", ApplicationID: "app", Version: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Replace the record file with a non-empty directory at the same path.
-	if err := os.Remove(rs.fileFor("victim")); err != nil {
+	if err := os.Remove(rs.FileFor("victim")); err != nil {
 		t.Fatalf("remove record: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(rs.fileFor("victim"), "child"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(rs.FileFor("victim"), "child"), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
 	// loadAll must still see it as a record (the name is unchanged) for the delete
 	// loop to reach the Remove; a directory entry is skipped, so seed a sibling that
 	// keeps the application in the listing and points the loop at the bad path.
-	if err := rs.save(applicationRelease{ID: "victim2", ApplicationID: "app", Version: 2}); err != nil {
+	if err := rs.Save(applicationRelease{ID: "victim2", ApplicationID: "app", Version: 2}); err != nil {
 		t.Fatalf("save sibling: %v", err)
 	}
-	if err := os.Remove(rs.fileFor("victim2")); err != nil {
+	if err := os.Remove(rs.FileFor("victim2")); err != nil {
 		t.Fatalf("remove sibling: %v", err)
 	}
 	// Write a valid record whose *stored* id maps to the directory path, so the
@@ -139,7 +139,7 @@ func TestDeleteForApplicationRemoveError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(rs.fileFor("marker"), raw, 0o600); err != nil {
+	if err := os.WriteFile(rs.FileFor("marker"), raw, 0o600); err != nil {
 		t.Fatalf("write marker: %v", err)
 	}
 	if err := rs.deleteForApplication("app"); err == nil {
@@ -156,10 +156,10 @@ func TestReleaseStoreLoadAllDecodeError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newReleaseStore: %v", err)
 	}
-	if err := os.WriteFile(rs.fileFor("bad"), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(rs.FileFor("bad"), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := rs.loadAll(); err == nil {
+	if _, err := rs.LoadAll(); err == nil {
 		t.Fatal("loadAll with a malformed record: want an error")
 	}
 }
@@ -167,8 +167,8 @@ func TestReleaseStoreLoadAllDecodeError(t *testing.T) {
 // TestReleaseStoreErrorsOnMissingDir covers loadAll/forApplication/
 // deleteForApplication against a directory that does not exist.
 func TestReleaseStoreErrorsOnMissingDir(t *testing.T) {
-	broken := &releaseStore{dir: filepath.Join(t.TempDir(), "gone")}
-	if _, err := broken.loadAll(); err == nil {
+	broken := brokenStore(newReleaseStore(filepath.Join(t.TempDir(), "gone")))
+	if _, err := broken.LoadAll(); err == nil {
 		t.Error("loadAll on a missing dir: want an error")
 	}
 	if _, err := broken.forApplication("x"); err == nil {
@@ -198,13 +198,13 @@ func TestDeleteForApplicationIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newReleaseStore: %v", err)
 	}
-	if err := rs.save(applicationRelease{ID: "keep", ApplicationID: "other", Version: 1}); err != nil {
+	if err := rs.Save(applicationRelease{ID: "keep", ApplicationID: "other", Version: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if err := rs.deleteForApplication("absent"); err != nil {
 		t.Fatalf("deleteForApplication(absent) = %v, want nil", err)
 	}
-	all, err := rs.loadAll()
+	all, err := rs.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestLoadReleaseVersionsRebuildsCounter(t *testing.T) {
 		{ID: "x2", ApplicationID: "a", Version: 4},
 		{ID: "x3", ApplicationID: "b", Version: 2},
 	} {
-		if err := rs.save(rec); err != nil {
+		if err := rs.Save(rec); err != nil {
 			t.Fatalf("save: %v", err)
 		}
 	}
@@ -237,7 +237,7 @@ func TestLoadReleaseVersionsRebuildsCounter(t *testing.T) {
 		t.Fatalf("appVersions = %v, want a=4 b=2", s.appVersions)
 	}
 
-	broken := &Server{releases: &releaseStore{dir: filepath.Join(t.TempDir(), "gone")}, appVersions: map[string]int32{}}
+	broken := &Server{releases: brokenStore(newReleaseStore(filepath.Join(t.TempDir(), "gone"))), appVersions: map[string]int32{}}
 	if err := broken.loadReleaseVersions(); err == nil {
 		t.Fatal("loadReleaseVersions with a broken store: want an error")
 	}
@@ -321,7 +321,7 @@ func TestReleaseHandlerStoreErrors(t *testing.T) {
 	realReleases := srv.releases
 	// A store whose directory does not exist: reads fail, and so does the atomic
 	// write (its temp file cannot be created), which is what the publish case needs.
-	srv.releases = &releaseStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.releases = brokenStore(newReleaseStore(filepath.Join(t.TempDir(), "gone")))
 
 	if got := do(http.MethodGet, "/api/v1/applications/"+app+"/releases", ""); got != http.StatusInternalServerError {
 		t.Errorf("list releases with a broken store = %d, want 500", got)
@@ -344,7 +344,7 @@ func TestReleaseHandlerStoreErrors(t *testing.T) {
 	// The bundle also loads the application's DMN references; a broken dmn-ref store
 	// fails the publish during collection, before anything is deployed.
 	realDmnrefs := srv.dmnrefs
-	srv.dmnrefs = &dmnRefStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(http.MethodPost, "/api/v1/applications/"+app+"/publish", `{}`); got != http.StatusInternalServerError {
 		t.Errorf("publish with a broken dmn-ref store = %d, want 500", got)
 	}

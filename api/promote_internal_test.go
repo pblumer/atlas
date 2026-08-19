@@ -64,7 +64,7 @@ func TestTargetStoreErrorsAndSkips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTargetStore: %v", err)
 	}
-	if err := s.save(deploymentTarget{ID: "a", Name: "A", CreatedAt: 1}); err != nil {
+	if err := s.Save(deploymentTarget{ID: "a", Name: "A", CreatedAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Foreign entries are skipped.
@@ -77,7 +77,7 @@ func TestTargetStoreErrorsAndSkips(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "README.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -86,25 +86,25 @@ func TestTargetStoreErrorsAndSkips(t *testing.T) {
 	}
 
 	// get on an absent id is a clean miss, not an error.
-	if _, ok, err := s.get("ghost"); err != nil || ok {
+	if _, ok, err := s.Get("ghost"); err != nil || ok {
 		t.Errorf("get(ghost) = ok=%v err=%v, want a clean miss", ok, err)
 	}
 	// A malformed record fails loudly on both paths.
-	if err := os.WriteFile(s.fileFor("bad"), []byte("{nope"), 0o600); err != nil {
+	if err := os.WriteFile(s.FileFor("bad"), []byte("{nope"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, _, err := s.get("bad"); err == nil {
+	if _, _, err := s.Get("bad"); err == nil {
 		t.Error("get on a malformed record: want an error")
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Error("loadAll with a malformed record: want an error")
 	}
 
-	broken := &targetStore{dir: filepath.Join(t.TempDir(), "gone")}
-	if _, err := broken.loadAll(); err == nil {
+	broken := brokenStore(newTargetStore(filepath.Join(t.TempDir(), "gone")))
+	if _, err := broken.LoadAll(); err == nil {
 		t.Error("loadAll on a missing dir: want an error")
 	}
-	if err := broken.delete("x"); err == nil {
+	if err := broken.Delete("x"); err == nil {
 		t.Error("delete on a missing dir: want an error")
 	}
 	// get on a record path that is a directory is an error, not a miss.
@@ -113,10 +113,10 @@ func TestTargetStoreErrorsAndSkips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTargetStore: %v", err)
 	}
-	if err := os.MkdirAll(ds.fileFor("d"), 0o755); err != nil {
+	if err := os.MkdirAll(ds.FileFor("d"), 0o755); err != nil {
 		t.Fatalf("mkdir record: %v", err)
 	}
-	if _, _, err := ds.get("d"); err == nil {
+	if _, _, err := ds.Get("d"); err == nil {
 		t.Error("get on a directory record: want an error")
 	}
 
@@ -158,7 +158,7 @@ func TestTargetHandlerBadInputAndStoreErrors(t *testing.T) {
 	}
 
 	real := srv.targets
-	srv.targets = &targetStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.targets = brokenStore(newTargetStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(http.MethodPost, "/api/v1/targets", `{"name":"X","baseUrl":"https://x.example"}`); got != http.StatusInternalServerError {
 		t.Errorf("create with a broken store = %d, want 500", got)
 	}
@@ -226,7 +226,7 @@ func TestPromoteResolvePhaseStoreErrors(t *testing.T) {
 		return rec.Code
 	}
 	realReleases := srv.releases
-	srv.releases = &releaseStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.releases = brokenStore(newReleaseStore(filepath.Join(t.TempDir(), "gone")))
 	if got := doFor(app.ID); got != http.StatusInternalServerError {
 		t.Errorf("promote with a broken release store = %d, want 500", got)
 	}
@@ -236,7 +236,7 @@ func TestPromoteResolvePhaseStoreErrors(t *testing.T) {
 	// fails on the target lookup instead.
 	seedRelease(t, srv, app.ID)
 	realTargets := srv.targets
-	srv.targets = &targetStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.targets = brokenStore(newTargetStore(filepath.Join(t.TempDir(), "gone")))
 	if got := doFor(app.ID); got != http.StatusInternalServerError {
 		t.Errorf("promote with a broken target store = %d, want 500", got)
 	}
@@ -245,7 +245,7 @@ func TestPromoteResolvePhaseStoreErrors(t *testing.T) {
 	// And with both readable but the deployment records gone, the artifacts cannot
 	// be reassembled — which must fail rather than ship an incomplete bundle.
 	realDeploys := srv.deploys
-	srv.deploys = &deployStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.deploys = brokenStore(newDeployStore(filepath.Join(t.TempDir(), "gone")))
 	if got := doFor(app.ID); got != http.StatusInternalServerError {
 		t.Errorf("promote with a broken deploy store = %d, want 500", got)
 	}
@@ -258,7 +258,7 @@ func seedRelease(t *testing.T, srv *Server, appID string) {
 	t.Helper()
 	var err error
 	srv.do(func() {
-		err = srv.releases.save(applicationRelease{
+		err = srv.releases.Save(applicationRelease{
 			ID: "rel-" + appID, ApplicationID: appID, Version: 1,
 			Members: []releaseMember{{Kind: "process", Ref: "p", ArtifactVer: 1, Key: 12345}},
 		})
@@ -281,7 +281,7 @@ func TestPromoteSkipsNonProcessMembersAndCarriesLegacyDMN(t *testing.T) {
 	)
 	srv.do(func() {
 		// A deployment recorded the old way: one DMN in the singular field.
-		err = srv.deploys.save(persistedDeployment{
+		err = srv.deploys.Save(persistedDeployment{
 			Key: 4242, ProcessID: "legacy", Name: "Legacy", Version: 1,
 			XML: "<definitions/>", DMNXML: "<dmn-legacy/>",
 		})
@@ -320,11 +320,11 @@ func TestTargetStoreOrdersOldestFirst(t *testing.T) {
 		{ID: "c", CreatedAt: 30}, {ID: "a", CreatedAt: 10},
 		{ID: "b1", CreatedAt: 20}, {ID: "b0", CreatedAt: 20},
 	} {
-		if err := s.save(rec); err != nil {
+		if err := s.Save(rec); err != nil {
 			t.Fatalf("save %s: %v", rec.ID, err)
 		}
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestApplicationTargetsStoreError(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	srv.targets = &targetStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.targets = brokenStore(newTargetStore(filepath.Join(t.TempDir(), "gone")))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/applications/"+app.ID+"/targets", nil))
 	if rec.Code != http.StatusInternalServerError {

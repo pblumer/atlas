@@ -22,7 +22,7 @@ func TestDeployStoreSaveError(t *testing.T) {
 		t.Fatalf("mkdir temp path: %v", err)
 	}
 
-	if err := ds.save(persistedDeployment{Key: 1, ProcessID: "p", Version: 1}); err == nil {
+	if err := ds.Save(persistedDeployment{Key: 1, ProcessID: "p", Version: 1}); err == nil {
 		t.Fatal("save with a directory at the temp path: want an error, got nil")
 	}
 }
@@ -45,7 +45,7 @@ func TestDeployStoreSaveRenameError(t *testing.T) {
 		t.Fatalf("write child: %v", err)
 	}
 
-	if err := ds.save(persistedDeployment{Key: 2, ProcessID: "p", Version: 1}); err == nil {
+	if err := ds.Save(persistedDeployment{Key: 2, ProcessID: "p", Version: 1}); err == nil {
 		t.Fatal("save renaming over a non-empty directory: want an error, got nil")
 	}
 }

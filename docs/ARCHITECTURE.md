@@ -296,7 +296,7 @@ atlas/
 │   ├── layout/        BPMN diagram auto-layout (ADR-0124/0127)
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
-│   └── sidecar/       Atomic write + fsync, shared by the design-time stores
+│   └── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
 ├── mcp/           MCP server over the HTTP API (ADR-0016)
 ├── metrics/       Prometheus metrics (ADR-0142)
 ├── opensearch/    OpenSearch event exporter (ADR-0114)

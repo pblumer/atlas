@@ -1,14 +1,6 @@
 package api
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
-
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
@@ -72,82 +64,21 @@ type connector struct {
 // deployment/draft/dmn-ref stores (ADR-0019/0034/0041). Like them it is owned
 // solely by the server's run-loop goroutine, so it needs no locking; and it holds
 // no secret material, only references (I6).
-type connectorStore struct {
-	dir string
-}
 
-// newConnectorStore opens (creating if needed) the connectors directory.
+// connectorStore is a durable store for connector records, one JSON file per id
+// under a single directory (ADR-0019). Like every design-time store it is owned
+// solely by the server's run-loop goroutine, so it needs no locking of its own.
+type connectorStore = sidecar.Store[connector]
+
+// newConnectorStore opens (creating if needed) the connector directory.
 func newConnectorStore(dir string) (*connectorStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("connectorstore: create dir: %w", err)
-	}
-	return &connectorStore{dir: dir}, nil
-}
-
-func (s *connectorStore) fileFor(id string) string {
-	return filepath.Join(s.dir, hex.EncodeToString([]byte(id))+".json")
-}
-
-// save writes a connector durably (atomic write + directory fsync), overwriting
-// any existing record with the same id.
-func (s *connectorStore) save(rec connector) error {
-	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
-}
-
-// get returns the connector for an id, or ok=false if none exists.
-func (s *connectorStore) get(id string) (connector, bool, error) {
-	data, err := os.ReadFile(s.fileFor(id))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return connector{}, false, nil
-		}
-		return connector{}, false, fmt.Errorf("connectorstore: read: %w", err)
-	}
-	var rec connector
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return connector{}, false, fmt.Errorf("connectorstore: decode: %w", err)
-	}
-	return rec, true, nil
-}
-
-// delete removes a connector. A missing connector is not an error (idempotent).
-func (s *connectorStore) delete(id string) error {
-	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("connectorstore: remove: %w", err)
-	}
-	return sidecar.FsyncDir(s.dir)
-}
-
-// loadAll reads every connector, oldest first (creation order), so the Console
-// lists them stably. Non-record files are ignored.
-func (s *connectorStore) loadAll() ([]connector, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("connectorstore: read dir: %w", err)
-	}
-	var out []connector
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		if _, err := hex.DecodeString(strings.TrimSuffix(e.Name(), ".json")); err != nil {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("connectorstore: read %s: %w", e.Name(), err)
-		}
-		var rec connector
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("connectorstore: decode %s: %w", e.Name(), err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != out[j].CreatedAt {
-			return out[i].CreatedAt < out[j].CreatedAt
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return sidecar.NewStore(dir, "connectorstore",
+		func(rec connector) string { return rec.ID },
+		sidecar.Order(func(a, b connector) bool {
+			if a.CreatedAt != b.CreatedAt {
+				return a.CreatedAt < b.CreatedAt
+			}
+			return a.ID < b.ID
+		}),
+	)
 }

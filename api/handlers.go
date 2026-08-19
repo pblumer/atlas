@@ -516,7 +516,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		refs    []dmnRef
 		loadErr error
 	)
-	s.do(func() { refs, loadErr = s.dmnrefs.loadAll() })
+	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
 	if loadErr != nil {
 		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
@@ -549,11 +549,11 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		if !hasProjectParam {
-			if d, ok, e := s.drafts.get(pid); e == nil && ok {
+			if d, ok, e := s.drafts.Get(pid); e == nil && ok {
 				projectID = d.ProjectID
 			}
 		} else if projectID != "" {
-			_, ok, e := s.projects.get(projectID)
+			_, ok, e := s.projects.Get(projectID)
 			if e != nil {
 				projErr = e
 				return
@@ -632,7 +632,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
-		if err := s.deploys.save(persistedDeployment{
+		if err := s.deploys.Save(persistedDeployment{
 			Key:        key,
 			ProcessID:  pid,
 			Name:       name,
@@ -873,7 +873,7 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		rec.Inactive = !body.Active
-		if err := s.deploys.save(rec); err != nil {
+		if err := s.deploys.Save(rec); err != nil {
 			persistErr = err
 			return
 		}
@@ -3357,12 +3357,12 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		if !hasProjectParam {
-			existing, ok, e := s.drafts.get(pid)
+			existing, ok, e := s.drafts.Get(pid)
 			if e == nil && ok {
 				rec.ProjectID = existing.ProjectID
 			}
 		} else if projectID != "" {
-			proj, ok, e := s.projects.get(projectID)
+			proj, ok, e := s.projects.Get(projectID)
 			if e != nil {
 				projErr = e
 				return
@@ -3378,7 +3378,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		saveErr = s.drafts.save(rec)
+		saveErr = s.drafts.Save(rec)
 	})
 	switch {
 	case projErr != nil:
@@ -3402,7 +3402,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []draft
-		recs, loadErr = s.drafts.loadAll()
+		recs, loadErr = s.drafts.LoadAll()
 		for _, d := range recs {
 			if filter != "" && d.ProjectID != filter {
 				continue
@@ -3441,7 +3441,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		view                     draftResp
 	)
 	s.do(func() {
-		rec, ok, e := s.drafts.get(id)
+		rec, ok, e := s.drafts.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -3451,7 +3451,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if payload.ProjectID != "" {
-			proj, pok, pe := s.projects.get(payload.ProjectID)
+			proj, pok, pe := s.projects.Get(payload.ProjectID)
 			if pe != nil {
 				projErr = pe
 				return
@@ -3468,7 +3468,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		rec.ProjectID = payload.ProjectID
-		if saveErr = s.drafts.save(rec); saveErr != nil {
+		if saveErr = s.drafts.Save(rec); saveErr != nil {
 			return
 		}
 		view = draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt}
@@ -3499,7 +3499,7 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		readErr error
 	)
-	s.do(func() { rec, ok, readErr = s.drafts.get(id) })
+	s.do(func() { rec, ok, readErr = s.drafts.Get(id) })
 	switch {
 	case readErr != nil:
 		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
@@ -3516,7 +3516,7 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var delErr error
-	s.do(func() { delErr = s.drafts.delete(id) })
+	s.do(func() { delErr = s.drafts.Delete(id) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "delete draft: "+delErr.Error())
 		return

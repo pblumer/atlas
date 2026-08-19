@@ -55,7 +55,7 @@ func TestDeployTokenStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDeployTokenStore: %v", err)
 	}
-	if err := s.save(deployToken{ID: "a", Name: "A", Hash: "h", CreatedAt: 1}); err != nil {
+	if err := s.Save(deployToken{ID: "a", Name: "A", Hash: "h", CreatedAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
@@ -67,7 +67,7 @@ func TestDeployTokenStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "README.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write non-hex json: %v", err)
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -85,11 +85,11 @@ func TestDeployTokenStoreOrdersOldestFirst(t *testing.T) {
 		{ID: "c", CreatedAt: 30}, {ID: "a", CreatedAt: 10},
 		{ID: "b1", CreatedAt: 20}, {ID: "b0", CreatedAt: 20},
 	} {
-		if err := s.save(rec); err != nil {
+		if err := s.Save(rec); err != nil {
 			t.Fatalf("save %s: %v", rec.ID, err)
 		}
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -103,11 +103,11 @@ func TestDeployTokenStoreOrdersOldestFirst(t *testing.T) {
 }
 
 func TestDeployTokenStoreErrors(t *testing.T) {
-	broken := &deployTokenStore{dir: filepath.Join(t.TempDir(), "gone")}
-	if _, err := broken.loadAll(); err == nil {
+	broken := brokenStore(newDeployTokenStore(filepath.Join(t.TempDir(), "gone")))
+	if _, err := broken.LoadAll(); err == nil {
 		t.Error("loadAll on a missing dir: want an error")
 	}
-	if err := broken.delete("x"); err == nil {
+	if err := broken.Delete("x"); err == nil {
 		t.Error("delete on a missing dir: want an error")
 	}
 
@@ -117,10 +117,10 @@ func TestDeployTokenStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDeployTokenStore: %v", err)
 	}
-	if err := os.WriteFile(s.fileFor("bad"), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(s.FileFor("bad"), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Error("loadAll with a malformed record: want an error")
 	}
 
@@ -140,7 +140,7 @@ func TestLoadDeployTokensRebuildsIndex(t *testing.T) {
 		t.Fatalf("newDeployTokenStore: %v", err)
 	}
 	secret := deployTokenPrefix + "seeded"
-	if err := store.save(deployToken{ID: "t", Name: "Seeded", Hash: hashDeployToken(secret)}); err != nil {
+	if err := store.Save(deployToken{ID: "t", Name: "Seeded", Hash: hashDeployToken(secret)}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	s := &Server{deployTokenStore: store, deployTokens: newDeployTokenIndex()}
@@ -152,7 +152,7 @@ func TestLoadDeployTokensRebuildsIndex(t *testing.T) {
 	}
 
 	brokenSrv := &Server{
-		deployTokenStore: &deployTokenStore{dir: filepath.Join(t.TempDir(), "gone")},
+		deployTokenStore: brokenStore(newDeployTokenStore(filepath.Join(t.TempDir(), "gone"))),
 		deployTokens:     newDeployTokenIndex(),
 	}
 	if err := brokenSrv.loadDeployTokens(); err == nil {
@@ -207,7 +207,7 @@ func TestDeployTokenHandlerStoreErrors(t *testing.T) {
 	}
 
 	real := srv.deployTokenStore
-	srv.deployTokenStore = &deployTokenStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.deployTokenStore = brokenStore(newDeployTokenStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(http.MethodPost, "/api/v1/deploy-tokens", `{"name":"x"}`); got != http.StatusInternalServerError {
 		t.Errorf("mint with a broken store = %d, want 500", got)
 	}
@@ -242,7 +242,7 @@ func TestImportBundleStoreErrors(t *testing.T) {
 
 	// Resolving (or creating) the application reads the project store first.
 	realProjects := srv.projects
-	srv.projects = &projectStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(); got != http.StatusInternalServerError {
 		t.Errorf("import with a broken project store = %d, want 500", got)
 	}
@@ -250,7 +250,7 @@ func TestImportBundleStoreErrors(t *testing.T) {
 
 	// Then the release history, to refuse a version already held.
 	realReleases := srv.releases
-	srv.releases = &releaseStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.releases = brokenStore(newReleaseStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(); got != http.StatusInternalServerError {
 		t.Errorf("import with a broken release store = %d, want 500", got)
 	}

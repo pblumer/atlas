@@ -36,7 +36,7 @@ func (s *Server) handleValidateDmnRef(w http.ResponseWriter, r *http.Request) {
 		ok     bool
 		getErr error
 	)
-	s.do(func() { rec, ok, getErr = s.dmnrefs.get(id) })
+	s.do(func() { rec, ok, getErr = s.dmnrefs.Get(id) })
 	switch {
 	case getErr != nil:
 		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
@@ -75,12 +75,12 @@ func (s *Server) handleValidateProject(w http.ResponseWriter, r *http.Request) {
 		refs            []dmnRef
 	)
 	s.do(func() {
-		proj, ok, getErr = s.projects.get(id)
+		proj, ok, getErr = s.projects.Get(id)
 		if getErr != nil || !ok {
 			return
 		}
 		var all []dmnRef
-		if all, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if all, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, rec := range all {

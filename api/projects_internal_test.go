@@ -75,8 +75,8 @@ func TestProjectHandlerStoreErrors(t *testing.T) {
 		t.Fatalf("seed draft: status=%d", got)
 	}
 
-	brokenProjects := &projectStore{dir: filepath.Join(t.TempDir(), "gone")}
-	brokenDrafts := &draftStore{dir: filepath.Join(t.TempDir(), "gone")}
+	brokenProjects := brokenStore(newProjectStore(filepath.Join(t.TempDir(), "gone")))
+	brokenDrafts := brokenStore(newDraftStore(filepath.Join(t.TempDir(), "gone")))
 
 	// Create/list fail when the projects directory does not exist.
 	srv.projects = brokenProjects
@@ -106,10 +106,10 @@ func TestProjectHandlerStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor("x"), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor("x"), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(ps.fileFor("y"), "child"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(ps.FileFor("y"), "child"), 0o755); err != nil {
 		t.Fatalf("make non-empty record dir: %v", err)
 	}
 	srv.projects = ps
@@ -133,7 +133,7 @@ func TestProjectHandlerStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDraftStore: %v", err)
 	}
-	if err := os.MkdirAll(ds.fileFor("p"), 0o755); err != nil {
+	if err := os.MkdirAll(ds.FileFor("p"), 0o755); err != nil {
 		t.Fatalf("make draft record dir: %v", err)
 	}
 	srv.drafts = ds

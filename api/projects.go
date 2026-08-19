@@ -111,7 +111,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		if rec.Key, saveErr = s.deriveApplicationKey(rec); saveErr != nil {
 			return
 		}
-		saveErr = s.projects.save(rec)
+		saveErr = s.projects.Save(rec)
 	})
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
@@ -130,15 +130,15 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var projs []project
-		if projs, loadErr = s.projects.loadAll(); loadErr != nil {
+		if projs, loadErr = s.projects.LoadAll(); loadErr != nil {
 			return
 		}
 		var drafts []draft
-		if drafts, loadErr = s.drafts.loadAll(); loadErr != nil {
+		if drafts, loadErr = s.drafts.LoadAll(); loadErr != nil {
 			return
 		}
 		var refs []dmnRef
-		if refs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if refs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		counts := map[string]int{}
@@ -213,7 +213,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		view                projectView
 	)
 	s.do(func() {
-		rec, ok, e := s.projects.get(id)
+		rec, ok, e := s.projects.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -231,7 +231,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if payload.OwnerID != nil && s.authEnabled {
-			if _, ok, e := s.users.get(*payload.OwnerID); e != nil {
+			if _, ok, e := s.users.Get(*payload.OwnerID); e != nil {
 				lookupErr = e
 				return
 			} else if !ok {
@@ -249,7 +249,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			rec.OwnerID = *payload.OwnerID
 		}
 		rec.UpdatedAt = time.Now().Unix()
-		if saveErr = s.projects.save(rec); saveErr != nil {
+		if saveErr = s.projects.Save(rec); saveErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(id)
@@ -294,7 +294,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		delErr    error
 	)
 	s.do(func() {
-		rec, ok, e := s.projects.get(id)
+		rec, ok, e := s.projects.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -325,7 +325,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		if delErr = s.releases.deleteForApplication(id); delErr != nil {
 			return
 		}
-		if delErr = s.projects.delete(id); delErr != nil {
+		if delErr = s.projects.Delete(id); delErr != nil {
 			return
 		}
 		delete(s.appVersions, id)
@@ -348,7 +348,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 // tagged with a project id. It must be called on the run-loop goroutine (inside
 // do).
 func (s *Server) countArtifactsInProject(id string) (int, error) {
-	drafts, err := s.drafts.loadAll()
+	drafts, err := s.drafts.LoadAll()
 	if err != nil {
 		return 0, err
 	}
@@ -358,7 +358,7 @@ func (s *Server) countArtifactsInProject(id string) (int, error) {
 			n++
 		}
 	}
-	refs, err := s.dmnrefs.loadAll()
+	refs, err := s.dmnrefs.LoadAll()
 	if err != nil {
 		return 0, err
 	}

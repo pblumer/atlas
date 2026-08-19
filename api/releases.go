@@ -23,7 +23,7 @@ import (
 // restarting it at v1. It runs before the loop serves traffic, so touching the map
 // directly here respects the single-writer invariant.
 func (s *Server) loadReleaseVersions() error {
-	recs, err := s.releases.loadAll()
+	recs, err := s.releases.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 	var saveErr error
 	s.do(func() {
 		rec.Version = s.appVersions[out.proj.ID] + 1
-		if saveErr = s.releases.save(rec); saveErr != nil {
+		if saveErr = s.releases.Save(rec); saveErr != nil {
 			return
 		}
 		s.appVersions[out.proj.ID] = rec.Version

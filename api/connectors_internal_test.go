@@ -54,24 +54,24 @@ func TestConnectorStoreCRUD(t *testing.T) {
 		t.Fatalf("newConnectorStore: %v", err)
 	}
 	rec := connector{ID: "a", Name: "risk", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 1}
-	if err := st.save(rec); err != nil {
+	if err := st.Save(rec); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	got, ok, err := st.get("a")
+	got, ok, err := st.Get("a")
 	if err != nil || !ok || got.Name != "risk" {
 		t.Fatalf("get = %+v, %v, %v", got, ok, err)
 	}
-	all, err := st.loadAll()
+	all, err := st.LoadAll()
 	if err != nil || len(all) != 1 {
 		t.Fatalf("loadAll = %v, %v", all, err)
 	}
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := st.get("a"); ok {
+	if _, ok, _ := st.Get("a"); ok {
 		t.Fatal("get after delete: still present")
 	}
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete idempotent: %v", err)
 	}
 }
@@ -288,9 +288,9 @@ func TestBuildMailNativeClients(t *testing.T) {
 	t.Setenv("ATLAS_CONNECTOR_GRAPH_BUNDLE_TOKEN", `{"method":"clientCredentials","tenantId":"t","clientId":"c","clientSecret":"s"}`)
 	t.Setenv("ATLAS_CONNECTOR_BAD_BUNDLE_TOKEN", `not valid json`)
 
-	_ = srv.connectors.save(connector{ID: "1", Name: "gmail", Kind: "mail", Provider: "gmail", Sender: "a@x", CredentialsRef: "gmail_bundle", Enabled: true, CreatedAt: 1})
-	_ = srv.connectors.save(connector{ID: "2", Name: "graph", Kind: "mail", Provider: "microsoft", Sender: "b@x", CredentialsRef: "graph_bundle", Enabled: true, CreatedAt: 2})
-	_ = srv.connectors.save(connector{ID: "3", Name: "broken", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "1", Name: "gmail", Kind: "mail", Provider: "gmail", Sender: "a@x", CredentialsRef: "gmail_bundle", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "graph", Kind: "mail", Provider: "microsoft", Sender: "b@x", CredentialsRef: "graph_bundle", Enabled: true, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "broken", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 3})
 
 	clients, err := srv.buildMailClients()
 	if err != nil {
@@ -360,11 +360,11 @@ func TestMailConnectorLifecycle(t *testing.T) {
 // clients; a disabled, non-mail, endpoint-less, or unknown-provider record is skipped.
 func TestBuildMailClients(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "mail", Endpoint: "smtp.a:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
-	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "mail", Endpoint: "smtp.b:587", Sender: "b@x", Enabled: false, CreatedAt: 2})
-	_ = srv.connectors.save(connector{ID: "3", Name: "clio", Kind: "clio", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
-	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "mail", Endpoint: "", Sender: "d@x", Enabled: true, CreatedAt: 4})
-	_ = srv.connectors.save(connector{ID: "5", Name: "future", Kind: "mail", Endpoint: "graph:0", Provider: "microsoft-graph", Enabled: true, CreatedAt: 5})
+	_ = srv.connectors.Save(connector{ID: "1", Name: "on", Kind: "mail", Endpoint: "smtp.a:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "off", Kind: "mail", Endpoint: "smtp.b:587", Sender: "b@x", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "clio", Kind: "clio", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "noendpoint", Kind: "mail", Endpoint: "", Sender: "d@x", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "5", Name: "future", Kind: "mail", Endpoint: "graph:0", Provider: "microsoft-graph", Enabled: true, CreatedAt: 5})
 
 	clients, err := srv.buildMailClients()
 	if err != nil {
@@ -381,7 +381,7 @@ func TestBuildMailClients(t *testing.T) {
 // TestBuildMailClientsLoadError covers buildMailClients' store-read failure.
 func TestBuildMailClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if _, err := srv.buildMailClients(); err == nil {
 		t.Error("buildMailClients with a broken store: want error")
 	}
@@ -432,12 +432,12 @@ func TestBuildRemedyClients(t *testing.T) {
 	t.Setenv("ATLAS_CONNECTOR_HELIX_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
 	t.Setenv("ATLAS_CONNECTOR_BAD_CREDS_TOKEN", `not valid json`)
 
-	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 1})
-	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: false, CreatedAt: 2})
-	_ = srv.connectors.save(connector{ID: "3", Name: "mail", Kind: "mail", Endpoint: "smtp:587", Sender: "a@x", Enabled: true, CreatedAt: 3})
-	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "remedy", Endpoint: "", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 4})
-	_ = srv.connectors.save(connector{ID: "5", Name: "nocreds", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "", Enabled: true, CreatedAt: 5})
-	_ = srv.connectors.save(connector{ID: "6", Name: "broken", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "bad_creds", Enabled: true, CreatedAt: 6})
+	_ = srv.connectors.Save(connector{ID: "1", Name: "on", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "off", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "mail", Kind: "mail", Endpoint: "smtp:587", Sender: "a@x", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "noendpoint", Kind: "remedy", Endpoint: "", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "5", Name: "nocreds", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "", Enabled: true, CreatedAt: 5})
+	_ = srv.connectors.Save(connector{ID: "6", Name: "broken", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "bad_creds", Enabled: true, CreatedAt: 6})
 
 	clients, err := srv.buildRemedyClients()
 	if err != nil {
@@ -454,7 +454,7 @@ func TestBuildRemedyClients(t *testing.T) {
 // TestBuildRemedyClientsLoadError covers buildRemedyClients' store-read failure.
 func TestBuildRemedyClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if _, err := srv.buildRemedyClients(); err == nil {
 		t.Error("buildRemedyClients with a broken store: want error")
 	}
@@ -464,10 +464,10 @@ func TestBuildRemedyClientsLoadError(t *testing.T) {
 // records that both differ in and share CreatedAt (the tie-break by id).
 func TestConnectorStoreLoadAllOrdering(t *testing.T) {
 	st, _ := newConnectorStore(filepath.Join(t.TempDir(), "c"))
-	_ = st.save(connector{ID: "b", Name: "b", Kind: "temis", Endpoint: "http://x", CreatedAt: 2})
-	_ = st.save(connector{ID: "a", Name: "a", Kind: "temis", Endpoint: "http://x", CreatedAt: 2})
-	_ = st.save(connector{ID: "z", Name: "z", Kind: "temis", Endpoint: "http://x", CreatedAt: 1})
-	all, err := st.loadAll()
+	_ = st.Save(connector{ID: "b", Name: "b", Kind: "temis", Endpoint: "http://x", CreatedAt: 2})
+	_ = st.Save(connector{ID: "a", Name: "a", Kind: "temis", Endpoint: "http://x", CreatedAt: 2})
+	_ = st.Save(connector{ID: "z", Name: "z", Kind: "temis", Endpoint: "http://x", CreatedAt: 1})
+	all, err := st.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -484,10 +484,10 @@ func TestConnectorStoreLoadAllReadError(t *testing.T) {
 	st, _ := newConnectorStore(filepath.Join(t.TempDir(), "c"))
 	// A dangling symlink named like a record: ReadDir reports it as a non-directory
 	// entry that clears the hex/.json filter, but ReadFile follows it and fails.
-	if err := os.Symlink(filepath.Join(st.dir, "missing"), st.fileFor("x")); err != nil {
+	if err := os.Symlink(filepath.Join(st.Dir(), "missing"), st.FileFor("x")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over an unreadable record: want error")
 	}
 }
@@ -495,7 +495,7 @@ func TestConnectorStoreLoadAllReadError(t *testing.T) {
 // TestBuildTemisClientsLoadError covers buildTemisClients' store-read failure.
 func TestBuildTemisClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if _, err := srv.buildTemisClients(); err == nil {
 		t.Error("buildTemisClients with a broken store: want error")
 	}
@@ -518,8 +518,8 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 	// Update save failure: a valid record whose temp-write path is a directory, so
 	// the atomic write can't create its temp file (get succeeds, save fails).
 	stSave, _ := newConnectorStore(filepath.Join(t.TempDir(), "save"))
-	_ = stSave.save(connector{ID: "u", Name: "u", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
-	if err := os.Mkdir(stSave.fileFor("u")+".tmp", 0o755); err != nil {
+	_ = stSave.Save(connector{ID: "u", Name: "u", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+	if err := os.Mkdir(stSave.FileFor("u")+".tmp", 0o755); err != nil {
 		t.Fatal(err)
 	}
 	srv.connectors = stSave
@@ -530,8 +530,8 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 	// Update rebuild failure: the target record reads and saves fine, but a corrupt
 	// *other* record makes the post-save buildTemisClients loadAll fail.
 	stUp, _ := newConnectorStore(filepath.Join(t.TempDir(), "up"))
-	_ = stUp.save(connector{ID: "u2", Name: "u2", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
-	if err := os.WriteFile(stUp.fileFor("junk"), []byte("{bad"), 0o644); err != nil {
+	_ = stUp.Save(connector{ID: "u2", Name: "u2", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+	if err := os.WriteFile(stUp.FileFor("junk"), []byte("{bad"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	srv.connectors = stUp
@@ -542,7 +542,7 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 	// Delete rebuild failure: deleting a (missing) id succeeds, but a corrupt record
 	// makes the post-delete rebuild fail.
 	stDel, _ := newConnectorStore(filepath.Join(t.TempDir(), "del"))
-	if err := os.WriteFile(stDel.fileFor("junk"), []byte("{bad"), 0o644); err != nil {
+	if err := os.WriteFile(stDel.FileFor("junk"), []byte("{bad"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	srv.connectors = stDel
@@ -569,29 +569,29 @@ func TestResolveConnectorSecret(t *testing.T) {
 func TestConnectorStoreErrors(t *testing.T) {
 	// loadAll ignores foreign files (subdir, non-json, non-hex name).
 	st, _ := newConnectorStore(filepath.Join(t.TempDir(), "c"))
-	if err := os.Mkdir(filepath.Join(st.dir, "sub"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(st.Dir(), "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st.dir, "notes.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st.Dir(), "notes.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st.dir, "zz.json"), []byte("{}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st.Dir(), "zz.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err) // non-hex name → skipped
 	}
-	_ = st.save(connector{ID: "a", Name: "n", Kind: "temis", Endpoint: "http://x", CreatedAt: 1})
-	all, err := st.loadAll()
+	_ = st.Save(connector{ID: "a", Name: "n", Kind: "temis", Endpoint: "http://x", CreatedAt: 1})
+	all, err := st.LoadAll()
 	if err != nil || len(all) != 1 {
 		t.Fatalf("loadAll = %v, %v, want 1 record", all, err)
 	}
 
 	// get on a corrupt record errors.
-	if err := os.WriteFile(st.fileFor("bad"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(st.FileFor("bad"), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.get("bad"); err == nil {
+	if _, _, err := st.Get("bad"); err == nil {
 		t.Error("get of corrupt record: want error")
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over a corrupt record: want error")
 	}
 
@@ -604,25 +604,25 @@ func TestConnectorStoreErrors(t *testing.T) {
 
 	// loadAll on a missing dir errors.
 	gone, _ := newConnectorStore(filepath.Join(t.TempDir(), "gone"))
-	_ = os.RemoveAll(gone.dir)
-	if _, err := gone.loadAll(); err == nil {
+	_ = os.RemoveAll(gone.Dir())
+	if _, err := gone.LoadAll(); err == nil {
 		t.Error("loadAll of a missing dir: want error")
 	}
 
 	// A record path that is a (non-empty) directory triggers the read/remove error
 	// branches of get and delete.
 	fresh, _ := newConnectorStore(filepath.Join(t.TempDir(), "d"))
-	dirRec := fresh.fileFor("dir")
+	dirRec := fresh.FileFor("dir")
 	if err := os.Mkdir(dirRec, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dirRec, "x"), []byte("y"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := fresh.get("dir"); err == nil {
+	if _, _, err := fresh.Get("dir"); err == nil {
 		t.Error("get on a directory record: want error")
 	}
-	if err := fresh.delete("dir"); err == nil {
+	if err := fresh.Delete("dir"); err == nil {
 		t.Error("delete of a non-empty directory record: want error")
 	}
 }
@@ -674,7 +674,7 @@ func TestConnectorHandlerStoreErrors(t *testing.T) {
 	}
 
 	// A store whose directory does not exist: list/create/delete all fail.
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if do(http.MethodGet, "/api/v1/connectors", "") != http.StatusInternalServerError {
 		t.Error("list with a broken store: want 500")
 	}
@@ -687,7 +687,7 @@ func TestConnectorHandlerStoreErrors(t *testing.T) {
 
 	// A store with a corrupt record for an existing id: update fails on read.
 	good, _ := newConnectorStore(filepath.Join(t.TempDir(), "c2"))
-	if err := os.WriteFile(good.fileFor("u"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(good.FileFor("u"), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	srv.connectors = good

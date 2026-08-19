@@ -30,7 +30,7 @@ func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []User
-		recs, loadErr = s.users.loadAll()
+		recs, loadErr = s.users.LoadAll()
 		for _, u := range recs {
 			if u.Disabled {
 				continue

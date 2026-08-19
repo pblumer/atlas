@@ -96,7 +96,7 @@ func TestSingleDeployInvalidBpmn(t *testing.T) {
 // dmnref store makes the deploy a 500 before anything is registered.
 func TestSingleDeployRefStoreError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.dmnrefs = &dmnRefStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "gone")))
 	x := deployTestHarness{t, srv.Handler()}
 	if code, _ := x.do(http.MethodPost, "/api/v1/deployments", dinnerBPMN); code != http.StatusInternalServerError {
 		t.Fatalf("deploy with a broken ref store, want 500")

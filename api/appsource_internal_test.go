@@ -391,7 +391,7 @@ func allow(project) (int, string) { return 0, "" }
 func TestApplicationKeyBackfill(t *testing.T) {
 	s := storesFor(t)
 	legacy := project{ID: "old1", Name: "Alte Applikation", CreatedAt: 1, UpdatedAt: 1}
-	if err := s.projects.save(legacy); err != nil {
+	if err := s.projects.Save(legacy); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	key, err := s.applicationKeyFor(legacy)
@@ -401,7 +401,7 @@ func TestApplicationKeyBackfill(t *testing.T) {
 	if key != "alte-applikation" {
 		t.Fatalf("key = %q", key)
 	}
-	stored, ok, err := s.projects.get("old1")
+	stored, ok, err := s.projects.Get("old1")
 	if err != nil || !ok {
 		t.Fatalf("get: %v ok=%v", err, ok)
 	}
@@ -420,7 +420,7 @@ func TestApplicationKeyBackfill(t *testing.T) {
 func TestExportApplicationSourceFiltersOtherApplications(t *testing.T) {
 	s := storesFor(t)
 	mine := project{ID: "app1", Name: "Meine", Key: "meine"}
-	if err := s.projects.save(mine); err != nil {
+	if err := s.projects.Save(mine); err != nil {
 		t.Fatalf("save project: %v", err)
 	}
 	for _, d := range []draft{
@@ -428,14 +428,14 @@ func TestExportApplicationSourceFiltersOtherApplications(t *testing.T) {
 		{ProcessID: "theirs", Name: "Fremd", ProjectID: "app2", XML: "<b/>"},
 		{ProcessID: "loose", Name: "Ungrouped", XML: "<c/>"},
 	} {
-		if err := s.drafts.save(d); err != nil {
+		if err := s.drafts.Save(d); err != nil {
 			t.Fatalf("save draft: %v", err)
 		}
 	}
-	if err := s.forms.save(form{ID: "f-theirs", Name: "Fremd", ProjectID: "app2", Schema: "{}"}); err != nil {
+	if err := s.forms.Save(form{ID: "f-theirs", Name: "Fremd", ProjectID: "app2", Schema: "{}"}); err != nil {
 		t.Fatalf("save form: %v", err)
 	}
-	if err := s.dmnrefs.save(dmnRef{ID: "r-theirs", Name: "Fremd", ModelRef: "m", ProjectID: "app2"}); err != nil {
+	if err := s.dmnrefs.Save(dmnRef{ID: "r-theirs", Name: "Fremd", ModelRef: "m", ProjectID: "app2"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
 	files, err := s.exportApplicationSource(mine)
@@ -471,7 +471,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("caller may not write the application", func(t *testing.T) {
 		s := storesFor(t)
-		if err := s.projects.save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
+		if err := s.projects.Save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
 			t.Fatalf("save: %v", err)
 		}
 		man, byPath := tree("app", nil, nil, nil)
@@ -489,7 +489,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("protected system project", func(t *testing.T) {
 		s := storesFor(t)
-		if err := s.projects.save(project{ID: "sys", Name: "Atlas System", Key: "atlas-system", Protected: true}); err != nil {
+		if err := s.projects.Save(project{ID: "sys", Name: "Atlas System", Key: "atlas-system", Protected: true}); err != nil {
 			t.Fatalf("save: %v", err)
 		}
 		man, byPath := tree("atlas-system", nil, nil, nil)
@@ -502,7 +502,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("form owned by another application", func(t *testing.T) {
 		s := storesFor(t)
-		if err := s.forms.save(form{ID: "f1", Name: "Fremd", ProjectID: "other", Schema: "{}"}); err != nil {
+		if err := s.forms.Save(form{ID: "f1", Name: "Fremd", ProjectID: "other", Schema: "{}"}); err != nil {
 			t.Fatalf("save form: %v", err)
 		}
 		man, byPath := tree("app", nil, []sourceForm{{ID: "f1", Name: "F", Path: "forms/f.form.json"}}, nil)
@@ -515,7 +515,7 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("decision owned by another application", func(t *testing.T) {
 		s := storesFor(t)
-		if err := s.dmnrefs.save(dmnRef{ID: "r1", Name: "Fremd", ModelRef: "m", ProjectID: "other"}); err != nil {
+		if err := s.dmnrefs.Save(dmnRef{ID: "r1", Name: "Fremd", ModelRef: "m", ProjectID: "other"}); err != nil {
 			t.Fatalf("save ref: %v", err)
 		}
 		man, byPath := tree("app", nil, nil, []sourceDecision{{ID: "r1", Name: "D", ModelRef: "m2"}})
@@ -531,10 +531,10 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 // Modeler's ordering, so an existing reference keeps its creation time.
 func TestApplySourceTreeKeepsDecisionCreatedAt(t *testing.T) {
 	s := storesFor(t)
-	if err := s.projects.save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
+	if err := s.projects.Save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
 		t.Fatalf("save project: %v", err)
 	}
-	if err := s.dmnrefs.save(dmnRef{ID: "r1", Name: "Alt", ModelRef: "m", ProjectID: "a1", CreatedAt: 4242}); err != nil {
+	if err := s.dmnrefs.Save(dmnRef{ID: "r1", Name: "Alt", ModelRef: "m", ProjectID: "a1", CreatedAt: 4242}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
 	man := sourceManifest{
@@ -544,7 +544,7 @@ func TestApplySourceTreeKeepsDecisionCreatedAt(t *testing.T) {
 	if _, err := s.applySourceTree(man, map[string][]byte{}, "", allow); err != nil {
 		t.Fatalf("applySourceTree: %v", err)
 	}
-	got, ok, err := s.dmnrefs.get("r1")
+	got, ok, err := s.dmnrefs.Get("r1")
 	if err != nil || !ok {
 		t.Fatalf("get: %v ok=%v", err, ok)
 	}
@@ -560,12 +560,7 @@ func TestApplySourceTreeKeepsDecisionCreatedAt(t *testing.T) {
 // error, not a refusal — the caller reports 500 rather than blaming the tree.
 func TestApplySourceTreeReportsStoreFailure(t *testing.T) {
 	s := storesFor(t)
-	// A directory that does not exist and cannot be created under a file.
-	blocker := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	s.projects = &projectStore{dir: filepath.Join(blocker, "projects")}
+	s.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "projects")))
 	man := sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}
 	_, err := s.applySourceTree(man, map[string][]byte{}, "", allow)
 	if err == nil {
@@ -577,7 +572,7 @@ func TestApplySourceTreeReportsStoreFailure(t *testing.T) {
 	}
 
 	broken := storesFor(t)
-	broken.drafts = &draftStore{dir: filepath.Join(blocker, "drafts")}
+	broken.drafts = brokenStore(newDraftStore(filepath.Join(t.TempDir(), "drafts")))
 	if _, err := broken.exportApplicationSource(project{ID: "a", Name: "A", Key: "a"}); err == nil {
 		t.Error("a broken draft store was not reported by the exporter")
 	}
@@ -588,16 +583,16 @@ func TestApplySourceTreeReportsStoreFailure(t *testing.T) {
 // able to see everything the repository does not know about.
 func TestApplySourceTreeReportsUntrackedOfEveryKind(t *testing.T) {
 	s := storesFor(t)
-	if err := s.projects.save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
+	if err := s.projects.Save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
 		t.Fatalf("save project: %v", err)
 	}
-	if err := s.drafts.save(draft{ProcessID: "p1", Name: "P", ProjectID: "a1", XML: "<x/>"}); err != nil {
+	if err := s.drafts.Save(draft{ProcessID: "p1", Name: "P", ProjectID: "a1", XML: "<x/>"}); err != nil {
 		t.Fatalf("save draft: %v", err)
 	}
-	if err := s.forms.save(form{ID: "f1", Name: "F", ProjectID: "a1", Schema: "{}"}); err != nil {
+	if err := s.forms.Save(form{ID: "f1", Name: "F", ProjectID: "a1", Schema: "{}"}); err != nil {
 		t.Fatalf("save form: %v", err)
 	}
-	if err := s.dmnrefs.save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "a1"}); err != nil {
+	if err := s.dmnrefs.Save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "a1"}); err != nil {
 		t.Fatalf("save ref: %v", err)
 	}
 	// An empty tree for the same application: everything local is untracked.
@@ -611,10 +606,10 @@ func TestApplySourceTreeReportsUntrackedOfEveryKind(t *testing.T) {
 		t.Errorf("untracked = %q, want %q", got, want)
 	}
 	// And none of them was removed.
-	if _, ok, _ := s.forms.get("f1"); !ok {
+	if _, ok, _ := s.forms.Get("f1"); !ok {
 		t.Error("the untracked form was deleted")
 	}
-	if _, ok, _ := s.dmnrefs.get("r1"); !ok {
+	if _, ok, _ := s.dmnrefs.Get("r1"); !ok {
 		t.Error("the untracked decision was deleted")
 	}
 }
@@ -622,10 +617,6 @@ func TestApplySourceTreeReportsUntrackedOfEveryKind(t *testing.T) {
 // TestApplySourceTreeReportsWriteFailure: a store that cannot be written is
 // reported as an error, not swallowed into a success with a smaller count.
 func TestApplySourceTreeReportsWriteFailure(t *testing.T) {
-	blocker := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
 	cases := []struct {
 		name   string
 		break_ func(*Server)
@@ -634,21 +625,21 @@ func TestApplySourceTreeReportsWriteFailure(t *testing.T) {
 	}{
 		{
 			name:   "draft store",
-			break_: func(s *Server) { s.drafts = &draftStore{dir: filepath.Join(blocker, "drafts")} },
+			break_: func(s *Server) { s.drafts = brokenStore(newDraftStore(filepath.Join(t.TempDir(), "drafts"))) },
 			man: sourceManifest{FormatVersion: 1, Key: "app", Name: "App",
 				Processes: []sourceProcess{{ID: "p1", Name: "P", Path: "processes/p.bpmn"}}},
 			files: map[string][]byte{"processes/p.bpmn": []byte("<x/>\n")},
 		},
 		{
 			name:   "form store",
-			break_: func(s *Server) { s.forms = &formStore{dir: filepath.Join(blocker, "forms")} },
+			break_: func(s *Server) { s.forms = brokenStore(newFormStore(filepath.Join(t.TempDir(), "forms"))) },
 			man: sourceManifest{FormatVersion: 1, Key: "app", Name: "App",
 				Forms: []sourceForm{{ID: "f1", Name: "F", Path: "forms/f.form.json"}}},
 			files: map[string][]byte{"forms/f.form.json": []byte("{}\n")},
 		},
 		{
 			name:   "dmn reference store",
-			break_: func(s *Server) { s.dmnrefs = &dmnRefStore{dir: filepath.Join(blocker, "dmnrefs")} },
+			break_: func(s *Server) { s.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "dmnrefs"))) },
 			man: sourceManifest{FormatVersion: 1, Key: "app", Name: "App",
 				Decisions: []sourceDecision{{ID: "r1", Name: "R", ModelRef: "m"}}},
 			files: map[string][]byte{},
@@ -657,7 +648,7 @@ func TestApplySourceTreeReportsWriteFailure(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := storesFor(t)
-			if err := s.projects.save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
+			if err := s.projects.Save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
 				t.Fatalf("save project: %v", err)
 			}
 			c.break_(s)
@@ -671,17 +662,13 @@ func TestApplySourceTreeReportsWriteFailure(t *testing.T) {
 // TestApplySourceTreeReportsCreateFailure: the same for creating the application
 // itself, which is the first write an import into a fresh server makes.
 func TestApplySourceTreeReportsCreateFailure(t *testing.T) {
-	blocker := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
 	s := storesFor(t)
 	// loadAll succeeds (the dir exists and is empty); the save then fails.
-	dir := s.projects.dir
+	dir := s.projects.Dir()
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("rmdir: %v", err)
 	}
-	s.projects = &projectStore{dir: dir}
+	s.projects = brokenStore(newProjectStore(dir))
 	if _, err := s.applySourceTree(
 		sourceManifest{FormatVersion: 1, Key: "app", Name: "App"}, map[string][]byte{}, "", allow); err == nil {
 		t.Fatal("a failed application create was reported as success")
@@ -691,15 +678,11 @@ func TestApplySourceTreeReportsCreateFailure(t *testing.T) {
 // TestExportApplicationSourceReportsStoreFailures: each of the three artifact
 // stores is a separate read, and each failure has to surface.
 func TestExportApplicationSourceReportsStoreFailures(t *testing.T) {
-	blocker := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
 	app := project{ID: "a1", Name: "App", Key: "app"}
 	cases := map[string]func(*Server){
-		"forms":    func(s *Server) { s.forms = &formStore{dir: filepath.Join(blocker, "forms")} },
-		"dmnrefs":  func(s *Server) { s.dmnrefs = &dmnRefStore{dir: filepath.Join(blocker, "dmnrefs")} },
-		"projects": func(s *Server) { s.projects = &projectStore{dir: filepath.Join(blocker, "projects")} },
+		"forms":    func(s *Server) { s.forms = brokenStore(newFormStore(filepath.Join(t.TempDir(), "forms"))) },
+		"dmnrefs":  func(s *Server) { s.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "dmnrefs"))) },
+		"projects": func(s *Server) { s.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "projects"))) },
 	}
 	for name, brk := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -722,11 +705,11 @@ func TestExportApplicationSourceReportsStoreFailures(t *testing.T) {
 // derived, and a failure there must not return a key the store does not hold.
 func TestApplicationKeyForReportsSaveFailure(t *testing.T) {
 	s := storesFor(t)
-	dir := s.projects.dir
+	dir := s.projects.Dir()
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("rmdir: %v", err)
 	}
-	s.projects = &projectStore{dir: dir}
+	s.projects = brokenStore(newProjectStore(dir))
 	if _, err := s.applicationKeyFor(project{ID: "a1", Name: "App"}); err == nil {
 		t.Fatal("a failed key save was reported as success")
 	}

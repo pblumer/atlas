@@ -3,12 +3,9 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/pblumer/atlas/api/sidecar"
 )
@@ -104,30 +101,44 @@ func newProcessDocID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// processDocStore is a durable sidecar store for documentation versions: one
-// JSON record per version with the PDF beside it under the same id. It mirrors
-// the release and public-link stores (ADR-0019/0021/0128) and, like them, is
-// owned solely by the server's run-loop goroutine, so it needs no locking.
+// processDocStore is a durable store for process documentation versions
+// (ADR-0143): one JSON record per version id under a single directory, each
+// beside the PDF it describes. The PDF is why it wraps the shared store rather
+// than being one — a version is two files, and both have to go together.
+//
+// Every entry point rejects an id that is not bare hex before touching the
+// filesystem. Ids here name their own files directly (they are already
+// filename-safe), so that check is what keeps an id from escaping the directory.
 type processDocStore struct {
-	dir string
+	*sidecar.Store[processDoc]
 }
 
+// newProcessDocStore opens (creating if needed) the process-docs directory.
+// Versions list grouped by process, newest version first within each, tie-broken
+// by id so the order is deterministic.
 func newProcessDocStore(dir string) (*processDocStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("processdocstore: create dir: %w", err)
+	s, err := sidecar.NewStore(dir, "processdocstore",
+		func(rec processDoc) string { return rec.ID },
+		sidecar.Names[processDoc](func(id string) string { return id }, isHexToken),
+		sidecar.Order(func(a, b processDoc) bool {
+			if a.ProcessID != b.ProcessID {
+				return a.ProcessID < b.ProcessID
+			}
+			if a.Version != b.Version {
+				return a.Version > b.Version
+			}
+			return a.ID < b.ID
+		}),
+	)
+	if err != nil {
+		return nil, err
 	}
-	return &processDocStore{dir: dir}, nil
+	return &processDocStore{s}, nil
 }
 
-// fileFor maps a version id to its record path, pdfFileFor to its document. The
-// id is bare hex, so it is already a safe filename; every entry point validates
-// that before touching the filesystem.
-func (s *processDocStore) fileFor(id string) string {
-	return filepath.Join(s.dir, id+".json")
-}
-
+// pdfFileFor maps a version id to its document path, beside the record's own.
 func (s *processDocStore) pdfFileFor(id string) string {
-	return filepath.Join(s.dir, id+".pdf")
+	return filepath.Join(s.Dir(), id+".pdf")
 }
 
 // save writes a version durably: the PDF first, then the record. The order
@@ -137,7 +148,7 @@ func (s *processDocStore) save(rec processDoc, pdf []byte) error {
 	if !isHexToken(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
-	if err := sidecar.WriteFile(s.dir, s.pdfFileFor(rec.ID), pdf); err != nil {
+	if err := sidecar.WriteFile(s.Dir(), s.pdfFileFor(rec.ID), pdf); err != nil {
 		return err
 	}
 	return s.saveRecord(rec)
@@ -150,25 +161,16 @@ func (s *processDocStore) saveRecord(rec processDoc) error {
 	if !isHexToken(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
-	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return s.Save(rec)
 }
 
+// get returns a version's record, or ok=false if there is none. An unsafe id is a
+// clean miss rather than a filesystem lookup.
 func (s *processDocStore) get(id string) (processDoc, bool, error) {
 	if !isHexToken(id) {
 		return processDoc{}, false, nil
 	}
-	data, err := os.ReadFile(s.fileFor(id))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return processDoc{}, false, nil
-		}
-		return processDoc{}, false, fmt.Errorf("processdocstore: read: %w", err)
-	}
-	var rec processDoc
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return processDoc{}, false, fmt.Errorf("processdocstore: decode: %w", err)
-	}
-	return rec, true, nil
+	return s.Get(id)
 }
 
 // pdf returns a version's document bytes. An unknown or unsafe id is an error
@@ -185,49 +187,9 @@ func (s *processDocStore) pdf(id string) ([]byte, error) {
 	return data, nil
 }
 
-// loadAll reads every version, grouped by process id with the newest version
-// first — the order the history view wants. Files that are not records are
-// ignored; a record that is present but undecodable is an error, because losing
-// history silently is worse than reporting a fault.
-func (s *processDocStore) loadAll() ([]processDoc, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("processdocstore: read dir: %w", err)
-	}
-	var out []processDoc
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		if !isHexToken(strings.TrimSuffix(name, ".json")) {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("processdocstore: read %s: %w", name, err)
-		}
-		var rec processDoc
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("processdocstore: decode %s: %w", name, err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].ProcessID != out[j].ProcessID {
-			return out[i].ProcessID < out[j].ProcessID
-		}
-		if out[i].Version != out[j].Version {
-			return out[i].Version > out[j].Version
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
-}
-
 // forProcess returns one process's documentation history, newest version first.
 func (s *processDocStore) forProcess(processID string) ([]processDoc, error) {
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -240,13 +202,14 @@ func (s *processDocStore) forProcess(processID string) ([]processDoc, error) {
 	return out, nil
 }
 
-// byShareToken finds the version a public token addresses. An empty token never
-// matches, so the many unshared records — which carry no token — stay private.
+// byShareToken finds the version a public token addresses. An empty or unsafe
+// token never matches, so the many unshared records — which carry no token — stay
+// private.
 func (s *processDocStore) byShareToken(token string) (processDoc, bool, error) {
 	if !isHexToken(token) {
 		return processDoc{}, false, nil
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		return processDoc{}, false, err
 	}
@@ -260,9 +223,8 @@ func (s *processDocStore) byShareToken(token string) (processDoc, bool, error) {
 
 // pruneProcess enforces a retention limit on one process's documentation history:
 // it keeps the newest `keep` versions and deletes the rest, returning the ids it
-// removed (newest-kept-first order is irrelevant to the caller, so the returned
-// ids are just those pruned). It is the bounded-growth follow-up ADR-0143 flagged:
-// every version keeps a PDF, so an unpruned archive grows without limit.
+// removed. It is the bounded-growth follow-up ADR-0143 flagged: every version
+// keeps a PDF, so an unpruned archive grows without limit.
 //
 // keep is clamped at zero — a negative limit would otherwise delete history it was
 // asked to retain. keep >= the number of versions prunes nothing. Deleting the
@@ -290,15 +252,14 @@ func (s *processDocStore) pruneProcess(processID string, keep int) ([]string, er
 }
 
 // delete removes a version and its document. A missing file is not an error, so
-// cleanup is idempotent.
+// cleanup is idempotent; the PDF goes with the record, since neither is meaningful
+// without the other.
 func (s *processDocStore) delete(id string) error {
 	if !isHexToken(id) {
 		return nil
 	}
-	for _, path := range []string{s.fileFor(id), s.pdfFileFor(id)} {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("processdocstore: remove: %w", err)
-		}
+	if err := os.Remove(s.pdfFileFor(id)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("processdocstore: remove: %w", err)
 	}
-	return sidecar.FsyncDir(s.dir)
+	return s.Delete(id)
 }

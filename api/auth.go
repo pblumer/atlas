@@ -440,7 +440,7 @@ func (s *Server) bootstrapAdmin(now int64) error {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.users.save(u); err != nil {
+	if err := s.users.Save(u); err != nil {
 		return err
 	}
 	if generated {

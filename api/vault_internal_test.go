@@ -296,7 +296,7 @@ func TestProvisionClioKeyErrors(t *testing.T) {
 
 	// A clio connector saved without an endpoint → 400.
 	srv.do(func() {
-		_ = srv.connectors.save(connector{ID: "noep", Name: "noep", Kind: connectorKindClio, Enabled: true, CreatedAt: 9})
+		_ = srv.connectors.Save(connector{ID: "noep", Name: "noep", Kind: connectorKindClio, Enabled: true, CreatedAt: 9})
 	})
 	if post(base+"noep/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
 		t.Error("connector with no endpoint: want 400")
@@ -319,7 +319,7 @@ func TestProvisionClioKeyErrors(t *testing.T) {
 	}
 	// A corrupt connector record makes the load error → 500.
 	srv.do(func() {
-		_ = os.WriteFile(srv.connectors.fileFor("corrupt"), []byte("{not json"), 0o644)
+		_ = os.WriteFile(srv.connectors.FileFor("corrupt"), []byte("{not json"), 0o644)
 	})
 	if post(base+"corrupt/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusInternalServerError {
 		t.Error("corrupt connector record: want 500")

@@ -42,11 +42,11 @@ func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bo
 		readErr error
 	)
 	s.do(func() {
-		if rec, draftOK, readErr = s.drafts.get(draftID); readErr != nil || !draftOK {
+		if rec, draftOK, readErr = s.drafts.Get(draftID); readErr != nil || !draftOK {
 			return
 		}
 		if rec.ProjectID != "" {
-			proj, projOK, readErr = s.projects.get(rec.ProjectID)
+			proj, projOK, readErr = s.projects.Get(rec.ProjectID)
 		}
 	})
 	switch {

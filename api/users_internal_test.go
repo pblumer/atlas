@@ -14,13 +14,13 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	// A corrupt record makes every decode path fail.
 	dir := t.TempDir()
 	st, _ := newUserStore(dir)
-	if err := os.WriteFile(st.fileFor("bad"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(st.FileFor("bad"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("write corrupt: %v", err)
 	}
-	if _, _, err := st.get("bad"); err == nil {
+	if _, _, err := st.Get("bad"); err == nil {
 		t.Fatalf("get should surface a decode error")
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Fatalf("loadAll should surface a decode error")
 	}
 	if _, _, err := st.byUsername("x"); err == nil {
@@ -36,10 +36,10 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	// A record path that is a directory makes get's read (not the missing case)
 	// fail.
 	st2, _ := newUserStore(t.TempDir())
-	if err := os.Mkdir(st2.fileFor("d"), 0o755); err != nil {
+	if err := os.Mkdir(st2.FileFor("d"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if _, _, err := st2.get("d"); err == nil {
+	if _, _, err := st2.Get("d"); err == nil {
 		t.Fatalf("get on a directory should error")
 	}
 
@@ -49,13 +49,13 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	if err := os.RemoveAll(dir3); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if _, err := st3.loadAll(); err == nil {
+	if _, err := st3.LoadAll(); err == nil {
 		t.Fatalf("loadAll on a missing dir should error")
 	}
-	if err := st3.save(newTestUser("1", "a")); err == nil {
+	if err := st3.Save(newTestUser("1", "a")); err == nil {
 		t.Fatalf("save into a missing dir should error")
 	}
-	if err := st3.delete("x"); err == nil {
+	if err := st3.Delete("x"); err == nil {
 		t.Fatalf("delete against a missing dir should error")
 	}
 
@@ -63,14 +63,14 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	// standing where a record file should be).
 	st4dir := t.TempDir()
 	st4, _ := newUserStore(st4dir)
-	busy := st4.fileFor("busy")
+	busy := st4.FileFor("busy")
 	if err := os.Mkdir(busy, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(busy, "child"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write child: %v", err)
 	}
-	if err := st4.delete("busy"); err == nil {
+	if err := st4.Delete("busy"); err == nil {
 		t.Fatalf("delete of a non-empty record path should error")
 	}
 
@@ -78,10 +78,10 @@ func TestUserStoreErrorBranches(t *testing.T) {
 	// dangling symlink).
 	st5dir := t.TempDir()
 	st5, _ := newUserStore(st5dir)
-	if err := os.Symlink(filepath.Join(st5dir, "missing-target"), st5.fileFor("dangle")); err != nil {
+	if err := os.Symlink(filepath.Join(st5dir, "missing-target"), st5.FileFor("dangle")); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	if _, err := st5.loadAll(); err == nil {
+	if _, err := st5.LoadAll(); err == nil {
 		t.Fatalf("loadAll should surface a read error on an unreadable entry")
 	}
 
@@ -178,7 +178,7 @@ func TestBootstrapAdminCountError(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := newUserStore(dir)
 	// A corrupt record makes the pre-seed count fail, which bootstrap surfaces.
-	if err := os.WriteFile(st.fileFor("bad"), []byte("{nope"), 0o644); err != nil {
+	if err := os.WriteFile(st.FileFor("bad"), []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	s := &Server{users: st}

@@ -65,7 +65,7 @@ func (s *Server) handleCallActivities(w http.ResponseWriter, _ *http.Request) {
 	rows := []callActivityRow{}
 	var loadErr error
 	s.do(func() {
-		recs, err := s.callOverrides.loadAll()
+		recs, err := s.callOverrides.LoadAll()
 		if err != nil {
 			loadErr = err
 			return
@@ -179,7 +179,7 @@ func (s *Server) callOverrideDirective(rec callOverride) (engine.CallTargetOverr
 // resolving by default, which is visible and safe. Pre-loop, so direct processor
 // access is single-writer-safe.
 func (s *Server) loadCallOverrides() error {
-	recs, err := s.callOverrides.loadAll()
+	recs, err := s.callOverrides.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Durable before visible (I2): persist the record, then apply to the engine.
-		if err := s.callOverrides.save(rec); err != nil {
+		if err := s.callOverrides.Save(rec); err != nil {
 			saveErr = err
 			return
 		}
@@ -260,7 +260,7 @@ func (s *Server) handleDeleteCallOverride(w http.ResponseWriter, r *http.Request
 	pid := r.PathValue("processId")
 	var delErr error
 	s.do(func() {
-		if err := s.callOverrides.delete(pid); err != nil {
+		if err := s.callOverrides.Delete(pid); err != nil {
 			delErr = err
 			return
 		}

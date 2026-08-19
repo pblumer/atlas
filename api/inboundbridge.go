@@ -138,7 +138,7 @@ func (s *Server) primeInbound(ctx context.Context, sb pendingSub) {
 // last skipped event (when the page carried any) and sets Primed once the backlog is
 // exhausted. It runs on the run loop (the store's owner).
 func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
-	rec, ok, err := s.inboundSubs.get(subID)
+	rec, ok, err := s.inboundSubs.Get(subID)
 	if err != nil || !ok {
 		return
 	}
@@ -148,18 +148,18 @@ func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
 	if primed {
 		rec.Primed = true
 	}
-	_ = s.inboundSubs.save(rec)
+	_ = s.inboundSubs.Save(rec)
 }
 
 // resolveInboundSubs loads the enabled subscriptions whose connector is an enabled
 // clio connector with a live client, compiling each correlation key. It reads the
 // stores, so it runs on the run-loop goroutine.
 func (s *Server) resolveInboundSubs() []pendingSub {
-	recs, err := s.inboundSubs.loadAll()
+	recs, err := s.inboundSubs.LoadAll()
 	if err != nil {
 		return nil
 	}
-	conns, err := s.connectors.loadAll()
+	conns, err := s.connectors.LoadAll()
 	if err != nil {
 		return nil
 	}
@@ -198,12 +198,12 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 // an optimization — the engine high-water mark, not this cursor, guarantees no
 // duplicate delivery (ADR-0075).
 func (s *Server) advanceInboundCursor(subID, lastEventID string) {
-	rec, ok, err := s.inboundSubs.get(subID)
+	rec, ok, err := s.inboundSubs.Get(subID)
 	if err != nil || !ok {
 		return
 	}
 	rec.LastEventID = lastEventID
-	_ = s.inboundSubs.save(rec)
+	_ = s.inboundSubs.Save(rec)
 }
 
 // inboundSourceID is the opaque per-source key the engine deduplicates on: a clio

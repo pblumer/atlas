@@ -143,7 +143,7 @@ func (s *Server) registrationLinkForLocked(pid string, now int64) (string, error
 	if d == nil || d.cp == nil || !d.cp.IsExecutable() || d.cp.StartFormId() == "" {
 		return "", nil
 	}
-	links, err := s.publicLinks.loadAll()
+	links, err := s.publicLinks.LoadAll()
 	if err != nil {
 		return "", err
 	}
@@ -157,7 +157,7 @@ func (s *Server) registrationLinkForLocked(pid string, now int64) (string, error
 		return "", err
 	}
 	l := publicLink{Token: token, ProcessID: pid, FormID: d.cp.StartFormId(), CreatedAt: now}
-	if err := s.publicLinks.save(l); err != nil {
+	if err := s.publicLinks.Save(l); err != nil {
 		return "", err
 	}
 	return "/public/forms/" + l.Token, nil

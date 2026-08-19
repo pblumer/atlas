@@ -301,7 +301,7 @@ func parseSourceTree(files []sourceFile) (sourceManifest, map[string][]byte, err
 //
 // Runs on the run loop (the project store is loop-owned).
 func (s *Server) deriveApplicationKey(app project) (string, error) {
-	all, err := s.projects.loadAll()
+	all, err := s.projects.LoadAll()
 	if err != nil {
 		return "", err
 	}
@@ -338,7 +338,7 @@ func (s *Server) applicationKeyFor(app project) (string, error) {
 	}
 	app.Key = key
 	app.UpdatedAt = time.Now().Unix()
-	if err := s.projects.save(app); err != nil {
+	if err := s.projects.Save(app); err != nil {
 		return "", err
 	}
 	return key, nil
@@ -353,15 +353,15 @@ func (s *Server) exportApplicationSource(app project) ([]sourceFile, error) {
 	}
 	app.Key = key
 
-	drafts, err := s.drafts.loadAll()
+	drafts, err := s.drafts.LoadAll()
 	if err != nil {
 		return nil, err
 	}
-	forms, err := s.forms.loadAll()
+	forms, err := s.forms.LoadAll()
 	if err != nil {
 		return nil, err
 	}
-	refs, err := s.dmnrefs.loadAll()
+	refs, err := s.dmnrefs.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +442,7 @@ func (e sourceRefusal) Error() string { return e.msg }
 //
 // Runs on the run loop.
 func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, ownerID string, authorize func(project) (int, string)) (sourceImportResult, error) {
-	all, err := s.projects.loadAll()
+	all, err := s.projects.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
 	}
@@ -477,7 +477,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 
 	// Ownership conflicts are checked across every artifact before anything is
 	// written, so a refused import leaves the stores exactly as it found them.
-	drafts, err := s.drafts.loadAll()
+	drafts, err := s.drafts.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
 	}
@@ -485,7 +485,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	for _, d := range drafts {
 		draftOwner[d.ProcessID] = d
 	}
-	forms, err := s.forms.loadAll()
+	forms, err := s.forms.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
 	}
@@ -493,7 +493,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	for _, f := range forms {
 		formOwner[f.ID] = f
 	}
-	refs, err := s.dmnrefs.loadAll()
+	refs, err := s.dmnrefs.LoadAll()
 	if err != nil {
 		return sourceImportResult{}, err
 	}
@@ -519,14 +519,14 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	}
 
 	if !found {
-		if err := s.projects.save(app); err != nil {
+		if err := s.projects.Save(app); err != nil {
 			return sourceImportResult{}, err
 		}
 	} else if app.Name != man.Name {
 		// The repository is the source of truth for the application's name, the same
 		// as for its artifacts; the key, not the name, is what identifies it.
 		app.Name, app.UpdatedAt = man.Name, now
-		if err := s.projects.save(app); err != nil {
+		if err := s.projects.Save(app); err != nil {
 			return sourceImportResult{}, err
 		}
 	}
@@ -537,7 +537,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			ProcessID: p.ID, Name: p.Name, ProjectID: app.ID,
 			SavedAt: now, XML: string(byPath[p.Path]),
 		}
-		if err := s.drafts.save(rec); err != nil {
+		if err := s.drafts.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
 		res.Processes++
@@ -547,7 +547,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 			ID: f.ID, Name: f.Name, ProjectID: app.ID,
 			SavedAt: now, Schema: string(byPath[f.Path]),
 		}
-		if err := s.forms.save(rec); err != nil {
+		if err := s.forms.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
 		res.Forms++
@@ -559,7 +559,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 		if prev, ok := refOwner[d.ID]; ok && prev.CreatedAt != 0 {
 			rec.CreatedAt = prev.CreatedAt
 		}
-		if err := s.dmnrefs.save(rec); err != nil {
+		if err := s.dmnrefs.Save(rec); err != nil {
 			return sourceImportResult{}, err
 		}
 		res.Decisions++

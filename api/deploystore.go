@@ -1,13 +1,7 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/pblumer/atlas/api/sidecar"
 )
@@ -58,95 +52,43 @@ func (d persistedDeployment) dmnModels() []string {
 	return nil
 }
 
-// deployStore is a small durable store for deployments, backed by one JSON file
-// per deployment under a single directory (ADR-0019). It is an interim mechanism
-// for the single-binary server, sidestepping the WAL until deployment becomes a
-// first-class event at the Milestone 4 public API. It is owned exclusively by the
-// server's run-loop goroutine, so it needs no locking of its own.
+// deployStore is a durable store for deployments, one JSON file per deployment
+// key under a single directory (ADR-0019). Unlike the other design-time stores
+// its records are keyed by the engine's own uint64 key rather than a string, so
+// it wraps the shared store to keep that key type at its edge; the file is named
+// by the key in decimal, which is already filename-safe and recognizable.
 type deployStore struct {
-	dir string
+	*sidecar.Store[persistedDeployment]
 }
 
-// newDeployStore opens (creating if needed) the deployment directory.
+// newDeployStore opens (creating if needed) the deployments directory.
+// Deployments list in key order, which is deployment order.
 func newDeployStore(dir string) (*deployStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("deploystore: create dir: %w", err)
+	s, err := sidecar.NewStore(dir, "deploystore",
+		func(rec persistedDeployment) string { return deployKeyName(rec.Key) },
+		sidecar.Names[persistedDeployment](
+			func(key string) string { return key },
+			func(stem string) bool { _, err := strconv.ParseUint(stem, 10, 64); return err == nil },
+		),
+		sidecar.Order(func(a, b persistedDeployment) bool { return a.Key < b.Key }),
+	)
+	if err != nil {
+		return nil, err
 	}
-	return &deployStore{dir: dir}, nil
+	return &deployStore{s}, nil
 }
 
-// fileFor returns the record path for a definition key.
-func (d *deployStore) fileFor(key uint64) string {
-	return filepath.Join(d.dir, strconv.FormatUint(key, 10)+".json")
-}
+// deployKeyName renders a deployment key as the store's key string, which is also
+// its filename stem.
+func deployKeyName(key uint64) string { return strconv.FormatUint(key, 10) }
 
-// save writes a deployment durably (atomic write + directory fsync), so the
-// caller may treat a nil return as "on disk" (I2 / ADR-0019).
-func (d *deployStore) save(rec persistedDeployment) error {
-	return sidecar.WriteJSON(d.dir, d.fileFor(rec.Key), rec)
-}
+// fileFor maps a deployment key to its record path.
+func (d *deployStore) fileFor(key uint64) string { return d.FileFor(deployKeyName(key)) }
 
-// load reads a single deployment record by key. ok is false (with a nil error) when
-// no record exists for the key, so a caller can distinguish "not deployed" from a read
-// failure. It lets an in-place metadata edit (e.g. toggling Inactive, ADR-0119) rewrite
-// the full record without the caller having to hold every field (notably the DMN models)
-// in memory.
+// load returns the deployment for a key, or ok=false if none is stored.
 func (d *deployStore) load(key uint64) (persistedDeployment, bool, error) {
-	data, err := os.ReadFile(d.fileFor(key))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return persistedDeployment{}, false, nil
-		}
-		return persistedDeployment{}, false, fmt.Errorf("deploystore: read: %w", err)
-	}
-	var rec persistedDeployment
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return persistedDeployment{}, false, fmt.Errorf("deploystore: decode: %w", err)
-	}
-	return rec, true, nil
+	return d.Get(deployKeyName(key))
 }
 
-// delete removes a deployment's record. A missing file is not an error, so
-// cleanup is idempotent.
-func (d *deployStore) delete(key uint64) error {
-	if err := os.Remove(d.fileFor(key)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("deploystore: remove: %w", err)
-	}
-	return sidecar.FsyncDir(d.dir)
-}
-
-// loadAll reads every deployment record, sorted by key ascending so registration
-// order (and thus assigned keys) is reconstructed deterministically. Files that
-// are not <key>.json records are ignored.
-func (d *deployStore) loadAll() ([]persistedDeployment, error) {
-	entries, err := os.ReadDir(d.dir)
-	if err != nil {
-		return nil, fmt.Errorf("deploystore: read dir: %w", err)
-	}
-	var out []persistedDeployment
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		// Skip anything whose stem is not a plain key (e.g. leftover *.tmp is
-		// already excluded by the suffix check; a stray README.json is skipped).
-		if _, err := strconv.ParseUint(strings.TrimSuffix(name, ".json"), 10, 64); err != nil {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(d.dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("deploystore: read %s: %w", name, err)
-		}
-		var rec persistedDeployment
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("deploystore: decode %s: %w", name, err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out, nil
-}
+// delete removes a deployment. A missing deployment is not an error.
+func (d *deployStore) delete(key uint64) error { return d.Delete(deployKeyName(key)) }

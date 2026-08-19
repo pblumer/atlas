@@ -32,14 +32,14 @@ func rawTemplate(name string) json.RawMessage {
 func TestMarketplaceStoreRoundTripAndOrder(t *testing.T) {
 	ms := newInstalled(t)
 	save := func(id string, at int64) {
-		if err := ms.save(installedTemplate{ID: id, PackageID: id, Kind: packageKindConnector, Template: rawTemplate(id), InstalledAt: at}); err != nil {
+		if err := ms.Save(installedTemplate{ID: id, PackageID: id, Kind: packageKindConnector, Template: rawTemplate(id), InstalledAt: at}); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
 	save("b", 200)
 	save("a", 100)
 	save("c", 300)
-	got, err := ms.loadAll()
+	got, err := ms.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestMarketplaceStoreRoundTripAndOrder(t *testing.T) {
 			t.Errorf("position %d = %q, want %q", i, got[i].ID, w)
 		}
 	}
-	rec, ok, err := ms.get("a")
+	rec, ok, err := ms.Get("a")
 	if err != nil || !ok || rec.PackageID != "a" {
 		t.Fatalf("get a = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -63,11 +63,11 @@ func TestMarketplaceStoreRoundTripAndOrder(t *testing.T) {
 func TestMarketplaceStoreTieBreakByID(t *testing.T) {
 	ms := newInstalled(t)
 	for _, id := range []string{"c", "a", "b"} {
-		if err := ms.save(installedTemplate{ID: id, Template: rawTemplate(id), InstalledAt: 42}); err != nil {
+		if err := ms.Save(installedTemplate{ID: id, Template: rawTemplate(id), InstalledAt: 42}); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
-	got, err := ms.loadAll()
+	got, err := ms.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -82,26 +82,26 @@ func TestMarketplaceStoreTieBreakByID(t *testing.T) {
 // record and uninstall is idempotent.
 func TestMarketplaceStoreOverwriteAndDelete(t *testing.T) {
 	ms := newInstalled(t)
-	if err := ms.save(installedTemplate{ID: "p", Version: "1.0.0", Template: rawTemplate("p"), InstalledAt: 1}); err != nil {
+	if err := ms.Save(installedTemplate{ID: "p", Version: "1.0.0", Template: rawTemplate("p"), InstalledAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := ms.save(installedTemplate{ID: "p", Version: "2.0.0", Template: rawTemplate("p"), InstalledAt: 2}); err != nil {
+	if err := ms.Save(installedTemplate{ID: "p", Version: "2.0.0", Template: rawTemplate("p"), InstalledAt: 2}); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := ms.loadAll()
+	got, err := ms.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
 	if len(got) != 1 || got[0].Version != "2.0.0" {
 		t.Fatalf("after overwrite want one v2.0.0 record, got %+v", got)
 	}
-	if err := ms.delete("p"); err != nil {
+	if err := ms.Delete("p"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := ms.get("p"); ok {
+	if _, ok, _ := ms.Get("p"); ok {
 		t.Fatal("record still present after delete")
 	}
-	if err := ms.delete("p"); err != nil {
+	if err := ms.Delete("p"); err != nil {
 		t.Errorf("delete of absent record = %v, want nil (idempotent)", err)
 	}
 }
@@ -123,14 +123,14 @@ func TestMarketplaceStoreErrorPaths(t *testing.T) {
 		t.Fatalf("newMarketplaceStore: %v", err)
 	}
 
-	bad := ms.fileFor("p")
+	bad := ms.FileFor("p")
 	if err := os.WriteFile(bad, []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("write bad: %v", err)
 	}
-	if _, err := ms.loadAll(); err == nil {
+	if _, err := ms.LoadAll(); err == nil {
 		t.Fatal("loadAll of invalid JSON: want error")
 	}
-	if _, _, err := ms.get("p"); err == nil {
+	if _, _, err := ms.Get("p"); err == nil {
 		t.Fatal("get of invalid JSON: want error")
 	}
 
@@ -140,7 +140,7 @@ func TestMarketplaceStoreErrorPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write stray: %v", err)
 	}
-	got, err := ms.loadAll()
+	got, err := ms.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll after cleanup: %v", err)
 	}
@@ -151,13 +151,13 @@ func TestMarketplaceStoreErrorPaths(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := ms.save(installedTemplate{ID: "p"}); err == nil {
+	if err := ms.Save(installedTemplate{ID: "p"}); err == nil {
 		t.Fatal("save with no dir: want error")
 	}
-	if err := ms.delete("p"); err == nil {
+	if err := ms.Delete("p"); err == nil {
 		t.Fatal("delete with no dir: want error")
 	}
-	if _, err := ms.loadAll(); err == nil {
+	if _, err := ms.LoadAll(); err == nil {
 		t.Fatal("loadAll with no dir: want error")
 	}
 }
@@ -353,7 +353,7 @@ func TestMarketplaceHandlerErrorPaths(t *testing.T) {
 
 	// Point the store at a path that cannot be written/read so save/loadAll/delete
 	// surface I/O errors as 500s.
-	srv.marketplaceStore.dir = filepath.Join(t.TempDir(), "gone")
+	srv.marketplaceStore = brokenStore(newMarketplaceStore(filepath.Join(t.TempDir(), "gone")))
 
 	req = httptest.NewRequest("POST", "/api/v1/marketplace/packages/"+"atlas.rest-outbound"+"/install", nil)
 	req.SetPathValue("id", "atlas.rest-outbound")

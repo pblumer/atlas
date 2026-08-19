@@ -127,7 +127,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		// Resolve or create the application. Matching by name is what makes the
 		// publisher's first import work without either side knowing the other's ids.
-		projs, err := s.projects.loadAll()
+		projs, err := s.projects.LoadAll()
 		if err != nil {
 			opErr = err
 			return
@@ -152,7 +152,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 				opErr = err
 				return
 			}
-			if err := s.projects.save(rec); err != nil {
+			if err := s.projects.Save(rec); err != nil {
 				opErr = err
 				return
 			}
@@ -213,7 +213,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if p := principalFrom(r.Context()); p != nil {
 			rel.PublishedBy = p.UserID
 		}
-		if err := s.releases.save(rel); err != nil {
+		if err := s.releases.Save(rel); err != nil {
 			opErr = err
 			return
 		}

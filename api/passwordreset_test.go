@@ -14,7 +14,7 @@ func seedUser(t *testing.T, dataDir string, u User) {
 	if err != nil {
 		t.Fatalf("newUserStore: %v", err)
 	}
-	if err := st.save(u); err != nil {
+	if err := st.Save(u); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 }

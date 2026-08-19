@@ -21,16 +21,16 @@ func newDrafts(t *testing.T) *draftStore {
 // suffix skip branch.
 func TestDraftStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	ds := newDrafts(t)
-	if err := ds.save(draft{ProcessID: "real", Name: "R", SavedAt: 1, XML: "<r/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "real", Name: "R", SavedAt: 1, XML: "<r/>"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := os.Mkdir(filepath.Join(ds.dir, "subdir"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(ds.Dir(), "subdir"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(ds.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ds.Dir(), "notes.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write txt: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -43,16 +43,16 @@ func TestDraftStoreLoadAllSkipsForeignFiles(t *testing.T) {
 // saved first, and proves get finds a specific one.
 func TestDraftStoreRoundTripAndOrder(t *testing.T) {
 	ds := newDrafts(t)
-	if err := ds.save(draft{ProcessID: "a", Name: "A", SavedAt: 100, XML: "<a/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "a", Name: "A", SavedAt: 100, XML: "<a/>"}); err != nil {
 		t.Fatalf("save a: %v", err)
 	}
-	if err := ds.save(draft{ProcessID: "b", Name: "B", SavedAt: 300, XML: "<b/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "b", Name: "B", SavedAt: 300, XML: "<b/>"}); err != nil {
 		t.Fatalf("save b: %v", err)
 	}
-	if err := ds.save(draft{ProcessID: "c", Name: "C", SavedAt: 200, XML: "<c/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "c", Name: "C", SavedAt: 200, XML: "<c/>"}); err != nil {
 		t.Fatalf("save c: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestDraftStoreRoundTripAndOrder(t *testing.T) {
 			t.Errorf("position %d = %q, want %q (not sorted by savedAt desc)", i, got[i].ProcessID, w)
 		}
 	}
-	rec, ok, err := ds.get("b")
+	rec, ok, err := ds.Get("b")
 	if err != nil || !ok || rec.XML != "<b/>" {
 		t.Fatalf("get b = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -75,13 +75,13 @@ func TestDraftStoreRoundTripAndOrder(t *testing.T) {
 // than piling up files.
 func TestDraftStoreOverwrite(t *testing.T) {
 	ds := newDrafts(t)
-	if err := ds.save(draft{ProcessID: "p", Name: "First", SavedAt: 1, XML: "<one/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "p", Name: "First", SavedAt: 1, XML: "<one/>"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := ds.save(draft{ProcessID: "p", Name: "Second", SavedAt: 2, XML: "<two/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "p", Name: "Second", SavedAt: 2, XML: "<two/>"}); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -93,19 +93,19 @@ func TestDraftStoreOverwrite(t *testing.T) {
 // TestDraftStoreGetMissAndDelete covers a missing get and idempotent delete.
 func TestDraftStoreGetMissAndDelete(t *testing.T) {
 	ds := newDrafts(t)
-	if _, ok, err := ds.get("nope"); err != nil || ok {
+	if _, ok, err := ds.Get("nope"); err != nil || ok {
 		t.Fatalf("get missing = (ok=%v, err=%v), want (false, nil)", ok, err)
 	}
-	if err := ds.save(draft{ProcessID: "p", SavedAt: 1, XML: "<x/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: "p", SavedAt: 1, XML: "<x/>"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := ds.delete("p"); err != nil {
+	if err := ds.Delete("p"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := ds.get("p"); ok {
+	if _, ok, _ := ds.Get("p"); ok {
 		t.Fatal("draft still present after delete")
 	}
-	if err := ds.delete("p"); err != nil {
+	if err := ds.Delete("p"); err != nil {
 		t.Errorf("delete of absent draft = %v, want nil (idempotent)", err)
 	}
 }
@@ -115,10 +115,10 @@ func TestDraftStoreGetMissAndDelete(t *testing.T) {
 func TestDraftStoreProcessIdWithUnsafeChars(t *testing.T) {
 	ds := newDrafts(t)
 	id := "weird/id.with:chars"
-	if err := ds.save(draft{ProcessID: id, SavedAt: 1, XML: "<x/>"}); err != nil {
+	if err := ds.Save(draft{ProcessID: id, SavedAt: 1, XML: "<x/>"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	rec, ok, err := ds.get(id)
+	rec, ok, err := ds.Get(id)
 	if err != nil || !ok || rec.ProcessID != id {
 		t.Fatalf("get unsafe id = (%+v, %v, %v)", rec, ok, err)
 	}
@@ -143,14 +143,14 @@ func TestDraftStoreErrorPaths(t *testing.T) {
 	}
 
 	// Invalid JSON in a hex-named record fails loadAll and get.
-	bad := ds.fileFor("p")
+	bad := ds.FileFor("p")
 	if err := os.WriteFile(bad, []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("write bad: %v", err)
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll of invalid JSON: want error")
 	}
-	if _, _, err := ds.get("p"); err == nil {
+	if _, _, err := ds.Get("p"); err == nil {
 		t.Fatal("get of invalid JSON: want error")
 	}
 
@@ -158,14 +158,14 @@ func TestDraftStoreErrorPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write stray: %v", err)
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll still errors from the bad record") // sanity: bad record dominates
 	}
 	// Remove the bad record; now the stray is simply ignored and load succeeds.
 	if err := os.Remove(bad); err != nil {
 		t.Fatalf("remove bad: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll after cleanup: %v", err)
 	}
@@ -178,10 +178,10 @@ func TestDraftStoreErrorPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDraftStore: %v", err)
 	}
-	if err := os.MkdirAll(ds2.fileFor("blocked"), 0o755); err != nil {
+	if err := os.MkdirAll(ds2.FileFor("blocked"), 0o755); err != nil {
 		t.Fatalf("make dir at record path: %v", err)
 	}
-	if err := ds2.save(draft{ProcessID: "blocked", XML: "<x/>"}); err == nil {
+	if err := ds2.Save(draft{ProcessID: "blocked", XML: "<x/>"}); err == nil {
 		t.Error("save onto a directory path: want rename error, got nil")
 	}
 
@@ -189,13 +189,13 @@ func TestDraftStoreErrorPaths(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := ds.save(draft{ProcessID: "p", XML: "<x/>"}); err == nil {
+	if err := ds.Save(draft{ProcessID: "p", XML: "<x/>"}); err == nil {
 		t.Fatal("save with no dir: want error")
 	}
-	if err := ds.delete("p"); err == nil {
+	if err := ds.Delete("p"); err == nil {
 		t.Fatal("delete with no dir: want error")
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll with no dir: want error")
 	}
 }

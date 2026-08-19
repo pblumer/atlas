@@ -278,7 +278,7 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	realDeploys := srv.deploys
 
 	// Broken drafts store → artifact load fails.
-	srv.drafts = &draftStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.drafts = brokenStore(newDraftStore(filepath.Join(t.TempDir(), "gone")))
 	if code, _ := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusInternalServerError {
 		t.Fatalf("deploy with broken drafts = %d, want 500", code)
 	}
@@ -289,7 +289,7 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor(pid), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor(pid), 0o755); err != nil {
 		t.Fatalf("mkdir record: %v", err)
 	}
 	srv.projects = ps
@@ -309,15 +309,15 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	// Remove the broken reference so the persist-failure case can reach phase 3.
 	// (Delete it via the store directly, then continue.)
 	var refs []dmnRef
-	srv.do(func() { refs, _ = srv.dmnrefs.loadAll() })
+	srv.do(func() { refs, _ = srv.dmnrefs.LoadAll() })
 	for _, rr := range refs {
 		if rr.ModelRef == "busy" {
-			srv.do(func() { _ = srv.dmnrefs.delete(rr.ID) })
+			srv.do(func() { _ = srv.dmnrefs.Delete(rr.ID) })
 		}
 	}
 
 	// Broken deployment store → persist fails during phase-3 deploy → 500.
-	srv.deploys = &deployStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.deploys = brokenStore(newDeployStore(filepath.Join(t.TempDir(), "gone")))
 	if code, _ := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusInternalServerError {
 		t.Fatalf("deploy with broken deploy store = %d, want 500", code)
 	}

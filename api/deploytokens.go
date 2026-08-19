@@ -28,7 +28,7 @@ type newDeployTokenResp struct {
 // before the loop serves traffic, so touching the index directly is safe — the
 // same discipline loadDeployments and loadReleaseVersions use.
 func (s *Server) loadDeployTokens() error {
-	recs, err := s.deployTokenStore.loadAll()
+	recs, err := s.deployTokenStore.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 
 	var saveErr error
 	s.do(func() {
-		if saveErr = s.deployTokenStore.save(rec); saveErr != nil {
+		if saveErr = s.deployTokenStore.Save(rec); saveErr != nil {
 			return
 		}
 		s.deployTokens.add(rec)
@@ -108,7 +108,7 @@ func (s *Server) handleListDeployTokens(w http.ResponseWriter, r *http.Request) 
 	var loadErr error
 	s.do(func() {
 		var recs []deployToken
-		if recs, loadErr = s.deployTokenStore.loadAll(); loadErr != nil {
+		if recs, loadErr = s.deployTokenStore.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, rec := range recs {
@@ -133,7 +133,7 @@ func (s *Server) handleRevokeDeployToken(w http.ResponseWriter, r *http.Request)
 	id := r.PathValue("id")
 	var delErr error
 	s.do(func() {
-		delErr = s.deployTokenStore.delete(id)
+		delErr = s.deployTokenStore.Delete(id)
 		s.deployTokens.remove(id)
 	})
 	if delErr != nil {

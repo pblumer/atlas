@@ -82,7 +82,7 @@ api/        HTTP API, web UI, command submission and queries
   layout/   BPMN diagram auto-layout (ADR-0124/0127)
   collab/   Live collaborative modeling sessions (ADR-0140)
   vault/    Encrypted secret store (ADR-0069/0070)
-  sidecar/  The atomic-write + fsync discipline the design-time stores share
+  sidecar/  Store[T] and the atomic-write + fsync discipline behind every design-time store
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
@@ -108,7 +108,15 @@ connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-
 
 Adding a connector kind is one package here plus one `managedConnectorKind` entry in
 [`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
-server. Non-Go trees: [`docs/`](docs/), [`examples/`](examples/), [`e2e/`](e2e/),
+server.
+
+**Adding a design-time store** (drafts, projects, forms, connectors, releases, …)
+is one call to `sidecar.NewStore`: give it a directory, the name its errors carry,
+how a record states its key, and — only if it differs from the default — the
+listing order and the filename scheme. Do not hand-roll the read/write/list
+mechanics; sixteen copies of it is what this replaced. Note that the filename
+predicate also guards keys on the way *in*, so a request-supplied key cannot
+address a file outside the store. Non-Go trees: [`docs/`](docs/), [`examples/`](examples/), [`e2e/`](e2e/),
 [`deploy/`](deploy/), [`scripts/`](scripts/), [`postman/`](postman/).
 
 ## How to approach a task

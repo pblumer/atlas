@@ -1379,7 +1379,7 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 // instances (ADR-0019). It runs before the loop serves traffic, so touching the
 // registry and the processor directly here respects the single-writer invariant.
 func (s *Server) loadDeployments() error {
-	recs, err := s.deploys.loadAll()
+	recs, err := s.deploys.LoadAll()
 	if err != nil {
 		return err
 	}

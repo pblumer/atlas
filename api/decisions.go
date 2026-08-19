@@ -34,7 +34,7 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var all []dmnRef
-		all, loadErr = s.dmnrefs.loadAll()
+		all, loadErr = s.dmnrefs.LoadAll()
 		for _, rec := range all {
 			if filter != "" && rec.ProjectID != filter {
 				continue
@@ -114,7 +114,7 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 		ok     bool
 		getErr error
 	)
-	s.do(func() { rec, ok, getErr = s.dmnrefs.get(id) })
+	s.do(func() { rec, ok, getErr = s.dmnrefs.Get(id) })
 	switch {
 	case getErr != nil:
 		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())

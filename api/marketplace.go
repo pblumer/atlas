@@ -304,7 +304,7 @@ func (s *Server) handleInstallMarketplacePackage(w http.ResponseWriter, r *http.
 		Title: p.Title, Template: p.Template, InstalledAt: time.Now().Unix(),
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.marketplaceStore.save(rec) })
+	s.do(func() { saveErr = s.marketplaceStore.Save(rec) })
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "install package: "+saveErr.Error())
 		return
@@ -321,7 +321,7 @@ func (s *Server) handleListInstalled(w http.ResponseWriter, _ *http.Request) {
 		recs    []installedTemplate
 		loadErr error
 	)
-	s.do(func() { recs, loadErr = s.marketplaceStore.loadAll() })
+	s.do(func() { recs, loadErr = s.marketplaceStore.LoadAll() })
 	if loadErr != nil {
 		writeError(w, http.StatusInternalServerError, "list installed templates: "+loadErr.Error())
 		return
@@ -336,7 +336,7 @@ func (s *Server) handleListInstalled(w http.ResponseWriter, _ *http.Request) {
 // is not present still succeeds.
 func (s *Server) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	var delErr error
-	s.do(func() { delErr = s.marketplaceStore.delete(r.PathValue("id")) })
+	s.do(func() { delErr = s.marketplaceStore.Delete(r.PathValue("id")) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "uninstall template: "+delErr.Error())
 		return

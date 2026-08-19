@@ -1,14 +1,6 @@
 package api
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
-
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
@@ -45,77 +37,38 @@ type releaseMember struct {
 }
 
 // releaseStore is a durable store for application releases, one JSON file per
-// release id under a single directory. It reuses the sidecar approach of the
-// deployment, draft, and project stores (ADR-0019/0021/0034) and, like them, is
-// owned solely by the server's run-loop goroutine, so it needs no locking.
+// release id under a single directory (ADR-0128). A release belongs to an
+// application, so the lookups below are by application rather than by id.
 type releaseStore struct {
-	dir string
+	*sidecar.Store[applicationRelease]
 }
 
-// newReleaseStore opens (creating if needed) the releases directory.
+// newReleaseStore opens (creating if needed) the releases directory. Releases
+// list grouped by application, newest version first within each, tie-broken by id
+// so the order is deterministic.
 func newReleaseStore(dir string) (*releaseStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("releasestore: create dir: %w", err)
-	}
-	return &releaseStore{dir: dir}, nil
-}
-
-// fileFor maps a release id to its record path. The id is hex-encoded so any id
-// yields a safe, unique, deterministic filename; the real id is also stored inside
-// the record.
-func (s *releaseStore) fileFor(id string) string {
-	return filepath.Join(s.dir, hex.EncodeToString([]byte(id))+".json")
-}
-
-// save writes a release durably (atomic write + directory fsync), so the caller may
-// treat a nil return as "on disk" (I2).
-func (s *releaseStore) save(rec applicationRelease) error {
-	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
-}
-
-// loadAll reads every release, newest first (version descending within an
-// application, then publish time), which is the order the history view wants.
-// Files that are not release records are ignored.
-func (s *releaseStore) loadAll() ([]applicationRelease, error) {
-	entries, err := os.ReadDir(s.dir)
+	s, err := sidecar.NewStore(dir, "releasestore",
+		func(rec applicationRelease) string { return rec.ID },
+		sidecar.Order(func(a, b applicationRelease) bool {
+			if a.ApplicationID != b.ApplicationID {
+				return a.ApplicationID < b.ApplicationID
+			}
+			if a.Version != b.Version {
+				return a.Version > b.Version
+			}
+			return a.ID < b.ID
+		}),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("releasestore: read dir: %w", err)
+		return nil, err
 	}
-	var out []applicationRelease
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		if _, err := hex.DecodeString(strings.TrimSuffix(e.Name(), ".json")); err != nil {
-			continue // not a hex-named record
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("releasestore: read %s: %w", e.Name(), err)
-		}
-		var rec applicationRelease
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("releasestore: decode %s: %w", e.Name(), err)
-		}
-		out = append(out, rec)
-	}
-	// Newest first: application id groups together, highest version first, ties
-	// broken by id so the order is deterministic.
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].ApplicationID != out[j].ApplicationID {
-			return out[i].ApplicationID < out[j].ApplicationID
-		}
-		if out[i].Version != out[j].Version {
-			return out[i].Version > out[j].Version
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return &releaseStore{s}, nil
 }
 
-// forApplication returns one application's releases, newest first.
+// forApplication returns an application's releases, newest version first. Never
+// nil, so a caller can encode the result as a JSON array without a guard.
 func (s *releaseStore) forApplication(appID string) ([]applicationRelease, error) {
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -128,26 +81,17 @@ func (s *releaseStore) forApplication(appID string) ([]applicationRelease, error
 	return out, nil
 }
 
-// deleteForApplication removes every release of an application. Used when the
-// application itself is deleted, so its history does not outlive it as orphaned
-// records. A missing file is not an error (idempotent cleanup).
+// deleteForApplication removes every release of an application — the cleanup that
+// runs when the application itself is deleted. Deleting nothing is not an error.
 func (s *releaseStore) deleteForApplication(appID string) error {
-	all, err := s.loadAll()
+	all, err := s.forApplication(appID)
 	if err != nil {
 		return err
 	}
-	removed := false
 	for _, rec := range all {
-		if rec.ApplicationID != appID {
-			continue
+		if err := s.Delete(rec.ID); err != nil {
+			return err
 		}
-		if err := os.Remove(s.fileFor(rec.ID)); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("releasestore: remove: %w", err)
-		}
-		removed = true
 	}
-	if !removed {
-		return nil
-	}
-	return sidecar.FsyncDir(s.dir)
+	return nil
 }

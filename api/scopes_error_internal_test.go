@@ -31,15 +31,15 @@ func TestScopeMemberHandlerErrors(t *testing.T) {
 	srv.authEnabled = true // sharing is only meaningful under auth
 
 	realDrafts := srv.drafts
-	brokenDrafts := &draftStore{dir: filepath.Join(t.TempDir(), "gone")}
+	brokenDrafts := brokenStore(newDraftStore(filepath.Join(t.TempDir(), "gone")))
 
 	// Seed a real project and a real user so the later branches can load both.
 	now := int64(1)
 	proj := project{ID: "p1", Name: "P", OwnerID: "usr_owner", Visibility: VisibilityShared, CreatedAt: now, UpdatedAt: now}
-	if err := srv.projects.save(proj); err != nil {
+	if err := srv.projects.Save(proj); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	if err := srv.users.save(User{ID: "usr_target", Username: "t", Source: SourceLocal, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := srv.users.Save(User{ID: "usr_target", Username: "t", Source: SourceLocal, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestScopeMemberHandlerErrors(t *testing.T) {
 	// A project record whose path is a directory makes get() error (a real error,
 	// not a clean not-found), exercising the 500 branch of authorizeProject for
 	// both member handlers.
-	if err := os.MkdirAll(srv.projects.fileFor("pdir"), 0o755); err != nil {
+	if err := os.MkdirAll(srv.projects.FileFor("pdir"), 0o755); err != nil {
 		t.Fatalf("make project dir: %v", err)
 	}
 	req, rec = adminReq(http.MethodPut, strings.NewReader(`{"role":"viewer"}`), "pdir", "usr_target")
@@ -82,7 +82,7 @@ func TestScopeMemberHandlerErrors(t *testing.T) {
 	}
 
 	// Broken user store → 500 (users.get errors: the record path is a directory).
-	if err := os.MkdirAll(srv.users.fileFor("usr_dir"), 0o755); err != nil {
+	if err := os.MkdirAll(srv.users.FileFor("usr_dir"), 0o755); err != nil {
 		t.Fatalf("make user dir: %v", err)
 	}
 	req, rec = adminReq(http.MethodPut, strings.NewReader(`{"role":"editor"}`), "p1", "usr_dir")
@@ -115,10 +115,10 @@ func TestUpdateProjectTransferLookupError(t *testing.T) {
 	srv.authEnabled = true
 
 	now := int64(1)
-	if err := srv.projects.save(project{ID: "p1", Name: "P", OwnerID: "usr_owner", CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := srv.projects.Save(project{ID: "p1", Name: "P", OwnerID: "usr_owner", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
-	if err := os.MkdirAll(srv.users.fileFor("usr_dir"), 0o755); err != nil {
+	if err := os.MkdirAll(srv.users.FileFor("usr_dir"), 0o755); err != nil {
 		t.Fatalf("make user dir: %v", err)
 	}
 

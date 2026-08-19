@@ -37,7 +37,7 @@ func TestDraftHandlerStoreErrors(t *testing.T) {
 	}
 
 	// List/save fail when the drafts directory does not exist.
-	srv.drafts = &draftStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.drafts = brokenStore(newDraftStore(filepath.Join(t.TempDir(), "gone")))
 	if code := do(http.MethodGet, "/api/v1/drafts", ""); code != http.StatusInternalServerError {
 		t.Fatalf("list with broken store = %d, want 500", code)
 	}
@@ -52,7 +52,7 @@ func TestDraftHandlerStoreErrors(t *testing.T) {
 		t.Fatalf("newDraftStore: %v", err)
 	}
 	srv.drafts = ds
-	recordDir := ds.fileFor("x")
+	recordDir := ds.FileFor("x")
 	if err := os.MkdirAll(filepath.Join(recordDir, "child"), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
