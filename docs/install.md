@@ -58,7 +58,7 @@ host can reach it — see [Reverse proxy and TLS](#8-reverse-proxy-and-tls).
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/latest/download/atlas_0.2.0_linux_amd64.tar.gz
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.2.0/atlas_0.2.0_linux_amd64.tar.gz
 tar -xzf atlas_0.2.0_linux_amd64.tar.gz
 ./atlas_0.2.0_linux_amd64/atlas serve
 ```
@@ -66,6 +66,11 @@ tar -xzf atlas_0.2.0_linux_amd64.tar.gz
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
 which is exactly why this is a "try it" recipe and not an install. For anything
 that outlives the afternoon, follow the steps below.
+
+The URL names the version rather than using `/releases/latest/`: while Atlas is
+pre-1.0 every release is published as a **prerelease**, and GitHub's "latest"
+never points at one — so a `/latest/` link would 404. Bump the version here when
+you cut a release, as in the steps below.
 
 ## Linux, step by step
 
