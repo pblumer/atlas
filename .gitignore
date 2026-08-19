@@ -33,3 +33,6 @@ go.work.sum
 .vscode/
 *.swp
 .DS_Store
+
+# Playwright output, if a run is started from the repository root rather than e2e/.
+test-results/
