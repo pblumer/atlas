@@ -53,6 +53,10 @@ jobs:
   e2e:
     name: e2e · token simulation
     runs-on: ubuntu-latest
+    # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
+    # wedged browser holds the runner for the six-hour default. Well above the ~1 minute
+    # this job takes, and far below "an afternoon of runner time".
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +73,15 @@ jobs:
 
       - name: Install Chromium
         working-directory: e2e
-        run: npx playwright install --with-deps chromium
+        # --with-deps shells out to apt-get, so a stalled Ubuntu mirror does not fail the
+        # step — it stops it, until something cancels the job (twice on 2026-08-19, once
+        # for 24 minutes, without a single test having run). Bound that attempt, then fall
+        # back to the browser-only install: the ubuntu-latest image already carries
+        # Chromium's shared libraries, so the tests still run, and a genuinely missing one
+        # surfaces as a launch error in seconds rather than as a hang.
+        run: |
+          timeout 5m npx playwright install --with-deps chromium \
+            || npx playwright install chromium
 
       - name: Run browser e2e tests
         working-directory: e2e
