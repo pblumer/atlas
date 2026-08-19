@@ -366,35 +366,35 @@ func (s *Server) apiRoutes() []apiRoute {
 		// revocable public link. The document is produced in the browser, where
 		// bpmn-js already holds the authoritative picture; the server validates,
 		// numbers, stores, and serves it.
-		{"POST", "/api/v1/processes/{processId}/documentation", s.handleCreateProcessDoc, apiOp{
+		{"POST", "/api/v1/processes/{processId}/documentation", s.processDocs.HandleCreate, apiOp{
 			summary: "Publish the next documentation version of a process: the produced PDF plus the element prose it describes (ADR-0143)", tag: "Documentation",
 			req: jsonBody("Documentation upload", schemaObj(map[string]any{
 				"title": tString(), "note": tString(), "processName": tString(),
 				"xml": tString(), "elements": tArray(), "pdfBase64": tString(),
 			}, "pdfBase64")),
 			resp: jsonBody("The minted documentation version", tObject())}},
-		{"GET", "/api/v1/processes/{processId}/documentation", s.handleListProcessDocs, apiOp{
+		{"GET", "/api/v1/processes/{processId}/documentation", s.processDocs.HandleList, apiOp{
 			summary: "A process's documentation history, newest version first (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("Documentation versions", tArray())}},
-		{"POST", "/api/v1/processes/{processId}/documentation/prune", s.handlePruneProcessDocs, apiOp{
+		{"POST", "/api/v1/processes/{processId}/documentation/prune", s.processDocs.HandlePrune, apiOp{
 			summary: "Prune a process's documentation history to the newest `keep` versions, deleting older ones and their PDFs (ADR-0143 retention)", tag: "Documentation",
 			req: jsonBody("Retention limit", schemaObj(map[string]any{
 				"keep": tInteger(),
 			}, "keep")),
 			resp: jsonBody("The versions that were pruned", tObject())}},
-		{"GET", "/api/v1/documentation/{id}", s.handleGetProcessDoc, apiOp{
+		{"GET", "/api/v1/documentation/{id}", s.processDocs.HandleGet, apiOp{
 			summary: "Fetch one documentation version in full: metadata, per-element prose, and the BPMN source it was produced from (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("Documentation version", tObject())}},
-		{"GET", "/api/v1/documentation/{id}/pdf", s.handleGetProcessDocPDF, apiOp{
+		{"GET", "/api/v1/documentation/{id}/pdf", s.processDocs.HandleGetPDF, apiOp{
 			summary: "Download a documentation version's PDF (ADR-0143)", tag: "Documentation",
 			resp: &bodySpec{mediaType: "application/pdf", schema: tString(), desc: "The published PDF document"}}},
-		{"POST", "/api/v1/documentation/{id}/share", s.handleShareProcessDoc, apiOp{
+		{"POST", "/api/v1/documentation/{id}/share", s.processDocs.HandleShare, apiOp{
 			summary: "Share one documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("The version with its share link", tObject())}},
-		{"DELETE", "/api/v1/documentation/{id}/share", s.handleUnshareProcessDoc, apiOp{
+		{"DELETE", "/api/v1/documentation/{id}/share", s.processDocs.HandleUnshare, apiOp{
 			summary: "Revoke a documentation version's public link (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("The version, now private", tObject())}},
-		{"DELETE", "/api/v1/documentation/{id}", s.handleDeleteProcessDoc, apiOp{
+		{"DELETE", "/api/v1/documentation/{id}", s.processDocs.HandleDelete, apiOp{
 			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation",
 			status: http.StatusNoContent}},
 

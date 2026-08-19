@@ -1,6 +1,6 @@
 # ADR-0147: Splitting the api Server object, without weakening the single writer
 
-- **Status:** Proposed (amended 2026-08-19: pilot area corrected, and the API-kernel prerequisite added after measuring it)
+- **Status:** Accepted (amended 2026-08-19: pilot area corrected, and the API-kernel prerequisite added after measuring it; accepted once the pilot shipped)
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 
@@ -167,6 +167,41 @@ step 2 has landed — step 2 is the commitment.
   way a service reaches the processor or a store. `handlers.go` (17 fields) is
   the hardest file and should be tackled last, not first — by then the areas
   around it will have drained much of it.
+
+### What the pilot showed
+
+All three steps have shipped: `api/runloop`, then `api/httpapi` (plus `api/token`,
+which the pilot needed and public links already wanted), then `api/processdoc`.
+
+Two things came out differently from the plan, both in the direction of less
+machinery:
+
+- **The route table did not need splitting.** The plan had each service exposing
+  `routes() []apiRoute`, which meant moving the `apiRoute`/`apiOp` types and the
+  OpenAPI schema helpers into the kernel. In the event the table stays whole in
+  `api/openapi.go` and simply points at the service's exported handler methods.
+  That is *more* faithful to ADR-0043 — the single source of truth stays literally
+  a single table — and it kept the kernel to what handlers genuinely share.
+- **The auth guard was not needed.** The area has no per-handler role check, so
+  nothing forced the question of how `requireAdmin` travels. It is still open, and
+  the next area that needs it decides it.
+
+The payoff is concrete and was not available before. The area's behavior is now
+tested against the service directly — no server, no mux, no route table — and
+those tests cover 97.6% of the package. Seven tests that previously reached the
+handlers' error branches by breaking a whole server's store were deleted as
+duplicates at a worse altitude; one remains in `api`, the one that proves the
+collaborators the server supplies are actually connected. Repo-wide coverage went
+up, not down.
+
+The cost is what was predicted: a wide, dull kernel commit, and three
+collaborators the server now has to hand over explicitly.
+
+**On whether the rest follows:** the pattern holds and the next area can use it.
+It should stay opportunistic rather than becoming a migration — an area is worth
+converting when it is being worked on anyway, and `handlers.go` (17 fields, and a
+grab bag rather than a subsystem) should be last, by which point the areas around
+it will have drained much of it.
 
 ## Pros and cons of the options
 

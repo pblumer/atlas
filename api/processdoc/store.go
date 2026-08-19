@@ -1,4 +1,4 @@
-package api
+package processdoc
 
 import (
 	"crypto/rand"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/pblumer/atlas/api/sidecar"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 // Process documentation (ADR-0143): a BPMN process published as one structured
@@ -19,12 +21,12 @@ import (
 // from these records at startup, the discipline loadDeployments and
 // loadReleaseVersions already follow.
 
-// processDocCode is one code-bearing field of an element, snapshotted at publish
+// Code is one code-bearing field of an element, snapshotted at publish
 // time: a script task's job source (PowerShell/Python/JavaScript, ADR-0047), a
 // FEEL condition or expression (ADR-0067), and the like. The document reproduces
 // it verbatim so a reader can audit what a step actually runs, not merely what it
 // is named — the prose says *what*, the code says *how*.
-type processDocCode struct {
+type Code struct {
 	// Label names the field the code came from, e.g. "Script" or "Condition".
 	Label string `json:"label"`
 	// Language is the code's language id (e.g. "powershell", "feel"), empty when
@@ -35,10 +37,10 @@ type processDocCode struct {
 	Source string `json:"source"`
 }
 
-// processDocElement is one BPMN element as it was documented: the prose a reader
+// Element is one BPMN element as it was documented: the prose a reader
 // needs about it, snapshotted at publish time so a later edit to the model cannot
 // rewrite what an already-published version says.
-type processDocElement struct {
+type Element struct {
 	ID   string `json:"id"`
 	Type string `json:"type"` // the BPMN type, e.g. "bpmn:ServiceTask"
 	Name string `json:"name,omitempty"`
@@ -54,12 +56,12 @@ type processDocElement struct {
 	// Code is the code-bearing fields of the element (scripts, FEEL expressions),
 	// in the order a reader should meet them. Empty for the many elements that
 	// carry no code.
-	Code []processDocCode `json:"code,omitempty"`
+	Code []Code `json:"code,omitempty"`
 }
 
-// processDoc is one published documentation version of a process: immutable
+// Doc is one published documentation version of a process: immutable
 // metadata describing what was documented, with the PDF stored beside it.
-type processDoc struct {
+type Doc struct {
 	ID string `json:"id"`
 	// ProcessID is the BPMN process id the document describes. It binds to the id,
 	// not a deployment, because a process is documented whether or not it is
@@ -80,7 +82,7 @@ type processDoc struct {
 	DeploymentVersion int32  `json:"deploymentVersion,omitempty"`
 	PDFSize           int64  `json:"pdfSize"`
 	// Elements is the documented element prose, snapshotted by value.
-	Elements []processDocElement `json:"elements,omitempty"`
+	Elements []Element `json:"elements,omitempty"`
 	// XML is the BPMN source the document was produced from, so a reader of the
 	// history can recover the exact model a version describes.
 	XML string `json:"xml,omitempty"`
@@ -90,10 +92,10 @@ type processDoc struct {
 	ShareToken string `json:"shareToken,omitempty"`
 }
 
-// newProcessDocID mints a version id. 16 bytes of crypto randomness hex-encoded
+// NewID mints a version id. 16 bytes of crypto randomness hex-encoded
 // is filename-safe (so the id is its own store key) and collision-free in
 // practice.
-func newProcessDocID() (string, error) {
+func NewID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", fmt.Errorf("processdocstore: random: %w", err)
@@ -101,7 +103,7 @@ func newProcessDocID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// processDocStore is a durable store for process documentation versions
+// Store is a durable store for process documentation versions
 // (ADR-0143): one JSON record per version id under a single directory, each
 // beside the PDF it describes. The PDF is why it wraps the shared store rather
 // than being one — a version is two files, and both have to go together.
@@ -109,18 +111,18 @@ func newProcessDocID() (string, error) {
 // Every entry point rejects an id that is not bare hex before touching the
 // filesystem. Ids here name their own files directly (they are already
 // filename-safe), so that check is what keeps an id from escaping the directory.
-type processDocStore struct {
-	*sidecar.Store[processDoc]
+type Store struct {
+	*sidecar.Store[Doc]
 }
 
-// newProcessDocStore opens (creating if needed) the process-docs directory.
+// NewStore opens (creating if needed) the process-docs directory.
 // Versions list grouped by process, newest version first within each, tie-broken
 // by id so the order is deterministic.
-func newProcessDocStore(dir string) (*processDocStore, error) {
+func NewStore(dir string) (*Store, error) {
 	s, err := sidecar.NewStore(dir, "processdocstore",
-		func(rec processDoc) string { return rec.ID },
-		sidecar.Names[processDoc](func(id string) string { return id }, isHexToken),
-		sidecar.Order(func(a, b processDoc) bool {
+		func(rec Doc) string { return rec.ID },
+		sidecar.Names[Doc](func(id string) string { return id }, token.IsHex),
+		sidecar.Order(func(a, b Doc) bool {
 			if a.ProcessID != b.ProcessID {
 				return a.ProcessID < b.ProcessID
 			}
@@ -133,51 +135,52 @@ func newProcessDocStore(dir string) (*processDocStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &processDocStore{s}, nil
+	return &Store{s}, nil
 }
 
 // pdfFileFor maps a version id to its document path, beside the record's own.
-func (s *processDocStore) pdfFileFor(id string) string {
+func (s *Store) pdfFileFor(id string) string {
 	return filepath.Join(s.Dir(), id+".pdf")
 }
 
-// save writes a version durably: the PDF first, then the record. The order
+// Save writes a version durably: the PDF first, then the record. The order
 // matters — a record is the thing readers discover, so it must never point at a
 // document that is not yet on disk (I2).
-func (s *processDocStore) save(rec processDoc, pdf []byte) error {
-	if !isHexToken(rec.ID) {
+func (s *Store) Save(rec Doc, pdf []byte) error {
+	if !token.IsHex(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
 	if err := sidecar.WriteFile(s.Dir(), s.pdfFileFor(rec.ID), pdf); err != nil {
 		return err
 	}
-	return s.saveRecord(rec)
+	return s.SaveRecord(rec)
 }
 
-// saveRecord rewrites only the metadata sidecar, leaving the stored PDF alone.
+// SaveRecord rewrites only the metadata sidecar, leaving the stored PDF alone.
 // Minting or revoking a share token is such an update: the document is immutable,
 // who may read it is not.
-func (s *processDocStore) saveRecord(rec processDoc) error {
-	if !isHexToken(rec.ID) {
+func (s *Store) SaveRecord(rec Doc) error {
+	if !token.IsHex(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
-	return s.Save(rec)
+	return s.Store.Save(rec)
 }
 
-// get returns a version's record, or ok=false if there is none. An unsafe id is a
-// clean miss rather than a filesystem lookup.
-func (s *processDocStore) get(id string) (processDoc, bool, error) {
-	if !isHexToken(id) {
-		return processDoc{}, false, nil
+// Get returns a version's record, or ok=false if there is none. An unsafe id is a
+// clean miss rather than a filesystem lookup. It shadows the embedded store's Get
+// deliberately: every caller goes through the guard.
+func (s *Store) Get(id string) (Doc, bool, error) {
+	if !token.IsHex(id) {
+		return Doc{}, false, nil
 	}
-	return s.Get(id)
+	return s.Store.Get(id)
 }
 
-// pdf returns a version's document bytes. An unknown or unsafe id is an error
+// PDF returns a version's document bytes. An unknown or unsafe id is an error
 // rather than an empty document, so a handler cannot serve a zero-byte PDF as if
 // it were real.
-func (s *processDocStore) pdf(id string) ([]byte, error) {
-	if !isHexToken(id) {
+func (s *Store) PDF(id string) ([]byte, error) {
+	if !token.IsHex(id) {
 		return nil, fmt.Errorf("processdocstore: refusing unsafe id %q", id)
 	}
 	data, err := os.ReadFile(s.pdfFileFor(id))
@@ -187,13 +190,13 @@ func (s *processDocStore) pdf(id string) ([]byte, error) {
 	return data, nil
 }
 
-// forProcess returns one process's documentation history, newest version first.
-func (s *processDocStore) forProcess(processID string) ([]processDoc, error) {
+// ForProcess returns one process's documentation history, newest version first.
+func (s *Store) ForProcess(processID string) ([]Doc, error) {
 	all, err := s.LoadAll()
 	if err != nil {
 		return nil, err
 	}
-	out := []processDoc{}
+	out := []Doc{}
 	for _, rec := range all {
 		if rec.ProcessID == processID {
 			out = append(out, rec)
@@ -202,26 +205,26 @@ func (s *processDocStore) forProcess(processID string) ([]processDoc, error) {
 	return out, nil
 }
 
-// byShareToken finds the version a public token addresses. An empty or unsafe
+// ByShareToken finds the version a public token addresses. An empty or unsafe
 // token never matches, so the many unshared records — which carry no token — stay
 // private.
-func (s *processDocStore) byShareToken(token string) (processDoc, bool, error) {
-	if !isHexToken(token) {
-		return processDoc{}, false, nil
+func (s *Store) ByShareToken(shareToken string) (Doc, bool, error) {
+	if !token.IsHex(shareToken) {
+		return Doc{}, false, nil
 	}
 	all, err := s.LoadAll()
 	if err != nil {
-		return processDoc{}, false, err
+		return Doc{}, false, err
 	}
 	for _, rec := range all {
-		if rec.ShareToken == token {
+		if rec.ShareToken == shareToken {
 			return rec, true, nil
 		}
 	}
-	return processDoc{}, false, nil
+	return Doc{}, false, nil
 }
 
-// pruneProcess enforces a retention limit on one process's documentation history:
+// PruneProcess enforces a retention limit on one process's documentation history:
 // it keeps the newest `keep` versions and deletes the rest, returning the ids it
 // removed. It is the bounded-growth follow-up ADR-0143 flagged: every version
 // keeps a PDF, so an unpruned archive grows without limit.
@@ -230,11 +233,11 @@ func (s *processDocStore) byShareToken(token string) (processDoc, bool, error) {
 // asked to retain. keep >= the number of versions prunes nothing. Deleting the
 // oldest is deliberate: history is answered newest-first, and the reason to prune
 // is that ancient versions are the ones no longer worth their bytes.
-func (s *processDocStore) pruneProcess(processID string, keep int) ([]string, error) {
+func (s *Store) PruneProcess(processID string, keep int) ([]string, error) {
 	if keep < 0 {
 		keep = 0
 	}
-	versions, err := s.forProcess(processID) // newest version first
+	versions, err := s.ForProcess(processID) // newest version first
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +246,7 @@ func (s *processDocStore) pruneProcess(processID string, keep int) ([]string, er
 	}
 	var pruned []string
 	for _, rec := range versions[keep:] {
-		if err := s.delete(rec.ID); err != nil {
+		if err := s.Delete(rec.ID); err != nil {
 			return pruned, err
 		}
 		pruned = append(pruned, rec.ID)
@@ -251,15 +254,16 @@ func (s *processDocStore) pruneProcess(processID string, keep int) ([]string, er
 	return pruned, nil
 }
 
-// delete removes a version and its document. A missing file is not an error, so
+// Delete removes a version and its document. A missing file is not an error, so
 // cleanup is idempotent; the PDF goes with the record, since neither is meaningful
-// without the other.
-func (s *processDocStore) delete(id string) error {
-	if !isHexToken(id) {
+// without the other. It shadows the embedded store's Delete so no caller can
+// remove a record and leave its document orphaned.
+func (s *Store) Delete(id string) error {
+	if !token.IsHex(id) {
 		return nil
 	}
 	if err := os.Remove(s.pdfFileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("processdocstore: remove: %w", err)
 	}
-	return s.Delete(id)
+	return s.Store.Delete(id)
 }

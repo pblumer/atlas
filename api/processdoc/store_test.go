@@ -1,4 +1,4 @@
-package api
+package processdoc
 
 import (
 	"bytes"
@@ -6,13 +6,15 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
-func newProcessDocs(t *testing.T) *processDocStore {
+func newProcessDocs(t *testing.T) *Store {
 	t.Helper()
-	s, err := newProcessDocStore(filepath.Join(t.TempDir(), "process-docs"))
+	s, err := NewStore(filepath.Join(t.TempDir(), "process-docs"))
 	if err != nil {
-		t.Fatalf("newProcessDocStore: %v", err)
+		t.Fatalf("NewStore: %v", err)
 	}
 	return s
 }
@@ -23,20 +25,20 @@ func newProcessDocs(t *testing.T) *processDocStore {
 func TestProcessDocStoreRoundTrip(t *testing.T) {
 	s := newProcessDocs(t)
 	pdf := []byte("%PDF-1.4\nfake\n%%EOF\n")
-	rec := processDoc{
+	rec := Doc{
 		ID: "aabb", ProcessID: "order", ProcessName: "Order to cash",
 		Version: 1, Title: "Order to cash", CreatedAt: 100, CreatedBy: "ada",
 		PDFSize: int64(len(pdf)),
-		Elements: []processDocElement{
+		Elements: []Element{
 			{ID: "Task_1", Type: "bpmn:ServiceTask", Name: "Charge card",
 				Documentation: "Charges the customer.", Annotations: []string{"needs PCI scope"}},
 		},
 	}
-	if err := s.save(rec, pdf); err != nil {
+	if err := s.Save(rec, pdf); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	got, ok, err := s.get("aabb")
+	got, ok, err := s.Get("aabb")
 	if err != nil || !ok {
 		t.Fatalf("get = (_, %v, %v), want the saved record", ok, err)
 	}
@@ -50,7 +52,7 @@ func TestProcessDocStoreRoundTrip(t *testing.T) {
 		t.Errorf("annotations = %+v, want the attached annotation preserved", got.Elements[0].Annotations)
 	}
 
-	blob, err := s.pdf("aabb")
+	blob, err := s.PDF("aabb")
 	if err != nil {
 		t.Fatalf("pdf: %v", err)
 	}
@@ -63,30 +65,30 @@ func TestProcessDocStoreRoundTrip(t *testing.T) {
 // rather than as an error, so a handler can turn it into a 404.
 func TestProcessDocStoreGetMissing(t *testing.T) {
 	s := newProcessDocs(t)
-	if _, ok, err := s.get("dead"); ok || err != nil {
+	if _, ok, err := s.Get("dead"); ok || err != nil {
 		t.Fatalf("get(missing) = (_, %v, %v), want (_, false, nil)", ok, err)
 	}
-	if _, err := s.pdf("dead"); err == nil {
+	if _, err := s.PDF("dead"); err == nil {
 		t.Fatal("pdf(missing) = nil error, want an error")
 	}
 }
 
 // TestProcessDocStoreRejectsUnsafeID proves an id that is not bare hex can never
 // name a file — the guard that keeps a crafted id from walking out of the store
-// directory, mirroring publicLinkStore's isHexToken check.
+// directory, mirroring publicLinkStore's token.IsHex check.
 func TestProcessDocStoreRejectsUnsafeID(t *testing.T) {
 	s := newProcessDocs(t)
 	for _, id := range []string{"", "../../etc/passwd", "not-hex", "abc"} {
-		if _, ok, err := s.get(id); ok || err != nil {
+		if _, ok, err := s.Get(id); ok || err != nil {
 			t.Errorf("get(%q) = (_, %v, %v), want (_, false, nil)", id, ok, err)
 		}
-		if err := s.save(processDoc{ID: id, ProcessID: "p"}, []byte("x")); err == nil {
+		if err := s.Save(Doc{ID: id, ProcessID: "p"}, []byte("x")); err == nil {
 			t.Errorf("save(%q) = nil error, want a refusal", id)
 		}
-		if err := s.saveRecord(processDoc{ID: id, ProcessID: "p"}); err == nil {
+		if err := s.SaveRecord(Doc{ID: id, ProcessID: "p"}); err == nil {
 			t.Errorf("saveRecord(%q) = nil error, want a refusal", id)
 		}
-		if _, err := s.pdf(id); err == nil {
+		if _, err := s.PDF(id); err == nil {
 			t.Errorf("pdf(%q) = nil error, want a refusal", id)
 		}
 	}
@@ -100,8 +102,8 @@ func TestNewProcessDocStoreRefusesUnusableDir(t *testing.T) {
 	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write blocker: %v", err)
 	}
-	if _, err := newProcessDocStore(filepath.Join(blocked, "docs")); err == nil {
-		t.Fatal("newProcessDocStore under a file = nil error, want a failure")
+	if _, err := NewStore(filepath.Join(blocked, "docs")); err == nil {
+		t.Fatal("NewStore under a file = nil error, want a failure")
 	}
 }
 
@@ -110,17 +112,17 @@ func TestNewProcessDocStoreRefusesUnusableDir(t *testing.T) {
 // another process's versions never leak into it.
 func TestProcessDocStoreForProcessNewestFirst(t *testing.T) {
 	s := newProcessDocs(t)
-	for _, rec := range []processDoc{
+	for _, rec := range []Doc{
 		{ID: "01", ProcessID: "order", Version: 1, CreatedAt: 100},
 		{ID: "02", ProcessID: "order", Version: 3, CreatedAt: 300},
 		{ID: "03", ProcessID: "order", Version: 2, CreatedAt: 200},
 		{ID: "04", ProcessID: "invoice", Version: 1, CreatedAt: 400},
 	} {
-		if err := s.save(rec, []byte("%PDF")); err != nil {
+		if err := s.Save(rec, []byte("%PDF")); err != nil {
 			t.Fatalf("save %s: %v", rec.ID, err)
 		}
 	}
-	got, err := s.forProcess("order")
+	got, err := s.ForProcess("order")
 	if err != nil {
 		t.Fatalf("forProcess: %v", err)
 	}
@@ -140,11 +142,11 @@ func TestProcessDocStoreForProcessNewestFirst(t *testing.T) {
 func TestProcessDocStoreOrderIsDeterministic(t *testing.T) {
 	s := newProcessDocs(t)
 	for _, id := range []string{"cc", "aa", "bb"} {
-		if err := s.save(processDoc{ID: id, ProcessID: "order", Version: 1}, []byte("%PDF")); err != nil {
+		if err := s.Save(Doc{ID: id, ProcessID: "order", Version: 1}, []byte("%PDF")); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
-	got, err := s.forProcess("order")
+	got, err := s.ForProcess("order")
 	if err != nil {
 		t.Fatalf("forProcess: %v", err)
 	}
@@ -158,7 +160,7 @@ func TestProcessDocStoreOrderIsDeterministic(t *testing.T) {
 // form stores' stray-file tests.
 func TestProcessDocStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	s := newProcessDocs(t)
-	if err := s.save(processDoc{ID: "0a", ProcessID: "real", Version: 1}, []byte("%PDF")); err != nil {
+	if err := s.Save(Doc{ID: "0a", ProcessID: "real", Version: 1}, []byte("%PDF")); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if err := os.Mkdir(filepath.Join(s.Dir(), "subdir"), 0o755); err != nil {
@@ -184,21 +186,21 @@ func TestProcessDocStoreLoadAllSkipsForeignFiles(t *testing.T) {
 // nobody published (ADR-0143 sharing is off by default).
 func TestProcessDocStoreByShareToken(t *testing.T) {
 	s := newProcessDocs(t)
-	if err := s.save(processDoc{ID: "0a", ProcessID: "order", Version: 1, ShareToken: "beef"}, []byte("%PDF")); err != nil {
+	if err := s.Save(Doc{ID: "0a", ProcessID: "order", Version: 1, ShareToken: "beef"}, []byte("%PDF")); err != nil {
 		t.Fatalf("save shared: %v", err)
 	}
-	if err := s.save(processDoc{ID: "0b", ProcessID: "order", Version: 2}, []byte("%PDF")); err != nil {
+	if err := s.Save(Doc{ID: "0b", ProcessID: "order", Version: 2}, []byte("%PDF")); err != nil {
 		t.Fatalf("save private: %v", err)
 	}
-	got, ok, err := s.byShareToken("beef")
+	got, ok, err := s.ByShareToken("beef")
 	if err != nil || !ok || got.ID != "0a" {
 		t.Fatalf("byShareToken(beef) = (%+v, %v, %v), want the shared version", got, ok, err)
 	}
-	if _, ok, err := s.byShareToken("cafe"); ok || err != nil {
+	if _, ok, err := s.ByShareToken("cafe"); ok || err != nil {
 		t.Fatalf("byShareToken(unknown) = (_, %v, %v), want (_, false, nil)", ok, err)
 	}
 	// An empty token must never match the many records that carry no token.
-	if _, ok, err := s.byShareToken(""); ok || err != nil {
+	if _, ok, err := s.ByShareToken(""); ok || err != nil {
 		t.Fatalf("byShareToken(\"\") = (_, %v, %v), want (_, false, nil)", ok, err)
 	}
 }
@@ -208,19 +210,19 @@ func TestProcessDocStoreByShareToken(t *testing.T) {
 func TestProcessDocStoreSaveRecordKeepsPDF(t *testing.T) {
 	s := newProcessDocs(t)
 	pdf := []byte("%PDF-1.4 body")
-	rec := processDoc{ID: "0a", ProcessID: "order", Version: 1, PDFSize: int64(len(pdf))}
-	if err := s.save(rec, pdf); err != nil {
+	rec := Doc{ID: "0a", ProcessID: "order", Version: 1, PDFSize: int64(len(pdf))}
+	if err := s.Save(rec, pdf); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	rec.ShareToken = "beef"
-	if err := s.saveRecord(rec); err != nil {
+	if err := s.SaveRecord(rec); err != nil {
 		t.Fatalf("saveRecord: %v", err)
 	}
-	got, ok, err := s.get("0a")
+	got, ok, err := s.Get("0a")
 	if err != nil || !ok || got.ShareToken != "beef" {
 		t.Fatalf("get = (%+v, %v, %v), want the token recorded", got, ok, err)
 	}
-	blob, err := s.pdf("0a")
+	blob, err := s.PDF("0a")
 	if err != nil || !bytes.Equal(blob, pdf) {
 		t.Fatalf("pdf = (%q, %v), want the original bytes untouched", blob, err)
 	}
@@ -230,22 +232,22 @@ func TestProcessDocStoreSaveRecordKeepsPDF(t *testing.T) {
 // and is idempotent, so cleanup never fails on an already-gone record.
 func TestProcessDocStoreDelete(t *testing.T) {
 	s := newProcessDocs(t)
-	if err := s.save(processDoc{ID: "0a", ProcessID: "order", Version: 1}, []byte("%PDF")); err != nil {
+	if err := s.Save(Doc{ID: "0a", ProcessID: "order", Version: 1}, []byte("%PDF")); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := s.delete("0a"); err != nil {
+	if err := s.Delete("0a"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := s.get("0a"); ok {
+	if _, ok, _ := s.Get("0a"); ok {
 		t.Error("get after delete found the record, want it gone")
 	}
 	if _, err := os.Stat(s.pdfFileFor("0a")); !os.IsNotExist(err) {
 		t.Errorf("pdf file still present after delete (stat err %v)", err)
 	}
-	if err := s.delete("0a"); err != nil {
+	if err := s.Delete("0a"); err != nil {
 		t.Fatalf("delete again: %v, want idempotent", err)
 	}
-	if err := s.delete("not-hex"); err != nil {
+	if err := s.Delete("not-hex"); err != nil {
 		t.Fatalf("delete(unsafe id): %v, want a silent no-op", err)
 	}
 }
@@ -256,20 +258,20 @@ func TestProcessDocStoreDelete(t *testing.T) {
 func TestProcessDocStoreCodeRoundTrip(t *testing.T) {
 	s := newProcessDocs(t)
 	script := "if ($budget -gt 1000) {\n    Approve-Request\n}"
-	rec := processDoc{
+	rec := Doc{
 		ID: "c0de", ProcessID: "order", Version: 1,
-		Elements: []processDocElement{{
+		Elements: []Element{{
 			ID: "Task_run", Type: "bpmn:ScriptTask", Name: "Decide",
-			Code: []processDocCode{
+			Code: []Code{
 				{Label: "Script", Language: "powershell", Source: script},
 				{Label: "Condition", Language: "feel", Source: "= budget > 1000"},
 			},
 		}},
 	}
-	if err := s.save(rec, []byte("%PDF")); err != nil {
+	if err := s.Save(rec, []byte("%PDF")); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	got, ok, err := s.get("c0de")
+	got, ok, err := s.Get("c0de")
 	if err != nil || !ok {
 		t.Fatalf("get = (_, %v, %v), want the saved record", ok, err)
 	}
@@ -292,7 +294,7 @@ func TestProcessDocStoreCodeRoundTrip(t *testing.T) {
 func TestProcessDocStorePrune(t *testing.T) {
 	s := newProcessDocs(t)
 	// Five versions of one process, plus one of another that pruning must not touch.
-	for _, rec := range []processDoc{
+	for _, rec := range []Doc{
 		{ID: "a1", ProcessID: "order", Version: 1, CreatedAt: 100},
 		{ID: "a2", ProcessID: "order", Version: 2, CreatedAt: 200},
 		{ID: "a3", ProcessID: "order", Version: 3, CreatedAt: 300},
@@ -300,12 +302,12 @@ func TestProcessDocStorePrune(t *testing.T) {
 		{ID: "a5", ProcessID: "order", Version: 5, CreatedAt: 500},
 		{ID: "b1", ProcessID: "invoice", Version: 1, CreatedAt: 600},
 	} {
-		if err := s.save(rec, []byte("%PDF")); err != nil {
+		if err := s.Save(rec, []byte("%PDF")); err != nil {
 			t.Fatalf("save %s: %v", rec.ID, err)
 		}
 	}
 
-	pruned, err := s.pruneProcess("order", 2)
+	pruned, err := s.PruneProcess("order", 2)
 	if err != nil {
 		t.Fatalf("pruneProcess: %v", err)
 	}
@@ -315,7 +317,7 @@ func TestProcessDocStorePrune(t *testing.T) {
 		t.Fatalf("pruned = %v, want the three oldest [a1 a2 a3]", pruned)
 	}
 	// The two newest of the process, and the untouched other process, remain.
-	left, err := s.forProcess("order")
+	left, err := s.ForProcess("order")
 	if err != nil {
 		t.Fatalf("forProcess: %v", err)
 	}
@@ -325,16 +327,16 @@ func TestProcessDocStorePrune(t *testing.T) {
 	if _, err := os.Stat(s.pdfFileFor("a1")); !os.IsNotExist(err) {
 		t.Errorf("pruned version's PDF still present (stat err %v)", err)
 	}
-	if other, _ := s.forProcess("invoice"); len(other) != 1 {
+	if other, _ := s.ForProcess("invoice"); len(other) != 1 {
 		t.Errorf("other process history = %d, want the prune to leave it alone", len(other))
 	}
 
 	// Pruning to a limit no smaller than the history removes nothing, and a
 	// negative limit is clamped rather than deleting what it was asked to keep.
-	if got, _ := s.pruneProcess("order", 5); got != nil {
+	if got, _ := s.PruneProcess("order", 5); got != nil {
 		t.Errorf("prune keep>=len = %v, want nothing pruned", got)
 	}
-	if got, err := s.pruneProcess("order", -1); err != nil || len(got) != 2 {
+	if got, err := s.PruneProcess("order", -1); err != nil || len(got) != 2 {
 		t.Errorf("prune keep=-1 = (%v, %v), want both remaining pruned after clamp to 0", got, err)
 	}
 }
@@ -347,7 +349,7 @@ func TestProcessDocStoreSaveRefusesUnwritableDir(t *testing.T) {
 	if err := os.RemoveAll(s.Dir()); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := s.save(processDoc{ID: "0a", ProcessID: "order", Version: 1}, []byte("%PDF")); err == nil {
+	if err := s.Save(Doc{ID: "0a", ProcessID: "order", Version: 1}, []byte("%PDF")); err == nil {
 		t.Fatal("save into a removed directory = nil error, want a failure")
 	}
 	if _, err := s.LoadAll(); err == nil {
@@ -366,7 +368,7 @@ func TestProcessDocStoreLoadAllRejectsCorruptRecord(t *testing.T) {
 	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll over a corrupt record = nil error, want a failure")
 	}
-	if _, ok, err := s.get("0a"); ok || err == nil {
+	if _, ok, err := s.Get("0a"); ok || err == nil {
 		t.Fatalf("get over a corrupt record = (_, %v, %v), want an error", ok, err)
 	}
 }
@@ -376,15 +378,15 @@ func TestProcessDocStoreLoadAllRejectsCorruptRecord(t *testing.T) {
 func TestNewProcessDocID(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 16; i++ {
-		id, err := newProcessDocID()
+		id, err := NewID()
 		if err != nil {
-			t.Fatalf("newProcessDocID: %v", err)
+			t.Fatalf("NewID: %v", err)
 		}
-		if !isHexToken(id) {
-			t.Fatalf("newProcessDocID = %q, want bare hex", id)
+		if !token.IsHex(id) {
+			t.Fatalf("NewID = %q, want bare hex", id)
 		}
 		if seen[id] {
-			t.Fatalf("newProcessDocID repeated %q", id)
+			t.Fatalf("NewID repeated %q", id)
 		}
 		seen[id] = true
 	}

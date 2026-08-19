@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 // defaultRegistrationProcessID is the process the login screen's "Registrieren"
@@ -154,7 +156,7 @@ func (s *Server) registrationLinkForLocked(pid string, now int64) (string, error
 			return "/public/forms/" + l.Token, nil
 		}
 	}
-	token, err := newPublicToken()
+	token, err := token.New()
 	if err != nil {
 		return "", err
 	}

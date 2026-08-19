@@ -1,4 +1,19 @@
-package api
+// Package processdoc serves process documentation (ADR-0143): a published BPMN
+// process as a stored PDF plus the element prose it describes, its version
+// history, and the revocable public link a reader without an account follows.
+//
+// It is the first area carved out of the api server object under ADR-0147, and it
+// is what a per-area service is meant to look like. Everything it needs is on
+// [Service] and nothing else is reachable from here: its own store and version
+// counters, the run loop that owns them, and three collaborators the rest of the
+// server supplies — the rate limiter guarding the public route, a lookup for the
+// deployment a document described, and the share-token minter.
+//
+// The single-writer boundary is the [runloop.Loop] this service holds: every read
+// and write of the store goes through it, and there is no other way from here to
+// shared state (I3, ADR-0002). Design-time only — nothing here reaches the event
+// log, the processor, or recovery.
+package processdoc
 
 import (
 	"bytes"
@@ -11,7 +26,55 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/runloop"
 )
+
+// Deployment is what a documentation record needs to know about the process
+// version it documented: which deployment, and which version of it. Narrow on
+// purpose — the service has no business with the rest of a deployment.
+type Deployment struct {
+	Key     uint64
+	Version int32
+}
+
+// Service serves the documentation area. Build it with [New].
+type Service struct {
+	// loop is the single-writer boundary. Every store access below runs on it,
+	// which is what lets concurrent HTTP handlers touch this state at all.
+	loop *runloop.Loop
+	// store holds the records and their PDFs; versions is the per-process counter
+	// that numbers the next one. Both are owned by the loop.
+	store    *Store
+	versions map[string]int32
+	// allow rate-limits the unauthenticated public route by client IP. Supplied by
+	// the server, which shares one limiter across every public surface, so a
+	// scripted reader cannot spend the budget of one endpoint to spare another.
+	allow func(clientIP string) bool
+	// deployed resolves the deployment currently running a process, so a document
+	// can record which running version it described. It reads the deployment
+	// registry, so it is only called on the loop.
+	deployed func(processID string) (Deployment, bool)
+	// newToken mints a share token. Injected rather than called directly so the
+	// service can be driven with a deterministic token in tests.
+	newToken func() (string, error)
+}
+
+// New builds the documentation service over its own store directory. allow,
+// deployed and newToken are the collaborators the server supplies; none of them
+// may touch state the loop owns except when called from inside it (deployed is
+// the only one that does, and the create path calls it on the loop).
+func New(loop *runloop.Loop, store *Store, allow func(clientIP string) bool,
+	deployed func(processID string) (Deployment, bool), newToken func() (string, error)) *Service {
+	return &Service{
+		loop:     loop,
+		store:    store,
+		versions: map[string]int32{},
+		allow:    allow,
+		deployed: deployed,
+		newToken: newToken,
+	}
+}
 
 // Process documentation export (ADR-0143). The document itself is produced in the
 // browser, where bpmn-js already holds the authoritative picture; this file is the
@@ -22,21 +85,21 @@ import (
 // Design-time only: nothing here reaches the event log, the processor, or
 // recovery.
 
-// maxProcessDocBytes caps a documentation upload. A document is a diagram raster
+// maxUploadBytes caps a documentation upload. A document is a diagram raster
 // plus its element prose; this is a sanity bound on the base64-carrying request
 // body, not a tuning knob.
-const maxProcessDocBytes = 24 << 20 // 24 MiB
+const maxUploadBytes = 24 << 20 // 24 MiB
 
 // pdfMagic is the header every PDF opens with. The server stores opaque bytes,
 // but it refuses to store something that is plainly not a document — otherwise a
 // mistaken upload only reveals itself to the reader who opens the share link.
 var pdfMagic = []byte("%PDF-")
 
-// processDocResp is one documentation version as the API renders it. Elements and
+// docResp is one documentation version as the API renders it. Elements and
 // XML are carried only by the single-version fetch: a history listing is a
 // summary, and hauling every version's whole BPMN source through it would make
 // the common read the expensive one.
-type processDocResp struct {
+type docResp struct {
 	ID                string `json:"id"`
 	ProcessID         string `json:"processId"`
 	ProcessName       string `json:"processName,omitempty"`
@@ -52,16 +115,16 @@ type processDocResp struct {
 	PDFURL            string `json:"pdfUrl"`
 	// ShareToken and ShareURL are present only while the version is shared, so
 	// their absence is the UI's signal that it is private.
-	ShareToken string              `json:"shareToken,omitempty"`
-	ShareURL   string              `json:"shareUrl,omitempty"`
-	Elements   []processDocElement `json:"elements,omitempty"`
-	XML        string              `json:"xml,omitempty"`
+	ShareToken string    `json:"shareToken,omitempty"`
+	ShareURL   string    `json:"shareUrl,omitempty"`
+	Elements   []Element `json:"elements,omitempty"`
+	XML        string    `json:"xml,omitempty"`
 }
 
-// toProcessDocResp renders a stored version. detail asks for the element prose
+// toResp renders a stored version. detail asks for the element prose
 // and the BPMN source; a listing passes false.
-func toProcessDocResp(rec processDoc, detail bool) processDocResp {
-	out := processDocResp{
+func toResp(rec Doc, detail bool) docResp {
+	out := docResp{
 		ID: rec.ID, ProcessID: rec.ProcessID, ProcessName: rec.ProcessName,
 		Version: rec.Version, Title: rec.Title, Note: rec.Note,
 		CreatedAt: rec.CreatedAt, CreatedBy: rec.CreatedBy,
@@ -71,7 +134,7 @@ func toProcessDocResp(rec processDoc, detail bool) processDocResp {
 	}
 	if rec.ShareToken != "" {
 		out.ShareToken = rec.ShareToken
-		out.ShareURL = publicProcessDocPath + rec.ShareToken
+		out.ShareURL = PublicPath + rec.ShareToken
 	}
 	if detail {
 		out.Elements = rec.Elements
@@ -80,50 +143,50 @@ func toProcessDocResp(rec processDoc, detail bool) processDocResp {
 	return out
 }
 
-// publicProcessDocPath is the prefix of the unauthenticated share URL. It lives
+// PublicPath is the prefix of the unauthenticated share URL. It lives
 // in one place so the minted URL and the served route cannot drift.
-const publicProcessDocPath = "/public/process-docs/"
+const PublicPath = "/public/process-docs/"
 
-// loadProcessDocVersions rebuilds the per-process documentation counter from the
+// LoadVersions rebuilds the per-process documentation counter from the
 // durable records, so an export after a restart continues the sequence rather than
 // restarting it at v1 and overwriting history. It runs before the loop serves
 // traffic, so touching the map directly here respects the single-writer invariant.
-func (s *Server) loadProcessDocVersions() error {
-	recs, err := s.processDocs.LoadAll()
+func (s *Service) LoadVersions() error {
+	recs, err := s.store.LoadAll()
 	if err != nil {
 		return err
 	}
 	for _, rec := range recs {
-		if rec.Version > s.docVersions[rec.ProcessID] {
-			s.docVersions[rec.ProcessID] = rec.Version
+		if rec.Version > s.versions[rec.ProcessID] {
+			s.versions[rec.ProcessID] = rec.Version
 		}
 	}
 	return nil
 }
 
-// createProcessDocReq is the upload: the document plus what it documents. The PDF
+// createReq is the upload: the document plus what it documents. The PDF
 // arrives base64-encoded inside the JSON body so the whole publication — prose,
 // source, and document — is one atomic request rather than a multi-step upload
 // that can half-fail.
-type createProcessDocReq struct {
-	Title       string              `json:"title"`
-	Note        string              `json:"note"`
-	ProcessName string              `json:"processName"`
-	XML         string              `json:"xml"`
-	Elements    []processDocElement `json:"elements"`
-	PDFBase64   string              `json:"pdfBase64"`
+type createReq struct {
+	Title       string    `json:"title"`
+	Note        string    `json:"note"`
+	ProcessName string    `json:"processName"`
+	XML         string    `json:"xml"`
+	Elements    []Element `json:"elements"`
+	PDFBase64   string    `json:"pdfBase64"`
 }
 
-// handleCreateProcessDoc records the next documentation version of a process
+// HandleCreate records the next documentation version of a process
 // (ADR-0143). Body: the produced PDF plus the element prose it describes.
-func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxProcessDocBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxUploadBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	var payload createProcessDocReq
+	var payload createReq
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
@@ -142,7 +205,7 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	id, err := newProcessDocID()
+	id, err := NewID()
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "mint documentation id: "+err.Error())
 		return
@@ -156,7 +219,7 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 		actor = p.Username
 	}
 
-	rec := processDoc{
+	rec := Doc{
 		ID: id, ProcessID: processID, ProcessName: payload.ProcessName,
 		Title: title, Note: payload.Note,
 		CreatedAt: time.Now().Unix(), CreatedBy: actor,
@@ -164,43 +227,43 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var opErr error
-	s.do(func() {
+	s.loop.Do(func() {
 		// A documented process that is deployed records which deployment it
 		// described, so a reader of the history can tell which running version a
 		// document belongs to. Read on the loop, which owns the registry.
-		if d := s.latestDeploymentByProcessID(processID); d != nil {
+		if d, ok := s.deployed(processID); ok {
 			rec.DeploymentKey = d.Key
 			rec.DeploymentVersion = d.Version
 		}
-		rec.Version = s.docVersions[processID] + 1
-		if opErr = s.processDocs.save(rec, pdf); opErr != nil {
+		rec.Version = s.versions[processID] + 1
+		if opErr = s.store.Save(rec, pdf); opErr != nil {
 			return
 		}
 		// The counter advances only once the record is durable, so a failed save
 		// cannot burn a version number.
-		s.docVersions[processID] = rec.Version
+		s.versions[processID] = rec.Version
 	})
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "save documentation: "+opErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
+	httpapi.JSON(w, http.StatusOK, toResp(rec, false))
 }
 
-// handleListProcessDocs returns one process's documentation history, newest
+// HandleList returns one process's documentation history, newest
 // version first.
-func (s *Server) handleListProcessDocs(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	out := []processDocResp{}
+	out := []docResp{}
 	var loadErr error
-	s.do(func() {
-		recs, e := s.processDocs.forProcess(processID)
+	s.loop.Do(func() {
+		recs, e := s.store.ForProcess(processID)
 		if e != nil {
 			loadErr = e
 			return
 		}
 		for _, rec := range recs {
-			out = append(out, toProcessDocResp(rec, false))
+			out = append(out, toResp(rec, false))
 		}
 	})
 	if loadErr != nil {
@@ -210,35 +273,35 @@ func (s *Server) handleListProcessDocs(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-// lookupProcessDoc reads one version on the run loop. It is the shared prologue
+// lookup reads one version on the run loop. It is the shared prologue
 // of every route that addresses a version by id.
-func (s *Server) lookupProcessDoc(id string) (processDoc, bool, error) {
+func (s *Service) lookup(id string) (Doc, bool, error) {
 	var (
-		rec   processDoc
+		rec   Doc
 		found bool
 		err   error
 	)
-	s.do(func() { rec, found, err = s.processDocs.get(id) })
+	s.loop.Do(func() { rec, found, err = s.store.Get(id) })
 	return rec, found, err
 }
 
-// handleGetProcessDoc returns one version in full: its metadata, the element
+// HandleGet returns one version in full: its metadata, the element
 // prose, and the BPMN source it was produced from.
-func (s *Server) handleGetProcessDoc(w http.ResponseWriter, r *http.Request) {
-	rec, found, err := s.lookupProcessDoc(r.PathValue("id"))
+func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
+	rec, found, err := s.lookup(r.PathValue("id"))
 	switch {
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read documentation: "+err.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, true))
+		httpapi.JSON(w, http.StatusOK, toResp(rec, true))
 	}
 }
 
-// handleGetProcessDocPDF downloads a version's document.
-func (s *Server) handleGetProcessDocPDF(w http.ResponseWriter, r *http.Request) {
-	rec, found, err := s.lookupProcessDoc(r.PathValue("id"))
+// HandleGetPDF downloads a version's document.
+func (s *Service) HandleGetPDF(w http.ResponseWriter, r *http.Request) {
+	rec, found, err := s.lookup(r.PathValue("id"))
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read documentation: "+err.Error())
 		return
@@ -247,34 +310,34 @@ func (s *Server) handleGetProcessDocPDF(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 		return
 	}
-	s.serveProcessDocPDF(w, rec)
+	s.servePDF(w, rec)
 }
 
-// serveProcessDocPDF writes a version's document to the response. Shared by the
+// servePDF writes a version's document to the response. Shared by the
 // authenticated download and the public share link so both serve identical bytes
 // under identical headers.
-func (s *Server) serveProcessDocPDF(w http.ResponseWriter, rec processDoc) {
+func (s *Service) servePDF(w http.ResponseWriter, rec Doc) {
 	var (
 		pdf []byte
 		err error
 	)
-	s.do(func() { pdf, err = s.processDocs.pdf(rec.ID) })
+	s.loop.Do(func() { pdf, err = s.store.PDF(rec.ID) })
 	if err != nil {
 		httpapi.Error(w, http.StatusNotFound, "the document for that version is not available")
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "inline; filename=\""+processDocFilename(rec)+"\"")
+	w.Header().Set("Content-Disposition", "inline; filename=\""+filenameFor(rec)+"\"")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(pdf)
 }
 
-// processDocFilename names the downloaded file after the process and version.
+// filenameFor names the downloaded file after the process and version.
 // Everything outside a conservative allowlist becomes '-', so the name cannot
 // carry a quote, a path separator, or a header-splitting byte into the
 // Content-Disposition header.
-func processDocFilename(rec processDoc) string {
+func filenameFor(rec Doc) string {
 	var b strings.Builder
 	for _, r := range rec.ProcessID {
 		switch {
@@ -291,28 +354,28 @@ func processDocFilename(rec processDoc) string {
 	return name + "-v" + strconv.Itoa(int(rec.Version)) + ".pdf"
 }
 
-// handleShareProcessDoc mints (or returns the existing) public link for one
+// HandleShare mints (or returns the existing) public link for one
 // version. Idempotent by design: re-sharing must not rotate a URL that readers
 // already hold.
-func (s *Server) handleShareProcessDoc(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleShare(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
-		rec   processDoc
+		rec   Doc
 		found bool
 		opErr error
 	)
-	s.do(func() {
-		rec, found, opErr = s.processDocs.get(id)
+	s.loop.Do(func() {
+		rec, found, opErr = s.store.Get(id)
 		if opErr != nil || !found || rec.ShareToken != "" {
 			return
 		}
-		token, e := newPublicToken()
+		token, e := s.newToken()
 		if e != nil {
 			opErr = e
 			return
 		}
 		rec.ShareToken = token
-		opErr = s.processDocs.saveRecord(rec)
+		opErr = s.store.SaveRecord(rec)
 	})
 	switch {
 	case opErr != nil:
@@ -320,25 +383,25 @@ func (s *Server) handleShareProcessDoc(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
+		httpapi.JSON(w, http.StatusOK, toResp(rec, false))
 	}
 }
 
-// handleUnshareProcessDoc revokes a version's public link, killing the URL.
-func (s *Server) handleUnshareProcessDoc(w http.ResponseWriter, r *http.Request) {
+// HandleUnshare revokes a version's public link, killing the URL.
+func (s *Service) HandleUnshare(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
-		rec   processDoc
+		rec   Doc
 		found bool
 		opErr error
 	)
-	s.do(func() {
-		rec, found, opErr = s.processDocs.get(id)
+	s.loop.Do(func() {
+		rec, found, opErr = s.store.Get(id)
 		if opErr != nil || !found || rec.ShareToken == "" {
 			return
 		}
 		rec.ShareToken = ""
-		opErr = s.processDocs.saveRecord(rec)
+		opErr = s.store.SaveRecord(rec)
 	})
 	switch {
 	case opErr != nil:
@@ -346,15 +409,15 @@ func (s *Server) handleUnshareProcessDoc(w http.ResponseWriter, r *http.Request)
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
+		httpapi.JSON(w, http.StatusOK, toResp(rec, false))
 	}
 }
 
-// handleDeleteProcessDoc prunes a version, taking its public URL with it. A
+// HandleDelete prunes a version, taking its public URL with it. A
 // missing version is not an error, so pruning is idempotent.
-func (s *Server) handleDeleteProcessDoc(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	var delErr error
-	s.do(func() { delErr = s.processDocs.delete(r.PathValue("id")) })
+	s.loop.Do(func() { delErr = s.store.Delete(r.PathValue("id")) })
 	if delErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delete documentation: "+delErr.Error())
 		return
@@ -362,33 +425,33 @@ func (s *Server) handleDeleteProcessDoc(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// pruneProcessDocsReq is the retention request: keep the newest `keep` versions
+// pruneReq is the retention request: keep the newest `keep` versions
 // of this process and prune the rest. `keep` is required and must be non-negative;
 // a document is a real artifact someone chose to publish, so nothing is pruned by
 // default and the caller has to say how much history to retain.
-type pruneProcessDocsReq struct {
+type pruneReq struct {
 	Keep *int `json:"keep"`
 }
 
-// pruneProcessDocsResp reports what a prune removed, so the UI can tell the reader
+// pruneResp reports what a prune removed, so the UI can tell the reader
 // exactly which versions are gone rather than silently shrinking the list.
-type pruneProcessDocsResp struct {
+type pruneResp struct {
 	Deleted []string `json:"deleted"`
 	Kept    int      `json:"kept"`
 }
 
-// handlePruneProcessDocs applies a retention limit to a process's documentation
+// HandlePrune applies a retention limit to a process's documentation
 // history (ADR-0143's bounded-growth follow-up): it keeps the newest `keep`
 // versions and deletes the older ones, PDF and all. Idempotent — pruning an
 // already-short history removes nothing.
-func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandlePrune(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	var payload pruneProcessDocsReq
+	var payload pruneReq
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
@@ -405,7 +468,7 @@ func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) 
 		pruned []string
 		opErr  error
 	)
-	s.do(func() { pruned, opErr = s.processDocs.pruneProcess(processID, *payload.Keep) })
+	s.loop.Do(func() { pruned, opErr = s.store.PruneProcess(processID, *payload.Keep) })
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "prune documentation: "+opErr.Error())
 		return
@@ -413,28 +476,28 @@ func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) 
 	if pruned == nil {
 		pruned = []string{}
 	}
-	httpapi.JSON(w, http.StatusOK, pruneProcessDocsResp{Deleted: pruned, Kept: *payload.Keep})
+	httpapi.JSON(w, http.StatusOK, pruneResp{Deleted: pruned, Kept: *payload.Keep})
 }
 
 // --- public, unauthenticated endpoint (ADR-0143, ADR-0029's mechanism) ---
 
-// handlePublicProcessDoc serves a shared version's PDF to a reader with no
+// HandlePublic serves a shared version's PDF to a reader with no
 // account. An unknown, malformed, or revoked token is one indistinguishable 404:
 // the response must not reveal whether a document ever existed behind it.
-func (s *Server) handlePublicProcessDoc(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+func (s *Service) HandlePublic(w http.ResponseWriter, r *http.Request) {
+	if !s.allow(httpapi.ClientIP(r)) {
 		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 	var (
-		rec   processDoc
+		rec   Doc
 		found bool
 		opErr error
 	)
-	s.do(func() { rec, found, opErr = s.processDocs.byShareToken(r.PathValue("token")) })
+	s.loop.Do(func() { rec, found, opErr = s.store.ByShareToken(r.PathValue("token")) })
 	if opErr != nil || !found {
 		httpapi.Error(w, http.StatusNotFound, "not found")
 		return
 	}
-	s.serveProcessDocPDF(w, rec)
+	s.servePDF(w, rec)
 }

@@ -79,10 +79,14 @@ job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
 connector/  In-process service-task workers — one package per connector kind
 api/        HTTP API, web UI, command submission and queries
-  layout/   BPMN diagram auto-layout (ADR-0124/0127)
-  collab/   Live collaborative modeling sessions (ADR-0140)
-  vault/    Encrypted secret store (ADR-0069/0070)
-  sidecar/  Store[T] and the atomic-write + fsync discipline behind every design-time store
+  runloop/    The single-writer boundary: a service reaches shared state only through it
+  httpapi/    Response envelope, client IP, request principal — what every handler uses
+  token/      Opaque share tokens: minting, and the shape guard that keeps one off a path
+  layout/     BPMN diagram auto-layout (ADR-0124/0127)
+  collab/     Live collaborative modeling sessions (ADR-0140)
+  vault/      Encrypted secret store (ADR-0069/0070)
+  sidecar/    Store[T] and the atomic-write + fsync discipline behind every design-time store
+  processdoc/ Process documentation (ADR-0143) — the first per-area service (ADR-0147)
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
@@ -109,6 +113,15 @@ connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-
 Adding a connector kind is one package here plus one `managedConnectorKind` entry in
 [`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
 server.
+
+**A new API area is a service, not more `Server` methods** (ADR-0147). Give it its
+own package under `api/`, hold a `*runloop.Loop` and take every other dependency
+as an explicit constructor argument, and expose handlers as exported methods the
+route table in `api/openapi.go` points at — that table stays whole, so the
+route/OpenAPI drift test keeps working. `api/processdoc` is the worked example.
+Reaching engine or design-time state goes through the loop and nothing else; that
+is the single-writer invariant (I3), and it is the one thing a review of such a
+package must check line by line.
 
 **Adding a design-time store** (drafts, projects, forms, connectors, releases, …)
 is one call to `sidecar.NewStore`: give it a directory, the name its errors carry,

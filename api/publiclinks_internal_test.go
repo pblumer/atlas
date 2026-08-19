@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 func newPublicLinks(t *testing.T) *publicLinkStore {
@@ -213,22 +215,22 @@ func TestIsHexToken(t *testing.T) {
 		"../etc": false,
 	}
 	for in, want := range cases {
-		if got := isHexToken(in); got != want {
-			t.Errorf("isHexToken(%q) = %v, want %v", in, got, want)
+		if got := token.IsHex(in); got != want {
+			t.Errorf("token.IsHex(%q) = %v, want %v", in, got, want)
 		}
 	}
 }
 
 func TestNewPublicTokenUnique(t *testing.T) {
-	a, err := newPublicToken()
+	a, err := token.New()
 	if err != nil {
 		t.Fatalf("newPublicToken: %v", err)
 	}
-	b, err := newPublicToken()
+	b, err := token.New()
 	if err != nil {
 		t.Fatalf("newPublicToken: %v", err)
 	}
-	if a == b || !isHexToken(a) || len(a) != 64 {
+	if a == b || !token.IsHex(a) || len(a) != 64 {
 		t.Fatalf("tokens not unique 64-char hex: %q %q", a, b)
 	}
 }

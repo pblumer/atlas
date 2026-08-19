@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 // maxPublicStartBytes caps a public start submission. A start form's data is
@@ -97,7 +99,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 		}
-		token, e := newPublicToken()
+		token, e := token.New()
 		if e != nil {
 			opErr = e
 			return
