@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -365,5 +366,72 @@ func TestEngineMetricsSkipDurationsForAnEmptyBatch(t *testing.T) {
 				t.Errorf("commands = %v for an empty batch, want the 4 it consumed", v)
 			}
 		}
+	}
+}
+
+// TestMetricsReportRuntimeGauges: the two questions an operator asks first — how much is
+// running, and is it moving — answered from the maintained per-definition counters
+// (ADR-0080) rather than by walking the runtime set on every scrape.
+func TestMetricsReportRuntimeGauges(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+
+	if got := sampleValue(t, scrape(t, h), "atlas_active_process_instances"); got != 0 {
+		t.Fatalf("active instances = %v before anything started, want 0", got)
+	}
+
+	h.create(3)
+	exposition := scrape(t, h)
+	if got := sampleValue(t, exposition, "atlas_active_process_instances"); got != 3 {
+		t.Errorf("active process instances = %v after starting 3, want 3", got)
+	}
+	// The three parked instances each hold a token at the service task.
+	if got := sampleValue(t, exposition, "atlas_live_element_tokens"); got == 0 {
+		t.Error("live element tokens = 0 while three instances are parked on a task")
+	}
+
+	// The gauge must agree with the scan that is ground truth, or the cheap read is
+	// telling the operator a different story than the API does.
+	scanned, err := h.store.ActiveProcessInstanceCount()
+	if err != nil {
+		t.Fatalf("ActiveProcessInstanceCount: %v", err)
+	}
+	if got := sampleValue(t, exposition, "atlas_active_process_instances"); int(got) != scanned {
+		t.Errorf("gauge says %v active instances, the authoritative scan says %d", got, scanned)
+	}
+}
+
+// TestMetricsRuntimeGaugesFallWhenInstancesFinish: a gauge that only climbs would show a
+// healthy engine as an ever-growing backlog, which is worse than not reporting at all.
+func TestMetricsRuntimeGaugesFallWhenInstancesFinish(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(2)
+	if got := sampleValue(t, scrape(t, h), "atlas_active_process_instances"); got != 2 {
+		t.Fatalf("active instances = %v after starting 2, want 2", got)
+	}
+
+	// Terminate one; the other stays parked.
+	code, body := h.x.do(http.MethodGet, "/api/v1/instances", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances status=%d body=%s", code, body)
+	}
+	var rows []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("listed %d instances, want 2", len(rows))
+	}
+	if code, body := h.x.do(http.MethodDelete, "/api/v1/instances/"+strconv.FormatUint(rows[0].Key, 10), ""); code != http.StatusOK {
+		t.Fatalf("terminate status=%d body=%s", code, body)
+	}
+
+	if got := sampleValue(t, scrape(t, h), "atlas_active_process_instances"); got != 1 {
+		t.Fatalf("active instances = %v after terminating one of two, want 1", got)
 	}
 }
