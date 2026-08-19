@@ -119,6 +119,19 @@ Option 2 gets the room without any of that. Concretely:
   remembered in `localStorage` — a wide script can have the whole modal, and a
   developer who works without the reference does not re-collapse it every time.
   Picking a tab from the rail expands onto it.
+- **The window behaves like a window.** The divider between the code and the
+  reference is draggable (and arrow-key nudgeable once focused), the header drags
+  the whole modal, and the modal itself resizes from its corner — a native CSS
+  `resize`, so the browser owns the grip and we own only what it cannot know.
+  Each of the three is remembered, because "a 320 px reference column" is a guess
+  about a screen we cannot see, and one that is wrong for a wide HTML template and
+  for a 13-inch laptop in opposite directions. Three floors keep an arrangement
+  recoverable: neither pane can be squeezed away, the modal has a minimum size, and
+  a strip of the header — the handle that drags it back — always stays on screen.
+  A double-click on the header forgets the arrangement and re-centres, which is the
+  way out of a layout that made sense on another monitor. All of it is geometry: no
+  gesture here can touch the value being edited, so a botched drag costs a position,
+  never an edit.
 - **Writing back is the only mutation.** Apply sets `field.value` and dispatches
   `input` + `change`, exactly what a keystroke produces. The panel's existing
   save wiring runs unchanged; nothing new touches moddle, modeling or the
