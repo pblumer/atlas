@@ -12,7 +12,64 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-19
+
+Milestone 1's BPMN surface is essentially complete: this release lands the last
+unimplemented **intermediate-event trigger** (conditional), the last major
+**structural** element (ad-hoc subprocesses), plus link, escalation and terminate
+events, lanes, and the loop markers on every activity kind.
+
+Around that engine work the platform grew up. **Process applications** make a
+project a versioned, deployable unit — git-backed as real source, publishable to
+another server, with versions that can be deprecated to drain. The engine gained
+**recovery checkpoints and WAL compaction**, so a restart no longer replays from
+genesis and the log's disk is bounded. **Retention** became a property of the
+process (`atlas:historyTtl`) and runs off a due-date index rather than a scan.
+And Atlas became **observable**: Prometheus metrics, named log lines you can
+alert on, and a readiness probe that means something.
+
+For the people who read processes rather than run them, documentation now lives
+on the elements themselves — shown to the assignee in the Tasks app and in the
+Operations replay, and **exportable as a PDF** for anyone without an account.
+
 ### Added
+
+- **A process declares how long its finished instances are kept**
+  ([ADR-0144](docs/adr/0144-per-definition-history-ttl.md)): a model can now carry
+  `atlas:historyTtl="P30D"` on its `<bpmn:process>`. The instance TTL (ADR-0085) bounds how long an
+  instance may *run*; history retention (ADR-0115) is what *deletes* — but that was a single
+  `--retention-max-age` for the whole server, which serves a recurring bulk data check and a
+  years-retained approval equally badly. Retention is a property of the process, so it now travels
+  **with the model**, versioned and deployed alongside it, and falls back to the server default when
+  a process says nothing. The sweep's cadence and per-tick batch — what actually decides how fast a
+  backlog drains — become operator settings too: `--retention-interval` and `--retention-batch`
+  (`ATLAS_RETENTION_INTERVAL` / `ATLAS_RETENTION_BATCH`), previously internal constants.
+
+- **Layout reserves corridors for column-skipping edges**
+  ([ADR-0127](docs/adr/0127-layered-layout-pipeline-and-invariants.md) phase 2): a forward edge that
+  skips columns had nowhere to run — the layers it passed over reserved no space — so it was routed
+  through a channel beneath the whole diagram, dipping far below the lowest shape. The layout now
+  **reserves the space in the layers the edge crosses** instead of detouring around them, so such an
+  edge runs where it belongs.
+
+- **The documentation export gains code, landscape pages and pruning**
+  ([ADR-0143](docs/adr/0143-process-documentation-export.md)): three follow-ups to the export above.
+  The document now includes **element code** — a script task's job source (PowerShell/Python/JS),
+  FEEL expressions and mappings — so a reader sees what a step actually does, not only its prose. A
+  **large diagram is laid out landscape** so it stays legible instead of being squeezed onto a
+  portrait page. And the archive stops growing without bound: a **prune** keeps the newest N versions
+  and deletes the rest (record and PDF), offered per version and as "keep newest N" in the export
+  panel, both confirmed — a deliberate act rather than an automatic policy.
+
+- **History purges run off a due-date index, so a short TTL actually takes effect**
+  ([ADR-0146](docs/adr/0146-history-expiry-due-date-index.md)): the per-definition TTL above rode
+  the existing key-order sweep, whose per-tick batch is a **scan** budget — finished instances that
+  can never be eligible still consumed it. The first production install made that concrete: with
+  ~529k finished instances of definitions carrying no TTL, a newly finished instance with
+  `historyTtl="PT1M"` sat behind all of them in key order and would have waited about **nine hours**
+  at the default 1000/minute. From the outside that is indistinguishable from a broken feature.
+  Purges are now scheduled on a **due-date index**, so the sweep visits what is actually due rather
+  than scanning history in key order — the same shape ADR-0085 established for the active set.
 
 - **An HTML body for the mail connector** ([ADR-0079](docs/adr/0079-outbound-mail-connector.md), amended):
   `<atlas:mailConnector bodyHtml="…">` beside the existing plain-text `body`, a literal or a FEEL
@@ -27,7 +84,6 @@ _Changed_ / _Removed_ for each version.
   markup is present. In the Modeler the field is a real code field — HTML highlighting inline and the
   Developer View on <kbd>F2</kbd> (ADR-0145).
 
-### Added
 
 - **A Developer View for code-bearing fields** ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)):
   <kbd>F2</kbd> in a field that holds code — a FEEL expression, a PowerShell/Python/JavaScript job
@@ -161,18 +217,6 @@ _Changed_ / _Removed_ for each version.
   slice: they have no maintained counter at all, and exporting them as scans would break
   the rule ADR-0142 set rather than bend it. They need durable counters of their own,
   which is a change to state and so its own change.
-
-## [0.2.0] — 2026-08-18
-
-Milestone 1's BPMN surface is essentially complete: this release lands the last
-unimplemented **intermediate-event trigger** (conditional), the last major
-**structural** element (ad-hoc subprocesses), plus link, escalation and terminate
-events, lanes, and the loop markers on every activity kind. Alongside it the
-platform grew **process applications** — versioned, deployable, git-backed and
-publishable to another server — and the engine gained **recovery checkpoints**
-so restart no longer replays from genesis.
-
-### Added
 
 - **Export a process as a document** ([ADR-0143](docs/adr/0143-process-documentation-export.md)):
   a BPMN model used to be readable only inside Atlas, which left out exactly the people who most
@@ -714,6 +758,13 @@ so restart no longer replays from genesis.
   service-task connector catalog.
 
 ### Fixed
+
+- **The Modeler no longer drops an example's extension elements**: opening
+  `examples/order-fulfillment.bpmn` reported *script task "register_order" has no expression* in the
+  Problems panel while the very same file deployed and ran — and both were right. `compiler.Parse`
+  matches elements by **local name** and ignores the namespace, so it saw the extensions; the
+  Modeler, which is namespace-correct, did not, and dropped them on load. The examples now namespace
+  their extension elements properly, so what the Modeler shows and what the compiler reads agree.
 
 - **An interrupted activity no longer leaves a ghost token in the replay**
   ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)): when an interrupting
