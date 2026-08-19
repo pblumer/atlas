@@ -1,6 +1,7 @@
 package runloop
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -150,5 +151,52 @@ func TestDoDuringShutdownDoesNotDeadlock(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("a caller hung dispatching into a closing loop")
+	}
+}
+
+// TestPingReachesARunningLoop is the readiness probe's happy path.
+func TestPingReachesARunningLoop(t *testing.T) {
+	l, stop := start(t)
+	defer stop()
+	if !l.Ping(context.Background(), 2*time.Second) {
+		t.Error("Ping on a running loop = false, want true")
+	}
+}
+
+// TestPingGivesUpOnAWedgedLoop is why Ping exists rather than Do with a timeout:
+// a loop busy in a long closure must be reported unreachable rather than block
+// the prober until it frees up.
+func TestPingGivesUpOnAWedgedLoop(t *testing.T) {
+	l, stop := start(t)
+	defer stop()
+
+	release := make(chan struct{})
+	occupied := make(chan struct{})
+	go l.Do(func() { close(occupied); <-release })
+	<-occupied // the loop is now busy and cannot take another closure
+
+	if l.Ping(context.Background(), 50*time.Millisecond) {
+		t.Error("Ping on a wedged loop = true, want false")
+	}
+	close(release)
+}
+
+// TestPingGivesUpOnAStoppedLoop covers the case the deadline also has to cover: a
+// loop that is not draining at all.
+func TestPingGivesUpOnAStoppedLoop(t *testing.T) {
+	l := New(make(chan struct{})) // never run
+	if l.Ping(context.Background(), 50*time.Millisecond) {
+		t.Error("Ping on a loop that was never run = true, want false")
+	}
+}
+
+// TestPingHonorsAHungUpCaller proves a prober that cancelled is answered at once
+// rather than at the deadline.
+func TestPingHonorsAHungUpCaller(t *testing.T) {
+	l := New(make(chan struct{})) // never run, so the send blocks
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if l.Ping(ctx, time.Hour) {
+		t.Error("Ping with a cancelled context = true, want false")
 	}
 }

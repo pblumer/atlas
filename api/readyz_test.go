@@ -144,7 +144,11 @@ func TestReadyzFailsWhenTheWriterIsWedged(t *testing.T) {
 
 	wedge := make(chan struct{})
 	defer close(wedge) // let the run loop finish, or Close would wait for it forever
-	f.srv.tasks <- func() { <-wedge }
+	// Occupy the loop, and wait until it has actually taken the closure — otherwise
+	// the probe below could run before the loop is wedged and pass by accident.
+	occupied := make(chan struct{})
+	go f.srv.runLoop.Do(func() { close(occupied); <-wedge })
+	<-occupied
 
 	start := time.Now()
 	code, body := f.ready(t)
@@ -170,7 +174,9 @@ func TestReadyzGivesUpWhenTheProberDoes(t *testing.T) {
 
 	wedge := make(chan struct{})
 	defer close(wedge)
-	f.srv.tasks <- func() { <-wedge }
+	occupied := make(chan struct{})
+	go f.srv.runLoop.Do(func() { close(occupied); <-wedge })
+	<-occupied
 
 	// Cancelled before the request is served, with the run loop wedged: the only way out
 	// of the handler is the caller's context.

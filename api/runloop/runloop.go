@@ -15,6 +15,11 @@
 // receiver.
 package runloop
 
+import (
+	"context"
+	"time"
+)
+
 // Loop is the single-writer goroutine. Build one with [New], run it with
 // [Loop.Run], and dispatch onto it with [Loop.Do].
 type Loop struct {
@@ -61,5 +66,39 @@ func (l *Loop) Do(fn func()) {
 	case l.tasks <- func() { defer close(done); fn() }:
 		<-done
 	case <-l.quit:
+	}
+}
+
+// Ping reports whether the loop is reachable: it hands over an empty closure and
+// waits for it to run, giving up after d. The closure is empty on purpose — the
+// check is that the loop is *reachable*, and anything it did would have to be
+// safe to abandon, since a timed-out closure still runs later with nobody
+// listening.
+//
+// Handing the closure over is what actually blocks — the queue is unbuffered, so
+// a successful send means the loop has already taken it — and the deadline covers
+// a stopped loop as well as a wedged one, which is why neither select watches
+// quit: a caller that cares about shutdown has already reported it, and a
+// shutdown that races this resolves at the deadline like any other unresponsive
+// writer.
+//
+// It is deliberately not [Do] with a timeout: Do promises the closure ran, and a
+// readiness probe must be able to give up on one that did not.
+func (l *Loop) Ping(ctx context.Context, d time.Duration) bool {
+	done := make(chan struct{})
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+	select {
+	case l.tasks <- func() { close(done) }:
+	case <-ctx.Done(): // the caller hung up; nothing was queued
+		return false
+	case <-deadline.C:
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	case <-deadline.C:
+		return false
 	}
 }
