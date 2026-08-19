@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -246,6 +247,95 @@ func TestProcessDocStoreDelete(t *testing.T) {
 	}
 	if err := s.delete("not-hex"); err != nil {
 		t.Fatalf("delete(unsafe id): %v, want a silent no-op", err)
+	}
+}
+
+// TestProcessDocStoreCodeRoundTrip proves an element's code-bearing fields survive
+// the save/load round trip with their whitespace intact — a script whose
+// indentation is mangled is a script a reader cannot trust (ADR-0143).
+func TestProcessDocStoreCodeRoundTrip(t *testing.T) {
+	s := newProcessDocs(t)
+	script := "if ($budget -gt 1000) {\n    Approve-Request\n}"
+	rec := processDoc{
+		ID: "c0de", ProcessID: "order", Version: 1,
+		Elements: []processDocElement{{
+			ID: "Task_run", Type: "bpmn:ScriptTask", Name: "Decide",
+			Code: []processDocCode{
+				{Label: "Script", Language: "powershell", Source: script},
+				{Label: "Condition", Language: "feel", Source: "= budget > 1000"},
+			},
+		}},
+	}
+	if err := s.save(rec, []byte("%PDF")); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, ok, err := s.get("c0de")
+	if err != nil || !ok {
+		t.Fatalf("get = (_, %v, %v), want the saved record", ok, err)
+	}
+	code := got.Elements[0].Code
+	if len(code) != 2 {
+		t.Fatalf("code fields = %d, want 2", len(code))
+	}
+	if code[0].Language != "powershell" || code[0].Source != script {
+		t.Errorf("script field = %+v, want the PowerShell source verbatim", code[0])
+	}
+	if code[1].Label != "Condition" || code[1].Source != "= budget > 1000" {
+		t.Errorf("condition field = %+v, want the FEEL expression preserved", code[1])
+	}
+}
+
+// TestProcessDocStorePrune proves retention keeps the newest `keep` versions and
+// removes the older ones, PDF and record together — ADR-0143's bounded-growth
+// follow-up. A prune that keeps at least everything removes nothing, and the
+// returned ids are exactly the versions that went.
+func TestProcessDocStorePrune(t *testing.T) {
+	s := newProcessDocs(t)
+	// Five versions of one process, plus one of another that pruning must not touch.
+	for _, rec := range []processDoc{
+		{ID: "a1", ProcessID: "order", Version: 1, CreatedAt: 100},
+		{ID: "a2", ProcessID: "order", Version: 2, CreatedAt: 200},
+		{ID: "a3", ProcessID: "order", Version: 3, CreatedAt: 300},
+		{ID: "a4", ProcessID: "order", Version: 4, CreatedAt: 400},
+		{ID: "a5", ProcessID: "order", Version: 5, CreatedAt: 500},
+		{ID: "b1", ProcessID: "invoice", Version: 1, CreatedAt: 600},
+	} {
+		if err := s.save(rec, []byte("%PDF")); err != nil {
+			t.Fatalf("save %s: %v", rec.ID, err)
+		}
+	}
+
+	pruned, err := s.pruneProcess("order", 2)
+	if err != nil {
+		t.Fatalf("pruneProcess: %v", err)
+	}
+	// The three oldest go; the ids are reported so the caller can tell the reader.
+	sort.Strings(pruned)
+	if len(pruned) != 3 || pruned[0] != "a1" || pruned[1] != "a2" || pruned[2] != "a3" {
+		t.Fatalf("pruned = %v, want the three oldest [a1 a2 a3]", pruned)
+	}
+	// The two newest of the process, and the untouched other process, remain.
+	left, err := s.forProcess("order")
+	if err != nil {
+		t.Fatalf("forProcess: %v", err)
+	}
+	if len(left) != 2 || left[0].Version != 5 || left[1].Version != 4 {
+		t.Fatalf("kept = %+v, want v5 and v4", left)
+	}
+	if _, err := os.Stat(s.pdfFileFor("a1")); !os.IsNotExist(err) {
+		t.Errorf("pruned version's PDF still present (stat err %v)", err)
+	}
+	if other, _ := s.forProcess("invoice"); len(other) != 1 {
+		t.Errorf("other process history = %d, want the prune to leave it alone", len(other))
+	}
+
+	// Pruning to a limit no smaller than the history removes nothing, and a
+	// negative limit is clamped rather than deleting what it was asked to keep.
+	if got, _ := s.pruneProcess("order", 5); got != nil {
+		t.Errorf("prune keep>=len = %v, want nothing pruned", got)
+	}
+	if got, err := s.pruneProcess("order", -1); err != nil || len(got) != 2 {
+		t.Errorf("prune keep=-1 = (%v, %v), want both remaining pruned after clamp to 0", got, err)
 	}
 }
 

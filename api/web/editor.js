@@ -5578,9 +5578,20 @@ function wireActions(root, modeler, api, toast, projectId) {
         <div class="row">
           <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
           ${share}
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
         </div>
       </div>`;
     }).join("");
+    // Retention (ADR-0143): every version keeps a PDF, so an old archive grows
+    // without bound. Offer a one-click prune to the newest few when there is
+    // enough history to be worth trimming.
+    if (versions.length > 1) {
+      docHistory.innerHTML += `<div class="doc-prune row">
+        <span class="muted">Keep newest</span>
+        <input id="doc-keep" type="number" min="1" value="5" style="width:4em"/>
+        <button class="btn neutral small" id="doc-prune">Prune older versions</button>
+      </div>`;
+    }
   };
 
   // loadDocHistory reads the history for whatever process the diagram currently
@@ -5628,16 +5639,36 @@ function wireActions(root, modeler, api, toast, projectId) {
     }
   });
 
-  // Sharing and revoking are delegated: the history is re-rendered on every
-  // change, so binding per row would leak listeners.
+  // Sharing, revoking, deleting a version, and pruning are delegated: the history
+  // is re-rendered on every change, so binding per row would leak listeners.
   docHistory.addEventListener("click", async (e) => {
-    const shareId = e.target.getAttribute && e.target.getAttribute("data-share");
-    const unshareId = e.target.getAttribute && e.target.getAttribute("data-unshare");
-    if (!shareId && !unshareId) return;
+    const attr = (name) => e.target.getAttribute && e.target.getAttribute(name);
+    const shareId = attr("data-share");
+    const unshareId = attr("data-unshare");
+    const deleteId = attr("data-delete");
+    const prune = e.target.id === "doc-prune";
+    if (!shareId && !unshareId && !deleteId && !prune) return;
+
+    // Deleting a version and pruning both destroy a published artifact and its
+    // PDF, so both confirm first — this is not a click to make lightly.
+    if (deleteId && !confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+
+    let keep = 0;
+    let processId = "";
+    if (prune) {
+      const keepField = docHistory.querySelector("#doc-keep");
+      keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
+      processId = collectDocumentation(modeler).processId;
+      if (!processId) return;
+      if (!confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+    }
+
     e.target.disabled = true;
     try {
       if (shareId) await api("POST", `/api/v1/documentation/${encodeURIComponent(shareId)}/share`);
-      else await api("DELETE", `/api/v1/documentation/${encodeURIComponent(unshareId)}/share`);
+      else if (unshareId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(unshareId)}/share`);
+      else if (deleteId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(deleteId)}`);
+      else if (prune) await api("POST", `/api/v1/processes/${encodeURIComponent(processId)}/documentation/prune`, { keep });
       await loadDocHistory();
     } catch (err) {
       docErr.textContent = err.message;

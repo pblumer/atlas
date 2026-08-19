@@ -104,6 +104,24 @@ export function wrapText(text, size, maxWidth, bold) {
   return lines;
 }
 
+// wrapPre breaks preformatted text — code — into lines that fit maxChars, keeping
+// every line's own leading whitespace so indentation survives, unlike wrapText
+// which collapses runs of spaces. A tab becomes four spaces so a monospace face
+// aligns it; an over-long line is hard-broken at the column rather than run off
+// the page. It is a character count, not a width, because code is set in Courier,
+// whose every glyph is the same width.
+export function wrapPre(text, maxChars) {
+  const out = [];
+  const cols = Math.max(1, maxChars | 0);
+  for (const raw of String(text ?? "").replace(/\t/g, "    ").split(/\r?\n/)) {
+    if (raw.length <= cols) { out.push(raw); continue; }
+    let rest = raw;
+    while (rest.length > cols) { out.push(rest.slice(0, cols)); rest = rest.slice(cols); }
+    out.push(rest);
+  }
+  return out;
+}
+
 // escapePdfString escapes the three characters a PDF literal string reserves.
 function escapePdfString(codes) {
   let out = "";
@@ -130,8 +148,13 @@ const num = (n) => (Math.round(n * 100) / 100).toString();
 // documentation export never needs one.
 export class PdfDocument {
   constructor(opts = {}) {
-    this.width = opts.width ?? A4.width;
-    this.height = opts.height ?? A4.height;
+    // The default page size; an individual page may override it (a wide diagram
+    // gets a landscape page, ADR-0143), so width/height below always mean "the
+    // page being written to now", not the document.
+    this.defaultWidth = opts.width ?? A4.width;
+    this.defaultHeight = opts.height ?? A4.height;
+    this.width = this.defaultWidth;
+    this.height = this.defaultHeight;
     this.margin = opts.margin ?? 56;
     this.title = opts.title ?? "";
     this.footer = opts.footer ?? "";
@@ -148,12 +171,24 @@ export class PdfDocument {
   // to predict can never disagree.
   get bottom() { return this.height - this.margin - (this.footer ? 18 : 0); }
 
-  newPage() {
-    this.current = { ops: [], images: [] };
+  // newPage starts a page, optionally at a size other than the document default.
+  // The size is stored on the page so the cross-reference pass can give each page
+  // its own MediaBox — that is what lets one document mix portrait prose with a
+  // landscape diagram.
+  newPage(opts = {}) {
+    this.width = opts.width ?? this.defaultWidth;
+    this.height = opts.height ?? this.defaultHeight;
+    this.current = { ops: [], images: [], width: this.width, height: this.height };
     this.pages.push(this.current);
     this.y = this.margin;
     return this.current;
   }
+
+  // landscapePage and portraitPage start a fresh page in the given orientation,
+  // swapping the default dimensions for landscape. A wide diagram uses these to
+  // sit on its own landscape sheet and then hand the document back to portrait.
+  landscapePage() { return this.newPage({ width: this.defaultHeight, height: this.defaultWidth }); }
+  portraitPage() { return this.newPage(); }
 
   // space reserves vertical room, breaking to a new page when the block would
   // cross the bottom margin.
@@ -232,6 +267,35 @@ export class PdfDocument {
     }
   }
 
+  // codeBlock renders code — a script, a FEEL expression — set in Courier so its
+  // indentation and alignment read as written, on a light panel that sets it off
+  // from the surrounding prose (ADR-0143). An optional caption names the field and
+  // its language. Each line reserves its own space, so the block breaks across
+  // pages by itself rather than needing its height known up front.
+  codeBlock(source, { size = 8.5, label = "", language = "" } = {}) {
+    const caption = [label, language].filter(Boolean).join("  ·  ");
+    if (caption) this.paragraph(caption, { size: 8, color: [0.42, 0.42, 0.42], after: 2 });
+
+    const charWidth = size * 0.6; // Courier is fixed-pitch at 600/1000 em
+    const pad = 4;
+    const maxChars = Math.max(8, Math.floor((this.contentWidth - 2 * pad) / charWidth));
+    const lines = wrapPre(source, maxChars);
+    const lineHeight = size * 1.5;
+    for (const line of lines) {
+      const top = this.space(lineHeight);
+      const boxY = this.height - top - lineHeight;
+      this.current.ops.push(
+        `0.96 0.96 0.96 rg ${num(this.margin)} ${num(boxY)} ${num(this.contentWidth)} ${num(lineHeight)} re f`,
+      );
+      const baseline = this.height - top - size - 2;
+      this.current.ops.push(
+        `BT 0.12 0.12 0.12 rg /F3 ${num(size)} Tf 1 0 0 1 ${num(this.margin + pad)} ${num(baseline)} Tm ` +
+        `(${escapePdfString(toWinAnsi(line))}) Tj ET`,
+      );
+    }
+    this.y += 5;
+  }
+
   // image places a JPEG, scaled to fit the content width and the space left on
   // the page while keeping its aspect ratio. jpeg is a Uint8Array of the encoded
   // bytes; they are embedded untranscoded (DCTDecode).
@@ -242,9 +306,10 @@ export class PdfDocument {
     let w = pixelWidth * scale;
     let h = pixelHeight * scale;
     // If it cannot fit in what is left of this page, start a fresh one rather
-    // than shrinking the diagram to a stamp.
+    // than shrinking the diagram to a stamp. The new page keeps this page's
+    // orientation, so a diagram placed on a landscape sheet stays landscape.
     if (this.y + h > this.bottom) {
-      this.newPage();
+      this.newPage({ width: this.width, height: this.height });
       const fit = Math.min(maxWidth / pixelWidth, (this.bottom - this.margin) / pixelHeight, 1);
       w = pixelWidth * fit;
       h = pixelHeight * fit;
@@ -296,7 +361,8 @@ export class PdfDocument {
     const endObject = () => push("endobj\n");
 
     const pageCount = this.pages.length;
-    const firstPageObj = 6;
+    // Objects 1..6 are fixed: catalog, page tree, the three fonts, and info.
+    const firstPageObj = 7;
     const firstContentObj = firstPageObj + pageCount;
     const firstImageObj = firstContentObj + pageCount;
     const totalObjects = firstImageObj + this.images.length - 1;
@@ -312,16 +378,19 @@ export class PdfDocument {
     push(`<< /Type /Pages /Count ${pageCount} /Kids [${kids}] >>\n`);
     endObject();
 
-    // 3, 4 Fonts
+    // 3, 4, 5 Fonts: the two Helvetica faces for prose, and Courier for code.
     startObject(3);
     push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\n");
     endObject();
     startObject(4);
     push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\n");
     endObject();
-
-    // 5 Info
     startObject(5);
+    push("<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>\n");
+    endObject();
+
+    // 6 Info
+    startObject(6);
     push(`<< /Title (${escapePdfString(toWinAnsi(this.title))}) /Producer (Atlas) /Creator (Atlas) >>\n`);
     endObject();
 
@@ -332,10 +401,12 @@ export class PdfDocument {
       const xobjects = page.images.length
         ? ` /XObject << ${page.images.map((n) => `/${n} ${imageObjNumber.get(n)} 0 R`).join(" ")} >>`
         : "";
+      const pw = page.width ?? this.defaultWidth;
+      const ph = page.height ?? this.defaultHeight;
       startObject(firstPageObj + i);
       push(
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(this.width)} ${num(this.height)}] ` +
-        `/Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> ` +
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(pw)} ${num(ph)}] ` +
+        `/Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >>${xobjects} >> ` +
         `/Contents ${firstContentObj + i} 0 R >>\n`,
       );
       endObject();
@@ -371,7 +442,7 @@ export class PdfDocument {
       xref += String(objects[i - 1] ?? 0).padStart(10, "0") + " 00000 n \n";
     }
     push(xref);
-    push(`trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R /Info 5 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+    push(`trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
 
     const out = new Uint8Array(offset);
     let at = 0;
