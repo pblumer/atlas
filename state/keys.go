@@ -43,6 +43,7 @@ const (
 	cfCompensable            columnFamily = 0x1E // comp:<scopeKey>:<seq> → CompensableValue (ADR-0103)
 	cfCanceling              columnFamily = 0x1F // canceling:<txScopeKey> → 1: a transaction being cancelled (ADR-0108)
 	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
+	cfRuntimeTotal           columnFamily = 0x21 // rtTotal:<kind> → int64 engine-wide live count (merge, ADR-0142)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -74,6 +75,25 @@ func keyDefLastActivity(procDefKey uint64) []byte {
 
 // runtimeCountPrefix scans every per-element counter of one definition (its live
 // tokens, or its cumulative visits) — O(elements), not O(instances).
+// runtimeTotalKind names one engine-wide live-entity counter. The values are part of
+// the on-disk key, so they are append-only: a new kind takes the next number and an
+// obsolete one is never reused (ADR-0142).
+type runtimeTotalKind byte
+
+const (
+	rtOpenJobs             runtimeTotalKind = 1
+	rtPendingTimers        runtimeTotalKind = 2
+	rtMessageSubscriptions runtimeTotalKind = 3
+)
+
+// keyRuntimeTotal keys an engine-wide live-entity counter. One key per kind, so the
+// count reads in O(1) instead of scanning the family it summarises — the difference
+// between a metric a scrape can take every fifteen seconds and one it cannot
+// (ADR-0142, following the per-definition counters of ADR-0080).
+func keyRuntimeTotal(kind runtimeTotalKind) []byte {
+	return []byte{byte(cfRuntimeTotal), byte(kind)}
+}
+
 func runtimeCountPrefix(cf columnFamily, procDefKey uint64) []byte {
 	return appendBE64([]byte{byte(cf)}, procDefKey)
 }

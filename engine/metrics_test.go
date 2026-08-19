@@ -260,3 +260,88 @@ func TestBatchMetricsAreOptional(t *testing.T) {
 		t.Fatalf("RunUntilIdle without metrics: %v", err)
 	}
 }
+
+// TestRuntimeTotalsSurviveRecovery is the ADR-0142 slice 4 property that matters: the
+// engine-wide open-job / pending-timer / subscription counters are maintained inside
+// applyToState, so a rebuild from the log must land on exactly the same numbers a live
+// run produced. If it did not, every crash would leave a permanently wrong gauge —
+// worse than no gauge, because it is plausible.
+func TestRuntimeTotalsSurviveRecovery(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	p := engine.New(1, log, store, &manualClock{})
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	cp, jobType := linearProcess(t)
+	p.Deploy(cp)
+
+	// Three instances park on the service task, then one job completes: a state with a
+	// non-trivial open count reached through both directions of the counter.
+	for i := 0; i < 3; i++ {
+		p.CreateInstance(cp.Key)
+	}
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var jobKey uint64
+	if err := store.ActivatableJobs(jobType, func(k uint64) error { jobKey = k; return nil }); err != nil {
+		t.Fatalf("ActivatableJobs: %v", err)
+	}
+	p.CompleteJob(jobKey)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	live, err := store.OpenJobs()
+	if err != nil {
+		t.Fatalf("OpenJobs: %v", err)
+	}
+	if live != 2 {
+		t.Fatalf("live open jobs = %d, want 2 (three created, one completed)", live)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store.Close: %v", err)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatalf("log.Close: %v", err)
+	}
+
+	// Rebuild from the log alone: a fresh state directory, the same WAL.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open (rebuild): %v", err)
+	}
+	store2, err := state.Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatalf("state.Open (rebuild): %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, &manualClock{})
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover (rebuild): %v", err)
+	}
+
+	rebuilt, err := store2.OpenJobs()
+	if err != nil {
+		t.Fatalf("OpenJobs (rebuild): %v", err)
+	}
+	if rebuilt != live {
+		t.Fatalf("open jobs after rebuilding from the log = %d, want the live %d", rebuilt, live)
+	}
+}

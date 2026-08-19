@@ -435,3 +435,86 @@ func TestMetricsRuntimeGaugesFallWhenInstancesFinish(t *testing.T) {
 		t.Fatalf("active instances = %v after terminating one of two, want 1", got)
 	}
 }
+
+// TestMetricsReportOpenWork: the backlog gauges — what is waiting for a worker, a
+// clock, or a message. Each is a durable counter maintained by applyToState (ADR-0142
+// slice 4), so unlike a scan it costs the same whatever the backlog is.
+func TestMetricsReportOpenWork(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+
+	exposition := scrape(t, h)
+	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v before anything started, want 0", name, got)
+		}
+	}
+
+	// Three instances park on the service task: three jobs waiting for a worker.
+	h.create(3)
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 3 {
+		t.Fatalf("open jobs = %v with three parked instances, want 3", got)
+	}
+
+	// Completing one closes exactly one job — the gauge falls rather than only climbing.
+	// The job type is interned by the compiler, so the test asks the store for whatever
+	// is activatable rather than assuming an id.
+	var jobKey uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		if jobKey == 0 {
+			jobKey = k
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if jobKey == 0 {
+		t.Fatal("no activatable job to complete")
+	}
+	if code, body := h.x.do(http.MethodPost,
+		"/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/complete", "{}"); code != http.StatusOK {
+		t.Fatalf("complete job status=%d body=%s", code, body)
+	}
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 2 {
+		t.Fatalf("open jobs = %v after completing one of three, want 2", got)
+	}
+}
+
+// TestOpenJobsGaugeIgnoresReputs is the subtle half of the open-job counter. Failing a
+// job re-puts it with a decremented retry count, and assigning re-puts it with an
+// assignee — the job was already open and still is, so neither may move the count.
+// Counting every put instead of only creation would inflate the gauge on exactly the
+// processes an operator is most likely to be watching: the ones that are retrying.
+func TestOpenJobsGaugeIgnoresReputs(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(1)
+
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 1 {
+		t.Fatalf("open jobs = %v after one parked instance, want 1", got)
+	}
+
+	var jobKey uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		if jobKey == 0 {
+			jobKey = k
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if jobKey == 0 {
+		t.Fatal("no activatable job in the fixture")
+	}
+
+	// Fail it with retries left: the job is re-put, still open, still one job.
+	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/fail",
+		`{"retries":2,"errorMessage":"transient"}`); code != http.StatusOK {
+		t.Fatalf("fail job status=%d body=%s", code, body)
+	}
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 1 {
+		t.Fatalf("open jobs = %v after failing (re-putting) the one job, want 1", got)
+	}
+}

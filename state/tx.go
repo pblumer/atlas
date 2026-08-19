@@ -676,6 +676,41 @@ func (t *Tx) SetDefLastActivity(procDefKey uint64, unixNano int64) error {
 	return t.b.Set(keyDefLastActivity(procDefKey), t.scratch, nil)
 }
 
+// --- Engine-wide live-entity counters (ADR-0142) ---
+//
+// One counter per kind of thing that is *currently open*: jobs waiting for a worker,
+// timers waiting to fire, message subscriptions waiting to correlate. Like the
+// definition-scoped counters above they are write-only signed merges maintained from
+// applyToState, so they cost no read on the hot path (invariant I1) and replay rebuilds
+// them identically (invariant I4).
+//
+// Each pairs an increment on the event that creates the entity with a decrement on the
+// event that removes it. That pairing is the correctness condition, and it is why
+// incidents are absent: an incident is also removed by the unconditional, idempotent
+// DeleteIncident that runs when *any* element terminates, with no event of its own to
+// count, and telling "there was one" from "there was not" would need a read on the
+// hottest path in the engine.
+
+// IncOpenJobs and DecOpenJobs move the count of jobs waiting for a worker, on job
+// creation and on completion or cancellation. Re-putting a job (assigned, failed with a
+// decremented retry count) moves nothing: the job was already open and still is.
+func (t *Tx) IncOpenJobs() error { return t.mergeCounter(keyRuntimeTotal(rtOpenJobs), 1) }
+func (t *Tx) DecOpenJobs() error { return t.mergeCounter(keyRuntimeTotal(rtOpenJobs), -1) }
+
+// IncPendingTimers and DecPendingTimers move the count of timers waiting to fire, on
+// timer creation and on trigger or cancellation.
+func (t *Tx) IncPendingTimers() error { return t.mergeCounter(keyRuntimeTotal(rtPendingTimers), 1) }
+func (t *Tx) DecPendingTimers() error { return t.mergeCounter(keyRuntimeTotal(rtPendingTimers), -1) }
+
+// IncMessageSubscriptions and DecMessageSubscriptions move the count of subscriptions
+// waiting to correlate, on subscription creation and on correlation.
+func (t *Tx) IncMessageSubscriptions() error {
+	return t.mergeCounter(keyRuntimeTotal(rtMessageSubscriptions), 1)
+}
+func (t *Tx) DecMessageSubscriptions() error {
+	return t.mergeCounter(keyRuntimeTotal(rtMessageSubscriptions), -1)
+}
+
 // IncElementToken and DecElementToken move a definition-element live-token count
 // by one, on element-instance activation and completion/termination.
 func (t *Tx) IncElementToken(procDefKey uint64, elementId int32) error {

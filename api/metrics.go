@@ -40,6 +40,9 @@ type durabilityCollector struct {
 	walBytes         *prometheus.Desc
 	activeInstances  *prometheus.Desc
 	liveTokens       *prometheus.Desc
+	openJobs         *prometheus.Desc
+	pendingTimers    *prometheus.Desc
+	subscriptions    *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
 }
@@ -65,6 +68,9 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Process instances currently running, summed from the per-definition counters (ADR-0080)."),
 		liveTokens: d("live_element_tokens",
 			"Element instances currently holding a live token, summed from the per-definition-element counters (ADR-0080)."),
+		openJobs:      d("open_jobs", "Jobs currently waiting for a worker."),
+		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
+		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
 		exporterPosition: d("exporter_position",
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
@@ -84,6 +90,9 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.walBytes
 	ch <- c.activeInstances
 	ch <- c.liveTokens
+	ch <- c.openJobs
+	ch <- c.pendingTimers
+	ch <- c.subscriptions
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -150,6 +159,20 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if n, err := s.store.TotalLiveTokens(); err == nil {
 		gauge(c.liveTokens, float64(n))
+	}
+	// What is currently open and waiting, from the engine-wide counters applyToState
+	// maintains (ADR-0142 slice 4). Incidents are absent on purpose: they are also
+	// removed by the unconditional delete that runs when any element terminates, with no
+	// event of its own to count, so a counter for them would need a read on the engine's
+	// hottest path. See the ADR.
+	if n, err := s.store.OpenJobs(); err == nil {
+		gauge(c.openJobs, float64(n))
+	}
+	if n, err := s.store.PendingTimers(); err == nil {
+		gauge(c.pendingTimers, float64(n))
+	}
+	if n, err := s.store.MessageSubscriptions(); err == nil {
+		gauge(c.subscriptions, float64(n))
 	}
 
 	// Lag is only meaningful with an exporter. A zero on a server that exports nothing

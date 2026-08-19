@@ -219,9 +219,27 @@ This ADR is **not implemented in one change**. The slices:
    break the rule above rather than bend it. They need their own durable merge counters
    inside `applyToState`, with a backfill for existing stores and recovery tests, which is
    a change to durable state and so its own slice.
-4. Durable maintained counters for jobs, timers, message subscriptions and incidents —
-   merge counters written inside `applyToState`, backfilled for existing stores,
-   recovery-tested — and the gauges over them.
+4. **Landed (partly)** — **durable counters for open work**: `atlas_open_jobs`,
+   `atlas_pending_timers` and `atlas_message_subscriptions`, engine-wide signed merge
+   counters maintained inside `applyToState` (one key per kind), backfilled once at
+   `Open` for stores written before they existed, and recovery-tested — a rebuild from
+   the log alone lands on the same numbers the live run produced.
+
+   The correctness condition is **pairing**: an increment on the event that creates the
+   entity, a decrement on the event that removes it, and *nothing* on an event that
+   merely re-puts one. Failing a job re-puts it with a decremented retry count and
+   assigning re-puts it with an assignee; the job was already open and still is, so
+   neither may move the count. Counting every put would inflate the gauge on exactly the
+   processes an operator is most likely watching — the ones that are retrying.
+
+   **Incidents are not countable this way**, which is why they are absent. An incident is
+   removed by its own `IncidentResolved` event *and* by the unconditional, idempotent
+   `DeleteIncident` that runs whenever any element terminates — a delete with no event of
+   its own, on the hottest path in the engine, where telling "there was one" from "there
+   was not" would need a read. Counting them needs an explicit resolution event for that
+   path, which changes what the log contains and so belongs in its own change; it is
+   arguably a log-fidelity improvement in its own right, since today an incident can
+   vanish with nothing in the log saying so.
 5. Job protocol counters (activations, completions, failures, retries, timeouts),
    landing with or after the ADR-0007 work.
 6. Recovery duration and replayed event count, exported once recovery can report them
