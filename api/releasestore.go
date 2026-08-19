@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // applicationRelease is one publish of a process application: the manifest of what
@@ -68,7 +70,7 @@ func (s *releaseStore) fileFor(id string) string {
 // save writes a release durably (atomic write + directory fsync), so the caller may
 // treat a nil return as "on disk" (I2).
 func (s *releaseStore) save(rec applicationRelease) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // loadAll reads every release, newest first (version descending within an
@@ -147,5 +149,5 @@ func (s *releaseStore) deleteForApplication(appID string) error {
 	if !removed {
 		return nil
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }

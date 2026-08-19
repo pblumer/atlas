@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // persistedDeployment is the on-disk form of a deployed definition: the metadata
@@ -81,7 +83,7 @@ func (d *deployStore) fileFor(key uint64) string {
 // save writes a deployment durably (atomic write + directory fsync), so the
 // caller may treat a nil return as "on disk" (I2 / ADR-0019).
 func (d *deployStore) save(rec persistedDeployment) error {
-	return atomicWriteJSON(d.dir, d.fileFor(rec.Key), rec)
+	return sidecar.WriteJSON(d.dir, d.fileFor(rec.Key), rec)
 }
 
 // load reads a single deployment record by key. ok is false (with a nil error) when
@@ -110,7 +112,7 @@ func (d *deployStore) delete(key uint64) error {
 	if err := os.Remove(d.fileFor(key)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deploystore: remove: %w", err)
 	}
-	return fsyncDir(d.dir)
+	return sidecar.FsyncDir(d.dir)
 }
 
 // loadAll reads every deployment record, sorted by key ascending so registration

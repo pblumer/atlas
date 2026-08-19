@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // Process documentation (ADR-0143): a BPMN process published as one structured
@@ -135,7 +137,7 @@ func (s *processDocStore) save(rec processDoc, pdf []byte) error {
 	if !isHexToken(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
-	if err := atomicWriteFile(s.dir, s.pdfFileFor(rec.ID), pdf); err != nil {
+	if err := sidecar.WriteFile(s.dir, s.pdfFileFor(rec.ID), pdf); err != nil {
 		return err
 	}
 	return s.saveRecord(rec)
@@ -148,7 +150,7 @@ func (s *processDocStore) saveRecord(rec processDoc) error {
 	if !isHexToken(rec.ID) {
 		return fmt.Errorf("processdocstore: refusing unsafe id %q", rec.ID)
 	}
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 func (s *processDocStore) get(id string) (processDoc, bool, error) {
@@ -298,5 +300,5 @@ func (s *processDocStore) delete(id string) error {
 			return fmt.Errorf("processdocstore: remove: %w", err)
 		}
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }

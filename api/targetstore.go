@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // deploymentTarget is another Atlas server this one can promote a release to
@@ -99,7 +101,7 @@ func (s *targetStore) fileFor(id string) string {
 }
 
 func (s *targetStore) save(rec deploymentTarget) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 func (s *targetStore) get(id string) (deploymentTarget, bool, error) {
@@ -121,7 +123,7 @@ func (s *targetStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("targetstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every target, oldest first, for a stable listing.

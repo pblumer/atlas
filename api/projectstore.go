@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // project is a named container that groups artifacts so related work lives
@@ -71,7 +73,7 @@ func (p *projectStore) fileFor(id string) string {
 // save writes a project durably (atomic write + directory fsync), overwriting any
 // existing project with the same id — the path a rename takes (I2 / ADR-0034).
 func (p *projectStore) save(rec project) error {
-	return atomicWriteJSON(p.dir, p.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(p.dir, p.fileFor(rec.ID), rec)
 }
 
 // get returns the project for an id, or ok=false if none exists.
@@ -97,7 +99,7 @@ func (p *projectStore) delete(id string) error {
 	if err := os.Remove(p.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("projectstore: remove: %w", err)
 	}
-	return fsyncDir(p.dir)
+	return sidecar.FsyncDir(p.dir)
 }
 
 // loadAll reads every project, oldest first (creation order), so the Modeler

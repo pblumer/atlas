@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // Call-activity target override actions (ADR-0105). Exactly one applies per record:
@@ -57,7 +59,7 @@ func (s *callOverrideStore) fileFor(processID string) string {
 // save writes an override durably (atomic write + directory fsync), overwriting any
 // existing record for the same called process id.
 func (s *callOverrideStore) save(rec callOverride) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.CalledProcessID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.CalledProcessID), rec)
 }
 
 // delete removes an override. A missing override is not an error (idempotent).
@@ -65,7 +67,7 @@ func (s *callOverrideStore) delete(processID string) error {
 	if err := os.Remove(s.fileFor(processID)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("calloverridestore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every override, oldest first (by last update), so listings are

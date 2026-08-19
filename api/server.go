@@ -61,6 +61,8 @@ import (
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
+
+	"github.com/pblumer/atlas/api/vault"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -187,7 +189,7 @@ type Server struct {
 	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
 	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
 	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vault            *vault.Vault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
 	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore           // durable sidecar for user accounts (ADR-0044)
 
@@ -808,11 +810,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// <data-dir>/vault.key so the vault works with no provisioning. Built after the
 	// options so WithoutVault takes effect before any key file is touched.
 	if s.vaultEnabled {
-		key, source, err := resolveVaultKey(filepath.Join(dataDir, "vault.key"))
+		key, source, err := vault.ResolveKey(filepath.Join(dataDir, "vault.key"))
 		if err != nil {
 			return nil, err
 		}
-		if s.vault, err = newSecretVault(filepath.Join(dataDir, "vault"), key); err != nil {
+		if s.vault, err = vault.New(filepath.Join(dataDir, "vault"), key); err != nil {
 			return nil, err
 		}
 		if source == "generated" {

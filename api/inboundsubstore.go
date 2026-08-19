@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // inboundSubscription is an operator-configured inbound event binding for a clio
@@ -61,7 +63,7 @@ func (s *inboundSubStore) fileFor(id string) string {
 
 // save writes a subscription durably (atomic write + directory fsync).
 func (s *inboundSubStore) save(rec inboundSubscription) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // get returns the subscription for an id, or ok=false if none exists.
@@ -85,7 +87,7 @@ func (s *inboundSubStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("inboundsubstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every subscription, oldest first (creation order). Non-record files

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // deployTokenPrefix marks a deploy token's secret. A recognizable, greppable
@@ -84,7 +86,7 @@ func (s *deployTokenStore) fileFor(id string) string {
 
 // save writes a token durably (atomic write + directory fsync).
 func (s *deployTokenStore) save(rec deployToken) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // delete revokes a token by removing its record. A missing record is not an error,
@@ -93,7 +95,7 @@ func (s *deployTokenStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deploytokenstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every token, oldest first, so a listing has a stable order.

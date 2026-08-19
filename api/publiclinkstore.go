@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // publicLink is a revocable, unauthenticated entry point that starts one process
@@ -55,7 +57,7 @@ func (p *publicLinkStore) fileFor(token string) string {
 }
 
 func (p *publicLinkStore) save(rec publicLink) error {
-	return atomicWriteJSON(p.dir, p.fileFor(rec.Token), rec)
+	return sidecar.WriteJSON(p.dir, p.fileFor(rec.Token), rec)
 }
 
 func (p *publicLinkStore) get(token string) (publicLink, bool, error) {
@@ -85,7 +87,7 @@ func (p *publicLinkStore) delete(token string) error {
 	if err := os.Remove(p.fileFor(token)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("publiclinkstore: remove: %w", err)
 	}
-	return fsyncDir(p.dir)
+	return sidecar.FsyncDir(p.dir)
 }
 
 func (p *publicLinkStore) loadAll() ([]publicLink, error) {

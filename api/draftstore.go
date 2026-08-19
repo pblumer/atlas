@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // draft is a saved-but-not-deployed diagram: the raw BPMN XML plus the metadata
@@ -52,7 +54,7 @@ func (d *draftStore) fileFor(processID string) string {
 // save writes a draft durably (atomic write + directory fsync), overwriting any
 // existing draft for the same process id (I2 / ADR-0021).
 func (d *draftStore) save(rec draft) error {
-	return atomicWriteJSON(d.dir, d.fileFor(rec.ProcessID), rec)
+	return sidecar.WriteJSON(d.dir, d.fileFor(rec.ProcessID), rec)
 }
 
 // get returns the draft for a process id, or ok=false if none is saved.
@@ -76,7 +78,7 @@ func (d *draftStore) delete(processID string) error {
 	if err := os.Remove(d.fileFor(processID)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("draftstore: remove: %w", err)
 	}
-	return fsyncDir(d.dir)
+	return sidecar.FsyncDir(d.dir)
 }
 
 // loadAll reads every draft, most recently saved first — the order the Modeler

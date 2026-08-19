@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // installedTemplate is a marketplace package a user has installed into this
@@ -50,7 +52,7 @@ func (s *marketplaceStore) fileFor(id string) string {
 // save writes an installed template durably (atomic write + directory fsync),
 // overwriting any existing record with the same id (re-install / upgrade).
 func (s *marketplaceStore) save(rec installedTemplate) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // get returns the installed template for an id, or ok=false if none exists.
@@ -75,7 +77,7 @@ func (s *marketplaceStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("marketplacestore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every installed template, oldest install first, so the Modeler

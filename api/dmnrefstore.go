@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // dmnRef is a DMN artifact: a *reference* to a decision model authored in temis,
@@ -49,7 +51,7 @@ func (d *dmnRefStore) fileFor(id string) string {
 // save writes a reference durably (atomic write + directory fsync), overwriting
 // any existing reference with the same id (I2 / ADR-0034).
 func (d *dmnRefStore) save(rec dmnRef) error {
-	return atomicWriteJSON(d.dir, d.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(d.dir, d.fileFor(rec.ID), rec)
 }
 
 // get returns the reference for an id, or ok=false if none exists.
@@ -74,7 +76,7 @@ func (d *dmnRefStore) delete(id string) error {
 	if err := os.Remove(d.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("dmnrefstore: remove: %w", err)
 	}
-	return fsyncDir(d.dir)
+	return sidecar.FsyncDir(d.dir)
 }
 
 // loadAll reads every reference, oldest first (creation order), so the Modeler

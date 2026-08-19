@@ -79,6 +79,10 @@ job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
 connector/  In-process service-task workers — one package per connector kind
 api/        HTTP API, web UI, command submission and queries
+  layout/   BPMN diagram auto-layout (ADR-0124/0127)
+  collab/   Live collaborative modeling sessions (ADR-0140)
+  vault/    Encrypted secret store (ADR-0069/0070)
+  sidecar/  The atomic-write + fsync discipline the design-time stores share
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
@@ -99,6 +103,7 @@ connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)
 connector/script/      Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
 ```
 
 Adding a connector kind is one package here plus one `managedConnectorKind` entry in

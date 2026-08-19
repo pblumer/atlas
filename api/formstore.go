@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // form is a stored form definition: a form-js JSON schema plus the metadata the
@@ -50,7 +52,7 @@ func (f *formStore) fileFor(id string) string {
 // save writes a form durably (atomic write + directory fsync), overwriting any
 // existing form with the same id (I2).
 func (f *formStore) save(rec form) error {
-	return atomicWriteJSON(f.dir, f.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(f.dir, f.fileFor(rec.ID), rec)
 }
 
 // get returns the form for an id, or ok=false if none is stored.
@@ -74,7 +76,7 @@ func (f *formStore) delete(id string) error {
 	if err := os.Remove(f.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("formstore: remove: %w", err)
 	}
-	return fsyncDir(f.dir)
+	return sidecar.FsyncDir(f.dir)
 }
 
 // loadAll reads every form, most recently saved first. Files that are not form

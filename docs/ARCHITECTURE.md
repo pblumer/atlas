@@ -290,8 +290,13 @@ atlas/
 │   ├── webscrape/     Web scraping (ADR-0118)
 │   ├── clio/          clio event store: read, write, query (ADR-0036)
 │   ├── temis/         temis decision service (ADR-0050)
-│   └── script/        Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+│   ├── script/        Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+│   └── csvimport/     CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
 ├── api/           HTTP API, web UI, command submission and queries
+│   ├── layout/        BPMN diagram auto-layout (ADR-0124/0127)
+│   ├── collab/        Live collaborative modeling sessions (ADR-0140)
+│   ├── vault/         Encrypted secret store (ADR-0069/0070)
+│   └── sidecar/       Atomic write + fsync, shared by the design-time stores
 ├── mcp/           MCP server over the HTTP API (ADR-0016)
 ├── metrics/       Prometheus metrics (ADR-0142)
 ├── opensearch/    OpenSearch event exporter (ADR-0114)
@@ -304,6 +309,14 @@ that kind's in-process worker handles it off the processor goroutine, after fsyn
 so a connector call can never violate the hot-path or durability invariants
 (ADR-0007, ADR-0067). Grouping them keeps that shared contract visible and makes
 adding a kind a new sub-package rather than another entry in a flat root.
+
+The sub-packages under `api/` are the parts of the server that depend on nothing
+else in it: a layout generator that only reads and writes BPMN XML, a session
+registry that only coordinates editors in memory, a vault that only seals bytes,
+and the durable-write discipline the rest of the design-time stores share. What
+remains in `api` itself is the HTTP surface and the stores it is inseparable
+from — those hang off the server's own state and are not a package boundary
+waiting to be drawn.
 
 ---
 

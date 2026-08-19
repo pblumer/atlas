@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // connectorKindTemis is the central DMN decision connector kind (ADR-0050);
@@ -89,7 +91,7 @@ func (s *connectorStore) fileFor(id string) string {
 // save writes a connector durably (atomic write + directory fsync), overwriting
 // any existing record with the same id.
 func (s *connectorStore) save(rec connector) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // get returns the connector for an id, or ok=false if none exists.
@@ -113,7 +115,7 @@ func (s *connectorStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("connectorstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // loadAll reads every connector, oldest first (creation order), so the Console

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // Identity sources. A user authenticates either against a locally stored
@@ -129,7 +131,7 @@ func (s *userStore) fileFor(id string) string {
 // save writes a user durably (atomic write + directory fsync), overwriting any
 // existing user with the same id.
 func (s *userStore) save(rec User) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
+	return sidecar.WriteJSON(s.dir, s.fileFor(rec.ID), rec)
 }
 
 // get returns the user for an id, or ok=false if none is stored.
@@ -192,7 +194,7 @@ func (s *userStore) delete(id string) error {
 	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("userstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // count returns the number of stored users. Bootstrap uses it to decide whether a
