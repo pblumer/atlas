@@ -258,8 +258,21 @@ This ADR is **not implemented in one change**. The slices:
    worker protocol (ADR-0007, programme F) does not exist yet, so there are no events to
    count. A permanent zero on a timeout counter reads as "nothing is timing out", which
    would be true and misleading. They land with that protocol.
-6. Recovery duration and replayed event count, exported once recovery can report them
-   without changing its shape.
+6. **Landed** — **what recovery cost**: `atlas_recovery_seconds` and
+   `atlas_recovery_replayed_records`, from `Processor.LastRecovery()`. This is the number
+   ADR-0131's checkpoint cadence exists to shrink, so without it "bounded recovery time"
+   is a claim with no evidence behind it in production.
+
+   Read at scrape time rather than pushed, and that is what keeps it simple: recovery
+   happens once, at startup, *before* the server that holds the registry exists, so a
+   pushed counter would have nowhere to go. The stats are recorded last in `RecoverFrom`,
+   so a failed recovery leaves nothing claiming success, and they are absent rather than
+   zero on a processor that has not recovered — a zero would read as an instant recovery.
+
+   `Replayed` counts records **read**, not events applied: a record at or below the
+   store's applied position is skipped rather than folded in, and a checkpoint lets
+   recovery skip whole segments without reading them at all. That is precisely the number
+   the cadence changes.
 7. Readiness semantics: a readiness probe distinct from liveness that fails while
    startup recovery is incomplete or a required local store cannot operate.
 8. Structured log event names and essential context, and only then OpenTelemetry

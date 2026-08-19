@@ -14,6 +14,8 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // ADR-0142 slice 1: the /metrics endpoint and the durability metrics behind it. Every
@@ -574,5 +576,67 @@ func TestJobLifecycleCounters(t *testing.T) {
 	}
 	if got := sampleValue(t, after, "atlas_open_jobs"); got != 1 {
 		t.Errorf("open jobs = %v after one completion and one retryable failure, want 1", got)
+	}
+}
+
+// TestMetricsReportWhatRecoveryCost: a restart's replay time is the number ADR-0131's
+// checkpoint cadence exists to shrink, so it has to be observable — otherwise "bounded
+// recovery time" is a claim with no evidence behind it in production.
+func TestMetricsReportWhatRecoveryCost(t *testing.T) {
+	dir := t.TempDir()
+	first := newCompactionHarness(t, dir)
+	first.deploy()
+	first.create(3)
+	first.close()
+
+	// A restart over the same directory replays what the first boot wrote.
+	restarted := newCompactionHarness(t, dir)
+	exposition := scrape(t, restarted)
+	replayed := sampleValue(t, exposition, "atlas_recovery_replayed_records")
+	if replayed == 0 {
+		t.Fatalf("recovery replayed 0 records over a log with three instances in it:\n%s", exposition)
+	}
+	if got := sampleValue(t, exposition, "atlas_recovery_seconds"); got < 0 {
+		t.Errorf("recovery seconds = %v, want a non-negative measurement", got)
+	}
+	// It describes *this* process's recovery, so it must not exceed what is in the log.
+	if applied := sampleValue(t, exposition, "atlas_applied_log_position"); replayed > applied {
+		t.Errorf("recovery read %v records but the log only reached position %v", replayed, applied)
+	}
+}
+
+// TestRecoveryMetricsAbsentBeforeRecovery: a processor that has not recovered reports
+// nothing rather than zero — a zero would read as an instant recovery.
+func TestRecoveryMetricsAbsentBeforeRecovery(t *testing.T) {
+	dir := t.TempDir()
+	lg, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, lg, store, nil) // deliberately not recovered
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("api.New: %v", err)
+	}
+	defer func() {
+		srv.Close()
+		if err := store.Close(); err != nil {
+			t.Errorf("store.Close: %v", err)
+		}
+		if err := lg.Close(); err != nil {
+			t.Errorf("log.Close: %v", err)
+		}
+	}()
+	x := deployTestHarness{t, srv.Handler()}
+	code, body := x.do(http.MethodGet, "/metrics", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /metrics status=%d", code)
+	}
+	if hasMetric(string(body), "atlas_recovery_seconds") {
+		t.Error("recovery cost is reported on a processor that never recovered")
 	}
 }

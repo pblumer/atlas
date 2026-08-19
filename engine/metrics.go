@@ -82,6 +82,31 @@ type Metrics interface {
 	CommitFailed()
 }
 
+// RecoveryStats is what the last recovery did: how long it took and how many records it
+// read from the log. It answers the question a restart raises — "how long was this
+// down, and why?" — and, alongside the checkpoint gauges (ADR-0131), whether the
+// checkpoint cadence is actually shortening replay.
+//
+// Replayed counts records *read*, not events applied: a record at or below the store's
+// applied position is skipped rather than folded in, and a checkpoint lets recovery skip
+// whole segments without reading them at all. That is the number the cadence changes.
+type RecoveryStats struct {
+	Seconds  float64
+	Replayed int
+	// Done is false on a processor that has not recovered yet, so a reader can tell
+	// "no recovery" from "a recovery that read nothing".
+	Done bool
+}
+
+// LastRecovery returns what the last Recover/RecoverFrom did.
+//
+// It is read at scrape time rather than pushed, which is what keeps it simple: recovery
+// happens once, before the server that would hold a metrics registry exists, so a pushed
+// counter would have nowhere to go. The fields are written by the goroutine that runs
+// recovery and read only after it returns, so the construction that follows establishes
+// the happens-before (invariant I3 is untouched — this never reaches partition state).
+func (p *Processor) LastRecovery() RecoveryStats { return p.recovery }
+
 // SetMetrics attaches batch instrumentation, or detaches it with nil. Call it before the
 // processor starts handling commands; like SetJobNotifier it is not safe to change while
 // batches are running.

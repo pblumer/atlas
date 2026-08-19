@@ -40,6 +40,8 @@ type durabilityCollector struct {
 	walBytes         *prometheus.Desc
 	activeInstances  *prometheus.Desc
 	liveTokens       *prometheus.Desc
+	recoverySeconds  *prometheus.Desc
+	recoveryReplayed *prometheus.Desc
 	openJobs         *prometheus.Desc
 	pendingTimers    *prometheus.Desc
 	subscriptions    *prometheus.Desc
@@ -68,6 +70,10 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Process instances currently running, summed from the per-definition counters (ADR-0080)."),
 		liveTokens: d("live_element_tokens",
 			"Element instances currently holding a live token, summed from the per-definition-element counters (ADR-0080)."),
+		recoverySeconds: d("recovery_seconds",
+			"How long this process's startup recovery took."),
+		recoveryReplayed: d("recovery_replayed_records",
+			"Records startup recovery read from the log; a checkpoint lets it skip whole segments (ADR-0131)."),
 		openJobs:      d("open_jobs", "Jobs currently waiting for a worker."),
 		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
 		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
@@ -90,6 +96,8 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.walBytes
 	ch <- c.activeInstances
 	ch <- c.liveTokens
+	ch <- c.recoverySeconds
+	ch <- c.recoveryReplayed
 	ch <- c.openJobs
 	ch <- c.pendingTimers
 	ch <- c.subscriptions
@@ -160,6 +168,14 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	if n, err := s.store.TotalLiveTokens(); err == nil {
 		gauge(c.liveTokens, float64(n))
 	}
+	// What the last startup recovery cost (ADR-0142 slice 6). Reported only once it has
+	// happened: a zero on a processor that has not recovered would read as an instant
+	// recovery rather than as no recovery at all.
+	if rec := s.proc.LastRecovery(); rec.Done {
+		gauge(c.recoverySeconds, rec.Seconds)
+		gauge(c.recoveryReplayed, float64(rec.Replayed))
+	}
+
 	// What is currently open and waiting, from the engine-wide counters applyToState
 	// maintains (ADR-0142 slice 4). Incidents are absent on purpose: they are also
 	// removed by the unconditional delete that runs when any element terminates, with no

@@ -38,6 +38,9 @@ type Processor struct {
 	// metrics observes each batch (ADR-0142). Nil — the default — means the loop reports
 	// nothing and never even reads the clock, so an uninstrumented processor pays nothing.
 	metrics Metrics
+	// recovery records what the last Recover/RecoverFrom did, for LastRecovery
+	// (ADR-0142). Written during recovery, read afterwards.
+	recovery RecoveryStats
 
 	processes map[uint64]*compiler.CompiledProcess
 	handlers  map[uint16]func(*ProcessingContext)
@@ -800,6 +803,8 @@ func (p *Processor) Recover() error { return p.RecoverFrom("") }
 // too-new checkpoint can never produce wrong state (invariant I2 is untouched — the
 // WAL remains the source of truth).
 func (p *Processor) RecoverFrom(checkpointRoot string) error {
+	started := time.Now()
+	replayed := 0
 	lastApplied, err := p.store.LastAppliedPosition()
 	if err != nil {
 		return err
@@ -818,6 +823,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	applied := false
 
 	onRecord := func(data []byte) error {
+		replayed++
 		rec, err := model.ReadRecord(data)
 		if err != nil {
 			return err
@@ -866,5 +872,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	p.position = maxPos
 	p.keygen.counter = maxCounter
+	// Recorded last, so a recovery that failed leaves no stats claiming it succeeded.
+	p.recovery = RecoveryStats{Seconds: time.Since(started).Seconds(), Replayed: replayed, Done: true}
 	return nil
 }
