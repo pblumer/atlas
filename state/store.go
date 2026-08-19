@@ -602,6 +602,36 @@ func (s *Store) CompletedProcessInstancesFrom(startKey uint64, limit int, fn fun
 	return next, more, nil
 }
 
+// DueHistoryExpiries calls fn with the purge due date and instance key of every finished
+// instance whose history TTL has elapsed by now, in due-date order, for up to limit of
+// them; it reports whether the window filled (more may be due). This is the retention
+// sweep's candidate set (ADR-0146): a range scan bounded by now, so a tick costs what is
+// due rather than what the history holds — the property the key-order scan lacked, and
+// the one ADR-0085 built the due-timer index for. An idle server pays one empty scan.
+func (s *Store) DueHistoryExpiries(now int64, limit int, fn func(dueDate int64, piKey uint64) error) (more bool, err error) {
+	lo := []byte{byte(cfHistoryExpiry)}
+	hi := prefixEnd(appendOrderedInt64([]byte{byte(cfHistoryExpiry)}, now))
+	n := 0
+	scanErr := s.scanRange(lo, hi, func(k, _ []byte) error {
+		if n >= limit {
+			more = true
+			return errScanWindowFull
+		}
+		if ferr := fn(orderedInt64At(k, 1), trailingKey(k)); ferr != nil {
+			return ferr
+		}
+		n++
+		return nil
+	})
+	if errors.Is(scanErr, errScanWindowFull) {
+		scanErr = nil
+	}
+	if scanErr != nil {
+		return false, scanErr
+	}
+	return more, nil
+}
+
 // Incidents calls fn with the element-instance key and value of every unresolved
 // incident — the operator "list incidents" access pattern (ADR-0061).
 func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {

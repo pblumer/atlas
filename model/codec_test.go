@@ -195,6 +195,19 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "finished process instance scheduled for a history purge",
+			vt:     VTProcessInstance,
+			intent: IntentCompleted,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:     NewKey(3, 2),
+				State:             PICompleted,
+				CompletedAt:       1_700_000_000_000_000_000,
+				CreatedAt:         1_699_999_999_000_000_000,
+				CompletedPosition: 4_242,
+				PurgeDueDate:      1_700_604_800_000_000_000,
+			},
+		},
+		{
 			name:   "child process instance with a TTL expiry due date",
 			vt:     VTProcessInstance,
 			intent: IntentActivated,

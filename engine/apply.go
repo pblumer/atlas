@@ -82,6 +82,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.IncDefCompletedCount(v.process.ProcessDefKey),
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
+			// A definition-declared history TTL schedules the record's hard delete: index the
+			// finished instance by the purge due date the terminal event carries, so retention
+			// selects candidates by asking what is due instead of walking the whole history
+			// (ADR-0146). Zero means the definition declares no history TTL — nothing to index.
+			if err == nil && hist.PurgeDueDate > 0 {
+				err = tx.PutHistoryExpiry(hist.PurgeDueDate, h.Key)
+			}
 			// Releasing a message-start instance re-opens its correlation key so a later
 			// message can start a fresh one (ADR-0094).
 			if err == nil && v.process.CorrelationKey != "" {
@@ -99,7 +106,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// event — the instance key and the definition key it carries — so replay
 			// reproduces the identical deletion (I4/I6). Deleting an already-absent key is
 			// a no-op, so a re-applied purge (replay, or a double-enqueue) is idempotent.
-			return tx.PurgeInstanceHistory(h.Key, v.process.ProcessDefKey)
+			// The carried value also supplies the purge due date, so the scheduled-expiry
+			// entry that nominated this instance is dropped with it (ADR-0146).
+			return tx.PurgeInstanceHistory(h.Key, v.process.ProcessDefKey, v.process.PurgeDueDate)
 		}
 
 	case model.VTElementInstance:
