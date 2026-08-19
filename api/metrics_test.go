@@ -14,6 +14,8 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // ADR-0142 slice 1: the /metrics endpoint and the durability metrics behind it. Every
@@ -433,5 +435,208 @@ func TestMetricsRuntimeGaugesFallWhenInstancesFinish(t *testing.T) {
 
 	if got := sampleValue(t, scrape(t, h), "atlas_active_process_instances"); got != 1 {
 		t.Fatalf("active instances = %v after terminating one of two, want 1", got)
+	}
+}
+
+// TestMetricsReportOpenWork: the backlog gauges — what is waiting for a worker, a
+// clock, or a message. Each is a durable counter maintained by applyToState (ADR-0142
+// slice 4), so unlike a scan it costs the same whatever the backlog is.
+func TestMetricsReportOpenWork(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+
+	exposition := scrape(t, h)
+	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v before anything started, want 0", name, got)
+		}
+	}
+
+	// Three instances park on the service task: three jobs waiting for a worker.
+	h.create(3)
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 3 {
+		t.Fatalf("open jobs = %v with three parked instances, want 3", got)
+	}
+
+	// Completing one closes exactly one job — the gauge falls rather than only climbing.
+	// The job type is interned by the compiler, so the test asks the store for whatever
+	// is activatable rather than assuming an id.
+	var jobKey uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		if jobKey == 0 {
+			jobKey = k
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if jobKey == 0 {
+		t.Fatal("no activatable job to complete")
+	}
+	if code, body := h.x.do(http.MethodPost,
+		"/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/complete", "{}"); code != http.StatusOK {
+		t.Fatalf("complete job status=%d body=%s", code, body)
+	}
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 2 {
+		t.Fatalf("open jobs = %v after completing one of three, want 2", got)
+	}
+}
+
+// TestOpenJobsGaugeIgnoresReputs is the subtle half of the open-job counter. Failing a
+// job re-puts it with a decremented retry count, and assigning re-puts it with an
+// assignee — the job was already open and still is, so neither may move the count.
+// Counting every put instead of only creation would inflate the gauge on exactly the
+// processes an operator is most likely to be watching: the ones that are retrying.
+func TestOpenJobsGaugeIgnoresReputs(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(1)
+
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 1 {
+		t.Fatalf("open jobs = %v after one parked instance, want 1", got)
+	}
+
+	var jobKey uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		if jobKey == 0 {
+			jobKey = k
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if jobKey == 0 {
+		t.Fatal("no activatable job in the fixture")
+	}
+
+	// Fail it with retries left: the job is re-put, still open, still one job.
+	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/fail",
+		`{"retries":2,"errorMessage":"transient"}`); code != http.StatusOK {
+		t.Fatalf("fail job status=%d body=%s", code, body)
+	}
+	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 1 {
+		t.Fatalf("open jobs = %v after failing (re-putting) the one job, want 1", got)
+	}
+}
+
+// TestJobLifecycleCounters: the throughput view of the job protocol — how many jobs
+// were created, finished, failed and cancelled — as cumulative counters, next to the
+// open-jobs gauge that says how many are waiting right now. A gauge alone cannot answer
+// "is anything moving?"; a counter alone cannot answer "how big is the backlog?".
+func TestJobLifecycleCounters(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(2)
+
+	exposition := scrape(t, h)
+	if got := sampleValue(t, exposition, "atlas_jobs_created_total"); got != 2 {
+		t.Fatalf("jobs created = %v after two parked instances, want 2", got)
+	}
+	for _, name := range []string{"atlas_jobs_completed_total", "atlas_jobs_failed_total", "atlas_jobs_canceled_total"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v before anything finished, want 0", name, got)
+		}
+	}
+
+	var keys []uint64
+	if err := h.store.AllActivatableJobs(func(k uint64) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("AllActivatableJobs: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("activatable jobs = %d, want 2", len(keys))
+	}
+
+	// Complete one, fail the other with retries left.
+	if code, body := h.x.do(http.MethodPost,
+		"/api/v1/jobs/"+strconv.FormatUint(keys[0], 10)+"/complete", "{}"); code != http.StatusOK {
+		t.Fatalf("complete status=%d body=%s", code, body)
+	}
+	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(keys[1], 10)+"/fail",
+		`{"retries":2,"errorMessage":"transient"}`); code != http.StatusOK {
+		t.Fatalf("fail status=%d body=%s", code, body)
+	}
+
+	after := scrape(t, h)
+	if got := sampleValue(t, after, "atlas_jobs_completed_total"); got != 1 {
+		t.Errorf("jobs completed = %v, want 1", got)
+	}
+	if got := sampleValue(t, after, "atlas_jobs_failed_total"); got != 1 {
+		t.Errorf("jobs failed = %v, want 1", got)
+	}
+	// A failure with retries left does not close the job, so creation is unchanged and
+	// one job is still open — the counters and the gauge tell a consistent story.
+	if got := sampleValue(t, after, "atlas_jobs_created_total"); got != 2 {
+		t.Errorf("jobs created = %v after a retryable failure, want the original 2", got)
+	}
+	if got := sampleValue(t, after, "atlas_open_jobs"); got != 1 {
+		t.Errorf("open jobs = %v after one completion and one retryable failure, want 1", got)
+	}
+}
+
+// TestMetricsReportWhatRecoveryCost: a restart's replay time is the number ADR-0131's
+// checkpoint cadence exists to shrink, so it has to be observable — otherwise "bounded
+// recovery time" is a claim with no evidence behind it in production.
+func TestMetricsReportWhatRecoveryCost(t *testing.T) {
+	dir := t.TempDir()
+	first := newCompactionHarness(t, dir)
+	first.deploy()
+	first.create(3)
+	first.close()
+
+	// A restart over the same directory replays what the first boot wrote.
+	restarted := newCompactionHarness(t, dir)
+	exposition := scrape(t, restarted)
+	replayed := sampleValue(t, exposition, "atlas_recovery_replayed_records")
+	if replayed == 0 {
+		t.Fatalf("recovery replayed 0 records over a log with three instances in it:\n%s", exposition)
+	}
+	if got := sampleValue(t, exposition, "atlas_recovery_seconds"); got < 0 {
+		t.Errorf("recovery seconds = %v, want a non-negative measurement", got)
+	}
+	// It describes *this* process's recovery, so it must not exceed what is in the log.
+	if applied := sampleValue(t, exposition, "atlas_applied_log_position"); replayed > applied {
+		t.Errorf("recovery read %v records but the log only reached position %v", replayed, applied)
+	}
+}
+
+// TestRecoveryMetricsAbsentBeforeRecovery: a processor that has not recovered reports
+// nothing rather than zero — a zero would read as an instant recovery.
+func TestRecoveryMetricsAbsentBeforeRecovery(t *testing.T) {
+	dir := t.TempDir()
+	lg, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, lg, store, nil) // deliberately not recovered
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("api.New: %v", err)
+	}
+	defer func() {
+		srv.Close()
+		if err := store.Close(); err != nil {
+			t.Errorf("store.Close: %v", err)
+		}
+		if err := lg.Close(); err != nil {
+			t.Errorf("log.Close: %v", err)
+		}
+	}()
+	x := deployTestHarness{t, srv.Handler()}
+	code, body := x.do(http.MethodGet, "/metrics", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /metrics status=%d", code)
+	}
+	if hasMetric(string(body), "atlas_recovery_seconds") {
+		t.Error("recovery cost is reported on a processor that never recovered")
 	}
 }

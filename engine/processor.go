@@ -38,6 +38,9 @@ type Processor struct {
 	// metrics observes each batch (ADR-0142). Nil — the default — means the loop reports
 	// nothing and never even reads the clock, so an uninstrumented processor pays nothing.
 	metrics Metrics
+	// recovery records what the last Recover/RecoverFrom did, for LastRecovery
+	// (ADR-0142). Written during recovery, read afterwards.
+	recovery RecoveryStats
 
 	processes map[uint64]*compiler.CompiledProcess
 	handlers  map[uint16]func(*ProcessingContext)
@@ -716,12 +719,42 @@ func (p *Processor) processBatch() error {
 			QueueDepth:    len(p.queue),
 			SyncSeconds:   syncSeconds,
 			CommitSeconds: commitSeconds,
+			Jobs:          p.jobStats(),
 		})
 	}
 	for _, se := range p.sideEffects {
 		p.notifyJobAvailable(se.jobType)
 	}
 	return nil
+}
+
+// jobStats counts the job-lifecycle transitions in the batch just committed (ADR-0142
+// slice 5). It walks records already in cache and counts into locals, so it allocates
+// nothing (invariant I1), and it runs only when metrics are attached.
+//
+// Reading the intents here rather than in applyToState is deliberate: applyToState must
+// stay deterministic and side-effect-free because it runs identically on replay
+// (invariant I4), and a counter incremented there would be double-counted by every
+// recovery.
+func (p *Processor) jobStats() JobStats {
+	var s JobStats
+	for i := range p.batchRecords {
+		h := &p.batchRecords[i].header
+		if h.ValueType != model.VTJob {
+			continue
+		}
+		switch h.Intent {
+		case model.IntentJobCreated:
+			s.Created++
+		case model.IntentJobCompleted:
+			s.Completed++
+		case model.IntentJobFailed:
+			s.Failed++
+		case model.IntentJobCanceled:
+			s.Canceled++
+		}
+	}
+	return s
 }
 
 func (p *Processor) processOne(cmd Command) {
@@ -770,6 +803,8 @@ func (p *Processor) Recover() error { return p.RecoverFrom("") }
 // too-new checkpoint can never produce wrong state (invariant I2 is untouched — the
 // WAL remains the source of truth).
 func (p *Processor) RecoverFrom(checkpointRoot string) error {
+	started := time.Now()
+	replayed := 0
 	lastApplied, err := p.store.LastAppliedPosition()
 	if err != nil {
 		return err
@@ -788,6 +823,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	applied := false
 
 	onRecord := func(data []byte) error {
+		replayed++
 		rec, err := model.ReadRecord(data)
 		if err != nil {
 			return err
@@ -836,5 +872,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	p.position = maxPos
 	p.keygen.counter = maxCounter
+	// Recorded last, so a recovery that failed leaves no stats claiming it succeeded.
+	p.recovery = RecoveryStats{Seconds: time.Since(started).Seconds(), Replayed: replayed, Done: true}
 	return nil
 }

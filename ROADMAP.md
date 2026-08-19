@@ -552,9 +552,13 @@ What it takes to run this for real.
   too — active process instances and live element tokens, summed from ADR-0080's
   per-definition counters rather than by scanning the runtime set, with a benchmark
   showing the sum is flat in the number of running instances once Pebble has compacted
-  its merge operands. Remaining: durable counters for jobs, timers, messages and
-  incidents (and the gauges over them); job-protocol counters; recovery duration;
-  readiness distinct from liveness; then structured log event names and OTel traces.
+  its merge operands. Durable counters for **open jobs, pending timers and
+  message subscriptions** followed, with the **job lifecycle counters** beside them and
+  **what a restart cost** (recovery seconds and records replayed) — the number the
+  checkpoint cadence exists to shrink. Remaining: an incident counter, which first needs
+  an explicit resolution event for the path where an incident is dropped with an element;
+  the lease/timeout counters, which wait on ADR-0007; readiness distinct from liveness;
+  then structured log event names and OTel traces.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state

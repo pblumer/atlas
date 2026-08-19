@@ -55,6 +55,37 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **The backlog, the job flow, and what a restart cost** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slices 4–6): three additions that
+  together answer "is anything stuck, is anything moving, and how long was this down?"
+
+  **Open work, durably counted** (slice 4): `atlas_open_jobs`, `atlas_pending_timers` and
+  `atlas_message_subscriptions`, engine-wide merge counters maintained inside
+  `applyToState`, backfilled once at open for stores written before they existed, and
+  recovery-tested — a rebuild from the log alone lands on the numbers the live run
+  produced. The correctness condition is pairing: increment on the event that *creates*
+  the entity, decrement on the one that removes it, and nothing on a re-put. Failing a
+  job re-puts it with a decremented retry count; the job was already open and still is,
+  so the gauge must not move — which would otherwise inflate it on exactly the processes
+  an operator is watching. **Incidents are absent on purpose**: an incident is also
+  removed by the unconditional delete that runs when any element terminates, with no
+  event of its own, so counting them needs an explicit resolution event first — arguably
+  a log-fidelity fix in its own right, since an incident can currently vanish with
+  nothing in the log saying so.
+
+  **Job flow** (slice 5): `atlas_jobs_created_total`, `_completed_total`, `_failed_total`
+  and `_canceled_total`, counted from each batch's own records after it is durable. A
+  gauge alone cannot say whether anything is moving; a counter alone cannot say how big
+  the backlog is. Activations, lease expiries and timeouts are absent rather than zero —
+  the lease-based worker protocol (ADR-0007) does not exist yet, and a permanent zero on
+  a timeout counter would read as "nothing is timing out".
+
+  **What a restart cost** (slice 6): `atlas_recovery_seconds` and
+  `atlas_recovery_replayed_records` — the number ADR-0131's checkpoint cadence exists to
+  shrink, so that "bounded recovery time" stops being a claim with no evidence in
+  production. Records *read*, not events applied, since that is what a checkpoint
+  changes; absent rather than zero before a recovery has happened.
+
 - **How much is running, as a metric** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 3): `/metrics` now reports
   `atlas_active_process_instances` and `atlas_live_element_tokens` — the first questions an
