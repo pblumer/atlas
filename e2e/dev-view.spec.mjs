@@ -338,6 +338,100 @@ test("the splitter resizes the side panel, and the width is remembered", async (
   expect(Math.round(await width())).toBe(Math.round(after));
 });
 
+// The collapse is written synchronously when it is toggled, so — unlike the modal's
+// geometry once was — it cannot be lost to an immediate close. These pin the two
+// decisions around it that a later change could plausibly undo.
+test("expanding from the rail is itself remembered", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-side-toggle").click();
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).toHaveClass(/collapsed/);
+
+  // Picking a tab expands — and that is a choice, not a one-off.
+  await page.locator(".dev-tab[data-tab='help']").click();
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+});
+
+test("resetting the layout leaves the collapse alone but clears the width", async ({ page }) => {
+  await openFeel(page);
+  const sideWidth = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const def = await sideWidth();
+
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 90, split.y + split.height / 2, { steps: 6 });
+  await page.mouse.up();
+  expect(await sideWidth()).toBeGreaterThan(def);
+
+  await page.locator(".dev-side-toggle").click();
+  await page.locator(".dev-head").dblclick();
+
+  // The collapse is a mode with its own button — a layout reset is not a request to
+  // undo it. The authored width, which a drag put there, is gone.
+  await expect(page.locator(".dev-side")).toHaveClass(/collapsed/);
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.sidewidth"))).toBeNull();
+  await page.locator(".dev-side-toggle").click();
+  expect(await sideWidth()).toBe(def);
+});
+
+test("an unreadable collapse setting opens the panel rather than guessing", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("atlas.devview.side", "banana"));
+  await openFeel(page);
+  await expect(page.locator(".dev-side")).not.toHaveClass(/collapsed/);
+  await expect(page.locator(".dev-pane-vars")).toBeVisible();
+});
+
+// The splitter's width is written on pointerup and on each key press — no debounce
+// stands between the gesture and the store, which is why (unlike the modal's own
+// geometry) it cannot be lost to an immediate close. These pin that: the drag case
+// is covered above, this covers the keyboard path and the collapse round-trip.
+test("an arrow-key nudge survives closing right after it", async ({ page }) => {
+  await openFeel(page);
+  const width = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const before = await width();
+
+  await page.locator(".dev-split").focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  const nudged = await width();
+  expect(nudged).toBe(before + 32);
+
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await width()).toBe(nudged);
+});
+
+test("collapsing the panel sets an authored width aside rather than forgetting it", async ({ page }) => {
+  await openFeel(page);
+  const width = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+
+  const box = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 100, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  const authored = await width();
+
+  // Collapse to the rail, close, reopen: still the rail, and the splitter is gone
+  // with nothing left to drag.
+  await page.locator(".dev-side-toggle").click();
+  const rail = await width();
+  expect(rail).toBeLessThan(80);
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await width()).toBe(rail);
+  await expect(page.locator(".dev-split")).toBeHidden();
+
+  // Expanding restores the authored width, not the 320px default.
+  await page.locator(".dev-side-toggle").click();
+  expect(await width()).toBe(authored);
+});
+
 test("the splitter cannot squeeze either pane away", async ({ page }) => {
   await openFeel(page);
   const box = await page.locator(".dev-split").boundingBox();
@@ -354,6 +448,43 @@ test("the splitter cannot squeeze either pane away", async ({ page }) => {
   await page.mouse.move(box.x - 3000, box.y + box.height / 2, { steps: 4 });
   await page.mouse.up();
   expect(await page.locator(".dev-main").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(100);
+});
+
+// resizeModal drags the native grip in the bottom-right corner by (dx, dy).
+async function resizeModal(page, dx, dy) {
+  const box = await page.locator(".dev-modal").boundingBox();
+  await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width + dx, box.y + box.height + dy, { steps: 8 });
+  await page.mouse.up();
+}
+
+const modalSize = (page) => page.locator(".dev-modal").evaluate((el) => {
+  const r = el.getBoundingClientRect();
+  return { w: Math.round(r.width), h: Math.round(r.height) };
+});
+
+test("a resized window comes back the same size on the next F2", async ({ page }) => {
+  await openFeel(page);
+  const before = await modalSize(page);
+  await resizeModal(page, -220, -150);
+  const resized = await modalSize(page);
+  expect(resized.w).toBeLessThan(before.w - 100);
+
+  // Closed straight away — no pause for a debounce to catch up. Nobody waits before
+  // pressing Escape, so the size has to already be safe.
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await modalSize(page)).toEqual(resized);
+});
+
+test("closing never stores a degenerate geometry", async ({ page }) => {
+  await openFeel(page);
+  await resizeModal(page, -200, -120);
+  await page.keyboard.press("Escape");
+  const stored = JSON.parse(await page.evaluate(() => localStorage.getItem("atlas.devview.geometry")));
+  expect(stored.w).toBeGreaterThan(0);
+  expect(stored.h).toBeGreaterThan(0);
 });
 
 test("the modal is dragged by its header and stays where it was put", async ({ page }) => {
@@ -412,6 +543,120 @@ test("the modal cannot be dragged out of reach", async ({ page }) => {
   expect(r.right).toBeGreaterThan(100);
   expect(r.top).toBeLessThan(await page.evaluate(() => window.innerHeight));
   expect(r.bottom).toBeGreaterThan(0);
+});
+
+// A geometry is remembered from whatever screen it was made on, and the screen it is
+// restored onto may be far smaller — a laptop after a monitor. Keeping "a strip is
+// reachable" would be the letter of the rule and a bad window: the reader would find
+// a corner of the editor, not the editor. When it fits, it is placed whole.
+// The header's double-click is the one recovery gesture, and it promises to reset
+// "the layout" — so it has to mean all of it. Leaving the panel width behind (as it
+// once did) makes the promise false in exactly the case someone reaches for it: an
+// arrangement made for another screen.
+test("the double-click reset restores every part of the layout", async ({ page }) => {
+  await openFeel(page);
+  const geo = () => page.locator(".dev-modal").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  const sideWidth = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const defaults = { geo: await geo(), side: await sideWidth() };
+
+  // Arrange all three. The reference is widened first: the splitter's ceiling is a
+  // share of the modal's width, so widening after a shrink would hit that ceiling
+  // and test the clamp rather than the reset.
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 110, split.y + split.height / 2, { steps: 6 });
+  await page.mouse.up();
+  expect(await sideWidth()).toBeGreaterThan(defaults.side + 80);
+
+  await resizeModal(page, -250, -160);
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + 200, head.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 120, head.y + 82, { steps: 6 });
+  await page.mouse.up();
+  expect((await geo()).w).toBeLessThan(defaults.geo.w - 100);
+
+  await page.locator(".dev-head").dblclick();
+  expect(await geo()).toEqual(defaults.geo);
+  expect(await sideWidth()).toBe(defaults.side);
+
+  // And the arrangement is forgotten, not merely undone for this opening.
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.geometry"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.sidewidth"))).toBeNull();
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await geo()).toEqual(defaults.geo);
+  expect(await sideWidth()).toBe(defaults.side);
+});
+
+// The panel width is authored against the modal as it was then. Shrink the window
+// afterwards and a fixed panel would eat the code area alive — so what is applied is
+// the authored width clamped to what the modal can currently hold, and the borrowed
+// pixels come back when the window grows again.
+test("shrinking the modal borrows from the panel rather than starving the code", async ({ page }) => {
+  await openFeel(page);
+  const widths = () => page.evaluate(() => ({
+    main: Math.round(document.querySelector(".dev-main").getBoundingClientRect().width),
+    side: Math.round(document.querySelector(".dev-side").getBoundingClientRect().width),
+  }));
+
+  // Widen the reference as far as the splitter allows.
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 400, split.y + split.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const wide = await widths();
+  expect(wide.side).toBeGreaterThan(400);
+
+  await resizeModal(page, -300, -100);
+  const tight = await widths();
+  expect(tight.side).toBeLessThan(wide.side);
+  expect(tight.main).toBeGreaterThanOrEqual(wide.main); // the code kept its room
+
+  // Growing the window hands the borrowed width back to the panel.
+  await resizeModal(page, 300, 100);
+  expect((await widths()).side).toBe(wide.side);
+});
+
+test("a geometry from a larger screen is fitted into a smaller window", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem(
+    "atlas.devview.geometry", JSON.stringify({ x: 2400, y: 1300, w: 1600, h: 1000 })));
+  await page.setViewportSize({ width: 900, height: 600 });
+  await openFeel(page);
+
+  const r = await page.locator(".dev-modal").evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) };
+  });
+  // Fully on screen, not a corner peeking in.
+  expect(r.x).toBeGreaterThanOrEqual(0);
+  expect(r.y).toBeGreaterThanOrEqual(0);
+  expect(r.x + r.w).toBeLessThanOrEqual(900);
+  expect(r.y + r.h).toBeLessThanOrEqual(600);
+});
+
+test("shrinking the window pulls the modal back into view", async ({ page }) => {
+  await openFeel(page);
+  // Put it well down and right first.
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + 300, head.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 900, head.y + 400, { steps: 6 });
+  await page.mouse.up();
+
+  await page.setViewportSize({ width: 700, height: 500 });
+  await expect
+    .poll(async () => page.locator(".dev-modal").evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return Math.round(b.x) >= 0 && Math.round(b.y) >= 0 &&
+        Math.round(b.right) <= 700 && Math.round(b.bottom) <= 500;
+    }))
+    .toBe(true);
 });
 
 test("the inline '</>' button opens the same view", async ({ page }) => {

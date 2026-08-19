@@ -128,8 +128,13 @@ Option 2 gets the room without any of that. Concretely:
   for a 13-inch laptop in opposite directions. Three floors keep an arrangement
   recoverable: neither pane can be squeezed away, the modal has a minimum size, and
   a strip of the header — the handle that drags it back — always stays on screen.
-  A double-click on the header forgets the arrangement and re-centres, which is the
-  way out of a layout that made sense on another monitor. All of it is geometry: no
+  A double-click on the header forgets the whole arrangement — size, position *and*
+  the split — and re-centres, which is the way out of a layout that made sense on
+  another monitor; the collapse is left alone, being a mode with its own button
+  rather than something a drag put there. What is applied for the split is the
+  authored width clamped to what the modal currently holds, so shrinking the window
+  borrows from the panel instead of starving the code, and growing it hands the
+  pixels back. All of it is geometry: no
   gesture here can touch the value being edited, so a botched drag costs a position,
   never an edit.
 - **Writing back is the only mutation.** Apply sets `field.value` and dispatches

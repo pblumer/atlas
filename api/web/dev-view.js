@@ -500,7 +500,7 @@ export function openDevView(field, opts = {}) {
     // The rail has a width of its own, so an authored panel width steps aside while
     // collapsed and is restored — not forgotten — when the panel comes back.
     if (collapsed) side.style.flex = "";
-    else if (sideWidth) setSideWidth(sideWidth, false);
+    else applySideWidth();
     sideToggle.textContent = collapsed ? "‹" : "›";
     sideToggle.title = collapsed ? "Expand the panel" : "Collapse the panel";
     sideToggle.setAttribute("aria-label", sideToggle.title);
@@ -524,41 +524,93 @@ export function openDevView(field, opts = {}) {
 
   // setSideWidth applies (and optionally remembers) the side panel's width, clamped
   // so neither pane can be squeezed out of existence.
-  let sideWidth = 0; // the authored panel width, kept across a collapse/expand
+  // sideWidth is the *authored* width — what the person dragged to. What is applied
+  // is that value clamped to what the modal can currently hold, so shrinking the
+  // window borrows from the panel instead of starving the code, and growing it again
+  // hands the borrowed pixels back rather than leaving the panel permanently smaller.
+  let sideWidth = 0;
+  const sideMax = () => Math.max(MIN_SIDE, modal.getBoundingClientRect().width - MIN_MODAL_W / 2);
+
+  function applySideWidth() {
+    if (!sideWidth || side.classList.contains("collapsed")) return;
+    side.style.flex = `0 0 ${Math.round(Math.min(Math.max(sideWidth, MIN_SIDE), sideMax()))}px`;
+  }
+
   function setSideWidth(px, persist) {
-    const max = Math.max(MIN_SIDE, modal.getBoundingClientRect().width - MIN_MODAL_W / 2);
-    const w = Math.round(Math.min(Math.max(px, MIN_SIDE), max));
-    sideWidth = w;
-    if (!side.classList.contains("collapsed")) side.style.flex = `0 0 ${w}px`;
-    if (persist) store(SIDEW_KEY, String(w));
+    sideWidth = Math.round(Math.min(Math.max(px, MIN_SIDE), sideMax()));
+    applySideWidth();
+    if (persist) store(SIDEW_KEY, String(sideWidth));
   }
 
   // place pins the modal at an explicit position and size, taking it out of the
-  // overlay's centering grid. x/y are clamped so a strip of the header — the handle
-  // that drags it back — always stays on screen.
-  function place(x, y, w, h) {
+  // overlay's centering grid.
+  //
+  // While a person *drags*, a position is honoured as given: pushing a window a bit
+  // past an edge is a real thing people do on purpose, and only the reachable-strip
+  // floor applies. `fit:true` — restoring a stored geometry, or reacting to the
+  // window shrinking — adds one more question: is the window still *substantially*
+  // on screen? A geometry made on a large monitor can leave a corner peeking into a
+  // laptop display, which satisfies the strip rule and is still the wrong window to
+  // open. So when less than half of it would show, it is pulled fully into view;
+  // when most of it shows, the authored position is kept, overhang and all.
+  function place(x, y, w, h, opts = {}) {
     const rect = modal.getBoundingClientRect();
     const width = Math.max(w === undefined ? rect.width : w, MIN_MODAL_W);
     const height = Math.max(h === undefined ? rect.height : h, MIN_MODAL_H);
+    let left = Math.min(Math.max(x, KEEP_ON_SCREEN - width), window.innerWidth - KEEP_ON_SCREEN);
+    let top = Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN);
+    if (opts.fit) {
+      const shownW = Math.min(left + width, window.innerWidth) - Math.max(left, 0);
+      const shownH = Math.min(top + height, window.innerHeight) - Math.max(top, 0);
+      if (shownW < width / 2 || shownH < height / 2) {
+        left = Math.min(Math.max(x, 0), Math.max(0, window.innerWidth - width));
+        top = Math.min(Math.max(y, 0), Math.max(0, window.innerHeight - height));
+      }
+    }
     modal.classList.add("placed");
     modal.style.width = width + "px";
     modal.style.height = height + "px";
-    modal.style.left = Math.round(Math.min(Math.max(x, KEEP_ON_SCREEN - width), window.innerWidth - KEEP_ON_SCREEN)) + "px";
-    modal.style.top = Math.round(Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN)) + "px";
+    modal.style.left = Math.round(left) + "px";
+    modal.style.top = Math.round(top) + "px";
   }
 
+  let geomTimer = null; // pending debounced save, flushed when the view closes
+
+  // saveGeometry records the modal's box — but never a degenerate one. A detached
+  // modal measures 0×0, and storing that would silently disable the whole feature:
+  // the restore path skips a zero-sized geometry, so the window would come back at
+  // the default size forever after.
   function saveGeometry() {
-    if (!modal.classList.contains("placed")) return;
+    if (!modal.classList.contains("placed") || !modal.isConnected) return;
     const r = modal.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
     store(GEOM_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }));
   }
 
-  // resetLayout returns the modal to the centered default and forgets the stored
-  // geometry — the way out of an arrangement that made sense on another screen.
+  // flushGeometry runs a pending save now. Closing must not lose a resize: nobody
+  // waits out a debounce before pressing Escape, and a timer that fires after the
+  // overlay is gone measures nothing.
+  function flushGeometry() {
+    clearTimeout(geomTimer);
+    geomTimer = null;
+    saveGeometry();
+  }
+
+  // resetLayout is the one recovery gesture, and it undoes *the layout*: the window's
+  // size and position and the split between the two panes. Leaving the panel width
+  // behind would make the promise false in exactly the case someone reaches for it —
+  // an arrangement made for a screen they are no longer sitting at. The collapse is
+  // deliberately not touched: it is a mode with its own button, not something a drag
+  // put there.
   function resetLayout() {
     modal.classList.remove("placed");
     modal.style.left = modal.style.top = modal.style.width = modal.style.height = "";
-    try { localStorage.removeItem(GEOM_KEY); } catch { /* no storage */ }
+    sideWidth = 0;
+    side.style.flex = "";
+    try {
+      localStorage.removeItem(GEOM_KEY);
+      localStorage.removeItem(SIDEW_KEY);
+    } catch { /* no storage */ }
   }
 
   // drag is the shared pointer-drag loop: capture the pointer so the gesture
@@ -618,8 +670,10 @@ export function openDevView(field, opts = {}) {
   // resize writes inline width/height, which is also how we tell a user's resize
   // from the initial layout — so only the former is remembered.
   if (typeof ResizeObserver === "function") {
-    let geomTimer = null;
     new ResizeObserver(() => {
+      // A narrower modal has less to share: re-apply the panel width against the new
+      // box before anything else, so the code area is never squeezed to nothing.
+      applySideWidth();
       if (!modal.style.width) return; // the browser's own first layout, not a resize
       if (!modal.classList.contains("placed")) {
         const r = modal.getBoundingClientRect();
@@ -635,7 +689,7 @@ export function openDevView(field, opts = {}) {
   const onWindowResize = () => {
     if (!modal.classList.contains("placed")) return;
     const r = modal.getBoundingClientRect();
-    place(r.left, r.top, Math.min(r.width, window.innerWidth), Math.min(r.height, window.innerHeight));
+    place(r.left, r.top, Math.min(r.width, window.innerWidth), Math.min(r.height, window.innerHeight), { fit: true });
   };
   window.addEventListener("resize", onWindowResize);
 
@@ -810,6 +864,7 @@ export function openDevView(field, opts = {}) {
   function close() {
     if (openView !== handle) return;
     openView = null;
+    flushGeometry(); // while the modal is still measurable
     document.removeEventListener("keydown", onKeydown, true);
     window.removeEventListener("resize", onWindowResize);
     try { if (editor) editor.destroy(); } catch { /* already gone */ }
@@ -877,7 +932,7 @@ export function openDevView(field, opts = {}) {
   try {
     const g = JSON.parse(read(GEOM_KEY) || "null");
     if (g && g.w > 0 && g.h > 0) {
-      place(g.x, g.y, Math.min(g.w, window.innerWidth), Math.min(g.h, window.innerHeight));
+      place(g.x, g.y, Math.min(g.w, window.innerWidth), Math.min(g.h, window.innerHeight), { fit: true });
     }
   } catch { /* a corrupt entry just means the default layout */ }
 
