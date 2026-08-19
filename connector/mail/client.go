@@ -133,7 +133,7 @@ type SMTPClient struct {
 // budget (ADR-0149), extended to reach an implicit-TLS submissions server, which
 // SendMail cannot (ADR-0150).
 func NewSMTPClient(conn Connector) *SMTPClient {
-	conn.ImplicitTLS = conn.ImplicitTLS || portOf(conn.Endpoint) == submissionsPort
+	conn.ImplicitTLS = conn.ImplicitTLS || usesImplicitTLS(conn.Endpoint)
 	c := &SMTPClient{conn: conn}
 	c.send = c.submit
 	return c
@@ -156,7 +156,7 @@ func (c *SMTPClient) auth() smtp.Auth {
 // listens on, a credential the server rejects) are exactly the ones that otherwise
 // surface much later as an incident on a parked token.
 func (c *SMTPClient) Probe(ctx context.Context) error {
-	sess, err := dialSMTP(ctx, c.conn.Endpoint, c.conn.ImplicitTLS, c.auth())
+	sess, err := dialSMTP(ctx, c.conn.Endpoint, c.conn.ImplicitTLS, nil, c.auth())
 	if err != nil {
 		return fmt.Errorf("mail: %w", err)
 	}

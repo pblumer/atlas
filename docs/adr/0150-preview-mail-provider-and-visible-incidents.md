@@ -159,22 +159,25 @@ is a 200 carrying `ok:false`: the request was served correctly and the answer is
 only an unusable request (a kind with nothing to check, an endpoint that cannot dial)
 is a 400.
 
-**A truthful check needed a truthful transport.** The endpoint normalization above maps
-`smtps://` to port 465 — and `net/smtp.SendMail`, which the SMTP client was built on,
-cannot reach a submissions-port server at all: it dials in the clear and waits for a
-greeting that a TLS-first server will never send, so the send does not fail, it hangs.
-A check that reported "connected" there would have been worse than no check. The
-transport is therefore ours now (`dialSMTP` + `submit`): TLS from the first byte on the
-submissions port, STARTTLS wherever a server offers it, AUTH after the upgrade, then
-the envelope — each step naming itself, so "relay denied" points at the address it was
-about. The probe and the send share the front half of it, which is what makes the check
-meaningful; a check that exercised a different path could only tell you about that path.
-It also closes an ADR-0079 follow-up in passing: the transport takes the caller's
-context, so a send is bounded by the job that asked for it rather than by the network.
-It carries ADR-0149's budget unchanged — that decision bounded the same send for a
-different reason, and the two met here: the budget is the ceiling, a caller's own
-deadline can only lower it, and the transport that applies it is now also the one the
-check walks.
+**A truthful check needed a transport it could share.** A check is only worth reading
+if it walks the path a send walks; one that opened its own kind of connection could
+only tell you about that connection. So the SMTP client's transport moved out of
+`net/smtp.SendMail` and into `dialSMTP`, which returns the live session: connect,
+STARTTLS where offered, AUTH — the front half a send and a check have in common — with
+the envelope walked on top of it for a send and the session simply closed for a check.
+Each step names itself, so a rejection points at the address it was about rather than
+at the send as a whole.
+
+That rewrite met two others in flight. ADR-0149 had already replaced `SendMail` to
+*bound* it, and was then amended to reach an implicit-TLS submissions server, which
+`SendMail` cannot: it dials in the clear and waits for a greeting a TLS-first server
+never sends, so a 465 endpoint did not fail but hung — which also meant this ADR's
+`smtps://` → 465 normalization had been a trap, and a check against it would have
+reported "connected" about a hang. Three decisions, one function: the merged transport
+takes ADR-0149's budget as its ceiling (a caller's own deadline can lower it, never
+raise it) and its implicit-TLS decision by port, and adds what a check needs — a
+session handed back rather than consumed, and the caller's context honored, which
+closes an ADR-0079 follow-up in passing.
 
 One behavior is inherited rather than chosen: `net/smtp` refuses PLAIN auth on an
 unencrypted connection (outside localhost) rather than putting a password on the wire.
@@ -183,13 +186,13 @@ against such a server answers with what it means — no STARTTLS offered, use 58
 
 - **Positive:** both failures from the original reports — a revoked Gmail refresh token
   and an SMTP endpoint that could not dial — are now answerable in a second, at the
-  form, by the person who typed them. A submissions-port (465) connector works at all,
-  which it did not before.
+  form, by the person who typed them, over the very path a send takes.
 - **Negative / trade-offs accepted:** the send path is our code rather than the standard
   library's, so its correctness is now our problem — covered by tests that speak SMTP to
-  a real socket rather than substituting the seam. The check is not admin-gated, matching
-  the rest of the connector API: anyone who can configure a connector can already send
-  through it from a process.
+  a real socket rather than substituting the seam. Three decisions now share one
+  function, so a change to any of them is a change to the others' guarantees. The check
+  is not admin-gated, matching the rest of the connector API: anyone who can configure a
+  connector can already send through it from a process.
 - **Follow-ups:** the remaining items above are unchanged, and the check makes the first
   of them cheaper — a periodic credential health probe is this same `Prober` on a timer.
 
@@ -229,4 +232,4 @@ against such a server answers with what it means — no STARTTLS offered, use 58
 - relates to ADR-0080 (bounded, O(elements) runtime overlay reads)
 - relates to ADR-0041 (managed connectors and the secret model)
 - relates to ADR-0148 (untrusted markup is rendered sandboxed, never inlined)
-- relates to ADR-0149 (the outbound call budget this transport applies)
+- relates to ADR-0149 (the outbound call budget and the implicit-TLS transport this shares)

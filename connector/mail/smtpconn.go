@@ -12,13 +12,27 @@ import (
 	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
-// submissionsPort is the implicit-TLS submission port (RFC 8314 "submissions"): a
-// server listening there expects the TLS handshake as the very first thing on the
-// connection, before any greeting, where 587 and 25 greet in the clear and are
-// upgraded afterwards with STARTTLS. The two are not interchangeable — speaking plain
-// SMTP at 465 leaves both sides waiting for the other, which is a hang and not an
-// error — so the port selects how the connection is opened.
-const submissionsPort = "465"
+// implicitTLSPort is the IANA-registered SMTPS port. A server on 465 expects a TLS
+// handshake immediately, with no plaintext greeting and no STARTTLS (RFC 8314).
+const implicitTLSPort = "465"
+
+// usesImplicitTLS reports whether addr should be reached with implicit TLS (SMTPS)
+// rather than a plaintext connection upgraded by STARTTLS.
+//
+// The decision is made by port, because the connector configuration carries no TLS
+// mode: an operator supplies only "host:port". Port 465 is unambiguous — it is
+// registered for exactly this and serves nothing else — so keying off it makes the
+// common submission endpoints work with no extra configuration. Isolating the choice
+// here also means an explicit per-connector override, should one be added, changes
+// only this function's caller.
+//
+// Getting this wrong hangs rather than fails cleanly: a plaintext client waits for a
+// greeting the TLS server will never send while the server waits for a ClientHello,
+// until the deadline expires.
+func usesImplicitTLS(addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	return err == nil && port == implicitTLSPort
+}
 
 // dialSMTP opens a session to addr and takes it as far as a message can be sent
 // through it: connect (with TLS from the first byte on the submissions port),
@@ -32,7 +46,7 @@ const submissionsPort = "465"
 // outright (outside localhost) rather than putting a password on the wire. That
 // refusal is a useful answer, not an obstacle — but "unencrypted connection" says
 // nothing about what to do, so it is translated below.
-func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth) (*smtp.Client, error) {
+func dialSMTP(ctx context.Context, addr string, implicitTLS bool, tlsCfg *tls.Config, auth smtp.Auth) (*smtp.Client, error) {
 	// Every outbound connector call is bounded by the shared budget (ADR-0149): the
 	// mail worker runs on the run-loop goroutine, so a submission host that accepts
 	// the connection and then stops answering would hold the engine's single writer.
@@ -46,6 +60,9 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 	defer cancel() // bounds the dial; the session below is bounded by the connection deadline
 
 	host := hostOf(addr)
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{ServerName: host}
+	}
 	dialer := &net.Dialer{}
 
 	var (
@@ -53,7 +70,7 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 		err  error
 	)
 	if implicitTLS {
-		conn, err = (&tls.Dialer{NetDialer: dialer, Config: &tls.Config{ServerName: host}}).DialContext(ctx, "tcp", addr)
+		conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsCfg}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
@@ -69,10 +86,14 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 		_ = conn.Close()
 		return nil, fmt.Errorf("no SMTP greeting from %s: %w", addr, err)
 	}
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			_ = c.Close()
-			return nil, fmt.Errorf("STARTTLS with %s: %w", host, err)
+	// STARTTLS only upgrades a plaintext connection; on an implicit-TLS connection the
+	// session is already encrypted and the server offers no such extension.
+	if !implicitTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsCfg); err != nil {
+				_ = c.Close()
+				return nil, fmt.Errorf("STARTTLS with %s: %w", host, err)
+			}
 		}
 	}
 	if auth != nil {
@@ -101,23 +122,30 @@ func dialSMTP(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth
 // connector's transport settings reach it while its signature stays [sendFunc] — the
 // seam a test substitutes.
 func (c *SMTPClient) submit(ctx context.Context, addr string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	return sendMailCtx(ctx, addr, c.conn.ImplicitTLS, auth, from, to, msg)
+	return sendMailCtx(ctx, addr, c.conn.ImplicitTLS, nil, auth, from, to, msg)
 }
 
-// sendMailWithin runs the transport with the budget injected and no implicit TLS, so
-// a test can drive the hang paths in milliseconds instead of waiting out the real
-// budget (ADR-0149's tests reach the transport through here).
+// sendMailWithin runs the transport with the budget injected, choosing the transport
+// from the endpoint's port, so a test can drive the hang paths in milliseconds
+// instead of waiting out the real budget (ADR-0149).
 func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	return sendMailOver(budget, addr, usesImplicitTLS(addr), nil, a, from, to, msg)
+}
+
+// sendMailOver is the send with the transport decision and TLS settings injected, so
+// a test can exercise the implicit-TLS path against a throwaway certificate on an
+// ordinary port (465 is privileged and unavailable to tests).
+func sendMailOver(budget time.Duration, addr string, implicitTLS bool, tlsCfg *tls.Config, a smtp.Auth, from string, to []string, msg []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
-	return sendMailCtx(ctx, addr, false, a, from, to, msg)
+	return sendMailCtx(ctx, addr, implicitTLS, tlsCfg, a, from, to, msg)
 }
 
 // sendMailCtx walks the envelope over a session from dialSMTP. Address validation is
 // net/smtp's own: Client.Mail and Client.Rcpt each call validateLine, so an address
 // carrying CR or LF is refused before it can inject an SMTP command.
-func sendMailCtx(ctx context.Context, addr string, implicitTLS bool, auth smtp.Auth, from string, to []string, msg []byte) error {
-	sess, err := dialSMTP(ctx, addr, implicitTLS, auth)
+func sendMailCtx(ctx context.Context, addr string, implicitTLS bool, tlsCfg *tls.Config, auth smtp.Auth, from string, to []string, msg []byte) error {
+	sess, err := dialSMTP(ctx, addr, implicitTLS, tlsCfg, auth)
 	if err != nil {
 		return err
 	}
@@ -144,15 +172,4 @@ func sendMailCtx(ctx context.Context, addr string, implicitTLS bool, auth smtp.A
 		return fmt.Errorf("message refused: %w", err)
 	}
 	return sess.Quit()
-}
-
-// portOf returns the port of a "host:port" endpoint, or "" when it has none.
-func portOf(endpoint string) string {
-	if _, p, err := net.SplitHostPort(endpoint); err == nil {
-		return p
-	}
-	if i := strings.LastIndex(endpoint, ":"); i >= 0 {
-		return endpoint[i+1:]
-	}
-	return ""
 }

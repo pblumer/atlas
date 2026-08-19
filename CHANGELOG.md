@@ -48,14 +48,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **An SMTP connector on the implicit-TLS submissions port (465) works at all**
-  (ADR-0150): the client was built on `net/smtp.SendMail`, which dials in the clear and
-  waits for a greeting a TLS-first server never sends — so such a connector did not
-  fail, it hung. Atlas now opens the connection itself: TLS from the first byte on 465,
-  STARTTLS wherever a server offers it, authentication after the upgrade, then the
-  envelope — with each step naming itself, so a rejection points at the address it was
-  about ("recipient x@y refused") instead of at the send as a whole. A send is also
-  bounded by the context of the job that asked for it, which it never was before.
+- **The SMTP client speaks over one transport that a check can share** (ADR-0150,
+  ADR-0149): the send no longer goes through `net/smtp.SendMail` but through a session
+  Atlas opens itself — the shared connector call budget as its ceiling, TLS from the
+  first byte on the submissions port (465), STARTTLS wherever a server offers it,
+  authentication after the upgrade, then the envelope. Each step names itself, so a
+  rejection points at the address it was about ("recipient x@y refused") instead of at
+  the send as a whole, and a connector check walks the same connection a send does. A
+  send is also bounded by the context of the job that asked for it, which it never was
+  before.
 - **An SMTP endpoint written without a port is completed instead of failing at send
   time** (ADR-0150): `mail.example.com` now becomes `mail.example.com:587` (and
   `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is

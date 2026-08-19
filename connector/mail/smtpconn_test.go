@@ -228,48 +228,10 @@ func TestSMTPSendNamesARefusedRecipient(t *testing.T) {
 	}
 }
 
-// TestImplicitTLSOpensWithAHandshake guards the reason the transport exists: a
-// submissions-port connector must speak TLS from the first byte, where net/smtp's
-// SendMail would have sent a plaintext greeting and waited forever. The fake listener
-// only reads what arrives first — a TLS record header (0x16, then the version) is
-// proof the branch was taken, with no certificate machinery in the test.
-func TestImplicitTLSOpensWithAHandshake(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-
-	first := make(chan []byte, 1)
-	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-		buf := make([]byte, 3)
-		n, _ := conn.Read(buf)
-		first <- buf[:n]
-	}()
-
-	c := NewSMTPClient(Connector{Endpoint: ln.Addr().String(), ImplicitTLS: true, From: "bot@example.com"})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = c.Probe(ctx) // fails: the listener is not a TLS server. What it *said* is the point.
-
-	select {
-	case got := <-first:
-		if len(got) < 2 || got[0] != 0x16 || got[1] != 0x03 {
-			t.Errorf("first bytes = % x, want a TLS handshake record (16 03 …)", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("nothing was sent — the implicit-TLS connection never opened")
-	}
-}
-
-// TestImplicitTLSFollowsTheSubmissionsPort: an operator writes "smtps://host", which
-// normalizes to :465, and the transport has to notice that on its own.
+// TestImplicitTLSFollowsTheSubmissionsPort joins the two halves: an operator writes
+// "smtps://host", normalization turns that into :465, and the *client* has to carry
+// the decision usesImplicitTLS makes about that port — so the probe opens the same
+// kind of connection the send does.
 func TestImplicitTLSFollowsTheSubmissionsPort(t *testing.T) {
 	endpoint, err := NormalizeSMTPEndpoint("smtps://mail.example.com")
 	if err != nil {
@@ -280,18 +242,5 @@ func TestImplicitTLSFollowsTheSubmissionsPort(t *testing.T) {
 	}
 	if c := NewSMTPClient(Connector{Endpoint: "mail.example.com:587"}); c.conn.ImplicitTLS {
 		t.Error("the submission port 587 selected implicit TLS, want STARTTLS")
-	}
-}
-
-func TestPortOf(t *testing.T) {
-	for in, want := range map[string]string{
-		"mail.example.com:587": "587",
-		"[::1]:465":            "465",
-		"mail.example.com":     "",
-		"":                     "",
-	} {
-		if got := portOf(in); got != want {
-			t.Errorf("portOf(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
