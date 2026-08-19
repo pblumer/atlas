@@ -263,6 +263,11 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
 	"DELETE /api/v1/settings/theme": "UI branding is a Console concern, not an agent action",
 
+	// UI logo (ADR-0148): org-wide branding image for the Console, an admin/UI concern.
+	"GET /api/v1/settings/logo":    "UI branding is a Console concern, not an agent action",
+	"PUT /api/v1/settings/logo":    "UI branding is a Console concern, not an agent action",
+	"DELETE /api/v1/settings/logo": "UI branding is a Console concern, not an agent action",
+
 	// Self-service registration config (ADR-0126): a login-screen/admin concern,
 	// not an agent action.
 	"GET /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",

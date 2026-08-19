@@ -572,6 +572,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
 			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/logo", s.handleGetLogo, apiOp{
+			summary: "Get the org-wide brand logo image; 404 when none is set (public; shown before login) (ADR-0148)", tag: "System",
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand logo image (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/settings/logo", s.handleSetLogo, apiOp{
+			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG logo bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
+			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
 			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System",
 			resp: jsonBody("Registration config", schemaObj(map[string]any{
