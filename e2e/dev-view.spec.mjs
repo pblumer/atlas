@@ -338,6 +338,52 @@ test("the splitter resizes the side panel, and the width is remembered", async (
   expect(Math.round(await width())).toBe(Math.round(after));
 });
 
+// The splitter's width is written on pointerup and on each key press — no debounce
+// stands between the gesture and the store, which is why (unlike the modal's own
+// geometry) it cannot be lost to an immediate close. These pin that: the drag case
+// is covered above, this covers the keyboard path and the collapse round-trip.
+test("an arrow-key nudge survives closing right after it", async ({ page }) => {
+  await openFeel(page);
+  const width = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const before = await width();
+
+  await page.locator(".dev-split").focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  const nudged = await width();
+  expect(nudged).toBe(before + 32);
+
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await width()).toBe(nudged);
+});
+
+test("collapsing the panel sets an authored width aside rather than forgetting it", async ({ page }) => {
+  await openFeel(page);
+  const width = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+
+  const box = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 100, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  const authored = await width();
+
+  // Collapse to the rail, close, reopen: still the rail, and the splitter is gone
+  // with nothing left to drag.
+  await page.locator(".dev-side-toggle").click();
+  const rail = await width();
+  expect(rail).toBeLessThan(80);
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await width()).toBe(rail);
+  await expect(page.locator(".dev-split")).toBeHidden();
+
+  // Expanding restores the authored width, not the 320px default.
+  await page.locator(".dev-side-toggle").click();
+  expect(await width()).toBe(authored);
+});
+
 test("the splitter cannot squeeze either pane away", async ({ page }) => {
   await openFeel(page);
   const box = await page.locator(".dev-split").boundingBox();
