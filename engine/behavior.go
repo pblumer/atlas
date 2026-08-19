@@ -210,6 +210,11 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		return
 	}
 	cancelExpiryTimer(c, piKey, pi.ExpiryDueDate)
+	// A terminated instance is a finished one: schedule its history purge like a
+	// completed instance does (ADR-0146), so an instance ended by its TTL, by a bulk
+	// cancel, or by an operator is retained for the same declared time.
+	terminated := *pi
+	terminated.PurgeDueDate = historyPurgeDue(c, terminated.ProcessDefKey)
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)
@@ -224,7 +229,7 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
 		}
 	})
-	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
+	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, terminated)
 }
 
 // handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
@@ -235,6 +240,25 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 // the deletion is safe; a re-enqueued purge just re-runs idempotent deletes.
 func handleProcessInstancePurging(c *ProcessingContext) {
 	c.AppendProcessInstanceEvent(c.cmd.Key, model.IntentPurged, c.cmd.Value.process)
+}
+
+// historyPurgeDue freezes when retention may hard-delete an instance's finished record:
+// now plus the definition's history TTL, or 0 when it declares none (ADR-0146, opt-in
+// like the instance TTL). Frozen here at command time and carried by the terminal event,
+// so applyToState indexes the instance by a date it was handed rather than one it reads
+// from a clock, and replay rebuilds the identical schedule (I4/I6) — the same discipline
+// ADR-0085 applied to the expiry timer. A definition already undeployed schedules
+// nothing: its compiled TTL is gone, and only a server-wide max age can still reach the
+// record.
+func historyPurgeDue(c *ProcessingContext, defKey uint64) int64 {
+	cp := c.process(defKey)
+	if cp == nil {
+		return 0
+	}
+	if ttl := cp.HistoryTtlNanos(); ttl > 0 {
+		return c.Now() + ttl
+	}
+	return 0
 }
 
 // cancelExpiryTimer retires an instance's TTL expiry timer (ADR-0085) when the instance
@@ -1105,7 +1129,11 @@ func completeScope(c *ProcessingContext, scope uint64) {
 		// Finishing before the TTL: retire the instance's expiry timer in the same batch
 		// so a completed instance leaves no armed timer behind (ADR-0085).
 		cancelExpiryTimer(c, scope, pi.ExpiryDueDate)
-		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
+		// Finishing schedules the record's own expiry: how long the *history* is kept is
+		// the definition's second TTL (ADR-0146), frozen here and carried by the event.
+		done := *pi
+		done.PurgeDueDate = historyPurgeDue(c, done.ProcessDefKey)
+		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, done)
 		if pi.ParentElementInstanceKey != 0 {
 			resumeCaller(c, scope, pi.ParentElementInstanceKey)
 		}
