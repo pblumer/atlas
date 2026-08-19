@@ -22,7 +22,7 @@ and replay any instance step by step — with no database, no message broker, an
 
 **Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries process instances, batch after batch, and never drops a token.
 
-> 🚧 **Developer preview (`0.x`).** Atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
+> **Developer preview (`0.x`).** Atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
 
 ---
 
@@ -42,14 +42,14 @@ That's the whole setup. No SQL schema to migrate, no broker to provision, no sid
 
 ## Highlights
 
-- 🧩 **One binary.** Engine, REST API, OpenAPI explorer, Modeler, Operations, Tasks app and MCP adapter ship in one file. Pure Go, no CGO, embedded state store.
-- 🛟 **Durable by construction.** Every state transition is an append-only event. Nothing becomes visible before it is on disk, and crash recovery is a replay of the log.
-- ⚡ **Compiled, not interpreted.** BPMN is compiled once at deploy time into a flat, integer-indexed graph — no XML parsing or string lookups on the hot path.
-- 🎨 **Model in the browser.** A full BPMN modeler with a properties panel, problems panel, auto-layout, version history, live collaborative editing, and a token simulation you can play without deploying.
-- 🔭 **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
-- 📋 **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
-- 📊 **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
-- 🤖 **Made for AI agents.** `atlas mcp` exposes 65 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
+- **One binary.** Engine, REST API, OpenAPI explorer, Modeler, Operations, Tasks app and MCP adapter ship in one file. Pure Go, no CGO, embedded state store.
+- **Durable by construction.** Every state transition is an append-only event. Nothing becomes visible before it is on disk, and crash recovery is a replay of the log.
+- **Compiled, not interpreted.** BPMN is compiled once at deploy time into a flat, integer-indexed graph — no XML parsing or string lookups on the hot path.
+- **Model in the browser.** A full BPMN modeler with a properties panel, problems panel, auto-layout, version history, live collaborative editing, and a token simulation you can play without deploying.
+- **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
+- **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
+- **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
+- **Made for AI agents.** `atlas mcp` exposes 65 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
 
 ## Take the tour
 
