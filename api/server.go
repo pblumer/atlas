@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/collab"
+	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
@@ -155,11 +156,12 @@ type Server struct {
 	// else needs it, so it is set once at construction and read-only thereafter.
 	dataDir string
 
-	// tasks carries closures to the single run-loop goroutine that owns the
-	// processor; quit stops that goroutine.
-	tasks chan func()
-	quit  chan struct{}
-	wg    sync.WaitGroup
+	// runLoop is the single-writer goroutine that owns the processor, the store
+	// and the registries; every handler reaches them through it (I3, ADR-0002).
+	// quit stops it, and every background sweeper alongside it.
+	runLoop *runloop.Loop
+	quit    chan struct{}
+	wg      sync.WaitGroup
 
 	// The fields below are touched only on the run-loop goroutine (via do), so
 	// they need no locking — the same single-owner discipline as process state.
@@ -744,12 +746,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
 	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
+	// quit stops the run loop and every background sweeper alike, so the loop is
+	// built from it rather than owning it.
+	quit := make(chan struct{})
 	s := &Server{
 		proc:        proc,
 		store:       store,
 		dataDir:     dataDir,
-		tasks:       make(chan func()),
-		quit:        make(chan struct{}),
+		quit:        quit,
+		runLoop:     runloop.New(quit),
 		deployments: map[uint64]*deployment{},
 		nextKey:     1,
 		versions:    map[string]int32{},
@@ -1514,32 +1519,22 @@ func (s *Server) collabReaper(every time.Duration) {
 	}
 }
 
-// loop is the single owner of the processor. Every processor and registry access
-// funnels through here, so the single-writer invariant holds even though HTTP
-// handlers are concurrent.
+// loop runs the single-writer goroutine that owns the processor. Every processor
+// and registry access funnels through it, so the single-writer invariant holds
+// even though HTTP handlers are concurrent; see [runloop] for the boundary
+// itself.
 func (s *Server) loop() {
 	defer s.wg.Done()
-	for {
-		select {
-		case <-s.quit:
-			return
-		case fn := <-s.tasks:
-			fn()
-		}
-	}
+	s.runLoop.Run()
 }
 
 // do runs fn on the run-loop goroutine and blocks until it completes. If the
 // server is closing, fn does not run and do returns immediately; callers must
 // treat their result variables' zero values as "not produced".
-func (s *Server) do(fn func()) {
-	done := make(chan struct{})
-	select {
-	case s.tasks <- func() { defer close(done); fn() }:
-		<-done
-	case <-s.quit:
-	}
-}
+//
+// It is a shorthand for the server's own handlers; a per-area service holds the
+// [runloop.Loop] itself (ADR-0147).
+func (s *Server) do(fn func()) { s.runLoop.Do(fn) }
 
 // Close stops the run-loop goroutine. It does not close the processor, log, or
 // store — the caller owns those.
