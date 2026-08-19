@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -133,5 +134,84 @@ func TestParseMailConnectorErrors(t *testing.T) {
 		if _, err := Parse(1, 1, strings.NewReader(wrap(inner))); err == nil {
 			t.Errorf("%s: want a compile error, got nil", name)
 		}
+	}
+}
+
+// An HTML body is authored beside the plain-text one (ADR-0079, amended): both
+// compile as literal-or-FEEL values, and the worker sends them as the two halves of
+// a multipart/alternative message. A model that carries no bodyHtml compiles exactly
+// as before, so the field is additive for every already-deployed process.
+func TestParseMailConnectorHTMLBody(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="office365" to="ops@example.com" subject="Order shipped"
+                             body="Your order is on its way."
+                             bodyHtml="&lt;p&gt;Your order is &lt;b&gt;on its way&lt;/b&gt;.&lt;/p&gt;"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	d := cp.ConnectorTask(cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target).Detail)
+	if d.Body.Literal != "Your order is on its way." {
+		t.Errorf("body = %+v, want the literal text body", d.Body)
+	}
+	if d.BodyHTML.Literal != "<p>Your order is <b>on its way</b>.</p>" {
+		t.Errorf("bodyHtml = %+v, want the literal markup", d.BodyHTML)
+	}
+
+	// Omitting it leaves the zero value — the shape every pre-HTML model compiles to.
+	cp2, err := Parse(1, 1, strings.NewReader(mailConnectorBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	d2 := cp2.ConnectorTask(cp2.Node(cp2.Flow(cp2.Outgoing(cp2.StartEvents()[0])[0]).Target).Detail)
+	if d2.BodyHTML.Expr != nil || d2.BodyHTML.Literal != "" {
+		t.Errorf("bodyHtml = %+v, want the zero value when the model omits it", d2.BodyHTML)
+	}
+}
+
+// An HTML body may be a FEEL expression, so the markup can be composed from the
+// instance's variables; a broken expression is a deploy error, not a send-time one.
+func TestParseMailConnectorHTMLBodyFeel(t *testing.T) {
+	tmpl := `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="gmail" to="ops@example.com" bodyHtml="%s"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+	cp, err := Parse(1, 1, strings.NewReader(fmt.Sprintf(tmpl, `=&quot;&lt;p&gt;&quot; + text + &quot;&lt;/p&gt;&quot;`)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	d := cp.ConnectorTask(cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target).Detail)
+	if d.BodyHTML.Expr == nil {
+		t.Errorf("bodyHtml = %+v, want a compiled FEEL expression", d.BodyHTML)
+	}
+
+	if _, err := Parse(1, 1, strings.NewReader(fmt.Sprintf(tmpl, "=+"))); err == nil {
+		t.Error("a broken FEEL html body must fail the deploy")
+	} else if !strings.Contains(err.Error(), "bodyHtml") {
+		t.Errorf("error should name the offending field, got %v", err)
 	}
 }

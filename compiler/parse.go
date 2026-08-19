@@ -1826,6 +1826,10 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+	// BodyHtml is the optional HTML body (ADR-0079, amended). Authored beside Body,
+	// which stays the plain-text alternative; blank means the message is text-only,
+	// exactly as before the field existed.
+	BodyHtml string `xml:"bodyHtml,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

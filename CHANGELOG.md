@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An HTML body for the mail connector** ([ADR-0079](docs/adr/0079-outbound-mail-connector.md), amended):
+  `<atlas:mailConnector bodyHtml="…">` beside the existing plain-text `body`, a literal or a FEEL
+  expression like every other message field, so markup can be composed from the instance's variables
+  and a broken expression fails the **deploy** rather than the send. What goes out follows what was
+  authored: text only → `text/plain` (framed exactly as before, so nothing changes for an existing
+  process), HTML only → `text/html`, **both → `multipart/alternative`** with the plain text first and
+  the markup last, so a client renders the richest part it can and a text-only reader still gets a
+  readable mail. The multipart boundary is derived from the deterministic Message-ID and extended
+  until it collides with neither body, keeping the framing deterministic and clock-free. The
+  Microsoft Graph provider, which carries a single typed body, declares `contentType: "HTML"` when
+  markup is present. In the Modeler the field is a real code field — HTML highlighting inline and the
+  Developer View on <kbd>F2</kbd> (ADR-0145).
+
+### Added
+
 - **A Developer View for code-bearing fields** ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)):
   <kbd>F2</kbd> in a field that holds code — a FEEL expression, a PowerShell/Python/JavaScript job
   script, a JSON value, a Markdown documentation text — lifts it into a full-screen editor with room

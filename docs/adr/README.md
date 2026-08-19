@@ -88,7 +88,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0076](0076-call-activities.md) | Call activities (single-partition) — start a separate process as a child instance, linked by a caller key | Accepted |
 | [0077](0077-multi-instance-activities.md) | Multi-instance activities (parallel and sequential) | Accepted (amended) |
 | [0078](0078-design-view-token-simulation.md) | Design-view token simulation — a client-side control-flow walkthrough | Accepted |
-| [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST | Accepted |
+| [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST ; **amended 2026-08-18**: an optional `bodyHtml` beside `body`, sent as `multipart/alternative` (plain first, markup last) or as `text/html` alone, with a boundary derived from the deterministic Message-ID so the framing stays clock-free; Graph declares `contentType: "HTML"`; authored in the Modeler as a real HTML code field | Accepted (amended) |
 | [0080](0080-runtime-aggregate-counters.md) | Sublinear runtime views via maintained aggregate counters | Accepted |
 | [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
 | [0082](0082-event-subprocesses.md) | Event subprocesses (message- and timer-triggered, interrupting and non-interrupting) | Proposed |

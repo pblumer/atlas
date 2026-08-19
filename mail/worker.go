@@ -67,6 +67,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 			Bcc:       splitAddrs(resolveValue(detail.Bcc, scope, scopeVars)),
 			Subject:   resolveValue(detail.MailSubject, scope, scopeVars),
 			Body:      resolveValue(detail.Body, scope, scopeVars),
+			HTML:      resolveValue(detail.BodyHTML, scope, scopeVars),
 			MessageID: strconv.FormatUint(j.Key, 10),
 		})
 	}

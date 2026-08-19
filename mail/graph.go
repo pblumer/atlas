@@ -65,10 +65,17 @@ func (c *GraphClient) Send(ctx context.Context, m Message) error {
 	if len(m.To) == 0 {
 		return fmt.Errorf("mail: graph: message has no recipients")
 	}
+	// Graph carries exactly one body with a declared content type — there is no
+	// multipart/alternative to send — so an HTML body wins when the author wrote one,
+	// and the plain text is what a text-only message sends, unchanged.
+	body := graphBody{ContentType: "Text", Content: m.Body}
+	if m.HTML != "" {
+		body = graphBody{ContentType: "HTML", Content: m.HTML}
+	}
 	payload := graphSendMail{
 		Message: graphMessage{
 			Subject:       m.Subject,
-			Body:          graphBody{ContentType: "Text", Content: m.Body},
+			Body:          body,
 			ToRecipients:  graphRecipients(m.To),
 			CcRecipients:  graphRecipients(m.Cc),
 			BccRecipients: graphRecipients(m.Bcc),

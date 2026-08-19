@@ -459,15 +459,17 @@ type ConnectorTaskDetail struct {
 	// names the server-registered mail provider; the message is authored in the
 	// model as literal-or-FEEL values evaluated over the instance's variables at
 	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
-	// the provider's default sender; MailSubject and Body are the message. Each is
-	// the zero RestExpr for a non-mail task. Cc/Bcc/From are also zero when a mail
-	// task omits them.
+	// the provider's default sender; MailSubject and Body are the message, and
+	// BodyHTML is its optional HTML half (sent as multipart/alternative beside Body,
+	// or alone as text/html). Each is the zero RestExpr for a non-mail task. Cc/Bcc/
+	// From/BodyHTML are also zero when a mail task omits them.
 	To          RestExpr
 	Cc          RestExpr
 	Bcc         RestExpr
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	BodyHTML    RestExpr
 	// CSV connector fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
