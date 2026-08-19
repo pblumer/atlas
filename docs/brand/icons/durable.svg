@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- A record landing on the append-only log: the write goes to the stack, nothing is overwritten. -->
+  <path d="M128 26V96" stroke="#2563EB" stroke-width="14" stroke-linecap="round"/>
+  <path d="M98 68 128 98 158 68" stroke="#2563EB" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="40" y="126" width="176" height="34" rx="17" stroke="#2563EB" stroke-width="14"/>
+  <rect x="40" y="186" width="176" height="34" rx="17" stroke="#2563EB" stroke-width="14"/>
+</svg>

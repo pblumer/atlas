@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- One live token on the flow, singled out — the live view and the replay. -->
+  <path d="M26 128H86M170 128H230" stroke="#2563EB" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="34" fill="#2563EB"/>
+  <circle cx="128" cy="128" r="62" stroke="#2563EB" stroke-width="18"/>
+</svg>
