@@ -654,7 +654,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* An element whose token is parked behind an incident (ADR-0061) is drawn red over
    its live-token green, and carries a badge with the reason. Without it a stuck task
    is pixel-identical to one that is legitimately waiting, which is exactly how a
-   failing process comes to look like a running one (ADR-0149). */
+   failing process comes to look like a running one (ADR-0150). */
 .djs-element.atlas-incident .djs-visual > :nth-child(1) {
   stroke: var(--danger) !important; stroke-width: 3px !important;
 }
@@ -2370,14 +2370,14 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
 
-/* The verdict of a connector check, under the connector form (ADR-0149). It says
+/* The verdict of a connector check, under the connector form (ADR-0150). It says
    what was proved, so it is a sentence and not a status dot — and a failure keeps the
    provider's own words, which is the part that tells an operator what to change. */
 .conn-test-result { font: 12.5px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
 .conn-test-result.ok { color: var(--ok); }
 .conn-test-result.err { color: var(--danger); }
 
-/* ---------- Preview mail outbox (ADR-0149) ---------- */
+/* ---------- Preview mail outbox (ADR-0150) ---------- */
 /* One delivered-but-never-sent message per row: the summary is the envelope, the
    open state is the message — text, rendered HTML, and the framed source. */
 .ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }

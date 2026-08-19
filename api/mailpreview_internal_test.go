@@ -28,7 +28,7 @@ func postConnector(t *testing.T, srv *Server, body string) (int, connector) {
 
 // TestMailEndpointNormalizedOnCreate is the outage in test form: a submission host
 // written without a port used to be stored as typed and to fail much later, deep in
-// the send, as an incident on a parked token (ADR-0149). It is now completed at the
+// the send, as an incident on a parked token (ADR-0150). It is now completed at the
 // boundary, and what cannot be completed is refused where it was typed.
 func TestMailEndpointNormalizedOnCreate(t *testing.T) {
 	srv, _ := newValidateServer(t)
@@ -226,7 +226,7 @@ func postTest(t *testing.T, srv *Server, body string) (int, struct {
 
 // TestConnectorCheckAnswersBeforeAnythingIsSaved is the point of the check: it runs
 // against what is typed, so a wrong host or a dead credential is answered at the form
-// rather than hours later as an incident on a parked token (ADR-0149).
+// rather than hours later as an incident on a parked token (ADR-0150).
 func TestConnectorCheckAnswersBeforeAnythingIsSaved(t *testing.T) {
 	srv, _ := newValidateServer(t)
 

@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **A mail task you can run before you own a mail server**
-  ([ADR-0149](docs/adr/0149-preview-mail-provider-and-visible-incidents.md)): a mail
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail
   connector can now use the **`preview`** provider, which asks for no submission host
   and no OAuth credential — it frames the message with the very same code the SMTP and
   Gmail providers send and delivers it to an in-server outbox, readable under
@@ -25,7 +25,7 @@ _Changed_ / _Removed_ for each version.
   model. The same sender/recipient checks a real provider applies are applied here, so
   it is a rehearsal rather than a bypass. The outbox is bounded and not durable:
   nothing in it was ever sent, and nothing in it survives a restart.
-- **The live diagram says why a token is not moving** (ADR-0149): the runtime overlay
+- **The live diagram says why a token is not moving** (ADR-0150): the runtime overlay
   now carries the unresolved incidents on a definition, so the Operations live view
   marks a parked element red, badges it with the failure's own message, and offers
   **Resolve & retry** next to the diagram. Previously a token parked behind an incident
@@ -34,7 +34,7 @@ _Changed_ / _Removed_ for each version.
   separate Incidents view ever showed it.
 
 - **A connector can be checked before it is trusted with anything**
-  ([ADR-0149](docs/adr/0149-preview-mail-provider-and-visible-incidents.md)): the
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): the
   connector form has a **Test connection** button, and every configured mail connector
   a **Test** action. The check runs against what is *typed* — nothing is saved to run it
   — and each provider answers the question its own configuration raises: SMTP opens the
@@ -49,7 +49,7 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 
 - **An SMTP connector on the implicit-TLS submissions port (465) works at all**
-  (ADR-0149): the client was built on `net/smtp.SendMail`, which dials in the clear and
+  (ADR-0150): the client was built on `net/smtp.SendMail`, which dials in the clear and
   waits for a greeting a TLS-first server never sends — so such a connector did not
   fail, it hung. Atlas now opens the connection itself: TLS from the first byte on 465,
   STARTTLS wherever a server offers it, authentication after the upgrade, then the
@@ -57,7 +57,7 @@ _Changed_ / _Removed_ for each version.
   about ("recipient x@y refused") instead of at the send as a whole. A send is also
   bounded by the context of the job that asked for it, which it never was before.
 - **An SMTP endpoint written without a port is completed instead of failing at send
-  time** (ADR-0149): `mail.example.com` now becomes `mail.example.com:587` (and
+  time** (ADR-0150): `mail.example.com` now becomes `mail.example.com:587` (and
   `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is
   bracketed, and an endpoint that cannot dial — a mailbox address in the server field,
   a non-numeric port — is refused with a message naming what was typed. This runs on

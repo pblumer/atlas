@@ -149,7 +149,7 @@ func (c *SMTPClient) auth() smtp.Auth {
 }
 
 // Probe opens the session a send would open — connect, TLS, authenticate — and hangs
-// up without a message (ADR-0149). It is what the connector form's check button
+// up without a message (ADR-0150). It is what the connector form's check button
 // calls: the failures it catches (a host that does not resolve, a port nothing
 // listens on, a credential the server rejects) are exactly the ones that otherwise
 // surface much later as an incident on a parked token.

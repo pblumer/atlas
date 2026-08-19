@@ -149,7 +149,7 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 // lives in mail.NewProviderClient; a record whose provider is misconfigured — an
 // unparseable credential bundle, a missing field, an endpoint that names no host — is
 // skipped (its tasks park) rather than failing the whole rebuild. The preview provider
-// (ADR-0149) needs no credential at all and is handed the server's outbox instead. The resolved secret is an SMTP password or, for a
+// (ADR-0150) needs no credential at all and is handed the server's outbox instead. The resolved secret is an SMTP password or, for a
 // native provider, the OAuth credential JSON bundle held in the vault (I6).
 func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	clients := map[string]mail.Client{}
@@ -428,7 +428,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
 		// an SMTP endpoint that dials, above all — or the change is refused here
-		// instead of parking a token later (ADR-0149).
+		// instead of parking a token later (ADR-0150).
 		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
 			return
 		}
@@ -578,7 +578,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleMailOutbox lists what the preview mail provider has delivered, newest first —
-// the Outbox view in Operations (ADR-0149). An optional ?limit= returns only the
+// the Outbox view in Operations (ADR-0150). An optional ?limit= returns only the
 // newest n; the response's "truncated" says older messages were left behind, by that
 // limit or by the outbox's own capacity.
 //
@@ -630,7 +630,7 @@ type connectorTestReq struct {
 }
 
 // handleTestConnector checks a mail connector and reports what happened in words the
-// person who typed it can act on (ADR-0149).
+// person who typed it can act on (ADR-0150).
 //
 // It exists because every failure this catches used to be discovered the same way: a
 // process ran, a token parked, and an incident carried the provider's error to

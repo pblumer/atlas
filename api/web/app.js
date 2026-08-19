@@ -2269,7 +2269,7 @@ function wireConnectorManagement(connectors) {
         // A native mail provider and SharePoint default their API base — no endpoint;
         // SMTP, temis, clio, and remedy need one. Preview dials nothing at all, so it
         // asks for neither a host nor a credential — that is the whole point of it
-        // (ADR-0149), and a field left standing there would read as if it were used.
+        // (ADR-0150), and a field left standing there would read as if it were used.
         endpointField.style.display = bundle || preview ? "none" : "";
         endpointIn.required = !bundle && !preview;
         endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
@@ -3298,7 +3298,7 @@ async function viewIncidents() {
 }
 
 // viewMailOutbox is the Operations "Outbox" view: the messages a mail connector on
-// the *preview* provider delivered in-server instead of sending (ADR-0149).
+// the *preview* provider delivered in-server instead of sending (ADR-0150).
 //
 // It is what makes preview worth having. A first mail task can be modeled, run and
 // read here before anyone owns a submission host or an OAuth bundle — and what is
@@ -3320,7 +3320,7 @@ async function viewMailOutbox() {
       </span>
     </div>
     <p class="muted">Messages a mail connector using the <b>preview</b> provider
-    delivered here instead of sending them (ADR-0149) — the zero-configuration way to
+    delivered here instead of sending them (ADR-0150) — the zero-configuration way to
     see what a mail task actually produces, before a real provider exists. The message
     is framed by the same code that sends over SMTP or the Gmail API, so what you read
     here is what would go out. Nothing here was ever delivered to a recipient, and the

@@ -46,7 +46,7 @@ func getRuntime(t *testing.T, ts *httptest.Server, path string) runtimeView {
 // TestProcessRuntimeShowsWhyATokenIsParked is the reason this data is on the overlay
 // at all: an operator looking at the live diagram of a failing process used to see a
 // token sitting on a task and nothing else — identical to a task that is legitimately
-// waiting — while the engine had been holding the failure the whole time (ADR-0149).
+// waiting — while the engine had been holding the failure the whole time (ADR-0150).
 // The runtime payload now carries the incident, on both the aggregate and the
 // single-instance view, and stops carrying it the moment it is resolved.
 func TestProcessRuntimeShowsWhyATokenIsParked(t *testing.T) {

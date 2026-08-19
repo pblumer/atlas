@@ -11,7 +11,7 @@ import (
 // Provider identifiers for a managed mail connector. SMTP (the default) reaches any
 // submission server; Gmail and Microsoft are the native provider APIs (ADR-0079/0081).
 // [ProviderPreview], declared beside its outbox, is the fourth: it frames a message
-// like the others and delivers it in-server instead of sending it (ADR-0149).
+// like the others and delivers it in-server instead of sending it (ADR-0150).
 const (
 	ProviderSMTP      = "smtp"
 	ProviderGmail     = "gmail"
@@ -32,7 +32,7 @@ const (
 // JSON bundle held in the vault under the connector's credentialsRef (ADR-0093). The
 // secret lives only here at build time, never in a model or an event (I6).
 //
-// Name and Outbox serve the preview provider (ADR-0149), which delivers into the
+// Name and Outbox serve the preview provider (ADR-0150), which delivers into the
 // server's outbox under the connector's own name; every other provider ignores them.
 type ProviderConfig struct {
 	Provider string

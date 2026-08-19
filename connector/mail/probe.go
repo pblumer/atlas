@@ -17,7 +17,7 @@ type Prober interface {
 }
 
 // Probe checks a client as far as it can be checked without sending anything
-// (ADR-0149). A nil error means the configuration works: the server answered, the
+// (ADR-0150). A nil error means the configuration works: the server answered, the
 // credential was accepted, the connector is ready to carry a message.
 func Probe(ctx context.Context, c Client) error {
 	p, ok := c.(Prober)

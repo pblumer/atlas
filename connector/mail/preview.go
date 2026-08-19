@@ -10,7 +10,7 @@ import (
 
 // ProviderPreview is the zero-configuration mail provider: a connector that frames
 // every message exactly like a real one and then delivers it to an in-server
-// [Outbox] instead of the internet (ADR-0149).
+// [Outbox] instead of the internet (ADR-0150).
 //
 // It exists for the first message someone ever sends from a process. Every other
 // provider asks for a submission host, or an OAuth app registration and a refresh

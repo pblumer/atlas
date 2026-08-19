@@ -8,7 +8,7 @@ import (
 // TestNormalizeSMTPEndpoint covers the shapes an operator actually types. The first
 // case is the outage this function was written for: a submission host written without
 // a port dialed nowhere and surfaced, much later, as "missing port in address" on a
-// parked token (ADR-0149).
+// parked token (ADR-0150).
 func TestNormalizeSMTPEndpoint(t *testing.T) {
 	ok := map[string]string{
 		"mail.example.com":             "mail.example.com:587",

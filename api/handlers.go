@@ -196,7 +196,7 @@ type runtimeResp struct {
 	// Incidents is why a token is not moving (ADR-0061). Without it a parked token
 	// renders exactly like one that is legitimately waiting, which is the reading an
 	// operator then gives it — "the task is still open" — while the engine has in fact
-	// been holding a failure for hours (ADR-0149).
+	// been holding a failure for hours (ADR-0150).
 	Incidents []runtimeIncident `json:"incidents"`
 	// IncidentsTruncated marks a capped page: more elements are parked than the
 	// overlay lists. The per-element counts are then a floor, not a total.

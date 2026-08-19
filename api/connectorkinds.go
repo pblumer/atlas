@@ -110,7 +110,7 @@ var managedConnectorKinds = []managedConnectorKind{
 		// server-registered provider (ADR-0079). The provider host and credential live
 		// in the managed connector store; the credential is resolved from the vault at
 		// build time (ADR-0041), so a secret never lives in a model. The preview
-		// provider (ADR-0149) is the exception that needs neither: it frames the message
+		// provider (ADR-0150) is the exception that needs neither: it frames the message
 		// identically and delivers it to the server's outbox.
 		name:           connectorKindMail,
 		validateCreate: validateMailConnector,
@@ -118,7 +118,7 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.mailRegistry = mail.NewRegistry()
 			// The outbox is created with the registry but never swapped with it: a
 			// rebuild re-binds the preview clients and must not throw away what they
-			// already delivered (ADR-0149). 0 takes the default capacity.
+			// already delivered (ADR-0150). 0 takes the default capacity.
 			s.mailOutbox = mail.NewOutbox(0)
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
@@ -259,7 +259,7 @@ func validateSharePointConnector(p *createConnectorParams) string {
 // the per-kind validator to a record a PATCH has just changed, returning a message
 // when the result is unusable. A partial update carries no kind and no provider, so it
 // cannot route through validateCreate — which is exactly how an SMTP endpoint could be
-// edited into a shape that only fails much later, at send time (ADR-0149). Only mail
+// edited into a shape that only fails much later, at send time (ADR-0150). Only mail
 // normalizes anything today; every other kind passes through untouched.
 func normalizeConnectorUpdate(rec *connector) string {
 	if rec.Kind != connectorKindMail {
@@ -280,7 +280,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 	return ""
 }
 
-// validateMailConnector validates a mail create request (ADR-0079/0081/0149): the
+// validateMailConnector validates a mail create request (ADR-0079/0081/0150): the
 // provider is SMTP (the default), Gmail, Microsoft Graph, or preview; a sender
 // (default From address) is always required; SMTP needs a submission endpoint, which
 // is normalized to "host:port" here, so an endpoint written without a port is fixed

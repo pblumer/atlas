@@ -5953,7 +5953,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
-  let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0149)
+  let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
   let incidentsTruncated = false;  // more elements are parked than the overlay lists
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
@@ -6224,7 +6224,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // variables panel because an incident is the reason nothing else in that panel is
   // changing — the question "why is this task still open?" is answered here, next to
   // the diagram, instead of in a separate Incidents view an operator has to think to
-  // visit (ADR-0149).
+  // visit (ADR-0150).
   function incidentPanelHTML() {
     if (!incidents.length) return "";
     const rows = incidents.map((inc) => `<div class="inc-row">
@@ -6288,7 +6288,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     const decidedEls = new Set(decisions.map((d) => d.elementId));
     // The elements whose token is parked behind an incident (ADR-0061). Without this
     // the diagram draws a stuck task exactly like a waiting one, and the view reads
-    // "still running" for a process that has been failing for hours (ADR-0149).
+    // "still running" for a process that has been failing for hours (ADR-0150).
     incidents = rt.incidents || [];
     incidentsTruncated = !!rt.incidentsTruncated;
     const incidentsByElement = new Map();
