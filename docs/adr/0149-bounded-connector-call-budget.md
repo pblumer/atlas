@@ -1,8 +1,23 @@
 # ADR-0149: A bounded outbound-call budget for every connector
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-19 — implicit-TLS submission; see the amendment note below)
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-08-19): implicit-TLS (SMTPS) submission.** Bounding the SMTP
+> send surfaced a second, older gap. `smtp.SendMail` always opens a *plaintext*
+> connection and upgrades it with STARTTLS, so an endpoint on the SMTPS port —
+> which expects a TLS handshake as its first byte (RFC 8314) — could never work:
+> the client waited for a greeting the server would never send while the server
+> waited for a ClientHello. Under `SendMail` that hung forever; under the budget it
+> merely timed out (`read tcp …:465: i/o timeout`) — visible, but still undeliverable.
+>
+> `sendMailOver` therefore chooses the transport: an endpoint on port 465 is dialled
+> with `tls.DialWithDialer` and skips STARTTLS (the session is already encrypted);
+> everything else keeps the previous plaintext-plus-STARTTLS path. The choice is by
+> port because the connector configuration carries no TLS mode and 465 is registered
+> for exactly this; it is isolated in `usesImplicitTLS` so an explicit per-connector
+> override — the natural follow-up — changes only that function's caller.
 
 ## Context and problem statement
 
