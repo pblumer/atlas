@@ -87,7 +87,7 @@ const publicProcessDocPath = "/public/process-docs/"
 // restarting it at v1 and overwriting history. It runs before the loop serves
 // traffic, so touching the map directly here respects the single-writer invariant.
 func (s *Server) loadProcessDocVersions() error {
-	recs, err := s.processDocs.loadAll()
+	recs, err := s.processDocs.LoadAll()
 	if err != nil {
 		return err
 	}

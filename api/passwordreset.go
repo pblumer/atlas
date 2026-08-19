@@ -99,7 +99,7 @@ func ResetPassword(opts ResetPasswordOptions) (ResetPasswordResult, error) {
 			CreatedAt:    opts.Now,
 			UpdatedAt:    opts.Now,
 		}
-		if err := store.save(u); err != nil {
+		if err := store.Save(u); err != nil {
 			return ResetPasswordResult{}, fmt.Errorf("reset-password: save: %w", err)
 		}
 		return ResetPasswordResult{UserID: u.ID, Username: u.Username, Created: true}, nil
@@ -107,7 +107,7 @@ func ResetPassword(opts ResetPasswordOptions) (ResetPasswordResult, error) {
 
 	u.PasswordHash = hash
 	u.UpdatedAt = opts.Now
-	if err := store.save(u); err != nil {
+	if err := store.Save(u); err != nil {
 		return ResetPasswordResult{}, fmt.Errorf("reset-password: save: %w", err)
 	}
 	return ResetPasswordResult{UserID: u.ID, Username: u.Username, Created: false}, nil

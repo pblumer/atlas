@@ -24,10 +24,10 @@ func TestLoadAllSkipsAndDecodeError(t *testing.T) {
 		t.Fatalf("write notes: %v", err)
 	}
 	// A valid record loads fine on its own.
-	if err := ds.save(persistedDeployment{Key: 3, ProcessID: "p", Version: 1}); err != nil {
+	if err := ds.Save(persistedDeployment{Key: 3, ProcessID: "p", Version: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	recs, err := ds.loadAll()
+	recs, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestLoadAllSkipsAndDecodeError(t *testing.T) {
 	if err := os.WriteFile(ds.fileFor(4), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("write bad record: %v", err)
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll with a corrupt record: want an error, got nil")
 	}
 }

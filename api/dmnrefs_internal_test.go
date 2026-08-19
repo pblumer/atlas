@@ -84,7 +84,7 @@ func TestDmnRefHandlerStoreErrors(t *testing.T) {
 		t.Fatalf("decode seeded ref: %v", err)
 	}
 
-	brokenDmn := &dmnRefStore{dir: filepath.Join(t.TempDir(), "gone")}
+	brokenDmn := brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "gone")))
 
 	// Create/list fail when the dmn-refs directory does not exist.
 	srv.dmnrefs = brokenDmn
@@ -110,14 +110,14 @@ func TestDmnRefHandlerStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDmnRefStore: %v", err)
 	}
-	if err := os.MkdirAll(ds.fileFor("x"), 0o755); err != nil {
+	if err := os.MkdirAll(ds.FileFor("x"), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
 	srv.dmnrefs = ds
 	if got := do(http.MethodPatch, "/api/v1/dmnrefs/x", `{"projectId":""}`); got != http.StatusInternalServerError {
 		t.Fatalf("move with dir record = %d, want 500", got)
 	}
-	if err := os.MkdirAll(filepath.Join(ds.fileFor("y"), "child"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(ds.FileFor("y"), "child"), 0o755); err != nil {
 		t.Fatalf("make non-empty record dir: %v", err)
 	}
 	if got := do(http.MethodDelete, "/api/v1/dmnrefs/y", ""); got != http.StatusInternalServerError {
@@ -133,7 +133,7 @@ func TestDmnRefHandlerStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor("z"), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor("z"), 0o755); err != nil {
 		t.Fatalf("make project record dir: %v", err)
 	}
 	srv.projects = ps

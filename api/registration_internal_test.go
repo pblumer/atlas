@@ -294,7 +294,7 @@ func TestRegistrationLinkReuseAndStoreErrors(t *testing.T) {
 	}
 
 	// A broken public-link store fails loadAll inside the mint path.
-	srv.publicLinks = &publicLinkStore{dir: filepath.Join(t.TempDir(), "nope", "deeper")}
+	srv.publicLinks = brokenStore(newPublicLinkStore(filepath.Join(t.TempDir(), "nope", "deeper")))
 	var errBroken error
 	srv.do(func() { _, errBroken = srv.registrationLinkForLocked(pid, 3) })
 	if errBroken == nil {

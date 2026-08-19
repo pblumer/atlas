@@ -52,7 +52,7 @@ func TestProjectUpdateAndDeleteErrorBranches(t *testing.T) {
 	// Count failure during update: a broken dmn-ref store makes the artifact count
 	// fail after the save has already succeeded, which is its own 500 branch.
 	realDmnrefs := srv.dmnrefs
-	srv.dmnrefs = &dmnRefStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "gone")))
 	if got, _ := do(http.MethodPatch, "/api/v1/applications/"+app.ID, `{"name":"Renamed"}`); got != http.StatusInternalServerError {
 		t.Errorf("update with a broken count = %d, want 500", got)
 	}
@@ -65,7 +65,7 @@ func TestProjectUpdateAndDeleteErrorBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor("unreadable"), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor("unreadable"), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
 	srv.projects = ps

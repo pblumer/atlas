@@ -19,16 +19,16 @@ func newProjects(t *testing.T) *projectStore {
 // back oldest-first (creation order), and proves get finds a specific one.
 func TestProjectStoreRoundTripAndOrder(t *testing.T) {
 	ps := newProjects(t)
-	if err := ps.save(project{ID: "p2", Name: "Beta", CreatedAt: 200, UpdatedAt: 200}); err != nil {
+	if err := ps.Save(project{ID: "p2", Name: "Beta", CreatedAt: 200, UpdatedAt: 200}); err != nil {
 		t.Fatalf("save p2: %v", err)
 	}
-	if err := ps.save(project{ID: "p1", Name: "Alpha", CreatedAt: 100, UpdatedAt: 150}); err != nil {
+	if err := ps.Save(project{ID: "p1", Name: "Alpha", CreatedAt: 100, UpdatedAt: 150}); err != nil {
 		t.Fatalf("save p1: %v", err)
 	}
-	if err := ps.save(project{ID: "p3", Name: "Gamma", CreatedAt: 300, UpdatedAt: 300}); err != nil {
+	if err := ps.Save(project{ID: "p3", Name: "Gamma", CreatedAt: 300, UpdatedAt: 300}); err != nil {
 		t.Fatalf("save p3: %v", err)
 	}
-	got, err := ps.loadAll()
+	got, err := ps.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestProjectStoreRoundTripAndOrder(t *testing.T) {
 			t.Errorf("position %d = %q, want %q (not sorted by createdAt asc)", i, got[i].ID, w)
 		}
 	}
-	rec, ok, err := ps.get("p1")
+	rec, ok, err := ps.Get("p1")
 	if err != nil || !ok || rec.Name != "Alpha" {
 		t.Fatalf("get p1 = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -52,11 +52,11 @@ func TestProjectStoreRoundTripAndOrder(t *testing.T) {
 func TestProjectStoreTieBreakByID(t *testing.T) {
 	ps := newProjects(t)
 	for _, id := range []string{"c", "a", "b"} {
-		if err := ps.save(project{ID: id, CreatedAt: 42}); err != nil {
+		if err := ps.Save(project{ID: id, CreatedAt: 42}); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
-	got, err := ps.loadAll()
+	got, err := ps.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -72,26 +72,26 @@ func TestProjectStoreTieBreakByID(t *testing.T) {
 // (the rename path) and delete is idempotent.
 func TestProjectStoreOverwriteAndDelete(t *testing.T) {
 	ps := newProjects(t)
-	if err := ps.save(project{ID: "p", Name: "First", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := ps.Save(project{ID: "p", Name: "First", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := ps.save(project{ID: "p", Name: "Renamed", CreatedAt: 1, UpdatedAt: 2}); err != nil {
+	if err := ps.Save(project{ID: "p", Name: "Renamed", CreatedAt: 1, UpdatedAt: 2}); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := ps.loadAll()
+	got, err := ps.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
 	if len(got) != 1 || got[0].Name != "Renamed" {
 		t.Fatalf("after overwrite want one 'Renamed' record, got %+v", got)
 	}
-	if err := ps.delete("p"); err != nil {
+	if err := ps.Delete("p"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := ps.get("p"); ok {
+	if _, ok, _ := ps.Get("p"); ok {
 		t.Fatal("project still present after delete")
 	}
-	if err := ps.delete("p"); err != nil {
+	if err := ps.Delete("p"); err != nil {
 		t.Errorf("delete of absent project = %v, want nil (idempotent)", err)
 	}
 }
@@ -115,14 +115,14 @@ func TestProjectStoreErrorPaths(t *testing.T) {
 	}
 
 	// Invalid JSON in a hex-named record fails loadAll and get.
-	bad := ps.fileFor("p")
+	bad := ps.FileFor("p")
 	if err := os.WriteFile(bad, []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("write bad: %v", err)
 	}
-	if _, err := ps.loadAll(); err == nil {
+	if _, err := ps.LoadAll(); err == nil {
 		t.Fatal("loadAll of invalid JSON: want error")
 	}
-	if _, _, err := ps.get("p"); err == nil {
+	if _, _, err := ps.Get("p"); err == nil {
 		t.Fatal("get of invalid JSON: want error")
 	}
 
@@ -133,7 +133,7 @@ func TestProjectStoreErrorPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write stray: %v", err)
 	}
-	got, err := ps.loadAll()
+	got, err := ps.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll after cleanup: %v", err)
 	}
@@ -145,13 +145,13 @@ func TestProjectStoreErrorPaths(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := ps.save(project{ID: "p"}); err == nil {
+	if err := ps.Save(project{ID: "p"}); err == nil {
 		t.Fatal("save with no dir: want error")
 	}
-	if err := ps.delete("p"); err == nil {
+	if err := ps.Delete("p"); err == nil {
 		t.Fatal("delete with no dir: want error")
 	}
-	if _, err := ps.loadAll(); err == nil {
+	if _, err := ps.LoadAll(); err == nil {
 		t.Fatal("loadAll with no dir: want error")
 	}
 }

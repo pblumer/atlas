@@ -82,11 +82,11 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		// A form filed under the protected system project is platform-managed
 		// (ADR-0122): refuse overwriting it, for every caller.
-		if existing, ok, e := s.forms.get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+		if existing, ok, e := s.forms.Get(id); e == nil && ok && existing.ProjectID == systemProjectID {
 			protected = true
 			return
 		}
-		saveErr = s.forms.save(rec)
+		saveErr = s.forms.Save(rec)
 	})
 	switch {
 	case protected:
@@ -107,7 +107,7 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []form
-		recs, loadErr = s.forms.loadAll()
+		recs, loadErr = s.forms.LoadAll()
 		for _, f := range recs {
 			if filter != "" && f.ProjectID != filter {
 				continue
@@ -131,7 +131,7 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { rec, ok, loadErr = s.forms.get(id) })
+	s.do(func() { rec, ok, loadErr = s.forms.Get(id) })
 	switch {
 	case loadErr != nil:
 		writeError(w, http.StatusInternalServerError, "read form: "+loadErr.Error())
@@ -160,11 +160,11 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 		protected bool
 	)
 	s.do(func() {
-		if existing, ok, e := s.forms.get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+		if existing, ok, e := s.forms.Get(id); e == nil && ok && existing.ProjectID == systemProjectID {
 			protected = true
 			return
 		}
-		delErr = s.forms.delete(id)
+		delErr = s.forms.Delete(id)
 	})
 	switch {
 	case protected:

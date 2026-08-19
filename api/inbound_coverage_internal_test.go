@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
@@ -87,14 +87,14 @@ func TestEventVarsAndKeys(t *testing.T) {
 func TestResolveInboundSubsSkips(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	srv.do(func() {
-		_ = srv.connectors.save(connector{ID: "clio-on", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
-		_ = srv.connectors.save(connector{ID: "clio-off", Name: "off", Kind: "clio", Endpoint: "http://x", Enabled: false, CreatedAt: 2})
-		_ = srv.connectors.save(connector{ID: "temis", Name: "t", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 3})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s-live", ConnectorID: "clio-on", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 1})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s-disabled", ConnectorID: "clio-on", WatchedSubject: "a", MessageName: "m", Enabled: false, CreatedAt: 2})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s-offconn", ConnectorID: "clio-off", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 3})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s-temis", ConnectorID: "temis", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 4})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s-noconn", ConnectorID: "gone", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 5})
+		_ = srv.connectors.Save(connector{ID: "clio-on", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+		_ = srv.connectors.Save(connector{ID: "clio-off", Name: "off", Kind: "clio", Endpoint: "http://x", Enabled: false, CreatedAt: 2})
+		_ = srv.connectors.Save(connector{ID: "temis", Name: "t", Kind: "temis", Endpoint: "http://x", Enabled: true, CreatedAt: 3})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s-live", ConnectorID: "clio-on", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 1})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s-disabled", ConnectorID: "clio-on", WatchedSubject: "a", MessageName: "m", Enabled: false, CreatedAt: 2})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s-offconn", ConnectorID: "clio-off", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 3})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s-temis", ConnectorID: "temis", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 4})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s-noconn", ConnectorID: "gone", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 5})
 		// Only clio-on has a live client registered.
 		srv.clioRegistry.Replace(map[string]clio.Client{"on": &fakeClioReader{}})
 	})
@@ -112,8 +112,8 @@ func TestResolveInboundSubsBadKey(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	var got []pendingSub
 	srv.do(func() {
-		_ = srv.connectors.save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s", ConnectorID: "c", WatchedSubject: "a", MessageName: "m", CorrelationKey: "( unbalanced", Enabled: true, CreatedAt: 1})
+		_ = srv.connectors.Save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s", ConnectorID: "c", WatchedSubject: "a", MessageName: "m", CorrelationKey: "( unbalanced", Enabled: true, CreatedAt: 1})
 		srv.clioRegistry.Replace(map[string]clio.Client{"on": &fakeClioReader{}})
 		got = srv.resolveInboundSubs()
 	})
@@ -134,8 +134,8 @@ func TestAdvanceInboundCursorMissing(t *testing.T) {
 func TestPollInboundReadError(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	srv.do(func() {
-		_ = srv.connectors.save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s", ConnectorID: "c", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 1})
+		_ = srv.connectors.Save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s", ConnectorID: "c", WatchedSubject: "a", MessageName: "m", Enabled: true, CreatedAt: 1})
 		srv.clioRegistry.Replace(map[string]clio.Client{"on": errReader{}})
 	})
 	srv.pollInbound(context.Background()) // read fails → no publish, no panic
@@ -159,20 +159,20 @@ func (errReader) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.Inb
 func TestInboundSubStoreErrors(t *testing.T) {
 	// loadAll ignores foreign files (subdir, non-json, non-hex name).
 	st, _ := newInboundSubStore(filepath.Join(t.TempDir(), "s"))
-	_ = os.Mkdir(filepath.Join(st.dir, "sub"), 0o755)
-	_ = os.WriteFile(filepath.Join(st.dir, "notes.txt"), []byte("x"), 0o644)
-	_ = os.WriteFile(filepath.Join(st.dir, "zz.json"), []byte("{}"), 0o644) // non-hex name → skipped
-	_ = st.save(inboundSubscription{ID: "a", ConnectorID: "c", MessageName: "m", CreatedAt: 1})
-	if all, err := st.loadAll(); err != nil || len(all) != 1 {
+	_ = os.Mkdir(filepath.Join(st.Dir(), "sub"), 0o755)
+	_ = os.WriteFile(filepath.Join(st.Dir(), "notes.txt"), []byte("x"), 0o644)
+	_ = os.WriteFile(filepath.Join(st.Dir(), "zz.json"), []byte("{}"), 0o644) // non-hex name → skipped
+	_ = st.Save(inboundSubscription{ID: "a", ConnectorID: "c", MessageName: "m", CreatedAt: 1})
+	if all, err := st.LoadAll(); err != nil || len(all) != 1 {
 		t.Fatalf("loadAll = %v, %v, want 1 record", all, err)
 	}
 
 	// get / loadAll over a corrupt record error.
-	_ = os.WriteFile(st.fileFor("bad"), []byte("{not json"), 0o644)
-	if _, _, err := st.get("bad"); err == nil {
+	_ = os.WriteFile(st.FileFor("bad"), []byte("{not json"), 0o644)
+	if _, _, err := st.Get("bad"); err == nil {
 		t.Error("get of corrupt record: want error")
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over a corrupt record: want error")
 	}
 
@@ -185,20 +185,20 @@ func TestInboundSubStoreErrors(t *testing.T) {
 
 	// loadAll on a missing dir errors.
 	gone, _ := newInboundSubStore(filepath.Join(t.TempDir(), "gone"))
-	_ = os.RemoveAll(gone.dir)
-	if _, err := gone.loadAll(); err == nil {
+	_ = os.RemoveAll(gone.Dir())
+	if _, err := gone.LoadAll(); err == nil {
 		t.Error("loadAll of a missing dir: want error")
 	}
 
 	// A record path that is a non-empty directory triggers get/delete read errors.
 	fresh, _ := newInboundSubStore(filepath.Join(t.TempDir(), "d"))
-	dirRec := fresh.fileFor("dir")
+	dirRec := fresh.FileFor("dir")
 	_ = os.Mkdir(dirRec, 0o755)
 	_ = os.WriteFile(filepath.Join(dirRec, "x"), []byte("y"), 0o644)
-	if _, _, err := fresh.get("dir"); err == nil {
+	if _, _, err := fresh.Get("dir"); err == nil {
 		t.Error("get on a directory record: want error")
 	}
-	if err := fresh.delete("dir"); err == nil {
+	if err := fresh.Delete("dir"); err == nil {
 		t.Error("delete of a non-empty directory record: want error")
 	}
 }
@@ -209,7 +209,7 @@ func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	// A clio connector exists so create passes its kind check and reaches the save.
 	srv.do(func() {
-		_ = srv.connectors.save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+		_ = srv.connectors.Save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
 	})
 	h := srv.Handler()
 	do := func(method, path, body string) int {
@@ -242,7 +242,7 @@ func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 	// A corrupt connector record makes the create handler's connector lookup error
 	// (a decode failure, not a missing file) → 500.
 	srv.do(func() {
-		_ = os.WriteFile(srv.connectors.fileFor("corrupt"), []byte("{not json"), 0o644)
+		_ = os.WriteFile(srv.connectors.FileFor("corrupt"), []byte("{not json"), 0o644)
 	})
 	if do(http.MethodPost, "/api/v1/connectors/corrupt/inbound-subscriptions", `{"watchedSubject":"s","messageName":"m"}`) != http.StatusInternalServerError {
 		t.Error("create with a corrupt connector record: want 500")
@@ -253,7 +253,7 @@ func TestInboundHandlerStoreAndBodyErrors(t *testing.T) {
 	// passes the connector-kind check on the real "c" connector, then the save fails
 	// → 500. (An update or get of a missing record is a 404, not a 500, since a
 	// missing file is not-found rather than an error.)
-	srv.do(func() { srv.inboundSubs = &inboundSubStore{dir: filepath.Join(t.TempDir(), "gone")} })
+	srv.do(func() { srv.inboundSubs = brokenStore(newInboundSubStore(filepath.Join(t.TempDir(), "gone"))) })
 	if do(http.MethodGet, "/api/v1/connectors/c/inbound-subscriptions", "") != http.StatusInternalServerError {
 		t.Error("list with a broken store: want 500")
 	}
@@ -271,7 +271,7 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
 	var got []pendingSub
 	srv.do(func() {
-		srv.inboundSubs = &inboundSubStore{dir: filepath.Join(t.TempDir(), "gone")}
+		srv.inboundSubs = brokenStore(newInboundSubStore(filepath.Join(t.TempDir(), "gone")))
 		got = srv.resolveInboundSubs()
 	})
 	if got != nil {
@@ -279,8 +279,8 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 	}
 	srv.do(func() {
 		srv.inboundSubs, _ = newInboundSubStore(filepath.Join(t.TempDir(), "subs"))
-		_ = srv.inboundSubs.save(inboundSubscription{ID: "s", ConnectorID: "c", MessageName: "m", Enabled: true})
-		srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "s", ConnectorID: "c", MessageName: "m", Enabled: true})
+		srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 		got = srv.resolveInboundSubs()
 	})
 	if got != nil {
@@ -292,10 +292,10 @@ func TestResolveInboundSubsLoadErrors(t *testing.T) {
 // dangling symlink named like a record passes the hex/.json filter but fails to read.
 func TestInboundSubStoreLoadAllReadError(t *testing.T) {
 	st, _ := newInboundSubStore(filepath.Join(t.TempDir(), "s"))
-	if err := os.Symlink(filepath.Join(st.dir, "missing"), st.fileFor("x")); err != nil {
+	if err := os.Symlink(filepath.Join(st.Dir(), "missing"), st.FileFor("x")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over an unreadable record: want error")
 	}
 }

@@ -1,15 +1,12 @@
 package api
 
 import (
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // deploymentTarget is another Atlas server this one can promote a release to
@@ -83,76 +80,21 @@ func isLoopbackHost(host string) bool {
 // targetStore is a durable store for deployment targets, one JSON file per id under
 // a single directory — the same sidecar approach as the deployment, project, and
 // release stores. Owned solely by the run-loop goroutine, so it needs no locking.
-type targetStore struct {
-	dir string
-}
 
+// targetStore is a durable store for deploymentTarget records, one JSON file per id
+// under a single directory (ADR-0019). Like every design-time store it is owned
+// solely by the server's run-loop goroutine, so it needs no locking of its own.
+type targetStore = sidecar.Store[deploymentTarget]
+
+// newTargetStore opens (creating if needed) the target directory.
 func newTargetStore(dir string) (*targetStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("targetstore: create dir: %w", err)
-	}
-	return &targetStore{dir: dir}, nil
-}
-
-func (s *targetStore) fileFor(id string) string {
-	return filepath.Join(s.dir, hex.EncodeToString([]byte(id))+".json")
-}
-
-func (s *targetStore) save(rec deploymentTarget) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
-}
-
-func (s *targetStore) get(id string) (deploymentTarget, bool, error) {
-	data, err := os.ReadFile(s.fileFor(id))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return deploymentTarget{}, false, nil
-		}
-		return deploymentTarget{}, false, fmt.Errorf("targetstore: read: %w", err)
-	}
-	var rec deploymentTarget
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return deploymentTarget{}, false, fmt.Errorf("targetstore: decode: %w", err)
-	}
-	return rec, true, nil
-}
-
-func (s *targetStore) delete(id string) error {
-	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("targetstore: remove: %w", err)
-	}
-	return fsyncDir(s.dir)
-}
-
-// loadAll reads every target, oldest first, for a stable listing.
-func (s *targetStore) loadAll() ([]deploymentTarget, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("targetstore: read dir: %w", err)
-	}
-	var out []deploymentTarget
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		if _, err := hex.DecodeString(strings.TrimSuffix(e.Name(), ".json")); err != nil {
-			continue // not a hex-named record
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("targetstore: read %s: %w", e.Name(), err)
-		}
-		var rec deploymentTarget
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("targetstore: decode %s: %w", e.Name(), err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != out[j].CreatedAt {
-			return out[i].CreatedAt < out[j].CreatedAt
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return sidecar.NewStore(dir, "targetstore",
+		func(rec deploymentTarget) string { return rec.ID },
+		sidecar.Order(func(a, b deploymentTarget) bool {
+			if a.CreatedAt != b.CreatedAt {
+				return a.CreatedAt < b.CreatedAt
+			}
+			return a.ID < b.ID
+		}),
+	)
 }

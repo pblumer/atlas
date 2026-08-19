@@ -4,13 +4,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // deployTokenPrefix marks a deploy token's secret. A recognizable, greppable
@@ -60,73 +57,23 @@ func hashDeployToken(secret string) string {
 }
 
 // deployTokenStore is a durable store for deploy tokens, one JSON file per token
-// id under a single directory — the same sidecar approach as the deployment,
-// draft, project, and release stores (ADR-0019/0021/0034/0128). Like them it is
-// owned solely by the server's run-loop goroutine, so it needs no locking.
-type deployTokenStore struct {
-	dir string
-}
+// id under a single directory (ADR-0129). Like every design-time store it is
+// owned solely by the server's run-loop goroutine, so it needs no locking of its
+// own — the lookup index below is the concurrent half.
+type deployTokenStore = sidecar.Store[deployToken]
 
-// newDeployTokenStore opens (creating if needed) the deploy-token directory. It is
-// created with owner-only permissions: the records are not secrets, but they are
-// credential material and there is no reason for them to be world-readable.
+// newDeployTokenStore opens (creating if needed) the deploy-tokens directory.
+// Tokens list oldest first, tie-broken by id so the order is deterministic.
 func newDeployTokenStore(dir string) (*deployTokenStore, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("deploytokenstore: create dir: %w", err)
-	}
-	return &deployTokenStore{dir: dir}, nil
-}
-
-// fileFor maps a token id to its record path.
-func (s *deployTokenStore) fileFor(id string) string {
-	return filepath.Join(s.dir, hex.EncodeToString([]byte(id))+".json")
-}
-
-// save writes a token durably (atomic write + directory fsync).
-func (s *deployTokenStore) save(rec deployToken) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
-}
-
-// delete revokes a token by removing its record. A missing record is not an error,
-// so revocation is idempotent.
-func (s *deployTokenStore) delete(id string) error {
-	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("deploytokenstore: remove: %w", err)
-	}
-	return fsyncDir(s.dir)
-}
-
-// loadAll reads every token, oldest first, so a listing has a stable order.
-func (s *deployTokenStore) loadAll() ([]deployToken, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("deploytokenstore: read dir: %w", err)
-	}
-	var out []deployToken
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		if _, err := hex.DecodeString(strings.TrimSuffix(e.Name(), ".json")); err != nil {
-			continue // not a hex-named record
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("deploytokenstore: read %s: %w", e.Name(), err)
-		}
-		var rec deployToken
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("deploytokenstore: decode %s: %w", e.Name(), err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != out[j].CreatedAt {
-			return out[i].CreatedAt < out[j].CreatedAt
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return sidecar.NewStore(dir, "deploytokenstore",
+		func(rec deployToken) string { return rec.ID },
+		sidecar.Order(func(a, b deployToken) bool {
+			if a.CreatedAt != b.CreatedAt {
+				return a.CreatedAt < b.CreatedAt
+			}
+			return a.ID < b.ID
+		}),
+	)
 }
 
 // deployTokenIndex is the in-memory view of the durable records, keyed by hash.

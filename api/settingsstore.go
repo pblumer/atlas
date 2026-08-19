@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // uiTheme is the org-wide UI theme (ADR-0113): a single brand accent colour the
@@ -79,7 +81,7 @@ func (s *settingsStore) getTheme() (uiTheme, error) {
 // saveTheme writes the theme durably (atomic write + directory fsync), overwriting
 // any previous value.
 func (s *settingsStore) saveTheme(t uiTheme) error {
-	return atomicWriteJSON(s.dir, s.file, t)
+	return sidecar.WriteJSON(s.dir, s.file, t)
 }
 
 // clearTheme removes any stored theme, restoring the built-in default. A missing
@@ -88,7 +90,7 @@ func (s *settingsStore) clearTheme() error {
 	if err := os.Remove(s.file); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("settingsstore: remove: %w", err)
 	}
-	return fsyncDir(s.dir)
+	return sidecar.FsyncDir(s.dir)
 }
 
 // getRegistration returns the stored registration setting and whether a record
@@ -112,5 +114,5 @@ func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
 // saveRegistration writes the registration setting durably, overwriting any
 // previous value. An empty ProcessID is a valid stored value meaning "disabled".
 func (s *settingsStore) saveRegistration(r registrationSetting) error {
-	return atomicWriteJSON(s.dir, s.regFile, r)
+	return sidecar.WriteJSON(s.dir, s.regFile, r)
 }

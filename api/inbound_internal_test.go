@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/connector/clio"
 )
 
 // TestInboundBridgeLive runs the bridge's ticker goroutine (not pollInbound
@@ -361,7 +361,7 @@ func (e errClio) Error() string { return string(e) }
 func inboundPrimeState(t *testing.T, srv *Server, id string) (bool, string) {
 	t.Helper()
 	var rec inboundSubscription
-	srv.do(func() { rec, _, _ = srv.inboundSubs.get(id) })
+	srv.do(func() { rec, _, _ = srv.inboundSubs.Get(id) })
 	return rec.Primed, rec.LastEventID
 }
 
@@ -403,9 +403,9 @@ func TestInboundBridgeDedupesLostCursor(t *testing.T) {
 
 	// Simulate a lost/stale cursor: reset it to empty so the bridge re-reads e1.
 	srv.do(func() {
-		rec, _, _ := srv.inboundSubs.get(sub.ID)
+		rec, _, _ := srv.inboundSubs.Get(sub.ID)
 		rec.LastEventID = ""
-		_ = srv.inboundSubs.save(rec)
+		_ = srv.inboundSubs.Save(rec)
 	})
 	srv.pollInbound(context.Background())
 	if n := activeInstances(t, srv); n != 1 {
@@ -559,25 +559,25 @@ func TestInboundSubStore(t *testing.T) {
 	a := inboundSubscription{ID: "a", ConnectorID: "c", WatchedSubject: "s", MessageName: "m", Enabled: true, CreatedAt: 2}
 	b := inboundSubscription{ID: "b", ConnectorID: "c", WatchedSubject: "s2", MessageName: "m2", Enabled: true, CreatedAt: 1}
 	for _, rec := range []inboundSubscription{a, b} {
-		if err := st.save(rec); err != nil {
+		if err := st.Save(rec); err != nil {
 			t.Fatalf("save: %v", err)
 		}
 	}
-	got, ok, err := st.get("a")
+	got, ok, err := st.Get("a")
 	if err != nil || !ok || got.MessageName != "m" {
 		t.Fatalf("get = %+v, %v, %v", got, ok, err)
 	}
-	all, err := st.loadAll()
+	all, err := st.LoadAll()
 	if err != nil || len(all) != 2 || all[0].ID != "b" { // earliest CreatedAt first
 		t.Fatalf("loadAll = %+v, %v", all, err)
 	}
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := st.get("a"); ok {
+	if _, ok, _ := st.Get("a"); ok {
 		t.Fatal("get after delete: still present")
 	}
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete idempotent: %v", err)
 	}
 }

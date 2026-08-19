@@ -78,11 +78,11 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		refs            []dmnRef
 	)
 	s.do(func() {
-		if proj, ok, getErr = s.projects.get(id); getErr != nil || !ok {
+		if proj, ok, getErr = s.projects.Get(id); getErr != nil || !ok {
 			return
 		}
 		var allDrafts []draft
-		if allDrafts, loadErr = s.drafts.loadAll(); loadErr != nil {
+		if allDrafts, loadErr = s.drafts.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, d := range allDrafts {
@@ -91,7 +91,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			}
 		}
 		var allRefs []dmnRef
-		if allRefs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if allRefs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, rec := range allRefs {

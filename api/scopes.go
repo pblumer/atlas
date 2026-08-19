@@ -171,7 +171,7 @@ func (s *Server) authorizeProject(r *http.Request, id, minRole string) (project,
 		ok     bool
 		getErr error
 	)
-	s.do(func() { proj, ok, getErr = s.projects.get(id) })
+	s.do(func() { proj, ok, getErr = s.projects.Get(id) })
 	if getErr != nil {
 		return project{}, http.StatusInternalServerError, "read project: " + getErr.Error()
 	}
@@ -232,7 +232,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		if s.authEnabled {
 			// Only grant to a real identity. With auth off there is no user store
 			// to consult (and sharing is moot), so the check is skipped.
-			if _, ok, e := s.users.get(userID); e != nil {
+			if _, ok, e := s.users.Get(userID); e != nil {
 				lookupErr = e
 				return
 			} else if !ok {
@@ -243,7 +243,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		proj.Members = upsertMember(proj.Members, userID, payload.Role)
 		proj.Visibility = VisibilityShared
 		proj.UpdatedAt = time.Now().Unix()
-		if sErr = s.projects.save(proj); sErr != nil {
+		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(proj.ID)
@@ -290,7 +290,7 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 	s.do(func() {
 		proj.Members = removeMember(proj.Members, userID)
 		proj.UpdatedAt = time.Now().Unix()
-		if sErr = s.projects.save(proj); sErr != nil {
+		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(proj.ID)

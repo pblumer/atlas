@@ -41,11 +41,11 @@ func TestPublicLinkStoreRoundTrip(t *testing.T) {
 		{Token: "bb", ProcessID: "p2", FormID: "f2", CreatedAt: 300},
 		{Token: "cc", ProcessID: "p3", FormID: "f3", CreatedAt: 200},
 	} {
-		if err := s.save(l); err != nil {
+		if err := s.Save(l); err != nil {
 			t.Fatalf("save %s: %v", l.Token, err)
 		}
 	}
-	got, err := s.loadAll()
+	got, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestPublicLinkStoreRoundTrip(t *testing.T) {
 			t.Errorf("position %d = %q, want %q", i, got[i].Token, w)
 		}
 	}
-	rec, ok, err := s.get("bb")
+	rec, ok, err := s.Get("bb")
 	if err != nil || !ok || rec.ProcessID != "p2" {
 		t.Fatalf("get bb = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -69,7 +69,7 @@ func TestPublicLinkStoreRoundTrip(t *testing.T) {
 func TestPublicLinkStoreGetMisses(t *testing.T) {
 	s := newPublicLinks(t)
 	for _, tok := range []string{"", "../etc", "nothex!", "abcd"} {
-		rec, ok, err := s.get(tok)
+		rec, ok, err := s.Get(tok)
 		if ok || err != nil {
 			t.Errorf("get(%q) = (%+v, %v, %v), want a clean miss", tok, rec, ok, err)
 		}
@@ -79,10 +79,10 @@ func TestPublicLinkStoreGetMisses(t *testing.T) {
 // TestPublicLinkStoreGetCorrupt covers get's decode-error branch.
 func TestPublicLinkStoreGetCorrupt(t *testing.T) {
 	s := newPublicLinks(t)
-	if err := os.WriteFile(s.fileFor("abcd"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(s.FileFor("abcd"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("plant corrupt: %v", err)
 	}
-	if _, _, err := s.get("abcd"); err == nil {
+	if _, _, err := s.Get("abcd"); err == nil {
 		t.Fatal("get of a corrupt record: want an error")
 	}
 }
@@ -91,10 +91,10 @@ func TestPublicLinkStoreGetCorrupt(t *testing.T) {
 // directory sits where the record file should be.
 func TestPublicLinkStoreGetReadError(t *testing.T) {
 	s := newPublicLinks(t)
-	if err := os.Mkdir(s.fileFor("abcd"), 0o755); err != nil {
+	if err := os.Mkdir(s.FileFor("abcd"), 0o755); err != nil {
 		t.Fatalf("mkdir record path: %v", err)
 	}
-	if _, _, err := s.get("abcd"); err == nil {
+	if _, _, err := s.Get("abcd"); err == nil {
 		t.Fatal("get over a directory: want an error")
 	}
 }
@@ -103,31 +103,31 @@ func TestPublicLinkStoreGetReadError(t *testing.T) {
 // and its non-IsNotExist error branch (a non-empty directory can't be removed).
 func TestPublicLinkStoreDelete(t *testing.T) {
 	s := newPublicLinks(t)
-	if err := s.save(publicLink{Token: "abcd", ProcessID: "p"}); err != nil {
+	if err := s.Save(publicLink{Token: "abcd", ProcessID: "p"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := s.delete("abcd"); err != nil {
+	if err := s.Delete("abcd"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := s.get("abcd"); ok {
+	if _, ok, _ := s.Get("abcd"); ok {
 		t.Fatal("record still present after delete")
 	}
 	// Deleting an absent (and a non-hex) token is a no-op, not an error.
-	if err := s.delete("abcd"); err != nil {
+	if err := s.Delete("abcd"); err != nil {
 		t.Errorf("delete absent: %v", err)
 	}
-	if err := s.delete("nothex!"); err != nil {
+	if err := s.Delete("nothex!"); err != nil {
 		t.Errorf("delete non-hex: %v", err)
 	}
 	// A non-empty directory at the record path makes os.Remove fail.
-	dirPath := s.fileFor("dddd")
+	dirPath := s.FileFor("dddd")
 	if err := os.Mkdir(dirPath, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dirPath, "child"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write child: %v", err)
 	}
-	if err := s.delete("dddd"); err == nil {
+	if err := s.Delete("dddd"); err == nil {
 		t.Fatal("delete of a non-empty directory: want an error")
 	}
 }
@@ -136,11 +136,11 @@ func TestPublicLinkStoreDelete(t *testing.T) {
 // atomic-write temp path makes the write fail.
 func TestPublicLinkStoreSaveError(t *testing.T) {
 	s := newPublicLinks(t)
-	tmp := s.fileFor("abcd") + ".tmp"
+	tmp := s.FileFor("abcd") + ".tmp"
 	if err := os.Mkdir(tmp, 0o755); err != nil {
 		t.Fatalf("mkdir temp path: %v", err)
 	}
-	if err := s.save(publicLink{Token: "abcd"}); err == nil {
+	if err := s.Save(publicLink{Token: "abcd"}); err == nil {
 		t.Fatal("save with a blocked temp path: want an error")
 	}
 }
@@ -149,20 +149,20 @@ func TestPublicLinkStoreSaveError(t *testing.T) {
 // (non-.json, sub-directories, non-hex names) and its decode-error branch.
 func TestPublicLinkStoreLoadAllSkipsAndErrors(t *testing.T) {
 	s := newPublicLinks(t)
-	if err := s.save(publicLink{Token: "abcd", CreatedAt: 1}); err != nil {
+	if err := s.Save(publicLink{Token: "abcd", CreatedAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Foreign entries that loadAll must ignore.
-	if err := os.WriteFile(filepath.Join(s.dir, "note.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir(), "note.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write note: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(s.dir, "nothex.json"), []byte("{}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir(), "nothex.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write nothex: %v", err)
 	}
-	if err := os.Mkdir(filepath.Join(s.dir, "sub.json"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(s.Dir(), "sub.json"), 0o755); err != nil {
 		t.Fatalf("mkdir sub: %v", err)
 	}
-	got, err := s.loadAll()
+	got, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -171,20 +171,20 @@ func TestPublicLinkStoreLoadAllSkipsAndErrors(t *testing.T) {
 	}
 	// A hex-named record that is a dangling symlink makes loadAll's read fail
 	// (the entry isn't a directory, so it isn't skipped, but the read errors).
-	if err := os.Symlink(filepath.Join(s.dir, "missing-target"), s.fileFor("dead")); err != nil {
+	if err := os.Symlink(filepath.Join(s.Dir(), "missing-target"), s.FileFor("dead")); err != nil {
 		t.Fatalf("symlink hex record: %v", err)
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll over an unreadable record: want an error")
 	}
-	if err := os.Remove(s.fileFor("dead")); err != nil {
+	if err := os.Remove(s.FileFor("dead")); err != nil {
 		t.Fatalf("cleanup symlink: %v", err)
 	}
 	// A corrupt hex record makes loadAll fail.
-	if err := os.WriteFile(s.fileFor("beef"), []byte("{nope"), 0o644); err != nil {
+	if err := os.WriteFile(s.FileFor("beef"), []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("plant corrupt: %v", err)
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll with a corrupt record: want an error")
 	}
 }
@@ -193,10 +193,10 @@ func TestPublicLinkStoreLoadAllSkipsAndErrors(t *testing.T) {
 // store directory is removed out from under it.
 func TestPublicLinkStoreLoadAllDirError(t *testing.T) {
 	s := newPublicLinks(t)
-	if err := os.RemoveAll(s.dir); err != nil {
+	if err := os.RemoveAll(s.Dir()); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll over a missing directory: want an error")
 	}
 }
@@ -315,7 +315,7 @@ func TestPublicLinkHandlerStoreErrors(t *testing.T) {
 	}
 
 	// A corrupt hex-named record makes loadAll (list) fail.
-	if err := os.WriteFile(srv.publicLinks.fileFor("beef"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(srv.publicLinks.FileFor("beef"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("plant corrupt record: %v", err)
 	}
 	if code := do(http.MethodGet, "/api/v1/public-links", ""); code != http.StatusInternalServerError {
@@ -329,12 +329,12 @@ func TestPublicLinkHandlerStoreErrors(t *testing.T) {
 	if code := do(http.MethodPost, "/public/forms/beef/start", `{}`); code != http.StatusInternalServerError {
 		t.Errorf("public start over corrupt record: %d, want 500", code)
 	}
-	if err := os.Remove(srv.publicLinks.fileFor("beef")); err != nil {
+	if err := os.Remove(srv.publicLinks.FileFor("beef")); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 
 	// A non-empty directory at a record path makes revoke's remove fail.
-	dirPath := srv.publicLinks.fileFor("dddd")
+	dirPath := srv.publicLinks.FileFor("dddd")
 	if err := os.Mkdir(dirPath, 0o755); err != nil {
 		t.Fatalf("mkdir record path: %v", err)
 	}
@@ -373,10 +373,10 @@ func TestPublicFormSchemaBranches(t *testing.T) {
 
 	// A link whose process is not deployed but whose form exists: schema serves
 	// with an empty process name (the deployment lookup is best-effort).
-	if err := srv.forms.save(form{ID: "pubform", Schema: `{"type":"default"}`}); err != nil {
+	if err := srv.forms.Save(form{ID: "pubform", Schema: `{"type":"default"}`}); err != nil {
 		t.Fatalf("save form: %v", err)
 	}
-	if err := srv.publicLinks.save(publicLink{Token: "aaaa", ProcessID: "ghost", FormID: "pubform", CreatedAt: 1}); err != nil {
+	if err := srv.publicLinks.Save(publicLink{Token: "aaaa", ProcessID: "ghost", FormID: "pubform", CreatedAt: 1}); err != nil {
 		t.Fatalf("save link: %v", err)
 	}
 	if code := do(http.MethodGet, "/public/forms/aaaa/schema", ""); code != http.StatusOK {
@@ -388,14 +388,14 @@ func TestPublicFormSchemaBranches(t *testing.T) {
 	}
 
 	// A corrupt form record makes the schema read fail (500).
-	if err := os.WriteFile(srv.forms.fileFor("pubform"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(srv.forms.FileFor("pubform"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("corrupt form: %v", err)
 	}
 	if code := do(http.MethodGet, "/public/forms/aaaa/schema", ""); code != http.StatusInternalServerError {
 		t.Errorf("schema over a corrupt form: %d, want 500", code)
 	}
 	// A missing form (link points at a form that no longer exists) is a 404.
-	if err := os.Remove(srv.forms.fileFor("pubform")); err != nil {
+	if err := os.Remove(srv.forms.FileFor("pubform")); err != nil {
 		t.Fatalf("remove form: %v", err)
 	}
 	if code := do(http.MethodGet, "/public/forms/aaaa/schema", ""); code != http.StatusNotFound {
@@ -432,7 +432,7 @@ func TestCreatePublicLinkStoreError(t *testing.T) {
 		return rec.Code
 	}
 
-	if err := srv.forms.save(form{ID: "onboarding-form", Schema: `{"type":"default"}`}); err != nil {
+	if err := srv.forms.Save(form{ID: "onboarding-form", Schema: `{"type":"default"}`}); err != nil {
 		t.Fatalf("save form: %v", err)
 	}
 	// A decoy process deployed first makes the deployment lookup iterate past a
@@ -445,7 +445,7 @@ func TestCreatePublicLinkStoreError(t *testing.T) {
 		t.Fatalf("deploy: %d", code)
 	}
 	// Remove the link store's directory so the durable read/write fails.
-	if err := os.RemoveAll(srv.publicLinks.dir); err != nil {
+	if err := os.RemoveAll(srv.publicLinks.Dir()); err != nil {
 		t.Fatalf("remove link dir: %v", err)
 	}
 	if code := do(http.MethodPost, "/api/v1/public-links", `{"processId":"onboard"}`, "application/json"); code != http.StatusInternalServerError {

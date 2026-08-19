@@ -16,7 +16,7 @@ import (
 func TestEnsureSystemProjectIdempotent(t *testing.T) {
 	srv := newServerForErrors(t)
 
-	got, ok, err := srv.projects.get(systemProjectID)
+	got, ok, err := srv.projects.Get(systemProjectID)
 	if err != nil {
 		t.Fatalf("get system project: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestEnsureSystemProjectIdempotent(t *testing.T) {
 	if err := srv.ensureSystemProject(created + 10_000); err != nil {
 		t.Fatalf("second ensureSystemProject: %v", err)
 	}
-	again, _, err := srv.projects.get(systemProjectID)
+	again, _, err := srv.projects.Get(systemProjectID)
 	if err != nil {
 		t.Fatalf("re-get: %v", err)
 	}
@@ -47,13 +47,13 @@ func TestEnsureSystemProjectIdempotent(t *testing.T) {
 func TestEnsureSystemProjectRepairs(t *testing.T) {
 	srv := newServerForErrors(t)
 
-	if err := srv.projects.save(project{ID: systemProjectID, Name: "tampered", CreatedAt: 5}); err != nil {
+	if err := srv.projects.Save(project{ID: systemProjectID, Name: "tampered", CreatedAt: 5}); err != nil {
 		t.Fatalf("seed tampered: %v", err)
 	}
 	if err := srv.ensureSystemProject(99); err != nil {
 		t.Fatalf("repair: %v", err)
 	}
-	got, _, err := srv.projects.get(systemProjectID)
+	got, _, err := srv.projects.Get(systemProjectID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -69,13 +69,13 @@ func TestEnsureSystemProjectRepairs(t *testing.T) {
 // the initial get fail.
 func TestEnsureSystemProjectStoreError(t *testing.T) {
 	srv := newServerForErrors(t)
-	srv.projects = &projectStore{dir: filepath.Join(t.TempDir(), "nope", "deeper")}
+	srv.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "nope", "deeper")))
 	// get() of a missing file is not an error, so force a real read error by making
 	// the record path a directory.
 	if err := srv.ensureSystemProject(1); err == nil {
 		// A non-existent parent dir yields ok=false, nil — so a fresh save must
 		// succeed here; instead point at an unwritable location to fail the save.
-		srv.projects = &projectStore{dir: "/proc/atlas-cannot-write"}
+		srv.projects = brokenStore(newProjectStore("/proc/atlas-cannot-write"))
 		if err := srv.ensureSystemProject(1); err == nil {
 			t.Fatal("ensureSystemProject with unwritable store: want error")
 		}

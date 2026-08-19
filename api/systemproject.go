@@ -33,7 +33,7 @@ const (
 // loop serves traffic — the same single-writer discipline bootstrapAdmin uses — so
 // it touches the project store directly rather than through s.do.
 func (s *Server) ensureSystemProject(now int64) error {
-	existing, ok, err := s.projects.get(systemProjectID)
+	existing, ok, err := s.projects.Get(systemProjectID)
 	if err != nil {
 		return err
 	}
@@ -44,9 +44,9 @@ func (s *Server) ensureSystemProject(now int64) error {
 		existing.Protected = true
 		existing.OwnerID = systemOwnerID
 		existing.UpdatedAt = now
-		return s.projects.save(existing)
+		return s.projects.Save(existing)
 	}
-	return s.projects.save(project{
+	return s.projects.Save(project{
 		ID:         systemProjectID,
 		Name:       systemProjectName,
 		OwnerID:    systemOwnerID,

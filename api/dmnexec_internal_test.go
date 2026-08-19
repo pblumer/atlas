@@ -236,7 +236,7 @@ func TestReloadFailsOnBadDMNSnapshot(t *testing.T) {
 		t.Fatalf("newDeployStore: %v", err)
 	}
 	// Valid BPMN, but an uncompilable DMN snapshot.
-	if err := ds.save(persistedDeployment{Key: 1, ProcessID: "dinner", Version: 1, XML: dinnerBPMN, DMNXML: "<not-dmn"}); err != nil {
+	if err := ds.Save(persistedDeployment{Key: 1, ProcessID: "dinner", Version: 1, XML: dinnerBPMN, DMNXML: "<not-dmn"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})

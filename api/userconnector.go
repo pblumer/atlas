@@ -145,7 +145,7 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.users.save(rec); err != nil {
+	if err := s.users.Save(rec); err != nil {
 		return "", false, err
 	}
 	return id, true, nil
@@ -170,7 +170,7 @@ func (s *Server) provisionSetPassword(username, password string, now int64) erro
 	}
 	u.PasswordHash = hash
 	u.UpdatedAt = now
-	return s.users.save(u)
+	return s.users.Save(u)
 }
 
 // provisionDisableUser disables a user, idempotently (already-disabled is success).
@@ -188,7 +188,7 @@ func (s *Server) provisionDisableUser(username string, now int64) error {
 		return nil // idempotent
 	}
 	if u.hasRole(RoleAdmin) {
-		all, err := s.users.loadAll()
+		all, err := s.users.LoadAll()
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (s *Server) provisionDisableUser(username string, now int64) error {
 	}
 	u.Disabled = true
 	u.UpdatedAt = now
-	if err := s.users.save(u); err != nil {
+	if err := s.users.Save(u); err != nil {
 		return err
 	}
 	s.sessions.destroyUser(u.ID)

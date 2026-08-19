@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/sharepoint"
+	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
 // TestSharePointConnectorValidationAndCreate covers the create endpoint's
@@ -52,10 +52,10 @@ func TestBuildSharePointClients(t *testing.T) {
 	t.Setenv("ATLAS_CONNECTOR_SP_BUNDLE_TOKEN", `{"method":"clientCredentials","tenantId":"t","clientId":"c","clientSecret":"s"}`)
 	t.Setenv("ATLAS_CONNECTOR_BAD_BUNDLE_TOKEN", `not valid json`)
 
-	_ = srv.connectors.save(connector{ID: "1", Name: "contoso", Kind: connectorKindSharePoint, CredentialsRef: "sp_bundle", Enabled: true, CreatedAt: 1})
-	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: connectorKindSharePoint, CredentialsRef: "sp_bundle", Enabled: false, CreatedAt: 2})
-	_ = srv.connectors.save(connector{ID: "3", Name: "clio", Kind: connectorKindClio, Endpoint: "http://c", Enabled: true, CreatedAt: 3})
-	_ = srv.connectors.save(connector{ID: "4", Name: "broken", Kind: connectorKindSharePoint, CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "1", Name: "contoso", Kind: connectorKindSharePoint, CredentialsRef: "sp_bundle", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "off", Kind: connectorKindSharePoint, CredentialsRef: "sp_bundle", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "clio", Kind: connectorKindClio, Endpoint: "http://c", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "broken", Kind: connectorKindSharePoint, CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 4})
 
 	clients, err := srv.buildSharePointClients()
 	if err != nil {
@@ -75,7 +75,7 @@ func TestBuildSharePointClients(t *testing.T) {
 // TestBuildSharePointClientsLoadError covers buildSharePointClients' store-read failure.
 func TestBuildSharePointClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if _, err := srv.buildSharePointClients(); err == nil {
 		t.Error("buildSharePointClients with a broken store: want error")
 	}

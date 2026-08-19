@@ -32,7 +32,7 @@ func TestCallOverrideHandlerErrors(t *testing.T) {
 	t.Run("save error", func(t *testing.T) {
 		srv, done := newSrv()
 		defer done()
-		if err := os.Mkdir(srv.callOverrides.fileFor("child")+".tmp", 0o755); err != nil {
+		if err := os.Mkdir(srv.callOverrides.FileFor("child")+".tmp", 0o755); err != nil {
 			t.Fatal(err)
 		}
 		rec := httptest.NewRecorder()
@@ -48,7 +48,7 @@ func TestCallOverrideHandlerErrors(t *testing.T) {
 	t.Run("delete error", func(t *testing.T) {
 		srv, done := newSrv()
 		defer done()
-		recPath := srv.callOverrides.fileFor("child")
+		recPath := srv.callOverrides.FileFor("child")
 		if err := os.Mkdir(recPath, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +68,7 @@ func TestCallOverrideHandlerErrors(t *testing.T) {
 	t.Run("corrupt store", func(t *testing.T) {
 		srv, done := newSrv()
 		defer done()
-		if err := os.WriteFile(srv.callOverrides.fileFor("child"), []byte("{not json"), 0o644); err != nil {
+		if err := os.WriteFile(srv.callOverrides.FileFor("child"), []byte("{not json"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		rec := httptest.NewRecorder()
@@ -117,18 +117,18 @@ func TestCallOverrideStore(t *testing.T) {
 	}
 	a := callOverride{CalledProcessID: "a", Action: overrideDisable, UpdatedAt: 1}
 	b := callOverride{CalledProcessID: "b", Action: overrideRedirect, TargetProcessID: "z", UpdatedAt: 2}
-	if err := st.save(a); err != nil {
+	if err := st.Save(a); err != nil {
 		t.Fatalf("save a: %v", err)
 	}
-	if err := st.save(b); err != nil {
+	if err := st.Save(b); err != nil {
 		t.Fatalf("save b: %v", err)
 	}
 	// Overwrite a in place — still one record for "a".
-	if err := st.save(callOverride{CalledProcessID: "a", Action: overridePin, TargetVersion: 3, UpdatedAt: 1}); err != nil {
+	if err := st.Save(callOverride{CalledProcessID: "a", Action: overridePin, TargetVersion: 3, UpdatedAt: 1}); err != nil {
 		t.Fatalf("overwrite a: %v", err)
 	}
 
-	got, err := st.loadAll()
+	got, err := st.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -147,17 +147,17 @@ func TestCallOverrideStore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "zz.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ = st.loadAll(); len(got) != 2 {
+	if got, _ = st.LoadAll(); len(got) != 2 {
 		t.Fatalf("loadAll after junk files = %d records, want 2", len(got))
 	}
 
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete a: %v", err)
 	}
-	if err := st.delete("a"); err != nil {
+	if err := st.Delete("a"); err != nil {
 		t.Fatalf("delete a again (idempotent): %v", err)
 	}
-	if got, _ = st.loadAll(); len(got) != 1 || got[0].CalledProcessID != "b" {
+	if got, _ = st.LoadAll(); len(got) != 1 || got[0].CalledProcessID != "b" {
 		t.Fatalf("after delete, loadAll = %+v, want [b]", got)
 	}
 }
@@ -183,22 +183,22 @@ func TestCallOverrideStoreErrors(t *testing.T) {
 
 	// delete surfaces a non-IsNotExist error: a non-empty directory where the record
 	// file would be cannot be removed by os.Remove.
-	recPath := st.fileFor("k")
+	recPath := st.FileFor("k")
 	if err := os.Mkdir(recPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(recPath, "child"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.delete("k"); err == nil {
+	if err := st.Delete("k"); err == nil {
 		t.Error("delete of a non-empty directory: want an error, got nil")
 	}
 
 	// loadAll surfaces a decode error: a hex-named .json record with invalid JSON.
-	if err := os.WriteFile(st.fileFor("bad"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(st.FileFor("bad"), []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.loadAll(); err == nil {
+	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over a corrupt record: want an error, got nil")
 	}
 }
@@ -217,7 +217,7 @@ func TestLoadCallOverrides(t *testing.T) {
 		{CalledProcessID: "gamma", Action: overridePin, TargetVersion: 9, UpdatedAt: 2}, // stale: nothing deployed
 	}
 	for _, r := range recs {
-		if err := srv.callOverrides.save(r); err != nil {
+		if err := srv.callOverrides.Save(r); err != nil {
 			t.Fatalf("save %s: %v", r.CalledProcessID, err)
 		}
 	}

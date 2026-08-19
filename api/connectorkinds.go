@@ -3,13 +3,13 @@ package api
 import (
 	"strings"
 
-	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
-	"github.com/pblumer/atlas/mail"
-	"github.com/pblumer/atlas/remedy"
-	"github.com/pblumer/atlas/sharepoint"
+	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/state"
-	"github.com/pblumer/atlas/temis"
 )
 
 // managedConnectorKind describes one operator-managed connector kind end to end: how

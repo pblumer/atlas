@@ -123,10 +123,10 @@ func TestBuildClioClients(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	// Enabled clio record → a client; a disabled one, a temis one, and an
 	// endpoint-less one are all skipped.
-	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "clio", Endpoint: "http://a", Enabled: true, CreatedAt: 1})
-	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "clio", Endpoint: "http://b", Enabled: false, CreatedAt: 2})
-	_ = srv.connectors.save(connector{ID: "3", Name: "temis", Kind: "temis", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
-	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "clio", Endpoint: "", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "1", Name: "on", Kind: "clio", Endpoint: "http://a", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "off", Kind: "clio", Endpoint: "http://b", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "temis", Kind: "temis", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "noendpoint", Kind: "clio", Endpoint: "", Enabled: true, CreatedAt: 4})
 
 	clients, err := srv.buildClioClients()
 	if err != nil {
@@ -143,7 +143,7 @@ func TestBuildClioClients(t *testing.T) {
 // TestBuildClioClientsLoadError covers buildClioClients' store-read failure.
 func TestBuildClioClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
 	if _, err := srv.buildClioClients(); err == nil {
 		t.Error("buildClioClients with a broken store: want error")
 	}

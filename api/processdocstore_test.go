@@ -161,16 +161,16 @@ func TestProcessDocStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	if err := s.save(processDoc{ID: "0a", ProcessID: "real", Version: 1}, []byte("%PDF")); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := os.Mkdir(filepath.Join(s.dir, "subdir"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(s.Dir(), "subdir"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(s.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir(), "notes.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write txt: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(s.dir, "zz-not-hex.json"), []byte("{}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir(), "zz-not-hex.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write foreign json: %v", err)
 	}
-	got, err := s.loadAll()
+	got, err := s.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -344,13 +344,13 @@ func TestProcessDocStorePrune(t *testing.T) {
 // happen — durable before visible (I2).
 func TestProcessDocStoreSaveRefusesUnwritableDir(t *testing.T) {
 	s := newProcessDocs(t)
-	if err := os.RemoveAll(s.dir); err != nil {
+	if err := os.RemoveAll(s.Dir()); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
 	if err := s.save(processDoc{ID: "0a", ProcessID: "order", Version: 1}, []byte("%PDF")); err == nil {
 		t.Fatal("save into a removed directory = nil error, want a failure")
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll on a removed directory = nil error, want a failure")
 	}
 }
@@ -360,10 +360,10 @@ func TestProcessDocStoreSaveRefusesUnwritableDir(t *testing.T) {
 // truncated write is a fault to report, not history to lose.
 func TestProcessDocStoreLoadAllRejectsCorruptRecord(t *testing.T) {
 	s := newProcessDocs(t)
-	if err := os.WriteFile(filepath.Join(s.dir, "0a.json"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir(), "0a.json"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("write corrupt: %v", err)
 	}
-	if _, err := s.loadAll(); err == nil {
+	if _, err := s.LoadAll(); err == nil {
 		t.Fatal("loadAll over a corrupt record = nil error, want a failure")
 	}
 	if _, ok, err := s.get("0a"); ok || err == nil {

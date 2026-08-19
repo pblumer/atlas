@@ -93,7 +93,7 @@ func TestUserConnectorIdempotent(t *testing.T) {
 	startInstance(t, h, key, vars)
 	startInstance(t, h, key, vars)
 
-	all, err := srv.users.loadAll()
+	all, err := srv.users.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestUserConnectorEmptyUsername(t *testing.T) {
 		`<atlas:userConnector operation="create" username="=fehlt" email="x@example.org" displayName="X" roles="user" password="longenough1"/>`))
 	startInstance(t, h, key, `{}`)
 
-	all, err := srv.users.loadAll()
+	all, err := srv.users.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestUserConnectorHandlerOpErrors(t *testing.T) {
 
 	// None of these created an account; the point is the handler ran each op's
 	// error branch (the jobs fail and raise incidents, which is fine here).
-	if all, _ := srv.users.loadAll(); len(all) != 0 {
+	if all, _ := srv.users.LoadAll(); len(all) != 0 {
 		t.Fatalf("op-error runs provisioned %d users, want 0", len(all))
 	}
 }

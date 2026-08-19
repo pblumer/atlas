@@ -20,13 +20,13 @@ func TestDraftSessionAccess(t *testing.T) {
 		},
 	}
 	srv.do(func() {
-		if err := srv.projects.save(proj); err != nil {
+		if err := srv.projects.Save(proj); err != nil {
 			t.Fatalf("save project: %v", err)
 		}
-		if err := srv.drafts.save(draft{ProcessID: "d_scoped", Name: "Scoped", ProjectID: "proj1", XML: "<x/>"}); err != nil {
+		if err := srv.drafts.Save(draft{ProcessID: "d_scoped", Name: "Scoped", ProjectID: "proj1", XML: "<x/>"}); err != nil {
 			t.Fatalf("save scoped draft: %v", err)
 		}
-		if err := srv.drafts.save(draft{ProcessID: "d_free", Name: "Free", XML: "<x/>"}); err != nil {
+		if err := srv.drafts.Save(draft{ProcessID: "d_free", Name: "Free", XML: "<x/>"}); err != nil {
 			t.Fatalf("save ungrouped draft: %v", err)
 		}
 	})

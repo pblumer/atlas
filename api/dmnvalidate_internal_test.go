@@ -251,7 +251,7 @@ func TestValidateStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDmnRefStore: %v", err)
 	}
-	if err := os.MkdirAll(badGet.fileFor(ref.ID), 0o755); err != nil {
+	if err := os.MkdirAll(badGet.FileFor(ref.ID), 0o755); err != nil {
 		t.Fatalf("mkdir record: %v", err)
 	}
 	srv.dmnrefs = badGet
@@ -260,7 +260,7 @@ func TestValidateStoreErrors(t *testing.T) {
 	}
 	// Project preflight can't list references when the dmn-refs directory is gone
 	// (loadAll's ReadDir fails).
-	srv.dmnrefs = &dmnRefStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.dmnrefs = brokenStore(newDmnRefStore(filepath.Join(t.TempDir(), "gone")))
 	if got := do(http.MethodPost, "/api/v1/projects/"+proj.ID+"/validate"); got != http.StatusInternalServerError {
 		t.Fatalf("preflight with broken dmn store = %d, want 500", got)
 	}
@@ -273,7 +273,7 @@ func TestValidateStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor(proj.ID), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor(proj.ID), 0o755); err != nil {
 		t.Fatalf("mkdir project record: %v", err)
 	}
 	srv.projects = ps

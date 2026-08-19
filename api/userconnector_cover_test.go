@@ -25,7 +25,7 @@ func TestEnsureSystemProjectGetError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor(systemProjectID), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor(systemProjectID), 0o755); err != nil {
 		t.Fatalf("make record dir: %v", err)
 	}
 	srv.projects = ps
@@ -198,7 +198,7 @@ func TestUserConnectorPureHelpers(t *testing.T) {
 // so the initial username lookup fails.
 func TestProvisionOpsStoreErrors(t *testing.T) {
 	srv := newServerForErrors(t)
-	srv.users = &userStore{dir: filepath.Join(t.TempDir(), "nope", "deeper")}
+	srv.users = brokenStore(newUserStore(filepath.Join(t.TempDir(), "nope", "deeper")))
 
 	if _, _, err := srv.provisionCreateUser("u", "", "", nil, "longenough1", 1); err == nil {
 		t.Error("provisionCreateUser with broken store: want error")
@@ -219,7 +219,7 @@ func TestEnsureSystemProcessesErrors(t *testing.T) {
 
 	broken := func(sub string) string { return filepath.Join(t.TempDir(), sub, "deeper") }
 
-	srv.forms = &formStore{dir: broken("forms")}
+	srv.forms = brokenStore(newFormStore(broken("forms")))
 	if err := srv.ensureSystemProcesses(1); err == nil {
 		t.Error("ensureSystemProcesses with broken form store: want error")
 	}
@@ -229,7 +229,7 @@ func TestEnsureSystemProcessesErrors(t *testing.T) {
 		t.Fatalf("newFormStore: %v", err)
 	}
 	srv.forms = realForms
-	srv.drafts = &draftStore{dir: broken("drafts")}
+	srv.drafts = brokenStore(newDraftStore(broken("drafts")))
 	if err := srv.ensureSystemProcesses(1); err == nil {
 		t.Error("ensureSystemProcesses with broken draft store: want error")
 	}

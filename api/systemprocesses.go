@@ -132,14 +132,14 @@ func (s *Server) ensureSystemProcesses(now int64) error {
 
 	// Seed forms (idempotent overwrite) filed under the system project.
 	for _, f := range forms {
-		if err := s.forms.save(form{ID: f.id, Name: f.id, ProjectID: systemProjectID, SavedAt: now, Schema: string(f.schema)}); err != nil {
+		if err := s.forms.Save(form{ID: f.id, Name: f.id, ProjectID: systemProjectID, SavedAt: now, Schema: string(f.schema)}); err != nil {
 			return fmt.Errorf("seed system form %s: %w", f.id, err)
 		}
 	}
 
 	for _, p := range procs {
 		// File the draft under the system project so the Modeler lists it there.
-		if err := s.drafts.save(draft{ProcessID: p.processID, Name: p.name, ProjectID: systemProjectID, SavedAt: now, XML: string(p.xml)}); err != nil {
+		if err := s.drafts.Save(draft{ProcessID: p.processID, Name: p.name, ProjectID: systemProjectID, SavedAt: now, XML: string(p.xml)}); err != nil {
 			return fmt.Errorf("file system draft %s: %w", p.processID, err)
 		}
 		// Idempotent deploy: skip when the newest deployed version is byte-identical.

@@ -30,7 +30,7 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 	)
 	s.do(func() {
 		var all []inboundSubscription
-		if all, loadErr = s.inboundSubs.loadAll(); loadErr != nil {
+		if all, loadErr = s.inboundSubs.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, sub := range all {
@@ -112,7 +112,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		saveErr error
 	)
 	s.do(func() {
-		conn, ok, e := s.connectors.get(connID)
+		conn, ok, e := s.connectors.Get(connID)
 		if e != nil {
 			saveErr = e
 			return
@@ -121,7 +121,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			notClio = true
 			return
 		}
-		saveErr = s.inboundSubs.save(rec)
+		saveErr = s.inboundSubs.Save(rec)
 	})
 	switch {
 	case notClio:
@@ -169,7 +169,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	)
 	s.do(func() {
 		var e error
-		rec, found, e = s.inboundSubs.get(id)
+		rec, found, e = s.inboundSubs.Get(id)
 		if e != nil {
 			saveErr = e
 			return
@@ -195,7 +195,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		if p.StartFromTip != nil {
 			rec.StartFromTip = *p.StartFromTip
 		}
-		saveErr = s.inboundSubs.save(rec)
+		saveErr = s.inboundSubs.Save(rec)
 	})
 	switch {
 	case saveErr != nil:
@@ -213,7 +213,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 func (s *Server) handleDeleteInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var delErr error
-	s.do(func() { delErr = s.inboundSubs.delete(id) })
+	s.do(func() { delErr = s.inboundSubs.Delete(id) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "delete subscription: "+delErr.Error())
 		return

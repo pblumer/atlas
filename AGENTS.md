@@ -65,22 +65,59 @@ cd e2e && npm ci && npx playwright install chromium && npm test
 
 ## Repository layout
 
-The intended package structure (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#component-map)):
+The Go packages (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#component-map)):
 
 ```
 compiler/   BPMN XML → CompiledProcess (parse, resolve, intern, expr, validate, linearize)
 model/      Record, header, ValueType/Intent, payload encode/decode
-engine/     Partition, processor loop, batching, ProcessingContext
-behavior/   Per-BPMN-element behaviors (service task, gateways, events, subprocess)
+engine/     Partition, processor loop, batching, ProcessingContext, element behaviors
 state/      State store wrapper, transactions, indexes (column families)
 wal/        Write-ahead log: segmented append, group commit, replay
+checkpoint/ Recovery checkpoints and WAL compaction (ADR-0131)
 expr/       FEEL expression compilation and evaluation
 job/        Job store, worker subscription, gRPC streaming protocol
-timer/      Due-date index scanning and timer triggering
-api/        Client-facing command submission and queries
+dmn/        DMN registry, resolver, validation, and the business-rule-task worker
+connector/  In-process service-task workers — one package per connector kind
+api/        HTTP API, web UI, command submission and queries
+  layout/   BPMN diagram auto-layout (ADR-0124/0127)
+  collab/   Live collaborative modeling sessions (ADR-0140)
+  vault/    Encrypted secret store (ADR-0069/0070)
+  sidecar/  Store[T] and the atomic-write + fsync discipline behind every design-time store
+mcp/        MCP server over the HTTP API (ADR-0016)
+metrics/    Prometheus metrics (ADR-0142)
+opensearch/ OpenSearch event exporter (ADR-0114)
+cmd/atlas/  The single binary (ADR-0011)
 ```
 
-Packages may not all exist yet — the project is at Milestone 0 (see [`ROADMAP.md`](ROADMAP.md)). Check what exists before assuming.
+**`connector/` holds the service-task types.** Every kind that a model can put on a
+service task and that Atlas executes itself rides the same seam — a
+`TypeConnectorTask` compiles to a job carrying a reserved `compiler.*JobTypeIndex`,
+and an in-process worker picks it up off the hot path, after fsync (ADR-0007/0067):
+
+```
+connector/rest/        HTTP REST outbound (ADR-0067)
+connector/mail/        Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
+connector/sharepoint/  SharePoint list items via Graph (ADR-0141)
+connector/remedy/      BMC Remedy AR System (ADR-0106)
+connector/webscrape/   Web scraping (ADR-0118)
+connector/clio/        clio event store: read, write, query (ADR-0036)
+connector/temis/       temis decision service (ADR-0050)
+connector/script/      Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+connector/csvimport/   CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
+```
+
+Adding a connector kind is one package here plus one `managedConnectorKind` entry in
+[`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
+server.
+
+**Adding a design-time store** (drafts, projects, forms, connectors, releases, …)
+is one call to `sidecar.NewStore`: give it a directory, the name its errors carry,
+how a record states its key, and — only if it differs from the default — the
+listing order and the filename scheme. Do not hand-roll the read/write/list
+mechanics; sixteen copies of it is what this replaced. Note that the filename
+predicate also guards keys on the way *in*, so a request-supplied key cannot
+address a file outside the store. Non-Go trees: [`docs/`](docs/), [`examples/`](examples/), [`e2e/`](e2e/),
+[`deploy/`](deploy/), [`scripts/`](scripts/), [`postman/`](postman/).
 
 ## How to approach a task
 

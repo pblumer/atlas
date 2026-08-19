@@ -84,7 +84,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		// Idempotent: reuse an existing link for this process id.
-		links, e := s.publicLinks.loadAll()
+		links, e := s.publicLinks.LoadAll()
 		if e != nil {
 			opErr = e
 			return
@@ -101,7 +101,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		out = publicLink{Token: token, ProcessID: payload.ProcessID, FormID: formID, CreatedAt: time.Now().Unix()}
-		opErr = s.publicLinks.save(out)
+		opErr = s.publicLinks.Save(out)
 	})
 	switch {
 	case opErr != nil:
@@ -122,7 +122,7 @@ func (s *Server) handleListPublicLinks(w http.ResponseWriter, _ *http.Request) {
 	out := []publicLinkResp{}
 	var loadErr error
 	s.do(func() {
-		links, e := s.publicLinks.loadAll()
+		links, e := s.publicLinks.LoadAll()
 		loadErr = e
 		for _, l := range links {
 			out = append(out, toPublicLinkResp(l))
@@ -139,7 +139,7 @@ func (s *Server) handleListPublicLinks(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	var delErr error
-	s.do(func() { delErr = s.publicLinks.delete(token) })
+	s.do(func() { delErr = s.publicLinks.Delete(token) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "revoke public link: "+delErr.Error())
 		return
@@ -168,12 +168,12 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 		opErr    error
 	)
 	s.do(func() {
-		link, ok, e := s.publicLinks.get(token)
+		link, ok, e := s.publicLinks.Get(token)
 		if e != nil || !ok {
 			opErr = e
 			return
 		}
-		f, ok, e := s.forms.get(link.FormID)
+		f, ok, e := s.forms.Get(link.FormID)
 		if e != nil || !ok {
 			opErr = e
 			return
@@ -227,7 +227,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		runErr  error
 	)
 	s.do(func() {
-		link, ok, e := s.publicLinks.get(token)
+		link, ok, e := s.publicLinks.Get(token)
 		if e != nil || !ok {
 			runErr = e
 			return

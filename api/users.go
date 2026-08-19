@@ -135,7 +135,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { u, ok, loadErr = s.users.get(p.UserID) })
+	s.do(func() { u, ok, loadErr = s.users.Get(p.UserID) })
 	if loadErr != nil {
 		writeError(w, http.StatusInternalServerError, "me: "+loadErr.Error())
 		return
@@ -156,7 +156,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []User
-		recs, loadErr = s.users.loadAll()
+		recs, loadErr = s.users.LoadAll()
 		for _, u := range recs {
 			list = append(list, u.toPublic())
 		}
@@ -182,7 +182,7 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 	var loadErr error
 	s.do(func() {
 		var recs []User
-		recs, loadErr = s.users.loadAll()
+		recs, loadErr = s.users.LoadAll()
 		for _, u := range recs {
 			if u.Disabled {
 				continue
@@ -270,7 +270,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		saveErr = s.users.save(rec)
+		saveErr = s.users.Save(rec)
 	})
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create user: "+saveErr.Error())
@@ -294,7 +294,7 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { u, ok, loadErr = s.users.get(id) })
+	s.do(func() { u, ok, loadErr = s.users.Get(id) })
 	switch {
 	case loadErr != nil:
 		writeError(w, http.StatusInternalServerError, "read user: "+loadErr.Error())
@@ -333,7 +333,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		disabling bool
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -367,21 +367,21 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		// Guard against locking everyone out: if the result is not an enabled admin
 		// and no other enabled admin remains, refuse.
 		if !(u.hasRole(RoleAdmin) && !u.Disabled) {
-			all, e := s.users.loadAll()
+			all, e := s.users.LoadAll()
 			if e != nil {
 				opErr = e
 				return
 			}
 			if enabledAdminCount(all, id) == 0 {
 				// Only a problem if this user *was* the last enabled admin.
-				if prev, _, _ := s.users.get(id); prev.hasRole(RoleAdmin) && !prev.Disabled {
+				if prev, _, _ := s.users.Get(id); prev.hasRole(RoleAdmin) && !prev.Disabled {
 					lockout = true
 					return
 				}
 			}
 		}
 		u.UpdatedAt = time.Now().Unix()
-		if opErr = s.users.save(u); opErr != nil {
+		if opErr = s.users.Save(u); opErr != nil {
 			return
 		}
 		updated = u
@@ -430,7 +430,7 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		opErr error
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -441,7 +441,7 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		found = true
 		u.PasswordHash = hash
 		u.UpdatedAt = time.Now().Unix()
-		opErr = s.users.save(u)
+		opErr = s.users.Save(u)
 	})
 	switch {
 	case opErr != nil:
@@ -467,7 +467,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		opErr   error
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -477,7 +477,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if u.hasRole(RoleAdmin) && !u.Disabled {
-			all, e := s.users.loadAll()
+			all, e := s.users.LoadAll()
 			if e != nil {
 				opErr = e
 				return
@@ -487,7 +487,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		opErr = s.users.delete(id)
+		opErr = s.users.Delete(id)
 	})
 	switch {
 	case opErr != nil:

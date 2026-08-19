@@ -42,23 +42,27 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/checkpoint"
-	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
-	"github.com/pblumer/atlas/mail"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
-	"github.com/pblumer/atlas/remedy"
-	"github.com/pblumer/atlas/rest"
-	"github.com/pblumer/atlas/script"
-	"github.com/pblumer/atlas/sharepoint"
 	"github.com/pblumer/atlas/state"
-	"github.com/pblumer/atlas/temis"
-	"github.com/pblumer/atlas/webscrape"
+
+	"github.com/pblumer/atlas/api/vault"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -185,7 +189,7 @@ type Server struct {
 	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
 	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
 	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vault            *vault.Vault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
 	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore           // durable sidecar for user accounts (ADR-0044)
 
@@ -199,7 +203,7 @@ type Server struct {
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
 	// touches the engine — it is design-time coordination around a draft, not
 	// engine state.
-	collab *collabRegistry
+	collab *collab.Registry
 
 	// collabKeepalive is how often an idle SSE session stream writes a keepalive
 	// comment. net/http only learns a client vanished when a write fails, so these
@@ -780,8 +784,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		sessions:          newSessionStore(defaultSessionTTL),
-		collab:            newCollabRegistry(),
-		collabKeepalive:   collabKeepaliveInterval,
+		collab:            collab.NewRegistry(),
+		collabKeepalive:   collab.KeepaliveInterval,
 		dmnResolver:       resolver,
 		dmnValidator:      dmn.NewValidator(resolver),
 		dmnRegistry:       dmn.NewRegistry(),
@@ -806,11 +810,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// <data-dir>/vault.key so the vault works with no provisioning. Built after the
 	// options so WithoutVault takes effect before any key file is touched.
 	if s.vaultEnabled {
-		key, source, err := resolveVaultKey(filepath.Join(dataDir, "vault.key"))
+		key, source, err := vault.ResolveKey(filepath.Join(dataDir, "vault.key"))
 		if err != nil {
 			return nil, err
 		}
-		if s.vault, err = newSecretVault(filepath.Join(dataDir, "vault"), key); err != nil {
+		if s.vault, err = vault.New(filepath.Join(dataDir, "vault"), key); err != nil {
 			return nil, err
 		}
 		if source == "generated" {
@@ -880,7 +884,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store, s.processLookup))
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvimport.Handler(store, s.processLookup))
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
 	// writing the extracted values into the task's result variable as a JSON array.
@@ -960,7 +964,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
-	go s.collabReaper(collabReapInterval)
+	go s.collabReaper(collab.ReapInterval)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -1411,7 +1415,7 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 // instances (ADR-0019). It runs before the loop serves traffic, so touching the
 // registry and the processor directly here respects the single-writer invariant.
 func (s *Server) loadDeployments() error {
-	recs, err := s.deploys.loadAll()
+	recs, err := s.deploys.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -1503,8 +1507,8 @@ func (s *Server) collabReaper(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
-			if n := s.collab.reap(); n > 0 {
-				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collabParticipantTTL)
+			if n := s.collab.Reap(); n > 0 {
+				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collab.ParticipantTTL)
 			}
 		}
 	}

@@ -33,7 +33,7 @@ func docRequest(t *testing.T, srv *Server, method, path, body string) *httptest.
 // read, so every store call fails and the handlers' 500 branches run.
 func breakDocStore(t *testing.T, srv *Server) {
 	t.Helper()
-	srv.processDocs = &processDocStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.processDocs = brokenStore(newProcessDocStore(filepath.Join(t.TempDir(), "gone")))
 }
 
 // TestLoadProcessDocVersionsRebuildsCounter proves the per-process counter is
@@ -63,7 +63,7 @@ func TestLoadProcessDocVersionsRebuildsCounter(t *testing.T) {
 	}
 
 	broken := &Server{
-		processDocs: &processDocStore{dir: filepath.Join(t.TempDir(), "gone")},
+		processDocs: brokenStore(newProcessDocStore(filepath.Join(t.TempDir(), "gone"))),
 		docVersions: map[string]int32{},
 	}
 	if err := broken.loadProcessDocVersions(); err == nil {
@@ -108,7 +108,7 @@ func TestProcessDocUnwritableStoreErrors(t *testing.T) {
 func TestProcessDocCorruptRecordErrors(t *testing.T) {
 	srv := newServerForErrors(t)
 	id := "00112233445566778899aabbccddeeff"
-	if err := os.WriteFile(srv.processDocs.fileFor(id), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(srv.processDocs.FileFor(id), []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("write corrupt record: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func TestDeleteProcessDocStoreError(t *testing.T) {
 	srv := newServerForErrors(t)
 	id := "00112233445566778899aabbccddeeff"
 	// A non-empty directory at the record's path cannot be removed.
-	if err := os.MkdirAll(filepath.Join(srv.processDocs.fileFor(id), "child"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srv.processDocs.FileFor(id), "child"), 0o755); err != nil {
 		t.Fatalf("make undeletable record: %v", err)
 	}
 	rec := docRequest(t, srv, http.MethodDelete, "/api/v1/documentation/"+id, "")

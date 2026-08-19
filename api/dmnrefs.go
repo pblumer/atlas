@@ -63,7 +63,7 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		if rec.ProjectID != "" {
-			_, ok, e := s.projects.get(rec.ProjectID)
+			_, ok, e := s.projects.Get(rec.ProjectID)
 			if e != nil {
 				projErr = e
 				return
@@ -73,7 +73,7 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		saveErr = s.dmnrefs.save(rec)
+		saveErr = s.dmnrefs.Save(rec)
 	})
 	switch {
 	case projErr != nil:
@@ -95,7 +95,7 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []dmnRef
-		recs, loadErr = s.dmnrefs.loadAll()
+		recs, loadErr = s.dmnrefs.LoadAll()
 		for _, rec := range recs {
 			if filter != "" && rec.ProjectID != filter {
 				continue
@@ -150,7 +150,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		view                     dmnRefResp
 	)
 	s.do(func() {
-		rec, ok, e := s.dmnrefs.get(id)
+		rec, ok, e := s.dmnrefs.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -161,7 +161,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		found = true
 		if payload.ProjectID != nil {
 			if *payload.ProjectID != "" {
-				_, pok, pe := s.projects.get(*payload.ProjectID)
+				_, pok, pe := s.projects.Get(*payload.ProjectID)
 				if pe != nil {
 					projErr = pe
 					return
@@ -176,7 +176,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		if payload.Name != nil {
 			rec.Name = newName
 		}
-		if saveErr = s.dmnrefs.save(rec); saveErr != nil {
+		if saveErr = s.dmnrefs.Save(rec); saveErr != nil {
 			return
 		}
 		view = toDmnRefResp(rec)
@@ -202,7 +202,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var delErr error
-	s.do(func() { delErr = s.dmnrefs.delete(id) })
+	s.do(func() { delErr = s.dmnrefs.Delete(id) })
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "delete dmn reference: "+delErr.Error())
 		return

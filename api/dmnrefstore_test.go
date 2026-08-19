@@ -20,16 +20,16 @@ func newDmnRefs(t *testing.T) *dmnRefStore {
 // deploystore's stray-file tests, exercising the IsDir / suffix skip branch.
 func TestDmnRefStoreLoadAllSkipsForeignFiles(t *testing.T) {
 	ds := newDmnRefs(t)
-	if err := ds.save(dmnRef{ID: "real", Name: "R", ModelRef: "m", CreatedAt: 1}); err != nil {
+	if err := ds.Save(dmnRef{ID: "real", Name: "R", ModelRef: "m", CreatedAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := os.Mkdir(filepath.Join(ds.dir, "subdir"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(ds.Dir(), "subdir"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(ds.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ds.Dir(), "notes.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("write txt: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -42,16 +42,16 @@ func TestDmnRefStoreLoadAllSkipsForeignFiles(t *testing.T) {
 // back oldest-first, and proves get finds a specific one.
 func TestDmnRefStoreRoundTripAndOrder(t *testing.T) {
 	ds := newDmnRefs(t)
-	if err := ds.save(dmnRef{ID: "b", Name: "Beta", ModelRef: "pricing", CreatedAt: 200}); err != nil {
+	if err := ds.Save(dmnRef{ID: "b", Name: "Beta", ModelRef: "pricing", CreatedAt: 200}); err != nil {
 		t.Fatalf("save b: %v", err)
 	}
-	if err := ds.save(dmnRef{ID: "a", Name: "Alpha", ModelRef: "risk", CreatedAt: 100}); err != nil {
+	if err := ds.Save(dmnRef{ID: "a", Name: "Alpha", ModelRef: "risk", CreatedAt: 100}); err != nil {
 		t.Fatalf("save a: %v", err)
 	}
-	if err := ds.save(dmnRef{ID: "c", Name: "Gamma", ModelRef: "routing", CreatedAt: 300}); err != nil {
+	if err := ds.Save(dmnRef{ID: "c", Name: "Gamma", ModelRef: "routing", CreatedAt: 300}); err != nil {
 		t.Fatalf("save c: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestDmnRefStoreRoundTripAndOrder(t *testing.T) {
 			t.Errorf("position %d = %q, want %q", i, got[i].ID, w)
 		}
 	}
-	rec, ok, err := ds.get("a")
+	rec, ok, err := ds.Get("a")
 	if err != nil || !ok || rec.ModelRef != "risk" {
 		t.Fatalf("get a = (%+v, %v, %v), want the saved record", rec, ok, err)
 	}
@@ -75,11 +75,11 @@ func TestDmnRefStoreRoundTripAndOrder(t *testing.T) {
 func TestDmnRefStoreTieBreakByID(t *testing.T) {
 	ds := newDmnRefs(t)
 	for _, id := range []string{"c", "a", "b"} {
-		if err := ds.save(dmnRef{ID: id, CreatedAt: 42}); err != nil {
+		if err := ds.Save(dmnRef{ID: id, CreatedAt: 42}); err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -94,26 +94,26 @@ func TestDmnRefStoreTieBreakByID(t *testing.T) {
 // and delete is idempotent.
 func TestDmnRefStoreOverwriteAndDelete(t *testing.T) {
 	ds := newDmnRefs(t)
-	if err := ds.save(dmnRef{ID: "p", Name: "First", ModelRef: "m1"}); err != nil {
+	if err := ds.Save(dmnRef{ID: "p", Name: "First", ModelRef: "m1"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := ds.save(dmnRef{ID: "p", Name: "Second", ModelRef: "m2"}); err != nil {
+	if err := ds.Save(dmnRef{ID: "p", Name: "Second", ModelRef: "m2"}); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
 	if len(got) != 1 || got[0].Name != "Second" || got[0].ModelRef != "m2" {
 		t.Fatalf("after overwrite want one 'Second/m2' record, got %+v", got)
 	}
-	if err := ds.delete("p"); err != nil {
+	if err := ds.Delete("p"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, ok, _ := ds.get("p"); ok {
+	if _, ok, _ := ds.Get("p"); ok {
 		t.Fatal("reference still present after delete")
 	}
-	if err := ds.delete("p"); err != nil {
+	if err := ds.Delete("p"); err != nil {
 		t.Errorf("delete of absent reference = %v, want nil (idempotent)", err)
 	}
 }
@@ -135,14 +135,14 @@ func TestDmnRefStoreErrorPaths(t *testing.T) {
 		t.Fatalf("newDmnRefStore: %v", err)
 	}
 
-	bad := ds.fileFor("p")
+	bad := ds.FileFor("p")
 	if err := os.WriteFile(bad, []byte("{nope"), 0o644); err != nil {
 		t.Fatalf("write bad: %v", err)
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll of invalid JSON: want error")
 	}
-	if _, _, err := ds.get("p"); err == nil {
+	if _, _, err := ds.Get("p"); err == nil {
 		t.Fatal("get of invalid JSON: want error")
 	}
 
@@ -152,7 +152,7 @@ func TestDmnRefStoreErrorPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write stray: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll after cleanup: %v", err)
 	}
@@ -163,13 +163,13 @@ func TestDmnRefStoreErrorPaths(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := ds.save(dmnRef{ID: "p"}); err == nil {
+	if err := ds.Save(dmnRef{ID: "p"}); err == nil {
 		t.Fatal("save with no dir: want error")
 	}
-	if err := ds.delete("p"); err == nil {
+	if err := ds.Delete("p"); err == nil {
 		t.Fatal("delete with no dir: want error")
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll with no dir: want error")
 	}
 }
