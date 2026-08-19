@@ -500,7 +500,7 @@ export function openDevView(field, opts = {}) {
     // The rail has a width of its own, so an authored panel width steps aside while
     // collapsed and is restored — not forgotten — when the panel comes back.
     if (collapsed) side.style.flex = "";
-    else if (sideWidth) setSideWidth(sideWidth, false);
+    else applySideWidth();
     sideToggle.textContent = collapsed ? "‹" : "›";
     sideToggle.title = collapsed ? "Expand the panel" : "Collapse the panel";
     sideToggle.setAttribute("aria-label", sideToggle.title);
@@ -524,13 +524,22 @@ export function openDevView(field, opts = {}) {
 
   // setSideWidth applies (and optionally remembers) the side panel's width, clamped
   // so neither pane can be squeezed out of existence.
-  let sideWidth = 0; // the authored panel width, kept across a collapse/expand
+  // sideWidth is the *authored* width — what the person dragged to. What is applied
+  // is that value clamped to what the modal can currently hold, so shrinking the
+  // window borrows from the panel instead of starving the code, and growing it again
+  // hands the borrowed pixels back rather than leaving the panel permanently smaller.
+  let sideWidth = 0;
+  const sideMax = () => Math.max(MIN_SIDE, modal.getBoundingClientRect().width - MIN_MODAL_W / 2);
+
+  function applySideWidth() {
+    if (!sideWidth || side.classList.contains("collapsed")) return;
+    side.style.flex = `0 0 ${Math.round(Math.min(Math.max(sideWidth, MIN_SIDE), sideMax()))}px`;
+  }
+
   function setSideWidth(px, persist) {
-    const max = Math.max(MIN_SIDE, modal.getBoundingClientRect().width - MIN_MODAL_W / 2);
-    const w = Math.round(Math.min(Math.max(px, MIN_SIDE), max));
-    sideWidth = w;
-    if (!side.classList.contains("collapsed")) side.style.flex = `0 0 ${w}px`;
-    if (persist) store(SIDEW_KEY, String(w));
+    sideWidth = Math.round(Math.min(Math.max(px, MIN_SIDE), sideMax()));
+    applySideWidth();
+    if (persist) store(SIDEW_KEY, String(sideWidth));
   }
 
   // place pins the modal at an explicit position and size, taking it out of the
@@ -587,12 +596,21 @@ export function openDevView(field, opts = {}) {
     saveGeometry();
   }
 
-  // resetLayout returns the modal to the centered default and forgets the stored
-  // geometry — the way out of an arrangement that made sense on another screen.
+  // resetLayout is the one recovery gesture, and it undoes *the layout*: the window's
+  // size and position and the split between the two panes. Leaving the panel width
+  // behind would make the promise false in exactly the case someone reaches for it —
+  // an arrangement made for a screen they are no longer sitting at. The collapse is
+  // deliberately not touched: it is a mode with its own button, not something a drag
+  // put there.
   function resetLayout() {
     modal.classList.remove("placed");
     modal.style.left = modal.style.top = modal.style.width = modal.style.height = "";
-    try { localStorage.removeItem(GEOM_KEY); } catch { /* no storage */ }
+    sideWidth = 0;
+    side.style.flex = "";
+    try {
+      localStorage.removeItem(GEOM_KEY);
+      localStorage.removeItem(SIDEW_KEY);
+    } catch { /* no storage */ }
   }
 
   // drag is the shared pointer-drag loop: capture the pointer so the gesture
@@ -653,6 +671,9 @@ export function openDevView(field, opts = {}) {
   // from the initial layout — so only the former is remembered.
   if (typeof ResizeObserver === "function") {
     new ResizeObserver(() => {
+      // A narrower modal has less to share: re-apply the panel width against the new
+      // box before anything else, so the code area is never squeezed to nothing.
+      applySideWidth();
       if (!modal.style.width) return; // the browser's own first layout, not a resize
       if (!modal.classList.contains("placed")) {
         const r = modal.getBoundingClientRect();

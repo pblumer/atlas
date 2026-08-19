@@ -501,6 +501,80 @@ test("the modal cannot be dragged out of reach", async ({ page }) => {
 // restored onto may be far smaller — a laptop after a monitor. Keeping "a strip is
 // reachable" would be the letter of the rule and a bad window: the reader would find
 // a corner of the editor, not the editor. When it fits, it is placed whole.
+// The header's double-click is the one recovery gesture, and it promises to reset
+// "the layout" — so it has to mean all of it. Leaving the panel width behind (as it
+// once did) makes the promise false in exactly the case someone reaches for it: an
+// arrangement made for another screen.
+test("the double-click reset restores every part of the layout", async ({ page }) => {
+  await openFeel(page);
+  const geo = () => page.locator(".dev-modal").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  const sideWidth = () => page.locator(".dev-side").evaluate((el) => Math.round(el.getBoundingClientRect().width));
+  const defaults = { geo: await geo(), side: await sideWidth() };
+
+  // Arrange all three. The reference is widened first: the splitter's ceiling is a
+  // share of the modal's width, so widening after a shrink would hit that ceiling
+  // and test the clamp rather than the reset.
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 110, split.y + split.height / 2, { steps: 6 });
+  await page.mouse.up();
+  expect(await sideWidth()).toBeGreaterThan(defaults.side + 80);
+
+  await resizeModal(page, -250, -160);
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + 200, head.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 120, head.y + 82, { steps: 6 });
+  await page.mouse.up();
+  expect((await geo()).w).toBeLessThan(defaults.geo.w - 100);
+
+  await page.locator(".dev-head").dblclick();
+  expect(await geo()).toEqual(defaults.geo);
+  expect(await sideWidth()).toBe(defaults.side);
+
+  // And the arrangement is forgotten, not merely undone for this opening.
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.geometry"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("atlas.devview.sidewidth"))).toBeNull();
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await geo()).toEqual(defaults.geo);
+  expect(await sideWidth()).toBe(defaults.side);
+});
+
+// The panel width is authored against the modal as it was then. Shrink the window
+// afterwards and a fixed panel would eat the code area alive — so what is applied is
+// the authored width clamped to what the modal can currently hold, and the borrowed
+// pixels come back when the window grows again.
+test("shrinking the modal borrows from the panel rather than starving the code", async ({ page }) => {
+  await openFeel(page);
+  const widths = () => page.evaluate(() => ({
+    main: Math.round(document.querySelector(".dev-main").getBoundingClientRect().width),
+    side: Math.round(document.querySelector(".dev-side").getBoundingClientRect().width),
+  }));
+
+  // Widen the reference as far as the splitter allows.
+  const split = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(split.x + 4, split.y + split.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(split.x - 400, split.y + split.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const wide = await widths();
+  expect(wide.side).toBeGreaterThan(400);
+
+  await resizeModal(page, -300, -100);
+  const tight = await widths();
+  expect(tight.side).toBeLessThan(wide.side);
+  expect(tight.main).toBeGreaterThanOrEqual(wide.main); // the code kept its room
+
+  // Growing the window hands the borrowed width back to the panel.
+  await resizeModal(page, 300, 100);
+  expect((await widths()).side).toBe(wide.side);
+});
+
 test("a geometry from a larger screen is fitted into a smaller window", async ({ page }) => {
   await page.evaluate(() => localStorage.setItem(
     "atlas.devview.geometry", JSON.stringify({ x: 2400, y: 1300, w: 1600, h: 1000 })));
