@@ -126,6 +126,108 @@ func TestBoundaryTimerFeelCycle(t *testing.T) {
 	}
 }
 
+// TestRecurringBoundaryFeelBreaksMidCycleRaisesIncident proves a recurring FEEL
+// boundary that resolves on its first occurrence but whose variable is then
+// changed to an unresolvable value raises a job-less incident on the next
+// occurrence instead of silently ceasing to recur (ADR-0111). Resolving the
+// incident with the variable still broken re-arms and re-raises.
+func TestRecurringBoundaryFeelBreaksMidCycleRaisesIncident(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const interval = int64(10e9)
+	e, err := expr.CompileAuto("cadence")
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b := compiler.NewBuilder(912, "feelcyclebreak", 1)
+	start := b.AddStartEvent()
+	host := b.AddServiceTask("work", 3)
+	rem := b.AddBoundaryTimerSchedule(host, false, compiler.TimerSchedule{Kind: compiler.TimerFeelCycle, Expr: e})
+	done := b.AddEndEvent()
+	reminder := b.AddEndEvent()
+	b.Connect(start, host)
+	b.Connect(host, done)
+	b.Connect(rem, reminder)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	// "R3/PT10S": recurs 3 times — but we break the cadence after the first.
+	p.CreateInstance(cp.Key, strVar("cadence", "R3/PT10S"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	piKey := singleActiveInstance(t, h.store)
+
+	// First occurrence resolves fine and spawns one reminder — no incident.
+	clk.t += interval + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (fire 1): %v", err)
+	}
+	if got := elementVisits(t, h.store, cp.Key)[reminder]; got != 1 {
+		t.Fatalf("after fire 1: reminder visits=%d, want 1", got)
+	}
+	if n := len(incidents(t, h.store)); n != 0 {
+		t.Fatalf("first occurrence raised %d incidents, want 0", n)
+	}
+
+	// Break the cadence: the re-armed second occurrence can no longer resolve.
+	p.SetVariables(piKey, piKey, "", strVar("cadence", "not-a-cycle"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (break): %v", err)
+	}
+
+	// Second occurrence: the FEEL fails to re-resolve → a job-less incident, and the
+	// reminder does not fire again.
+	clk.t += interval + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (fire 2): %v", err)
+	}
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("broken re-arm raised %d incidents, want 1", len(inc))
+	}
+	for _, v := range inc {
+		if v.JobKey != 0 {
+			t.Errorf("recurring re-arm incident JobKey=%d, want 0 (a timer incident has no job)", v.JobKey)
+		}
+		if !strings.Contains(v.Message, "timer schedule") {
+			t.Errorf("incident message = %q, want it to name the timer schedule", v.Message)
+		}
+	}
+	if got := elementVisits(t, h.store, cp.Key)[reminder]; got != 1 {
+		t.Fatalf("after the broken re-arm: reminder visits=%d, want 1 (recurrence stopped)", got)
+	}
+
+	// Resolving while still broken re-arms and re-raises — proving the incident
+	// routes back through the timer re-arm, not a blind clear (ADR-0064).
+	var elKey uint64
+	for k := range inc {
+		elKey = k
+	}
+	clk.t = 5_000
+	p.ResolveIncident(elKey, 1)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (resolve): %v", err)
+	}
+	reinc := incidents(t, h.store)
+	if len(reinc) != 1 {
+		t.Fatalf("resolving a still-broken re-arm left %d incidents, want 1 (re-raised)", len(reinc))
+	}
+	for _, v := range reinc {
+		if v.RaisedAt != 5_000 {
+			t.Errorf("re-raised incident RaisedAt=%d, want 5000 (a fresh raise from the re-arm)", v.RaisedAt)
+		}
+	}
+}
+
 // TestStartTimerFeelConstant proves a timer start event with a constant FEEL
 // schedule (no variables) resolves against an empty scope at arm and fires
 // (ADR-0056).

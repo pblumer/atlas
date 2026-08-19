@@ -1,0 +1,25 @@
+{
+  "id": "atlas.rest-outbound",
+  "version": "2.1.0",
+  "kind": "connector",
+  "title": "REST Outbound",
+  "author": "Atlas core",
+  "description": "Call any HTTP/REST endpoint. Method, URL, headers and query are authored in the model; the JSON response is mapped to a result variable. Credentials stay on the server, referenced by name.",
+  "engineCompat": ">=0.9",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "REST Outbound",
+    "id": "atlas.rest-outbound",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Method", "type": "Dropdown", "value": "GET", "binding": { "type": "property", "name": "atlas:method" },
+        "choices": [ { "name": "GET", "value": "GET" }, { "name": "POST", "value": "POST" }, { "name": "PUT", "value": "PUT" }, { "name": "DELETE", "value": "DELETE" } ] },
+      { "label": "URL", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:url" } },
+      { "label": "Headers", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:headers" } },
+      { "label": "Authentication", "type": "Dropdown", "value": "none", "binding": { "type": "property", "name": "atlas:authType" },
+        "choices": [ { "name": "None", "value": "none" }, { "name": "Basic (server credential)", "value": "basic" }, { "name": "Bearer (server credential)", "value": "bearer" } ] },
+      { "label": "Credential reference", "type": "String", "binding": { "type": "property", "name": "atlas:credentialsRef" } },
+      { "label": "Result variable", "type": "String", "binding": { "type": "property", "name": "atlas:resultVariable" } }
+    ]
+  }
+}

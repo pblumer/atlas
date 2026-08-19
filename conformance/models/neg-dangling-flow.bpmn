@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE fixture: must be REJECTED at compile.
+
+  A sequence flow targets "ghost", an element that does not exist. An unknown flow
+  reference is structurally invalid BPMN, so the compiler must refuse the model —
+  a bad reference is caught at deploy, never at runtime.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="defs_neg_dangling_flow" targetNamespace="http://atlas/conformance">
+  <process id="neg-dangling-flow" name="Dangling flow" isExecutable="true">
+    <startEvent id="s"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="ghost"/>
+  </process>
+</definitions>

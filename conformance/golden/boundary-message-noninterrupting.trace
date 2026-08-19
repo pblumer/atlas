@@ -1,0 +1,3 @@
+state: completed
+path: start -> review -> pinged -> notified -> done
+vars: (none)

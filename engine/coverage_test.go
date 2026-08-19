@@ -95,10 +95,11 @@ func TestToExprKind(t *testing.T) {
 // pointer identity/emptiness only.
 func TestAsValue(t *testing.T) {
 	iv := &inflightValue{
-		process:  model.ProcessInstanceValue{ProcessDefKey: 9},
-		element:  model.ElementInstanceValue{ElementId: 3},
-		job:      model.JobValue{JobType: 7},
-		variable: model.VariableValue{Name: "x"},
+		process:     model.ProcessInstanceValue{ProcessDefKey: 9},
+		element:     model.ElementInstanceValue{ElementId: 3},
+		job:         model.JobValue{JobType: 7},
+		variable:    model.VariableValue{Name: "x"},
+		compensable: model.CompensableValue{ScopeKey: 5},
 	}
 	if v := iv.asValue(model.VTProcessInstance); v != &iv.process {
 		t.Error("asValue(VTProcessInstance) should point at process field")
@@ -136,6 +137,10 @@ func TestInflightFromRecord(t *testing.T) {
 	vr := &model.VariableValue{Name: "x"}
 	if iv := inflightFromRecord(model.Record{Header: model.RecordHeader{ValueType: model.VTVariable}, Value: vr}); iv.variable != *vr {
 		t.Errorf("variable = %+v, want %+v", iv.variable, *vr)
+	}
+	comp := &model.CompensableValue{ScopeKey: 5, ElementId: 3, HandlerNode: 4, Seq: 9}
+	if iv := inflightFromRecord(model.Record{Header: model.RecordHeader{ValueType: model.VTCompensable}, Value: comp}); iv.compensable != *comp {
+		t.Errorf("compensable = %+v, want %+v", iv.compensable, *comp)
 	}
 
 	// Mismatched concrete Value: the type assertion fails, leaving the field zero.
@@ -351,5 +356,17 @@ func TestRecoverCorruptRecord(t *testing.T) {
 	p := New(1, log2, store, &wbClock{})
 	if err := p.Recover(); err == nil {
 		t.Fatal("Recover over a corrupt record = nil error, want error")
+	}
+}
+
+// TestFirstErr covers the error-aggregation helper: it returns the first non-nil
+// error and nil when every argument is nil.
+func TestFirstErr(t *testing.T) {
+	if err := firstErr(nil, nil, nil); err != nil {
+		t.Fatalf("firstErr(all nil) = %v, want nil", err)
+	}
+	want := errors.New("boom")
+	if err := firstErr(nil, want, errors.New("later")); err != want {
+		t.Fatalf("firstErr = %v, want the first non-nil error", err)
 	}
 }

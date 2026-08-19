@@ -1,0 +1,21 @@
+{
+  "name": "boundary-message-noninterrupting",
+  "model": "boundary-message-noninterrupting.bpmn",
+  "features": [
+    "boundary-message-noninterrupting"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "publish",
+      "correlation": "K",
+      "message": "ping"
+    },
+    {
+      "action": "complete",
+      "element": "review"
+    }
+  ]
+}

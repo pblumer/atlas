@@ -9,8 +9,33 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/remedy"
+	"github.com/pblumer/atlas/sharepoint"
 	"github.com/pblumer/atlas/temis"
 )
+
+// clioReadScope builds the clio scope string granting read on a subject: the exact
+// subject ("read:/employees") or, when recursive, its whole subtree
+// ("read:/employees/*") — the recursive grant a subtree watch needs. The subject is
+// made absolute first (clio subjects begin with "/").
+func clioReadScope(subject string, recursive bool) string {
+	subject = strings.TrimSpace(subject)
+	if !strings.HasPrefix(subject, "/") {
+		subject = "/" + subject
+	}
+	subject = strings.TrimRight(subject, "/")
+	if subject == "" {
+		subject = "/"
+	}
+	if recursive {
+		if subject == "/" {
+			return "read:/*"
+		}
+		return "read:" + subject + "/*"
+	}
+	return "read:" + subject
+}
 
 // envConnectorSecret returns the token for a connector's credentialsRef from the
 // environment per the ADR-0041 A2 secret model: the engine stores only the
@@ -111,23 +136,136 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 	return clients, nil
 }
 
-// rebuildConnectorRegistries rebuilds every managed connector registry (temis and
-// clio) from the current connector store and swaps each live registry atomically, so
-// a task referencing a changed connector starts (or stops) resolving at once. Callers
-// run it on the run-loop goroutine, inside the same s.do closure that saved the
-// change, so the rebuild sees the write. A single helper keeps every CRUD handler
-// from having to know which kinds exist.
+// buildMailClients assembles the mail connector clients from the enabled managed
+// connector instances of kind "mail", resolving each instance's credential from its
+// credentialsRef via the vault (ADR-0079/0081/0041). It reads the connector store, so
+// callers run it on the run-loop goroutine (the store's owner). It mirrors
+// buildClioClients; a mail connector has no environment base (its provider and
+// credentials are managed only). Provider dispatch (SMTP, Gmail, Microsoft Graph)
+// lives in mail.NewProviderClient; a record whose provider is misconfigured — an
+// unparseable credential bundle, a missing field — is skipped (its tasks park) rather
+// than failing the whole rebuild. The resolved secret is an SMTP password or, for a
+// native provider, the OAuth credential JSON bundle held in the vault (I6).
+func (s *Server) buildMailClients() (map[string]mail.Client, error) {
+	clients := map[string]mail.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindMail {
+			continue
+		}
+		provider := strings.TrimSpace(c.Provider)
+		if provider == "" {
+			provider = mail.ProviderSMTP
+		}
+		// SMTP needs a submission endpoint; the native providers default their API base.
+		if provider == mail.ProviderSMTP && strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		client, err := mail.NewProviderClient(mail.ProviderConfig{
+			Provider: provider,
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Sender:   strings.TrimSpace(c.Sender),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			continue // misconfigured provider: its tasks park until it is fixed (ADR-0093)
+		}
+		clients[c.Name] = client
+	}
+	return clients, nil
+}
+
+// buildSharePointClients assembles the SharePoint connector clients from the enabled
+// managed connector instances of kind "sharepoint", resolving each instance's OAuth
+// credential bundle from its credentialsRef via the vault (ADR-0141/0041). It reads
+// the connector store, so callers run it on the run-loop goroutine (the store's
+// owner). It mirrors buildMailClients; provider construction (Graph base + token
+// source) lives in sharepoint.NewProviderClient, and a record whose credential bundle
+// is misconfigured — unparseable, a missing field — is skipped (its tasks park)
+// rather than failing the whole rebuild. The resolved secret is the OAuth credential
+// JSON bundle held in the vault (I6), never a value in a model.
+func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) {
+	clients := map[string]sharepoint.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindSharePoint {
+			continue
+		}
+		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			continue // misconfigured credential: its tasks park until it is fixed (ADR-0141)
+		}
+		clients[c.Name] = client
+	}
+	return clients, nil
+}
+
+// remedyCredentials is the shape of a Remedy connector's credential bundle held in
+// the vault under its credentialsRef (ADR-0106): the AR System username and password
+// used to obtain a JWT. Only a *reference* to this bundle is stored in the connector
+// record; the values live in the vault, never in a model or the record (I6).
+type remedyCredentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// buildRemedyClients assembles the Remedy connector clients from the enabled managed
+// connector instances of kind "remedy", resolving each instance's credential bundle
+// from its credentialsRef via the vault (ADR-0106/0041). It reads the connector store,
+// so callers run it on the run-loop goroutine (the store's owner). It mirrors
+// buildMailClients: a record with no endpoint, or whose credential bundle is missing
+// or not valid JSON, is skipped (its tasks park) rather than failing the whole
+// rebuild. The resolved secret is the {username,password} JSON bundle held in the
+// vault (I6).
+func (s *Server) buildRemedyClients() (map[string]remedy.Client, error) {
+	clients := map[string]remedy.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindRemedy || strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		raw := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
+		if raw == "" {
+			continue // no credential configured yet: its tasks park until it is
+		}
+		var creds remedyCredentials
+		if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+			continue // a malformed bundle: skip rather than call Remedy wrongly
+		}
+		clients[c.Name] = remedy.NewHTTPClient(remedy.Connector{
+			BaseURL:  strings.TrimSpace(c.Endpoint),
+			Username: creds.Username,
+			Password: creds.Password,
+		})
+	}
+	return clients, nil
+}
+
+// rebuildConnectorRegistries rebuilds every managed connector registry from the
+// current connector store and swaps each live registry atomically, so a task
+// referencing a changed connector starts (or stops) resolving at once. It iterates the
+// managedConnectorKinds registry in order, so a CRUD handler never has to know which
+// kinds exist and adding a kind needs no change here. Callers run it on the run-loop
+// goroutine, inside the same s.do closure that saved the change, so the rebuild sees
+// the write.
 func (s *Server) rebuildConnectorRegistries() error {
-	temisClients, err := s.buildTemisClients()
-	if err != nil {
-		return err
+	for _, k := range managedConnectorKinds {
+		if err := k.rebuild(s); err != nil {
+			return err
+		}
 	}
-	clioClients, err := s.buildClioClients()
-	if err != nil {
-		return err
-	}
-	s.temisRegistry.Replace(temisClients)
-	s.clioRegistry.Replace(clioClients)
 	return nil
 }
 
@@ -158,33 +296,33 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	var p struct {
-		Name           string `json:"name"`
-		Kind           string `json:"kind"`
-		Endpoint       string `json:"endpoint"`
-		CredentialsRef string `json:"credentialsRef"`
-		Enabled        *bool  `json:"enabled"`
-	}
+	var p createConnectorParams
 	if err := json.Unmarshal(body, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	name := strings.TrimSpace(p.Name)
-	kind := strings.TrimSpace(p.Kind)
-	if kind == "" {
-		kind = connectorKindTemis
+	p.Name = strings.TrimSpace(p.Name)
+	p.Kind = strings.TrimSpace(p.Kind)
+	if p.Kind == "" {
+		p.Kind = connectorKindTemis
 	}
-	endpoint := strings.TrimSpace(p.Endpoint)
-	if name == "" {
+	p.Endpoint = strings.TrimSpace(p.Endpoint)
+	p.Provider = strings.TrimSpace(p.Provider)
+	p.Sender = strings.TrimSpace(p.Sender)
+	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
+	if p.Name == "" {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis && kind != connectorKindClio {
-		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\" or \"clio\"")
+	kind, ok := lookupManagedConnectorKind(p.Kind)
+	if !ok {
+		writeError(w, http.StatusBadRequest, managedConnectorKindsError())
 		return
 	}
-	if endpoint == "" {
-		writeError(w, http.StatusBadRequest, "connector endpoint is required")
+	// The kind's validator applies its own rules and normalizes p (defaulting a mail
+	// provider, clearing mail-only fields for kinds that don't use them).
+	if msg := kind.validateCreate(&p); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	id, err := newID()
@@ -197,8 +335,9 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		enabled = *p.Enabled
 	}
 	rec := connector{
-		ID: id, Name: name, Kind: kind, Endpoint: endpoint,
-		CredentialsRef: strings.TrimSpace(p.CredentialsRef), Enabled: enabled,
+		ID: id, Name: p.Name, Kind: p.Kind, Endpoint: p.Endpoint,
+		CredentialsRef: p.CredentialsRef, Enabled: enabled,
+		Provider: p.Provider, Sender: p.Sender,
 		CreatedAt: time.Now().Unix(),
 	}
 
@@ -213,7 +352,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, c := range existing {
-			if strings.EqualFold(c.Name, name) {
+			if strings.EqualFold(c.Name, p.Name) {
 				dupErr = true
 				return
 			}
@@ -225,7 +364,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case dupErr:
-		writeError(w, http.StatusConflict, "a connector named "+name+" already exists")
+		writeError(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
 		return
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
@@ -246,6 +385,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	var p struct {
 		Endpoint       *string `json:"endpoint"`
 		CredentialsRef *string `json:"credentialsRef"`
+		Sender         *string `json:"sender"`
 		Enabled        *bool   `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -272,6 +412,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
+		}
+		if p.Sender != nil {
+			rec.Sender = strings.TrimSpace(*p.Sender)
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
@@ -308,4 +451,112 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleProvisionClioKey provisions a managed clio connector's credential in one
+// step (ADR-0092): it mints a scoped read key on the connector's clio instance (using an admin
+// token the operator supplies once) and seals the returned key in the vault as the
+// connector's credential, then rebuilds the registries so the inbound bridge and
+// outbound tasks use it at once — no copy-pasting a token. The admin token is used
+// only for the one-off mint and is never stored (I6); only the scoped key is sealed.
+// Admin-gated, and the mint (a network call) runs off the run loop (I3); only the
+// connector read and the vault write ride s.do.
+func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if s.vault == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		return
+	}
+	connID := r.PathValue("id")
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var p struct {
+		AdminToken string `json:"adminToken"`
+		Subject    string `json:"subject"`
+		Recursive  bool   `json:"recursive"`
+		KeyName    string `json:"keyName"`
+		ExpiresAt  string `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	adminToken := strings.TrimSpace(p.AdminToken)
+	subject := strings.TrimSpace(p.Subject)
+	if adminToken == "" || subject == "" {
+		writeError(w, http.StatusBadRequest, "adminToken and subject are required")
+		return
+	}
+
+	// Resolve the connector on the run loop (the store's owner).
+	var (
+		conn    connector
+		ok      bool
+		loadErr error
+	)
+	s.do(func() { conn, ok, loadErr = s.connectors.get(connID) })
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
+		return
+	}
+	if !ok || conn.Kind != connectorKindClio {
+		writeError(w, http.StatusBadRequest, "no clio connector with that id")
+		return
+	}
+	if strings.TrimSpace(conn.Endpoint) == "" {
+		writeError(w, http.StatusBadRequest, "connector has no endpoint")
+		return
+	}
+
+	keyName := strings.TrimSpace(p.KeyName)
+	if keyName == "" {
+		keyName = "atlas-" + conn.Name
+	}
+	scope := clioReadScope(subject, p.Recursive)
+
+	// Mint the scoped key OFF the run loop (a network call, I3). The admin token
+	// lives only for this call and is never written anywhere.
+	token, err := clio.MintKey(r.Context(), strings.TrimSpace(conn.Endpoint), adminToken, clio.KeyRequest{
+		Name:      keyName,
+		Scopes:    []string{scope},
+		ExpiresAt: strings.TrimSpace(p.ExpiresAt),
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "mint clio key: "+err.Error())
+		return
+	}
+
+	// Seal the scoped key as the connector's credential and rebuild, on the run loop.
+	ref := strings.TrimSpace(conn.CredentialsRef)
+	setRef := ref == ""
+	if setRef {
+		ref = conn.Name
+	}
+	var saveErr error
+	s.do(func() {
+		if _, saveErr = s.vault.Set(ref, token); saveErr != nil {
+			return
+		}
+		if setRef {
+			conn.CredentialsRef = ref
+			if saveErr = s.connectors.save(conn); saveErr != nil {
+				return
+			}
+		}
+		saveErr = s.rebuildConnectorRegistries()
+	})
+	if saveErr != nil {
+		writeError(w, http.StatusInternalServerError, "store provisioned key: "+saveErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"credentialsRef": ref,
+		"scope":          scope,
+		"keyName":        keyName,
+	})
 }

@@ -1,0 +1,27 @@
+{
+  "id": "atlas.csv-to-json",
+  "version": "1.0.0",
+  "kind": "service-task",
+  "title": "CSV to JSON",
+  "author": "Atlas core",
+  "description": "Parse an uploaded CSV into a JSON array of row objects, entirely in the process. The source variable, delimiter, header handling, columns and result variable are authored on the task; a following script task then works the array. Columns are derived from the header row unless listed explicitly (ADR-0139).",
+  "engineCompat": ">=0.9",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "CSV to JSON",
+    "id": "atlas.csv-to-json",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Source variable", "type": "String", "value": "csvText", "binding": { "type": "property", "name": "atlas:source" },
+        "description": "Name of the process variable holding the raw CSV text (e.g. from the upload task)." },
+      { "label": "Delimiter", "type": "Dropdown", "value": ",", "binding": { "type": "property", "name": "atlas:delimiter" },
+        "choices": [ { "name": "Comma ,", "value": "," }, { "name": "Semicolon ;", "value": ";" }, { "name": "Tab", "value": "\t" }, { "name": "Pipe |", "value": "|" } ] },
+      { "label": "Header row", "type": "Dropdown", "value": "true", "binding": { "type": "property", "name": "atlas:hasHeader" },
+        "choices": [ { "name": "First row is the header", "value": "true" }, { "name": "No header row", "value": "false" } ] },
+      { "label": "Columns", "type": "String", "binding": { "type": "property", "name": "atlas:columns" },
+        "description": "Comma-separated field names. Leave empty to derive them from the header row; required when there is no header." },
+      { "label": "Result variable", "type": "String", "value": "rows", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Variable the parsed JSON array of rows is written to (rowCount is also set)." }
+    ]
+  }
+}

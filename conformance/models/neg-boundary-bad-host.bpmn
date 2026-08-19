@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE fixture: must be REJECTED at compile.
+
+  A boundary event names attachedToRef="ghost", a host that does not exist. A
+  boundary event must attach to a real activity, so the compiler must refuse it.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_neg_boundary_bad_host" targetNamespace="http://atlas/conformance">
+  <process id="neg-boundary-bad-host" name="Boundary bad host" isExecutable="true">
+    <startEvent id="s"/>
+    <userTask id="t" name="Task">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="g"/>
+      </extensionElements>
+    </userTask>
+    <boundaryEvent id="b" attachedToRef="ghost">
+      <timerEventDefinition>
+        <timeDuration>PT1S</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+    <sequenceFlow id="f3" sourceRef="b" targetRef="e"/>
+  </process>
+</definitions>

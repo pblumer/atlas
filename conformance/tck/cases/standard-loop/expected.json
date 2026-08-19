@@ -1,0 +1,22 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "seed",
+    "start",
+    "step"
+  ],
+  "path": [
+    "start",
+    "seed",
+    "step",
+    "step",
+    "step",
+    "step",
+    "end"
+  ],
+  "variables": {
+    "n": "3"
+  },
+  "dataObjects": []
+}

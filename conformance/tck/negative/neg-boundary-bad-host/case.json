@@ -1,0 +1,6 @@
+{
+  "name": "neg-boundary-bad-host",
+  "model": "neg-boundary-bad-host.bpmn",
+  "rejected": true,
+  "reason": "a boundary event attaches to a host that does not exist"
+}

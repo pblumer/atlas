@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  prüfe Datensätze — Massenprüfung von CSV-Datensätzen gegen Geschäftsregeln,
+  mit In-Prozess-Upload und Korrektur-Loop je fehlerhafter Zeile
+  (ADR-0084, ADR-0086, ADR-0087, ADR-0139).
+
+  Start
+   → User-Task "CSV hochladen"    (Formular csv-upload-form → Variable csvText)
+   → Service-Task "CSV einlesen"  (CSV-to-JSON-Connector: csvText → rows, rowCount)
+   → Multi-Instance-Subprozess "prüfe Datensatz"   (prüft + korrigiert je Zeile)
+   → Ende
+
+  Der Upload ist ein Prozessschritt: der Quality Manager lädt die Datei im
+  Formular des ersten User-Tasks hoch (die Tasks-App legt den Datei-Inhalt als
+  `csvText` ab). Der CSV-Service-Task ist ein erstklassiger CSV-to-JSON-Connector
+  (`atlas:csvConnector`, ADR-0139): Quellvariable, Trennzeichen, Kopfzeile,
+  Spalten und Ergebnisvariable sind am Task selbst hinterlegt — kein separater
+  Spaltenkonfig-Script mehr. Er parst `csvText` gegen dieses Layout zu `rows`;
+  danach läuft die Maschine an.
+
+  Der eingebettete Subprozess ist multi-instanziert über `=rows`: er läuft
+  einmal pro Datensatz, gebunden an `row`. Je Iteration:
+
+    row_start → (X) prüf_join → Regelprüfung → (X) prüf_split
+      ── gültig  [= verdict.valid] ─────────────→ row_end
+      ── sonst   (Default) ──→ "Datensatz korrigieren" ──(zurück)── prüf_join
+
+  Die Regelprüfung ruft die DMN-Entscheidung `RowValid` auf (siehe
+  pruefe-datensaetze.dmn) und schreibt den Verdict nach `verdict`. Das exklusive
+  Gateway verzweigt auf `= verdict.valid` — es liest die iterationslokale
+  `verdict` über die Scope-Kette (ADR-0086). Gültig → Iteration endet, Verdict
+  wird in `verdicts` gesammelt. Ungültig → der Token parkt auf einem User-Task:
+  der Quality Manager korrigiert E-Mail/Gruppe/Lizenz im Formular
+  `row-correction-form`; das Output-Mapping schreibt die Felder als `row` zurück,
+  und die Rückkante lässt den Datensatz erneut prüfen — wiederhole bis gültig.
+
+  Ein Business-Rule-Task kann nicht direkt multi-instanziert werden; deshalb
+  wickelt ihn der eingebettete Subprozess ein (ADR-0074 + ADR-0077). Die
+  Rückkante bleibt im selben Scope (Subprozess), das Join ist ein exklusives
+  Gateway (feuert je Ankunft). Die Layout-Information (BPMN-DI) wird beim
+  Ausliefern automatisch erzeugt.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_pruefe_datensaetze" targetNamespace="http://atlas/examples">
+  <process id="proc_pruefe_datensaetze" name="prüfe Datensätze" isExecutable="true">
+
+    <startEvent id="start" name="Start"/>
+
+    <userTask id="hochladen" name="CSV hochladen">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="quality"/>
+        <zeebe:formDefinition formId="csv-upload-form"/>
+      </extensionElements>
+    </userTask>
+
+    <serviceTask id="einlesen" name="CSV einlesen">
+      <extensionElements>
+        <atlas:csvConnector source="csvText" delimiter="," hasHeader="true"
+          columns="email,group,license" resultVariable="rows"/>
+      </extensionElements>
+    </serviceTask>
+
+    <subProcess id="pruefe_datensatz" name="prüfe Datensatz">
+      <multiInstanceLoopCharacteristics>
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=rows" inputElement="row"
+            outputCollection="verdicts" outputElement="=verdict"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+
+      <startEvent id="row_start"/>
+
+      <exclusiveGateway id="pruef_join"/>
+
+      <businessRuleTask id="regelpruefung" name="Regelprüfung">
+        <extensionElements>
+          <zeebe:calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=row.email" target="email"/>
+            <zeebe:input source="=row.group" target="group"/>
+            <zeebe:input source="=row.license" target="license"/>
+          </zeebe:ioMapping>
+        </extensionElements>
+      </businessRuleTask>
+
+      <exclusiveGateway id="pruef_split" name="gültig?" default="rf_korrigieren"/>
+
+      <userTask id="korrigiere" name="Datensatz korrigieren">
+        <extensionElements>
+          <zeebe:assignmentDefinition candidateGroups="quality"/>
+          <zeebe:formDefinition formId="row-correction-form"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=row.email" target="email"/>
+            <zeebe:input source="=row.group" target="group"/>
+            <zeebe:input source="=row.license" target="license"/>
+            <zeebe:output source="={email: email, group: group, license: license}" target="row"/>
+          </zeebe:ioMapping>
+        </extensionElements>
+      </userTask>
+
+      <endEvent id="row_end"/>
+
+      <sequenceFlow id="rf_start" sourceRef="row_start" targetRef="pruef_join"/>
+      <sequenceFlow id="rf_join_check" sourceRef="pruef_join" targetRef="regelpruefung"/>
+      <sequenceFlow id="rf_check_split" sourceRef="regelpruefung" targetRef="pruef_split"/>
+      <sequenceFlow id="rf_gueltig" sourceRef="pruef_split" targetRef="row_end">
+        <conditionExpression>= verdict.valid</conditionExpression>
+      </sequenceFlow>
+      <sequenceFlow id="rf_korrigieren" sourceRef="pruef_split" targetRef="korrigiere"/>
+      <sequenceFlow id="rf_loop" sourceRef="korrigiere" targetRef="pruef_join"/>
+    </subProcess>
+
+    <endEvent id="end" name="Ende"/>
+
+    <sequenceFlow id="f_start_upload" sourceRef="start" targetRef="hochladen"/>
+    <sequenceFlow id="f_upload_einlesen" sourceRef="hochladen" targetRef="einlesen"/>
+    <sequenceFlow id="f_einlesen_pruefe" sourceRef="einlesen" targetRef="pruefe_datensatz"/>
+    <sequenceFlow id="f_pruefe_end" sourceRef="pruefe_datensatz" targetRef="end"/>
+  </process>
+</definitions>

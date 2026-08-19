@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a transaction subprocess with cancel (ADR-0108).
+
+  Start -> transaction "book" { ts -> serviceTask "reserve" -> cancel end
+  "cancelled" } -> End "done", with a cancel boundary on the transaction routing
+  to End "handled". "reserve" is compensable (a compensation boundary links it to
+  the "unreserve" handler). Once reserve completes, the flow reaches the cancel
+  end event, which rolls the transaction back: the engine compensates the
+  completed reserve (running unreserve), then the transaction's cancel boundary
+  fires and routes to "handled" instead of "done". Driver: Complete("reserve")
+  then Complete("unreserve").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_transaction_cancel" targetNamespace="http://atlas/conformance">
+  <process id="transaction-cancel" name="Transaction (cancel)" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <transaction id="book" name="Book">
+      <startEvent id="ts" name="Enter"/>
+      <serviceTask id="reserve" name="Reserve seat">
+        <extensionElements><zeebe:taskDefinition type="reserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <boundaryEvent id="reserve_comp" attachedToRef="reserve">
+        <compensateEventDefinition/>
+      </boundaryEvent>
+      <serviceTask id="unreserve" name="Unreserve" isForCompensation="true">
+        <extensionElements><zeebe:taskDefinition type="unreserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <endEvent id="cancelled" name="Cancel">
+        <cancelEventDefinition/>
+      </endEvent>
+      <association id="ca1" sourceRef="reserve_comp" targetRef="unreserve"/>
+      <sequenceFlow id="tf1" sourceRef="ts" targetRef="reserve"/>
+      <sequenceFlow id="tf2" sourceRef="reserve" targetRef="cancelled"/>
+    </transaction>
+    <boundaryEvent id="book_cancelled" name="Cancelled" attachedToRef="book">
+      <cancelEventDefinition/>
+    </boundaryEvent>
+    <endEvent id="done" name="Done"/>
+    <endEvent id="handled" name="Handled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="book"/>
+    <sequenceFlow id="f2" sourceRef="book" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="book_cancelled" targetRef="handled"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="transaction-cancel">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="120" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_book" bpmnElement="book" isExpanded="true"><dc:Bounds x="180" y="120" width="360" height="340"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ts" bpmnElement="ts"><dc:Bounds x="210" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reserve" bpmnElement="reserve"><dc:Bounds x="290" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reserve_comp" bpmnElement="reserve_comp"><dc:Bounds x="322" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_unreserve" bpmnElement="unreserve"><dc:Bounds x="290" y="340" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cancelled" bpmnElement="cancelled"><dc:Bounds x="460" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_book_cancelled" bpmnElement="book_cancelled"><dc:Bounds x="452" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_done" bpmnElement="done"><dc:Bounds x="620" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_handled" bpmnElement="handled"><dc:Bounds x="620" y="502" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="156" y="200"/><di:waypoint x="180" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="540" y="200"/><di:waypoint x="620" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="470" y="478"/><di:waypoint x="470" y="520"/><di:waypoint x="620" y="520"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf1" bpmnElement="tf1"><di:waypoint x="246" y="200"/><di:waypoint x="290" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf2" bpmnElement="tf2"><di:waypoint x="390" y="200"/><di:waypoint x="460" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_ca1" bpmnElement="ca1"><di:waypoint x="340" y="258"/><di:waypoint x="340" y="340"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

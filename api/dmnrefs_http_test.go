@@ -60,16 +60,26 @@ func TestDmnRefLifecycle(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts?projectId="+proj.ID, projectDraftXML("wip", "WIP"), "application/xml"); code != http.StatusOK {
 		t.Fatal("save draft into project")
 	}
-	// The project now reports two artifacts (1 draft + 1 DMN reference).
+	// The project now reports two artifacts (1 draft + 1 DMN reference). The
+	// protected system project (ADR-0119) is always present with no artifacts, so
+	// ignore it.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/projects", "", "")
 	var projs []struct {
-		Artifacts int `json:"artifacts"`
+		Artifacts int  `json:"artifacts"`
+		Protected bool `json:"protected"`
 	}
 	if err := json.Unmarshal(body, &projs); err != nil {
 		t.Fatalf("decode projects: %v", err)
 	}
-	if len(projs) != 1 || projs[0].Artifacts != 2 {
-		t.Fatalf("projects = %+v, want one project with 2 artifacts", projs)
+	var userArtifacts, userCount int
+	for _, pr := range projs {
+		if !pr.Protected {
+			userCount++
+			userArtifacts = pr.Artifacts
+		}
+	}
+	if userCount != 1 || userArtifacts != 2 {
+		t.Fatalf("user projects = %+v, want one project with 2 artifacts", projs)
 	}
 
 	// Move the reference to Ungrouped.

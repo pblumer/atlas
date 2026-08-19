@@ -30,17 +30,21 @@ func handlerKey(vt model.ValueType, intent model.Intent) uint16 {
 
 func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
-		handlerKey(model.VTProcessInstance, model.IntentActivating):  handleProcessInstanceActivating,
-		handlerKey(model.VTProcessInstance, model.IntentTerminating): handleProcessInstanceTerminating,
-		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
-		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
-		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
-		handlerKey(model.VTJob, model.IntentJobFailed):               handleJobFailed,
-		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
-		handlerKey(model.VTIncident, model.IntentIncidentResolved):   handleIncidentResolved,
-		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
-		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
-		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
+		handlerKey(model.VTProcessInstance, model.IntentActivating):       handleProcessInstanceActivating,
+		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
+		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
+		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
+		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
+		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
+		handlerKey(model.VTJob, model.IntentJobCompleted):                 handleJobCompleted,
+		handlerKey(model.VTJob, model.IntentJobFailed):                    handleJobFailed,
+		handlerKey(model.VTJob, model.IntentJobErrorThrown):               handleJobError,
+		handlerKey(model.VTJob, model.IntentJobAssigned):                  handleJobAssigned,
+		handlerKey(model.VTIncident, model.IntentIncidentResolved):        handleIncidentResolved,
+		handlerKey(model.VTTimer, model.IntentTimerTriggered):             handleTimerTriggered,
+		handlerKey(model.VTTimer, model.IntentTimerStartArm):              handleTimerStartArm,
+		handlerKey(model.VTMessage, model.IntentMessagePublished):         handleMessagePublished,
+		handlerKey(model.VTVariable, model.IntentVariableModify):          handleVariablesModify,
 	}
 }
 
@@ -48,9 +52,19 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeEndEvent] = endEventBehavior{}
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, so it shares serviceTaskBehavior — which reads its ServiceTaskDetail
+	// from the same table (CompiledProcess.SendTask == ServiceTask). Retry backoff, incidents,
+	// boundary interruption, and recovery are inherited because they key off the job and the
+	// element instance, not the element type.
+	p.behaviors[compiler.TypeSendTask] = serviceTaskBehavior{}
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
+	// A mockup task is simulated by the engine itself (ADR-0120): no job, a timer for
+	// a random duration and an optional FEEL result. A distinct behavior because its
+	// activation (timer, not job) and completion (write result, maybe fail) differ.
+	p.behaviors[compiler.TypeMockupTask] = mockupTaskBehavior{}
 	p.behaviors[compiler.TypeScriptJobTask] = scriptJobTaskBehavior{}
 	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
 	p.behaviors[compiler.TypeBoundaryEvent] = boundaryEventBehavior{}
@@ -58,9 +72,39 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
+	p.behaviors[compiler.TypeReceiveTask] = receiveTaskBehavior{}
+	p.behaviors[compiler.TypeSignalCatchEvent] = signalCatchEventBehavior{}
+	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
+	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
+	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
+	// Escalation throw/end events (ADR-0125): both raise an escalation up the scope chain via
+	// propagateEscalation, then — unlike an error end — continue their own path unless an
+	// interrupting catch tore them down (an escalation may be caught non-interruptingly, or
+	// go uncaught, which is benign).
+	p.behaviors[compiler.TypeEscalationThrowEvent] = escalationThrowEventBehavior{}
+	p.behaviors[compiler.TypeEscalationEndEvent] = escalationEndEventBehavior{}
+	// Link throw/catch events are compile-time gotos (ADR-0133): the throw→catch pair is
+	// resolved to a synthetic sequence flow at compile, so both are pure pass-throughs — the
+	// token flows throw → synthetic edge → catch → the catch's real outgoing flow. No runtime
+	// of their own, exactly like a token passing through a none event.
+	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
+	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
+	// A conditional catch arms inert and waits until its FEEL condition becomes true
+	// (ADR-0137): OnActivated self-evaluates, else a variable-change re-check drives it to
+	// Completing. Conditional boundaries reuse boundaryEventBehavior with BoundaryConditional.
+	p.behaviors[compiler.TypeConditionalCatchEvent] = conditionalCatchBehavior{}
+	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
+	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
+	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
+	p.behaviors[compiler.TypeTerminateEndEvent] = terminateEndEventBehavior{}
+	// A signal start event is a plain entry point once instantiated: a broadcast
+	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
+	// straight on like a none start (ADR-0088), the same as a message start.
+	p.behaviors[compiler.TypeSignalStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
+	p.behaviors[compiler.TypeEventBasedGateway] = eventBasedGatewayBehavior{}
 	// A message start event is a plain entry point once instantiated: it flows
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
@@ -71,6 +115,9 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 	p.behaviors[compiler.TypeSubProcess] = subProcessBehavior{}
+	p.behaviors[compiler.TypeAdHocSubProcess] = adHocSubProcessBehavior{}
+	p.behaviors[compiler.TypeCallActivity] = callActivityBehavior{}
+	p.behaviors[compiler.TypeEventSubProcessStart] = eventSubProcessStartBehavior{}
 }
 
 // --- command handlers ---
@@ -80,13 +127,37 @@ func (p *Processor) registerBehaviors() {
 func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
 	piKey := c.NewKey()
+	cp := c.process(defKey)
+
+	// If the definition carries an instance TTL, schedule its self-cleaning expiry
+	// (ADR-0085): freeze a due date at command time and record it both on the instance
+	// and on a durable timer, so both rebuild identically on replay (I4/I6). The timer
+	// reuses the instance key — a globally unique id no other timer holds — so normal
+	// completion or an explicit cancel can retire it by key without scanning the index.
+	var expiryDue int64
+	if ttl := cp.InstanceTtlNanos(); ttl > 0 {
+		expiryDue = c.Now() + ttl
+	}
+
 	// The correlation key (empty for a timer or API start) rides in on the create
 	// command so the instance records which message key it began with (ADR-0020);
 	// CreatedAt is stamped from the event timestamp in applyToState.
 	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{
-		ProcessDefKey:  defKey,
-		CorrelationKey: c.cmd.Value.process.CorrelationKey,
+		ProcessDefKey:            defKey,
+		CorrelationKey:           c.cmd.Value.process.CorrelationKey,
+		ParentElementInstanceKey: c.cmd.Value.process.ParentElementInstanceKey,
+		ExpiryDueDate:            expiryDue,
 	})
+	if expiryDue > 0 {
+		// An expiry timer carries no owning element instance (ElementInstanceKey 0) — the
+		// shape handleTimerTriggered dispatches to instance termination (ADR-0085).
+		c.AppendTimerEvent(piKey, model.IntentTimerCreated, model.TimerValue{
+			ProcessInstanceKey: piKey,
+			ElementInstanceKey: 0,
+			TargetElementId:    -1,
+			DueDate:            expiryDue,
+		})
+	}
 
 	// Seed the instance's start variables under its scope before any element runs.
 	for i := range c.cmd.StartVars {
@@ -94,8 +165,6 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 		v.ScopeKey = piKey
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
-
-	cp := c.process(defKey)
 
 	// Seed the process's declared data objects under the instance scope, each with
 	// its declared initial data state (value unset for now; data associations write
@@ -123,6 +192,9 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 			SourceFlowId:       -1,
 		})
 	}
+	// Arm the root-scope event subprocesses: each opens its trigger (message/timer) and
+	// waits, ready to run its handler while the instance runs (ADR-0082).
+	armEventSubprocesses(c, piKey, defKey, piKey, cp.RootEventSubprocesses())
 }
 
 // handleProcessInstanceTerminating cancels a running instance: it terminates
@@ -137,12 +209,72 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	if pi == nil {
 		return
 	}
+	cancelExpiryTimer(c, piKey, pi.ExpiryDueDate)
+	// A terminated instance is a finished one: schedule its history purge like a
+	// completed instance does (ADR-0146), so an instance ended by its TTL, by a bulk
+	// cancel, or by an operator is retained for the same declared time.
+	terminated := *pi
+	terminated.PurgeDueDate = historyPurgeDue(c, terminated.ProcessDefKey)
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
+			terminateChildInstance(c, elKey, ei.BpmnElementType)
+			// Cancel any job the element left waiting, so a terminated instance leaves no
+			// orphan in the activatable index (the same teardown terminateScope does for a
+			// subprocess/multi-instance scope).
+			if jobKey, ok := c.JobOfElement(elKey); ok {
+				if job := c.GetJob(jobKey); job != nil {
+					c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
+				}
+			}
 			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
 		}
 	})
-	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
+	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, terminated)
+}
+
+// handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
+// it emits the durable IntentPurged event carrying the instance, which applyToState
+// folds into the removal of the terminal record and every per-instance family. The
+// retention sweep only enqueues instances it read from the history index and gated on
+// age + export position, so the carried value (with its definition key) is present and
+// the deletion is safe; a re-enqueued purge just re-runs idempotent deletes.
+func handleProcessInstancePurging(c *ProcessingContext) {
+	c.AppendProcessInstanceEvent(c.cmd.Key, model.IntentPurged, c.cmd.Value.process)
+}
+
+// historyPurgeDue freezes when retention may hard-delete an instance's finished record:
+// now plus the definition's history TTL, or 0 when it declares none (ADR-0146, opt-in
+// like the instance TTL). Frozen here at command time and carried by the terminal event,
+// so applyToState indexes the instance by a date it was handed rather than one it reads
+// from a clock, and replay rebuilds the identical schedule (I4/I6) — the same discipline
+// ADR-0085 applied to the expiry timer. A definition already undeployed schedules
+// nothing: its compiled TTL is gone, and only a server-wide max age can still reach the
+// record.
+func historyPurgeDue(c *ProcessingContext, defKey uint64) int64 {
+	cp := c.process(defKey)
+	if cp == nil {
+		return 0
+	}
+	if ttl := cp.HistoryTtlNanos(); ttl > 0 {
+		return c.Now() + ttl
+	}
+	return 0
+}
+
+// cancelExpiryTimer retires an instance's TTL expiry timer (ADR-0085) when the instance
+// ends before its TTL elapses. The timer key is the instance key and its due date is
+// stored on the instance record, so it deletes by key without scanning the timer index.
+// A zero due date means the instance had no TTL — nothing to retire. The delete is
+// idempotent, so this is also harmless when the expiry timer itself just terminated the
+// instance (it fired and deleted its own record first).
+func cancelExpiryTimer(c *ProcessingContext, piKey uint64, expiryDue int64) {
+	if expiryDue == 0 {
+		return
+	}
+	c.AppendTimerEvent(piKey, model.IntentTimerCanceled, model.TimerValue{
+		ProcessInstanceKey: piKey,
+		DueDate:            expiryDue,
+	})
 }
 
 // handleElementActivating emits the Activated lifecycle event, runs the
@@ -151,6 +283,15 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// A multi-instance body seeds its iterations rather than running the node's real
+	// behavior; its per-iteration data-input associations and io-mappings apply on
+	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
+	// falls through to the normal path and runs the real behavior.
+	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
+		seedMultiInstance(c, c.cmd.Key, ei)
+		armBoundaryEvents(c, c.cmd.Key, ei)
+		return
+	}
 	// Read the activity's data-input associations into process variables before its
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
 	// sees them (ADR-0059).
@@ -164,6 +305,14 @@ func handleElementActivating(c *ProcessingContext) {
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
 }
+
+// Multi-instance element-instance roles (ADR-0077), mirrored on
+// model.ElementInstanceValue.MultiInstance.
+const (
+	miNone  uint8 = 0 // not a multi-instance element instance
+	miBody  uint8 = 1 // the body: the scope that seeds and joins the iterations
+	miInner uint8 = 2 // one iteration: runs the node's real behavior, scoped under the body
+)
 
 // applyDataInputAssociations evaluates an activating activity's data-input
 // associations (ADR-0059): for each, it reads the source data object and writes a
@@ -223,13 +372,37 @@ func handleElementCompleting(c *ProcessingContext) {
 	// dropped locals (ADR-0068). Gated so a mapping-free activity keeps the pre-0068
 	// behaviour with no scope-drop scan.
 	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-		applyOutputMappings(c, c.cmd.Key, ei)
+		// A call activity's output mappings are applied against the child instance's
+		// variables when the child completes (resumeCaller), not against this
+		// element's local scope, so the generic promotion is skipped for it — but its
+		// input-mapped local scope is still dropped (ADR-0076).
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity {
+			applyOutputMappings(c, c.cmd.Key, ei)
+		}
 		dropLocalScope(c, c.cmd.Key)
+	}
+	// An inner multi-instance iteration does not take the node's outgoing flow (the
+	// body owns it): it completes, decrementing the body's active-child counter, and
+	// the body completes once the last iteration drains (ADR-0077).
+	if ei.MultiInstance == miInner {
+		finishMultiInstanceIteration(c, c.cmd.Key, ei)
+		return
+	}
+	// A completing multi-instance body promotes its assembled output collection to the
+	// enclosing scope and drops its own locals before it takes its outgoing flow, so
+	// downstream FEEL sees the collected list (ADR-0077).
+	if ei.MultiInstance == miBody {
+		promoteMultiInstanceOutput(c, c.cmd.Key, ei)
 	}
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
 	}
+	// A contained activity of an ad-hoc subprocess completing is that ad-hoc's completion
+	// checkpoint: re-evaluate its FEEL completion condition and, if it now holds, cancel the
+	// remaining work and complete the ad-hoc (ADR-0138). A no-op for every element whose flow
+	// scope is not an ad-hoc with a condition.
+	checkAdHocCompletion(c, ei.FlowScopeKey)
 }
 
 // applyDataOutputAssociations evaluates a completing activity's data-output
@@ -378,6 +551,64 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 }
 
+// handleVariablesModify applies an operator's external variable write to a running
+// instance (ADR-0095). It is the manual counterpart to the variable writes a model
+// makes for itself — start variables, job outputs, io-mappings — reusing the same
+// VariableCreated/VariableUpdated events over the same applyToState, so the change
+// is durable, replayable (invariant I6), and recorded in the instance's variable
+// timeline as the audit trail, never a raw store write.
+//
+// The command carries the process instance in Key and the target scope in
+// Value.variable.ScopeKey (0 means the instance root). It writes only when the
+// instance is live and the scope belongs to it, so a correction to a finished
+// instance or a foreign scope is a safe no-op. It deliberately does not re-drive the
+// token: a variable a gateway has already routed on is not re-evaluated, only its
+// stored value changes.
+func handleVariablesModify(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	if c.GetProcessInstance(piKey) == nil {
+		return // instance finished or never existed: nothing to modify
+	}
+	scope := c.cmd.Value.variable.ScopeKey
+	if scope == 0 {
+		scope = piKey
+	}
+	if scope != piKey {
+		// A non-root target must be a live element instance of this instance (a
+		// subprocess or multi-instance body local scope); anything else is rejected so
+		// a stray key cannot orphan variables under a scope no FEEL lookup reaches.
+		if ei := c.GetElementInstance(scope); ei == nil || ei.ProcessInstanceKey != piKey {
+			return
+		}
+	}
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = scope
+		// Created for a name new to the scope, Updated for one already present — the
+		// honest intent for an operator override, though applyToState upserts either
+		// way. GetVariable reads through the in-flight transaction, so it sees a write
+		// made earlier in this same call.
+		intent := model.IntentVariableCreated
+		if c.GetVariable(scope, v.Name) != nil {
+			intent = model.IntentVariableUpdated
+		}
+		c.AppendVariableEvent(intent, v)
+		// Record who made this override, alongside the variable event, so the "who
+		// changed it" trail is durable and replayable (ADR-0098). The actor rides in on
+		// the command; the value mirrors what was written so the audit row is
+		// self-contained.
+		c.AppendVariableAuditEvent(model.VariableAuditValue{
+			ProcessInstanceKey: piKey,
+			ScopeKey:           scope,
+			Actor:              c.cmd.Actor,
+			Name:               v.Name,
+			Kind:               v.Kind,
+			Bool:               v.Bool,
+			Text:               v.Text,
+		})
+	}
+}
+
 // handleJobFailed applies a worker's failure report for a job (ADR-0061). The
 // command carries the remaining retry count (in the job payload) and a failure
 // message (in the incident payload). The job's retries are set to that count and
@@ -391,6 +622,20 @@ func handleJobFailed(c *ProcessingContext) {
 		return
 	}
 	job.Retries = c.cmd.Value.job.Retries
+	// A worker-requested retry backoff (ADR-0111): with retries left and a positive delay,
+	// hold the job off the activatable index (RetryDueDate keeps PutJob from indexing it) and
+	// arm a retry timer that re-activates it when the backoff elapses. The due date is read
+	// from the clock here and frozen into the event (I6). A zero backoff is the pre-0111 path.
+	if job.Retries > 0 && c.cmd.RetryBackoff > 0 {
+		job.RetryDueDate = c.Now() + c.cmd.RetryBackoff
+		c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			JobKey:             c.cmd.Key,
+			DueDate:            job.RetryDueDate,
+		})
+		return
+	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
 	if job.Retries <= 0 {
 		var elementId int32
@@ -406,6 +651,35 @@ func handleJobFailed(c *ProcessingContext) {
 			Message:            c.cmd.Value.incident.Message,
 		})
 	}
+}
+
+// reactivateJobAfterBackoff re-activates a job whose retry-backoff timer just fired (ADR-0111):
+// it clears the job's RetryDueDate and re-emits it, so PutJob returns it to the activatable
+// index, then notifies workers. A job that is gone (its instance was cancelled during the
+// backoff) is a no-op — the timer self-retires.
+func reactivateJobAfterBackoff(c *ProcessingContext, jobKey uint64) {
+	job := c.GetJob(jobKey)
+	if job == nil {
+		return
+	}
+	job.RetryDueDate = 0
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, *job)
+	c.NotifyJobAvailable(job.JobType)
+}
+
+// handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
+// cancels the job (the token neither retries nor completes) and propagates the error from
+// the job's element to the nearest matching error handler. A matching error boundary on the
+// service task — or an enclosing scope — catches it; uncaught, it raises an incident. The
+// thrown code rides in the command's incident.Message (a transient command carrier).
+// Throwing on a job that is gone is a no-op.
+func handleJobError(c *ProcessingContext) {
+	job := c.GetJob(c.cmd.Key)
+	if job == nil {
+		return
+	}
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
+	propagateError(c, job.ElementInstanceKey, c.cmd.Value.incident.Message)
 }
 
 // handleIncidentResolved clears an incident and resumes the work it blocked
@@ -439,8 +713,14 @@ func handleIncidentResolved(c *ProcessingContext) {
 // whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
 // against the instance's current variables, the schedule either resolves — a
 // timer is created and the token waits normally — or fails again, raising a fresh
-// incident (resolve is a genuine retry, not a blind clear). A vanished element
-// (its instance was canceled) is a harmless no-op.
+// incident (resolve is a genuine retry, not a blind clear).
+//
+// The element cannot actually be gone here, despite what the check below reads
+// like: this is only reached from handleIncidentResolved once it has found the
+// incident, and terminating an element deletes the incident it carried (applyToState),
+// so an incident never outlives its element. The check stays because the processor
+// loop has no recover() — if that invariant ever shifts, returning is a no-op while
+// dereferencing nil would take the whole partition down with it.
 func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	ei := c.GetElementInstance(elKey)
 	if ei == nil {
@@ -450,12 +730,29 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	if cp == nil {
 		return
 	}
+	// A parked runaway loop carries a job-less incident too (ADR-0133, amended), on the
+	// loop body rather than on a timer element: resolving it resumes the loop.
+	if ei.MultiInstance == miBody && standardLoop(cp, ei.ElementId) {
+		resumeStandardLoop(c, elKey, ei)
+		return
+	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
+	case compiler.TypeMockupTask:
+		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
+		// new timer key drives an independent duration and failure draw, so a retry can
+		// make progress rather than deterministically failing again.
+		armMockupTimer(c, elKey, ei)
 	case compiler.TypeTimerCatchEvent:
 		armOneShotTimer(c, elKey, ei, cp.TimerCatch(node.Detail).Schedule)
 	case compiler.TypeBoundaryEvent:
 		if d := cp.BoundaryEvent(node.Detail); d.Kind == compiler.BoundaryTimer {
+			armOneShotTimer(c, elKey, ei, d.Schedule)
+		}
+	case compiler.TypeEventSubProcessStart:
+		// A recurring event-subprocess timer trigger whose FEEL cycle failed to re-arm
+		// (ADR-0111): re-run its arm, which re-resolves against current variables.
+		if d := cp.EventSubProcess(node.EventSub); d.Kind == compiler.BoundaryTimer {
 			armOneShotTimer(c, elKey, ei, d.Schedule)
 		}
 	}
@@ -482,27 +779,74 @@ func handleJobAssigned(c *ProcessingContext) {
 func handleTimerTriggered(c *ProcessingContext) {
 	timer := c.cmd.Value.timer
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
+	if timer.JobKey != 0 {
+		// A retry-backoff timer (ADR-0111): its backoff has elapsed, so re-activate the failed
+		// job rather than firing an element. Checked first — a retry timer carries no element.
+		reactivateJobAfterBackoff(c, timer.JobKey)
+		return
+	}
 	if timer.ProcessInstanceKey == 0 {
 		fireStartTimer(c, timer)
+		return
+	}
+	if timer.ElementInstanceKey == 0 {
+		// An instance-expiry (TTL) timer owns no element — its firing terminates the whole
+		// instance through the ordinary cancellation path (ADR-0085). Terminating an
+		// instance already gone (completed or cancelled first) is a no-op, so a race with
+		// normal completion is safe.
+		if pi := c.GetProcessInstance(timer.ProcessInstanceKey); pi != nil {
+			c.AppendProcessInstanceCommand(timer.ProcessInstanceKey, model.IntentTerminating, *pi)
+		}
 		return
 	}
 	ei := c.GetElementInstance(timer.ElementInstanceKey)
 	if ei == nil {
 		return // element gone (cancelled/completed/host-interrupted): self-retire
 	}
-	if sched, ok := recurringBoundarySchedule(c, ei); ok {
-		fireRecurringBoundary(c, timer, ei, sched)
+	if raw, ok := recurringBoundarySchedule(c, ei); ok {
+		fireRecurringOrIncident(c, timer, ei, raw, fireRecurringBoundary)
+		return
+	}
+	if raw, ok := recurringEventSubSchedule(c, ei); ok {
+		fireRecurringOrIncident(c, timer, ei, raw, fireRecurringEventSub)
+		return
+	}
+	// A mockup task's duration timer (ADR-0120): per its fail probability, drawn from
+	// this fired timer's key, simulate a failure instead of completing. With an error
+	// code it throws a BPMN error (caught by a matching error boundary/event subprocess,
+	// ADR-0089); otherwise it raises a job-less incident that parks the element. The
+	// TimerTriggered event is already appended above, so the fired timer is consumed on
+	// the failure path too.
+	if detail := mockupFailureDetail(c, ei, c.cmd.Key); detail != nil {
+		if detail.ErrorCode != "" {
+			propagateError(c, timer.ElementInstanceKey, detail.ErrorCode)
+		} else {
+			raiseMockupIncident(c, timer.ElementInstanceKey, ei, mockupFailMessage(detail))
+		}
 		return
 	}
 	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
 }
 
-// recurringBoundarySchedule reports whether ei is a non-interrupting boundary
-// timer whose schedule recurs, and returns the concrete cycle to re-arm from
-// (ADR-0054). For a FEEL cycle the expression is re-evaluated here — on each
-// occurrence — against the instance's current variables (ADR-0056), so a data-
-// driven cadence can change as the process runs; ok is false if it can't resolve
-// (the boundary then stops recurring).
+// fireRecurringOrIncident resolves a recurring timer's (possibly FEEL) schedule on the
+// occurrence that just fired and either fires it (arming the next occurrence) or, if the FEEL
+// can't be re-evaluated against the instance's current variables, raises the ADR-0064 job-less
+// incident and parks — instead of silently ceasing to recur (ADR-0111). Resolving the incident
+// re-arms the element (rearmTimerElement).
+func fireRecurringOrIncident(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, raw compiler.TimerSchedule, fire func(*ProcessingContext, model.TimerValue, *model.ElementInstanceValue, compiler.TimerSchedule)) {
+	sched, err := resolveScheduleErr(c, raw, ei.ProcessInstanceKey)
+	if err != nil {
+		raiseTimerScheduleIncident(c, timer.ElementInstanceKey, ei, err)
+		return
+	}
+	fire(c, timer, ei, sched)
+}
+
+// recurringBoundarySchedule reports whether ei is a non-interrupting boundary timer whose
+// schedule recurs, and returns its *unresolved* schedule to re-arm from (ADR-0054). This is a
+// pure compiled-type check; the caller (fireRecurringOrIncident) resolves the schedule — a FEEL
+// cycle is re-evaluated on each occurrence against the instance's current variables (ADR-0056),
+// and a failure raises an incident rather than silently stopping (ADR-0111).
 func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
 	cp := c.process(ei.ProcessDefKey)
 	node := cp.Node(ei.ElementId)
@@ -513,7 +857,7 @@ func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceVa
 	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
 		return compiler.TimerSchedule{}, false
 	}
-	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
+	return d.Schedule, true
 }
 
 // fireRecurringBoundary spawns the boundary's outgoing (reminder) token without
@@ -528,6 +872,60 @@ func fireRecurringBoundary(c *ProcessingContext, timer model.TimerValue, ei *mod
 	if timer.Repetitions == 0 {
 		return // finite cycle exhausted: stop arming, leave the boundary idle
 	}
+	// NextDue only reports !ok for a one-shot schedule, which cannot reach here: the
+	// caller gates on Repeats(), and resolving a FEEL cycle goes through parseTimeCycle,
+	// which yields only cycle kinds. The check stays because the alternative is arming a
+	// timer at the zero due date — permanently overdue, re-firing and re-arming on every
+	// tick — which is a far worse failure than returning.
+	next, ok := sched.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: timer.ElementInstanceKey,
+		TargetElementId:    ei.ElementId,
+		DueDate:            next,
+		Repetitions:        reps,
+	})
+}
+
+// recurringEventSubSchedule reports whether ei is a non-interrupting timer-triggered
+// event-subprocess trigger whose schedule recurs (a cycle), and returns the concrete
+// schedule to re-arm from — the event-subprocess analog of recurringBoundarySchedule
+// (ADR-0082). A one-shot (duration/date) or interrupting trigger fires once through the
+// generic Completing path instead; ok is false if the schedule can't resolve.
+func recurringEventSubSchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
+	if ei.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+		return compiler.TimerSchedule{}, false
+	}
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.EventSubProcess(cp.Node(ei.ElementId).EventSub)
+	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
+		return compiler.TimerSchedule{}, false
+	}
+	return d.Schedule, true
+}
+
+// fireRecurringEventSub fires a recurring non-interrupting event-subprocess timer: it
+// activates a fresh handler run without completing the trigger (which stays armed), then
+// arms the next occurrence — re-anchored to the clock, frozen into the event (I6), and
+// counting a finite Rn cycle down. When the count runs out it stops arming; the idle
+// trigger is disarmed when its scope completes. It mirrors fireRecurringBoundary (ADR-0054).
+func fireRecurringEventSub(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, sched compiler.TimerSchedule) {
+	activateEventSubHandler(c, ei, ei.FlowScopeKey)
+	if timer.Repetitions == 0 {
+		return // finite cycle exhausted: stop arming, leave the trigger idle
+	}
+	// NextDue only reports !ok for a one-shot schedule, which cannot reach here: the
+	// caller gates on Repeats(), and resolving a FEEL cycle goes through parseTimeCycle,
+	// which yields only cycle kinds. The check stays because the alternative is arming a
+	// timer at the zero due date — permanently overdue, re-firing and re-arming on every
+	// tick — which is a far worse failure than returning.
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return
@@ -556,7 +954,13 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if cp == nil {
 		return
 	}
-	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	// A deactivated definition keeps its start timer ticking and re-arming below, but
+	// does not instantiate while inactive — the operator paused new runs (ADR-0119). A
+	// recurring schedule resumes cleanly when reactivated; a one-shot that came due
+	// while paused is simply skipped.
+	if c.p.ProcessActive(timer.ProcessDefKey) {
+		c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	}
 	if timer.Repetitions == 0 {
 		return // one-shot (duration/date) or a finite cycle that has run out
 	}
@@ -570,6 +974,11 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if !ok {
 		return
 	}
+	// NextDue only reports !ok for a one-shot schedule, and a one-shot start timer
+	// carries Repetitions 0 and returned above — so only a recurring one gets here, and
+	// a recurring schedule always has a next occurrence. The check stays because the
+	// alternative is arming a timer at the zero due date: permanently overdue, re-firing
+	// and re-arming on every tick, which is a far worse failure than returning.
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return
@@ -668,7 +1077,28 @@ func (p *Processor) behavior(bpmnType uint8) bpmnBehavior {
 // completeAndTakeFlows is the default OnCompleting: emit Completed, then
 // activate the targets of every outgoing flow.
 func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A catch event armed by an event-based gateway wins the deferred choice when it fires:
+	// before it continues, it cancels every other armed catch in its race group, so only this
+	// branch proceeds (ADR-0110). A loser whose Completing was already queued when a sibling
+	// cancelled it finds itself gone and drops out (a same-event double-fire). The guard is a
+	// no-op for every element not armed by an event gateway (EventGatewayKey == 0).
+	if ei.EventGatewayKey != 0 {
+		if c.GetElementInstance(key) == nil {
+			return
+		}
+		cancelEventGatewaySiblings(c, ei.ProcessInstanceKey, ei.EventGatewayKey, key)
+	}
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	recordCompensable(c, key, ei)
+	cp := c.process(ei.ProcessDefKey)
+	if len(cp.Outgoing(ei.ElementId)) == 0 {
+		// A node that completes with no outgoing flow is a dead end — the token has left
+		// the scope like an implicit end, so check the scope for completion. Today this is
+		// only a compensation handler (ADR-0103): an off-flow activity a compensation throw
+		// activates, which must let its scope finish once it and its siblings drain.
+		completeScope(c, ei.FlowScopeKey)
+		return
+	}
 	takeOutgoingFlows(c, ei)
 }
 
@@ -686,13 +1116,27 @@ func completeScope(c *ProcessingContext, scope uint64) {
 		return
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
-		// A subprocess scope: drive its container to Completing.
+		// A subprocess scope: disarm its event-subprocess triggers (they are uncounted, so
+		// the scope drained with them still armed), then drive its container to Completing.
+		disarmEventSubprocesses(c, ei.ProcessInstanceKey, scope)
 		c.AppendElementCommand(scope, model.IntentCompleting, *ei)
 		return
 	}
-	// The process-instance root scope: the instance itself completes.
+	// The process-instance root scope: the instance itself completes. If it is a
+	// child of a call activity, its completion resumes the caller (ADR-0076).
 	if pi := c.GetProcessInstance(scope); pi != nil {
-		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
+		disarmEventSubprocesses(c, scope, scope)
+		// Finishing before the TTL: retire the instance's expiry timer in the same batch
+		// so a completed instance leaves no armed timer behind (ADR-0085).
+		cancelExpiryTimer(c, scope, pi.ExpiryDueDate)
+		// Finishing schedules the record's own expiry: how long the *history* is kept is
+		// the definition's second TTL (ADR-0146), frozen here and carried by the event.
+		done := *pi
+		done.PurgeDueDate = historyPurgeDue(c, done.ProcessDefKey)
+		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, done)
+		if pi.ParentElementInstanceKey != 0 {
+			resumeCaller(c, scope, pi.ParentElementInstanceKey)
+		}
 	}
 }
 
@@ -707,12 +1151,19 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
 	}
+	// A flow into a multi-instance activity activates its body — the scope that seeds
+	// the iterations (ADR-0077); an ordinary node activates with no role.
+	miRole := miNone
+	if target.MultiInstance >= 0 {
+		miRole = miBody
+	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		MultiInstance:      miRole,
 		TokenID:            tokenID,
 		ParentTokenID:      parentID,
 		SourceFlowId:       flowID,
@@ -727,6 +1178,13 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	for _, beID := range cp.BoundaryEvents(ei.ElementId) {
+		// A compensation boundary is inert: it is compile-time metadata linking the host
+		// to its compensation handler, never an armed waiting instance (ADR-0103). Arming
+		// it would create an instance that disarmBoundaryEvents retires exactly when the
+		// host completes — the moment compensation becomes available — so skip it.
+		if cp.BoundaryEvent(cp.Node(beID).Detail).Kind == compiler.BoundaryCompensation {
+			continue
+		}
 		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ProcessDefKey:      ei.ProcessDefKey,
@@ -734,6 +1192,7 @@ func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementIn
 			FlowScopeKey:       ei.FlowScopeKey,
 			BpmnElementType:    uint8(compiler.TypeBoundaryEvent),
 			AttachedToKey:      hostKey,
+			SourceFlowId:       -1, // attached to its host, not entered over a flow
 		})
 	}
 }
@@ -770,15 +1229,50 @@ func scopeContains(c *ProcessingContext, ancestor, elKey uint64) bool {
 	return false
 }
 
+// terminateChildInstance tears down the child process instance a call-activity
+// element started, when that element is terminated (a cancel of the caller, or an
+// interrupting boundary event). The child is found by its persisted parent link, so
+// this stays a pure function of committed state (I6); terminating it enqueues the
+// same Terminating command an API cancel does, which recurses into the child's own
+// element instances — and, through this helper, into any call activities the child
+// itself is running. A no-op for an element with no live child (a plain activity, or
+// a call activity whose child already completed).
+func terminateChildInstance(c *ProcessingContext, callElKey uint64, elemType uint8) {
+	if elemType != uint8(compiler.TypeCallActivity) {
+		return
+	}
+	var children []uint64
+	c.ForEachActiveProcessInstance(func(piKey uint64, pi *model.ProcessInstanceValue) {
+		if pi.ParentElementInstanceKey == callElKey {
+			children = append(children, piKey)
+		}
+	})
+	for _, ck := range children {
+		if pi := c.GetProcessInstance(ck); pi != nil {
+			c.AppendProcessInstanceCommand(ck, model.IntentTerminating, *pi)
+		}
+	}
+}
+
 // terminateScope terminates every active element instance inside the scope rooted
 // at scopeKey (a subprocess), recursively, cancelling any job each holds. Each
 // Terminated event drops the element and decrements its own scope's child counter
 // (apply.go). Victims are collected before any termination so the scope-chain walk
 // sees an intact tree. A no-op for a plain activity — nothing is scoped under it.
 func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
+	terminateScopeExcept(c, procKey, scopeKey, 0)
+}
+
+// terminateScopeExcept is terminateScope but spares one element instance (exceptKey). A cancel
+// end event uses it to terminate the transaction's other live tokens while it is itself still
+// being processed — so the scope drains to just the compensation handlers it then starts
+// (ADR-0108). exceptKey == 0 spares nothing (the plain terminateScope). Completed compensable
+// activities are not live instances, so their compensable records are untouched here; they are
+// dropped only when the transaction element itself tears down (apply.go).
+func terminateScopeExcept(c *ProcessingContext, procKey, scopeKey, exceptKey uint64) {
 	var victims []uint64
 	c.ForEachElementInstance(procKey, func(elKey uint64) {
-		if scopeContains(c, scopeKey, elKey) {
+		if elKey != exceptKey && scopeContains(c, scopeKey, elKey) {
 			victims = append(victims, elKey)
 		}
 	})
@@ -787,6 +1281,7 @@ func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
 		if ei == nil {
 			continue
 		}
+		terminateChildInstance(c, k, ei.BpmnElementType)
 		if jobKey, ok := c.JobOfElement(k); ok {
 			if job := c.GetJob(jobKey); job != nil {
 				c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
@@ -811,6 +1306,8 @@ func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
 	// everything inside its scope (recursively) before the host itself. A no-op for
 	// a plain activity, which is no one's flow scope (ADR-0074).
 	terminateScope(c, host.ProcessInstanceKey, hostKey)
+	// If the host is a call activity, its child instance must die with it (ADR-0076).
+	terminateChildInstance(c, hostKey, host.BpmnElementType)
 	if jobKey, ok := c.JobOfElement(hostKey); ok {
 		if job := c.GetJob(jobKey); job != nil {
 			c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
@@ -865,7 +1362,8 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			took = true
 			continue
 		}
-		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0085).
+		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
 		if err == nil && expr.IsTrue(v) {
 			activateElement(c, ei, flowID, true)
 			took = true
@@ -941,13 +1439,7 @@ func feelKindName(k compiler.TimerScheduleKind) string {
 func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, s compiler.TimerSchedule) {
 	sched, err := resolveScheduleErr(c, s, ei.ProcessInstanceKey)
 	if err != nil {
-		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			ElementId:          ei.ElementId,
-			RaisedAt:           c.Now(),
-			Message:            "timer schedule: " + err.Error(),
-		})
+		raiseTimerScheduleIncident(c, key, ei, err)
 		return
 	}
 	now := c.Now()
@@ -957,6 +1449,21 @@ func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstance
 		TargetElementId:    ei.ElementId,
 		DueDate:            sched.FirstDue(now),
 		Repetitions:        sched.Repetitions,
+	})
+}
+
+// raiseTimerScheduleIncident raises a job-less incident on a timer-bearing element whose FEEL
+// schedule could not be evaluated (ADR-0064/0111): the initial arm (armOneShotTimer) and a
+// recurring re-arm (handleTimerTriggered) share it, so a failure at either point parks the
+// element visibly with the same operator-resolvable incident (JobKey stays zero — the marker
+// that routes resolution back to rearmTimerElement).
+func raiseTimerScheduleIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, err error) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            "timer schedule: " + err.Error(),
 	})
 }
 
@@ -1040,7 +1547,15 @@ func hasIOMappings(cp *compiler.CompiledProcess, elementId int32) bool {
 // subprocess rather than leaking to the process root (ADR-0068/0074). For a
 // top-level activity FlowScopeKey == ProcessInstanceKey, so this is unchanged there.
 func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.ElementInstanceValue) uint64 {
-	if cp.Node(ei.ElementId).IOOutCount > 0 {
+	// A multi-instance iteration's result is its own — inner-scoped, so each iteration's
+	// output element reads this iteration's value and it is dropped with the iteration
+	// rather than colliding at the shared body scope (ADR-0077). A standard loop's
+	// iterations are successive runs of one activity, not independent ones, so their
+	// results are *not* inner-scoped: they land on the body like an ordinary activity's
+	// (the next iteration and the loop condition read them up the chain) and the body
+	// promotes them when the loop ends (ADR-0133). Otherwise the local scope when the
+	// node has output mappings, else the enclosing scope (ADR-0068).
+	if (ei.MultiInstance == miInner && !standardLoop(cp, ei.ElementId)) || cp.Node(ei.ElementId).IOOutCount > 0 {
 		return elementKey
 	}
 	return ei.FlowScopeKey
@@ -1211,6 +1726,154 @@ func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 	completeAndTakeFlows(c, key, ei)
 }
 
+// mockupTaskBehavior: a service task the engine simulates itself (ADR-0120),
+// instead of dispatching a job to an external worker or connector. On activation it
+// writes the optional FEEL result (the input→output "script", e.g. a simulated REST
+// response) and arms a one-shot timer for a random duration, then waits. When the
+// timer fires the task completes — unless the fail draw selects failure, in which
+// case handleTimerTriggered raises a job-less incident and the element parks
+// (resolving it re-arms a fresh attempt). The result is written in OnActivated, not
+// OnCompleting: handleElementCompleting runs output mappings and then drops the
+// activity-local scope before OnCompleting, so a result written there would be
+// discarded and invisible to output mappings.
+type mockupTaskBehavior struct{}
+
+func (mockupTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
+	// Evaluate the result expression here (command processing), exactly like a FEEL
+	// script task, and freeze the result into the variable event; on replay
+	// applyToState re-applies the stored result rather than re-evaluating (I6). The
+	// input mappings are already bound in the local scope, so the FEEL sees them.
+	if detail.Expr != nil {
+		result, err := detail.Expr.Eval(bindInputsChain(c, detail.Expr.Inputs(), key))
+		if err != nil {
+			// Match the inline script task: FEEL is null-propagating, so a failed
+			// evaluation yields null rather than halting the processor.
+			result = expr.Null
+		}
+		kind, b, text := expr.Classify(result)
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: ioResultScope(cp, key, ei),
+			Name:     detail.ResultVar,
+			Kind:     toVarKind(kind),
+			Bool:     b,
+			Text:     text,
+		})
+	}
+	armMockupTimer(c, key, ei)
+	// Stays Activated: no Completing until the simulated-duration timer fires.
+}
+
+func (mockupTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// mockupDurationSalt and mockupFailSalt make the duration and the failure decision
+// independent draws from the same timer key (ADR-0120): mockupHash mixes the key
+// with each salt so the two never correlate.
+const (
+	mockupDurationSalt uint64 = 0x6d6f636b75705f64 // "mockup_d"
+	mockupFailSalt     uint64 = 0x6d6f636b75705f66 // "mockup_f"
+)
+
+// armMockupTimer arms the one-shot timer that drives a mockup task to completion
+// (ADR-0120). It mints a fresh timer key, derives the random duration deterministically
+// from that key, and freezes the resulting due date into the TimerCreated event, so
+// the duration reproduces on replay without any new nondeterministic source (I6).
+// Because the key is fresh on every arm, each re-arm (after a simulated failure is
+// resolved) draws an independent duration and failure outcome. Shared by OnActivated
+// and rearmTimerElement so the two never diverge.
+func armMockupTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
+	tkey := c.NewKey()
+	dur := mockupDurationNanos(tkey, detail.MinNanos, detail.MaxNanos)
+	c.AppendTimerEvent(tkey, model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		TargetElementId:    ei.ElementId,
+		DueDate:            c.Now() + dur,
+	})
+}
+
+// mockupFailureDetail returns the mockup task's detail when ei is a mockup task
+// whose duration timer, fired with key tkey, should simulate a failure — else nil.
+// It is a pure function of the frozen timer key, so live and replay agree (though it
+// runs only live, since handleTimerTriggered is never replayed). A non-mockup element
+// never fails here.
+func mockupFailureDetail(c *ProcessingContext, ei *model.ElementInstanceValue, tkey uint64) *compiler.MockupTaskDetail {
+	cp := c.process(ei.ProcessDefKey)
+	node := cp.Node(ei.ElementId)
+	if node.Type != compiler.TypeMockupTask {
+		return nil
+	}
+	detail := cp.MockupTask(node.Detail)
+	if !mockupShouldFail(tkey, detail.FailPerMillion) {
+		return nil
+	}
+	return detail
+}
+
+// mockupFailMessage is the incident message for a simulated failure with no error
+// code: the authored message, or a default.
+func mockupFailMessage(detail *compiler.MockupTaskDetail) string {
+	if detail.FailMessage != "" {
+		return detail.FailMessage
+	}
+	return "mockup task simulated failure"
+}
+
+// raiseMockupIncident parks a mockup task with a job-less incident on a simulated
+// failure (ADR-0120), mirroring raiseTimerScheduleIncident: JobKey stays zero, the
+// marker that routes resolution back through rearmTimerElement — which re-arms a
+// fresh attempt.
+func raiseMockupIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, message string) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            message,
+	})
+}
+
+// mockupDurationNanos derives a mockup task's simulated duration, uniformly in
+// [minNanos, maxNanos], from the frozen timer key (ADR-0120). span is non-negative
+// because the compiler validates maxNanos >= minNanos.
+func mockupDurationNanos(tkey uint64, minNanos, maxNanos int64) int64 {
+	span := maxNanos - minNanos
+	if span <= 0 {
+		return minNanos
+	}
+	off := int64(mockupHash(tkey, mockupDurationSalt) % uint64(span+1))
+	return minNanos + off
+}
+
+// mockupShouldFail reports whether a mockup task with the given failure probability
+// (parts-per-million) fails on the attempt whose timer key is tkey (ADR-0120). The
+// endpoints short-circuit so 0 never fails and 1_000_000 always does.
+func mockupShouldFail(tkey uint64, failPerMillion int32) bool {
+	if failPerMillion <= 0 {
+		return false
+	}
+	if failPerMillion >= 1_000_000 {
+		return true
+	}
+	return mockupHash(tkey, mockupFailSalt)%1_000_000 < uint64(failPerMillion)
+}
+
+// mockupHash is a deterministic, self-contained mixer (splitmix64) over a key and a
+// salt (ADR-0120). It must stay pure — no math/rand, no seeded hash/maphash — so the
+// mockup duration and failure draws it feeds are identical live and on replay.
+func mockupHash(seed, salt uint64) uint64 {
+	x := seed ^ salt
+	x += 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	return x ^ (x >> 31)
+}
+
 // messageCatchEventBehavior: an intermediate message catch event. On activation
 // it evaluates its correlation-key expression over the instance's variables,
 // opens a subscription on (message name, key), and waits (stays Activated). A
@@ -1235,6 +1898,34 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 }
 
 func (messageCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// receiveTaskBehavior: a receive task waits for a correlating message, then continues —
+// the message intermediate catch event's semantics in task form (ADR-0102). On activation
+// it opens a subscription on the task's (message name, correlation key) and stays Activated;
+// a correlating publish or throw drives it to Completing through the same correlateMessage
+// path a catch event uses, and it then completes and takes its outgoing flows (running any
+// I/O output mappings and data associations, since it is an activity). It reads the
+// receive-task detail table rather than the message-catch table; otherwise it is
+// messageCatchEventBehavior. An attached boundary event arms and fires unchanged.
+type receiveTaskBehavior struct{}
+
+func (receiveTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ReceiveTask(cp.Node(ei.ElementId).Detail)
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		MessageName:        detail.MessageName,
+		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+	})
+	// Stays Activated: no Completing until a message correlates.
+}
+
+func (receiveTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 
@@ -1371,7 +2062,25 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// both correlate a waiting instance and start new ones, all recovered from the
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
+		// A deactivated definition does not start on a correlating message (ADR-0119):
+		// skip it entirely, so no instance and no message-flow record are created for it.
+		if !c.p.ProcessActive(ref.defKey) {
+			continue
+		}
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
+		// A singleton message start (ADR-0094) instantiates only if no instance of this
+		// definition is already live for this correlation key. An empty key identifies
+		// no entity, so it is never singleton (it always starts).
+		if ref.singletonStart && startKey != "" {
+			taken, err := c.singletonStartTaken(ref.defKey, startKey)
+			if err != nil {
+				c.p.fail(err)
+				return
+			}
+			if taken {
+				continue // a live instance for this key already exists (or is being started this batch)
+			}
+		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
@@ -1384,6 +2093,704 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+}
+
+// signalCatchEventBehavior: an intermediate signal catch event. On activation it
+// opens a name-only signal subscription and waits (stays Activated). A later
+// signal broadcast of the same name fires the subscription, driving the element
+// to complete and take its outgoing flows — the message-catch shape (ADR-0020)
+// minus the correlation key (ADR-0088).
+type signalCatchEventBehavior struct{}
+
+func (signalCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalCatch(cp.Node(ei.ElementId).Detail)
+	c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		SignalName:         detail.SignalName,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+	})
+	// Stays Activated: no Completing until a signal broadcasts.
+}
+
+func (signalCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// signalThrowEventBehavior: an intermediate signal throw event. On activation it
+// broadcasts the signal to every waiting catch of the same name — across all
+// instances — then completes and takes its outgoing flows. The throw carries the
+// throwing instance's variables as the broadcast payload, so every catch it fires
+// is seeded with them (ADR-0088), mirroring messageThrowEventBehavior. Reading the
+// payload here (command processing) keeps applyToState pure (I4).
+type signalThrowEventBehavior struct{}
+
+func (signalThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	broadcastSignal(c, detail.SignalName, payload)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (signalThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// signalEndEventBehavior: an end event that broadcasts a signal, then ends the
+// instance (ADR-0088). It is the send-and-stop union of a signal throw event and
+// a none end event: OnActivated broadcasts exactly like a throw (reusing the
+// throw detail table), and OnCompleting ends the instance exactly like a none end
+// event rather than taking outgoing flows. Broadcasting on the command path keeps
+// applyToState pure (I4/I6), the same reasoning as the throw event — and mirrors
+// messageEndEventBehavior.
+type signalEndEventBehavior struct{}
+
+func (signalEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	broadcastSignal(c, detail.SignalName, payload)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (signalEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
+// broadcastSignal delivers a signal with the given name to every open signal
+// subscription — a 1:n broadcast, across all instances, matching by name alone
+// (a signal has no correlation key). For each match it emits SubscriptionCorrelated
+// (which retires the subscription — a catch fires once), writes the broadcast
+// payload into that instance's scope, and commands the waiting element to
+// complete. Matches are collected before any mutation so retiring one can't
+// disturb the scan. A signal that matches nothing is a no-op — a broadcast is
+// fire-and-forget, with no buffering (ADR-0088). It mirrors correlateMessage,
+// and — like a correlating message — also instantiates every deployed process
+// with a matching signal start event (ADR-0088).
+func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue) {
+	type match struct {
+		elKey uint64
+		sub   model.SignalSubscriptionValue
+	}
+	var matches []match
+	c.p.fail(c.tx.SubscribedSignals(name, func(elKey uint64, v *model.SignalSubscriptionValue) error {
+		matches = append(matches, match{elKey: elKey, sub: *v})
+		return nil
+	}))
+	for i := range matches {
+		m := matches[i]
+		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		for j := range vars {
+			vv := vars[j]
+			vv.ScopeKey = m.sub.ProcessInstanceKey
+			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+		}
+		if ei := c.GetElementInstance(m.elKey); ei != nil {
+			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
+		}
+	}
+	// A broadcast also instantiates every deployed process with a matching signal
+	// start event, seeded with the payload (ADR-0088), mirroring message-start
+	// instantiation. A signal carries no correlation key, so the created instance
+	// records none. This runs after the subscription scan so one broadcast can both
+	// fire waiting catches and start fresh instances, all recovered from the events
+	// the created instances emit.
+	for _, defKey := range c.p.signalStarts[name] {
+		// A deactivated definition does not start on a broadcast signal (ADR-0119).
+		if !c.p.ProcessActive(defKey) {
+			continue
+		}
+		c.AppendCreateInstanceCommand(defKey, vars, "")
+	}
+}
+
+// errorEndEventBehavior: an end event that throws a BPMN error (ADR-0089). Unlike a none
+// end event it does not complete its scope; instead OnCompleting calls propagateError,
+// which routes the error up the live scope chain to the nearest matching error boundary —
+// aborting the scope below the catch and taking the boundary's recovery flow — or raises
+// an incident if nothing catches it. Throwing on the command path keeps applyToState pure
+// (I4/I6). OnActivated hops to Completing exactly like a none end.
+type errorEndEventBehavior struct{}
+
+func (errorEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (errorEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.ErrorEnd(cp.Node(ei.ElementId).Detail).ErrorCode
+	// The error end does NOT emit Completed: propagation tears its scope down, and the
+	// throwing element instance is terminated by interruptHost's terminateScope (or, when
+	// unhandled, parked under the incident). Emitting Completed here would double-count.
+	propagateError(c, key, code)
+}
+
+// propagateError routes a thrown error up the live scope chain to the nearest matching
+// error handler (ADR-0089). Starting from the throwing element, it walks up FlowScopeKey;
+// at each enclosing scope it checks that scope's armed error event subprocesses and, for an
+// activity scope, its armed error boundaries for a code match (equal code, or a code-less
+// catch-all) and drives the first match to Completing — an error catch is always
+// interrupting, so a boundary's interruptHost tears the activity down and it takes its
+// recovery flow, while an event-subprocess trigger terminateScopes its scope and runs its
+// handler. When the instance root is reached uncaught, the error crosses process boundaries:
+// if the instance is a call-activity child, the child is terminated (the error aborts it)
+// and propagation continues from the caller's call-activity element in the parent instance
+// (ADR-0076); a top-level instance instead raises an incident on the throwing element and
+// parks (ADR-0061). It reads only committed state and the compiled codes — a pure function
+// of committed state (I6) — and runs only on the command path (a throw is a command), never
+// on replay. Bounded by maxScopeDepth (both the scope-chain walk and the caller-hop count).
+func propagateError(c *ProcessingContext, fromKey uint64, code string) {
+	for hop := 0; hop <= maxScopeDepth; hop++ {
+		ei := c.GetElementInstance(fromKey)
+		if ei == nil {
+			return // the throwing/caller element vanished (already torn down): nothing to do
+		}
+		if errorCaughtInInstance(c, ei.ProcessInstanceKey, fromKey, code) {
+			return
+		}
+		// Uncaught in this instance. A call-activity child's error propagates to its caller:
+		// terminate the child (the error aborts it), then continue from the caller's element.
+		pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+		if pi != nil && pi.ParentElementInstanceKey != 0 {
+			c.AppendProcessInstanceCommand(ei.ProcessInstanceKey, model.IntentTerminating, *pi)
+			fromKey = pi.ParentElementInstanceKey
+			continue
+		}
+		raiseErrorIncident(c, fromKey, code)
+		return
+	}
+}
+
+// errorCaughtInInstance walks the scope chain of one instance from fromKey up to its root,
+// firing the nearest matching error catch (an event subprocess before a boundary at each
+// scope; the root's event subprocesses last), and reports whether one fired (ADR-0089).
+func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) bool {
+	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
+		ei := c.GetElementInstance(scope)
+		if ei == nil {
+			break // walked past the process root: no enclosing element scope left
+		}
+		// An error event subprocess declared in this scope catches errors thrown within it,
+		// nearer than a boundary on the scope's activity (which catches the error leaving it).
+		if fireErrorCatch(c, findErrorEventSub(c, piKey, scope, code)) {
+			return true
+		}
+		if fireErrorCatch(c, findErrorBoundary(c, piKey, scope, code)) {
+			return true
+		}
+		scope = ei.FlowScopeKey
+	}
+	// The process root's own error event subprocesses are keyed by the instance scope, which
+	// is not an element instance — so they are checked here, after the element-scope walk.
+	return fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code))
+}
+
+// fireErrorCatch drives a found error catch (a boundary or event-subprocess trigger element)
+// to Completing and reports whether it fired. A zero or vanished key is not a catch.
+func fireErrorCatch(c *ProcessingContext, catchKey uint64) bool {
+	if catchKey == 0 {
+		return false
+	}
+	catch := c.GetElementInstance(catchKey)
+	if catch == nil {
+		return false
+	}
+	c.AppendElementCommand(catchKey, model.IntentCompleting, *catch)
+	return true
+}
+
+// findErrorBoundary returns the element-instance key of an armed error boundary attached to
+// hostKey whose code catches the thrown code (equal, or a code-less catch-all), or 0 if the
+// host has none (ADR-0089). It scans the instance's element instances for a boundary whose
+// AttachedToKey is hostKey — the same lookup interruptHost/disarmBoundaryEvents use.
+func findErrorBoundary(c *ProcessingContext, piKey, hostKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != hostKey || b.BpmnElementType != uint8(compiler.TypeBoundaryEvent) {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		d := cp.BoundaryEvent(cp.Node(b.ElementId).Detail)
+		if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// findErrorEventSub returns the element-instance key of an armed error event-subprocess
+// trigger in the scope scopeKey whose code catches the thrown code (equal, or a code-less
+// catch-all), or 0 if the scope hosts none (ADR-0089, reusing ADR-0082). A trigger is a
+// TypeEventSubProcessStart element scoped by scopeKey; driving it to Completing runs its
+// handler (always interrupting for an error).
+func findErrorEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		t := c.GetElementInstance(elKey)
+		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+			return
+		}
+		cp := c.process(t.ProcessDefKey)
+		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+		if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// errorCodeMatches reports whether a catch with catchCode catches a thrown code: an equal
+// code, or a code-less catch-all (ADR-0089) — the runtime twin of the compiler's
+// same-named check.
+func errorCodeMatches(catchCode, code string) bool {
+	return catchCode == "" || catchCode == code
+}
+
+// raiseErrorIncident records an incident on a throwing element whose error no enclosing
+// handler caught, and parks (ADR-0089/ADR-0061). A vanished element is a harmless no-op.
+func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
+	ei := c.GetElementInstance(elKey)
+	if ei == nil {
+		return
+	}
+	msg := "unhandled error"
+	if code != "" {
+		msg = "unhandled error '" + code + "'"
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: elKey,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            msg,
+	})
+}
+
+// --- Escalation (ADR-0125) ---
+
+// escalationThrowEventBehavior: an intermediate throw event that raises an escalation
+// (ADR-0125). OnActivated raises it up the scope chain via propagateEscalation, then — unlike
+// a compensation/message throw that always continues — continues on its outgoing flow only if
+// the throw was NOT caught by an interrupting handler (which would have torn this token down;
+// continuing would double-count). A non-interrupting or uncaught escalation leaves the token
+// alive, so it flows on. Running on the command path keeps applyToState pure (I4/I6).
+type escalationThrowEventBehavior struct{}
+
+func (escalationThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.Escalation(cp.Node(ei.ElementId).Detail).EscalationCode
+	if propagateEscalation(c, key, code) {
+		// An interrupting catch fired: this token is inside the scope being torn down, so it
+		// must not take its outgoing flow (the interrupt handles teardown). Do nothing.
+		return
+	}
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (escalationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// escalationEndEventBehavior: an end event that raises an escalation, then ends its path
+// (ADR-0125). OnActivated hops to Completing like a none end; OnCompleting raises the
+// escalation and then — unless an interrupting catch tore this token down — ends its path
+// exactly like a none end (emit Completed, maybe complete the scope). This is the escalation
+// twin of errorEndEventBehavior, except an error end never completes (its catch always
+// interrupts) whereas an escalation end usually does (its catch may be non-interrupting, or
+// the escalation may go uncaught — both benign).
+type escalationEndEventBehavior struct{}
+
+func (escalationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (escalationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.Escalation(cp.Node(ei.ElementId).Detail).EscalationCode
+	if propagateEscalation(c, key, code) {
+		// An interrupting catch fired: interruptHost's terminateScope tears this end event down,
+		// so emitting Completed here would double-count. Leave the teardown to the interrupt.
+		return
+	}
+	// Non-interrupting or uncaught: end the path like a none end event.
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
+// propagateEscalation routes a raised escalation up the live scope chain to the nearest
+// matching escalation handler (ADR-0125) — the non-interrupting, benign-when-uncaught sibling
+// of propagateError. Starting from the raising element it walks up FlowScopeKey; at each
+// enclosing scope it checks that scope's armed escalation event subprocesses and, for an
+// activity scope, its armed escalation boundaries for a code match (equal, or a code-less
+// catch-all), driving the first match to Completing. It differs from propagateError in two
+// ways: (1) a matching catch may be non-interrupting — its boundary/event-sub OnCompleting
+// honors d.Interrupting, running the handler alongside the still-running scope; and (2) an
+// escalation that reaches a top-level root uncaught is BENIGN — no incident (an escalation is
+// a notification, not a failure). A call-activity child's uncaught escalation continues from
+// the caller's element (ADR-0076) without aborting the child. It returns whether it fired an
+// INTERRUPTING catch: true means the raising scope will be torn down, so the caller must not
+// also complete its own path; false means the raising token survives and flows on/ends
+// normally. Pure function of committed state (I6); command path only, never replay. Bounded by
+// maxScopeDepth (both the scope walk and the caller-hop count).
+func propagateEscalation(c *ProcessingContext, fromKey uint64, code string) (interrupted bool) {
+	for hop := 0; hop <= maxScopeDepth; hop++ {
+		ei := c.GetElementInstance(fromKey)
+		if ei == nil {
+			return false // the raising/caller element vanished (already torn down): nothing to do
+		}
+		if caught, interrupting := escalationCaughtInInstance(c, ei.ProcessInstanceKey, fromKey, code); caught {
+			return interrupting
+		}
+		// Uncaught in this instance. Unlike an error, a call-activity child's escalation does
+		// NOT abort the child — it is benign: continue from the caller's element to look for a
+		// handler there (an interrupting boundary on the call activity, if it catches, tears the
+		// child down; otherwise both run on).
+		pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+		if pi != nil && pi.ParentElementInstanceKey != 0 {
+			fromKey = pi.ParentElementInstanceKey
+			continue
+		}
+		return false // uncaught at a top-level root: benign, no incident
+	}
+	return false
+}
+
+// escalationCaughtInInstance walks the scope chain of one instance from fromKey up to its
+// root, firing the nearest matching escalation catch (an event subprocess before a boundary at
+// each scope; the root's event subprocesses last), and reports whether one fired and, if so,
+// whether it was interrupting (ADR-0125). Mirrors errorCaughtInInstance.
+func escalationCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) (caught, interrupting bool) {
+	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
+		ei := c.GetElementInstance(scope)
+		if ei == nil {
+			break // walked past the process root: no enclosing element scope left
+		}
+		if k := findEscalationEventSub(c, piKey, scope, code); k != 0 {
+			return true, fireEscalationCatch(c, k)
+		}
+		if k := findEscalationBoundary(c, piKey, scope, code); k != 0 {
+			return true, fireEscalationCatch(c, k)
+		}
+		scope = ei.FlowScopeKey
+	}
+	// The process root's own escalation event subprocesses are keyed by the instance scope,
+	// which is not an element instance — so they are checked here, after the element-scope walk.
+	if k := findEscalationEventSub(c, piKey, piKey, code); k != 0 {
+		return true, fireEscalationCatch(c, k)
+	}
+	return false, false
+}
+
+// fireEscalationCatch drives a found escalation catch (a boundary or event-subprocess trigger)
+// to Completing and returns whether that catch is interrupting — read from the compiled detail,
+// the same flag its OnCompleting path acts on (ADR-0125). A vanished catch is treated as
+// non-interrupting (nothing tears the raiser down).
+func fireEscalationCatch(c *ProcessingContext, catchKey uint64) bool {
+	catch := c.GetElementInstance(catchKey)
+	if catch == nil {
+		return false
+	}
+	interrupting := catchInterrupting(c, catch)
+	c.AppendElementCommand(catchKey, model.IntentCompleting, *catch)
+	return interrupting
+}
+
+// catchInterrupting reports whether an escalation catch element (a boundary or an
+// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0125). It
+// switches on the element *instance's* BpmnElementType, not the compiled node's Type: an
+// event-sub trigger instance is a TypeEventSubProcessStart whose ElementId points at the
+// handler container node (a TypeSubProcess) carrying the EventSub detail.
+func catchInterrupting(c *ProcessingContext, catch *model.ElementInstanceValue) bool {
+	cp := c.process(catch.ProcessDefKey)
+	node := cp.Node(catch.ElementId)
+	switch compiler.BpmnType(catch.BpmnElementType) {
+	case compiler.TypeBoundaryEvent:
+		return cp.BoundaryEvent(node.Detail).Interrupting
+	case compiler.TypeEventSubProcessStart:
+		return cp.EventSubProcess(node.EventSub).Interrupting
+	}
+	return true
+}
+
+// findEscalationBoundary returns the element-instance key of an armed escalation boundary
+// attached to hostKey whose code catches the raised code (equal, or a code-less catch-all), or
+// 0 if the host has none (ADR-0125). Mirrors findErrorBoundary but matches BoundaryEscalation.
+func findEscalationBoundary(c *ProcessingContext, piKey, hostKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != hostKey || b.BpmnElementType != uint8(compiler.TypeBoundaryEvent) {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		d := cp.BoundaryEvent(cp.Node(b.ElementId).Detail)
+		if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// findEscalationEventSub returns the element-instance key of an armed escalation
+// event-subprocess trigger in scope scopeKey whose code catches the raised code, or 0 if the
+// scope hosts none (ADR-0125, reusing ADR-0082). Mirrors findErrorEventSub but matches
+// BoundaryEscalation; driving the trigger to Completing runs its handler, interrupting or not
+// per its compiled Interrupting flag.
+func findEscalationEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		t := c.GetElementInstance(elKey)
+		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+			return
+		}
+		cp := c.process(t.ProcessDefKey)
+		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+		if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// --- Compensation (ADR-0103) ---
+
+// compensationThrowEventBehavior triggers compensation, then flows on. OnActivated runs
+// the handlers of completed compensable activities in the throw's scope (or of the one
+// named by activityRef) via compensate — a command-path scope walk, the structural twin of
+// propagateError — then hops to Completing exactly like a signal throw. Running compensation
+// on the command path keeps applyToState pure (I4/I6).
+type compensationThrowEventBehavior struct{}
+
+func (compensationThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (compensationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// compensationEndEventBehavior triggers compensation, then ends its scope — the
+// trigger-and-stop counterpart of a compensation throw, ending like a signal end rather
+// than taking outgoing flows (ADR-0103).
+type compensationEndEventBehavior struct{}
+
+func (compensationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (compensationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
+// compensate runs the compensation handlers of the completed compensable activities in the
+// throwing element's scope, newest first (reverse completion order). When activityRef >= 0
+// it compensates only that activity's completed instances; otherwise the whole scope. For
+// each matching record it activates the handler in the scope and consumes the record so it
+// is compensated at most once. Records and handler links are read from committed state and
+// the compiled graph — a pure function of committed state (I6) — and this runs only on the
+// command path (a throw is a command). It collects matches before activating so consuming
+// one cannot disturb the scan.
+func compensate(c *ProcessingContext, ei *model.ElementInstanceValue, activityRef int32) {
+	type match struct {
+		seq uint64
+		v   model.CompensableValue
+	}
+	var matches []match
+	c.p.fail(c.tx.CompensablesOfScopeDesc(ei.FlowScopeKey, func(seq uint64, v *model.CompensableValue) error {
+		if activityRef < 0 || v.ElementId == activityRef {
+			matches = append(matches, match{seq: seq, v: *v})
+		}
+		return nil
+	}))
+	for i := range matches {
+		m := matches[i]
+		activateCompensationHandler(c, &m.v)
+		consumed := m.v
+		consumed.Seq = m.seq
+		c.AppendCompensableEvent(model.IntentCompensableConsumed, consumed)
+	}
+}
+
+// activateCompensationHandler activates a compensation handler activity in the scope of the
+// activity it compensates. The handler runs its ordinary behavior (a service task creates a
+// job, …) and, having no outgoing flow, completes without taking one; it is counted in the
+// scope's active children, so a compensation throw's scope does not finish until its handlers
+// do (ADR-0103).
+func activateCompensationHandler(c *ProcessingContext, v *model.CompensableValue) {
+	target := c.process(v.ProcessDefKey).Node(v.HandlerNode)
+	key := c.NewKey()
+	miRole := miNone
+	if target.MultiInstance >= 0 {
+		miRole = miBody
+	}
+	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: v.ProcessInstanceKey,
+		ProcessDefKey:      v.ProcessDefKey,
+		ElementId:          v.HandlerNode,
+		FlowScopeKey:       v.ScopeKey,
+		BpmnElementType:    uint8(target.Type),
+		MultiInstance:      miRole,
+		TokenID:            key,
+		SourceFlowId:       -1, // reached by a compensation throw, not over a flow
+	})
+}
+
+// recordCompensable, when the just-completed element is a compensable activity (one bearing
+// a compensation boundary), appends a durable record so a later compensation throw can run
+// its handler (ADR-0103). It is called only on successful completion (completeAndTakeFlows),
+// never on termination — a terminated activity did not succeed and is not compensable.
+func recordCompensable(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	handler := compensationHandlerOf(c.process(ei.ProcessDefKey), ei.ElementId)
+	if handler < 0 {
+		return
+	}
+	c.AppendCompensableEvent(model.IntentCompensableRecorded, model.CompensableValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ScopeKey:           ei.FlowScopeKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		HandlerNode:        handler,
+	})
+}
+
+// compensationHandlerOf returns the compensation handler node linked to elementId by a
+// compensation boundary, or -1 if the element is not compensable. A bounded scan over the
+// element's (usually zero or one) boundary events, so it is cheap on the completion path.
+func compensationHandlerOf(cp *compiler.CompiledProcess, elementId int32) int32 {
+	for _, beID := range cp.BoundaryEvents(elementId) {
+		if d := cp.BoundaryEvent(cp.Node(beID).Detail); d.Kind == compiler.BoundaryCompensation {
+			return d.CompensationHandler
+		}
+	}
+	return -1
+}
+
+// cancelEndEventBehavior cancels the enclosing transaction (ADR-0108). Its FlowScopeKey is the
+// transaction (the compiler requires a cancel end directly inside one). On activation it
+// terminates the transaction's other live tokens — sparing itself — so the scope drains to just
+// the compensation handlers it then starts, compensates every completed compensable activity in
+// the transaction (newest first, reverse completion order) via the same command-path walk a
+// compensation end event uses, and hops to Completing. Its Completed event marks the transaction
+// scope cancelling (applyToState); completeScope then fires the transaction's Completing once
+// the handlers drain, where subProcessBehavior's cancel branch routes out the cancel boundary.
+type cancelEndEventBehavior struct{}
+
+func (cancelEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	terminateScopeExcept(c, ei.ProcessInstanceKey, ei.FlowScopeKey, key)
+	compensate(c, ei, -1) // compensate the whole transaction scope, reverse completion order
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (cancelEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements the transaction scope; applyToState marks it cancelling
+	completeScope(c, ei.FlowScopeKey)                     // fires the transaction's Completing once compensation drains
+}
+
+// terminateEndEventBehavior ends the enclosing flow scope at once (ADR-0116): on activation it
+// terminates every other live token in the scope — recursively, cancelling their jobs — sparing
+// itself, then hops to Completing; on completing its own Completed event drains the scope's last
+// child and completeScope fires. At the process root that ends the instance (resuming a
+// call-activity caller if any); inside a subprocess it completes that subprocess, so the parent
+// continues on its outgoing flow. It is cancelEndEventBehavior minus compensation and minus the
+// cancel boundary — a terminate runs no compensation or event handling (BPMN 13.4.6). No new
+// events, so recovery replays the Terminated/Completed history unchanged (I4).
+type terminateEndEventBehavior struct{}
+
+func (terminateEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	terminateScopeExcept(c, ei.ProcessInstanceKey, ei.FlowScopeKey, key)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (terminateEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements the now-drained scope's last child
+	completeScope(c, ei.FlowScopeKey)                     // subprocess → outgoing flow; root → instance ends
+}
+
+// cancelTransaction completes a cancelled transaction whose scope has drained (compensation
+// finished): it retires the transaction element and fires its inert cancel boundary to take the
+// recovery flow (ADR-0108). Retiring the transaction first drops its compensable records and the
+// cancelling marker (apply.go) and decrements the parent scope; completing the cancel boundary
+// then takes the recovery flow, and the boundary being gone makes the subsequent
+// disarmBoundaryEvents (handleElementCompleting) skip it while still disarming the transaction's
+// other boundaries. With no cancel boundary (a compile warning), the transaction is simply torn
+// down and the parent scope drained.
+func cancelTransaction(c *ProcessingContext, txKey uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(txKey, model.IntentTerminated, *ei)
+	if bKey := findCancelBoundary(c, ei.ProcessInstanceKey, txKey); bKey != 0 {
+		if b := c.GetElementInstance(bKey); b != nil {
+			completeAndTakeFlows(c, bKey, b)
+			return
+		}
+	}
+	completeScope(c, ei.FlowScopeKey)
+}
+
+// findCancelBoundary returns the armed cancel-boundary element instance attached to the
+// transaction txKey, or 0 if none (ADR-0108).
+func findCancelBoundary(c *ProcessingContext, procKey, txKey uint64) uint64 {
+	var found uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != txKey {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		if cp.BoundaryEvent(cp.Node(b.ElementId).Detail).Kind == compiler.BoundaryCancel {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// singletonStartTaken reports whether a singleton message start for (defKey, key)
+// should be skipped because a live instance already exists — either durably (the
+// ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
+// this batch (the per-batch set, which closes the window before the durable counter
+// reflects a same-batch create). When it returns false it records the pair so a second
+// message for the same key in the same batch is skipped (ADR-0094).
+func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
+	if c.p.startsThisBatch == nil {
+		c.p.startsThisBatch = make(map[startKeyIdent]struct{})
+	}
+	ident := startKeyIdent{defKey: defKey, key: key}
+	if _, ok := c.p.startsThisBatch[ident]; ok {
+		return true, nil
+	}
+	n, err := c.tx.ActiveStartKeyCount(defKey, key)
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	c.p.startsThisBatch[ident] = struct{}{}
+	return false, nil
 }
 
 // instanceVariables reads all of an instance's variables into a fresh slice, to
@@ -1502,6 +2909,63 @@ func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 	takeInclusiveOutgoing(c, ei)
 }
 
+// eventBasedGatewayBehavior is a deferred choice (ADR-0110): on activation it arms every
+// target catch event at once — each outgoing flow's target, a message/timer/signal
+// intermediate catch — stamping each with this gateway's key as its race group, then
+// completes. The armed catches open their own subscriptions/timers and wait unchanged;
+// whichever fires first cancels the rest (the group prologue in completeAndTakeFlows). The
+// gateway itself takes no outgoing flow — the targets were armed on activation.
+type eventBasedGatewayBehavior struct{}
+
+func (eventBasedGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	for _, flowID := range cp.Outgoing(ei.ElementId) {
+		targetId := cp.Flow(flowID).Target
+		target := cp.Node(targetId)
+		k := c.NewKey()
+		c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          targetId,
+			FlowScopeKey:       ei.FlowScopeKey,
+			BpmnElementType:    uint8(target.Type),
+			TokenID:            k,
+			ParentTokenID:      ei.TokenID,
+			SourceFlowId:       flowID,
+			EventGatewayKey:    key, // the race group: this gateway's element-instance key
+		})
+	}
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (eventBasedGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+}
+
+// cancelEventGatewaySiblings terminates every live element instance in the same event-gateway
+// race group as the winner (groupKey), except the winner itself (selfKey) — the deferred
+// choice's losing branches (ADR-0110). Each loser's message subscription or timer self-retires
+// (a later correlate/fire finds no element and drops the stale entry), the same lazy cleanup a
+// disarmed boundary uses. Mirrors interruptHost's sibling-terminate loop, keyed by the
+// event-gateway group instead of a boundary host. Victims are collected before any termination
+// so the scan sees an intact set.
+func cancelEventGatewaySiblings(c *ProcessingContext, procKey, groupKey, selfKey uint64) {
+	var losers []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if elKey == selfKey {
+			return
+		}
+		if s := c.GetElementInstance(elKey); s != nil && s.EventGatewayKey == groupKey {
+			losers = append(losers, elKey)
+		}
+	})
+	for _, lk := range losers {
+		if s := c.GetElementInstance(lk); s != nil {
+			c.AppendElementEvent(lk, model.IntentTerminated, *s)
+		}
+	}
+}
+
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the
 // first (in flow order) whose FEEL condition is true, an unconditional non-default
 // flow, or the default flow; -1 if none apply.
@@ -1516,7 +2980,11 @@ func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei 
 		if f.Condition == nil {
 			return flowID // an unconditional flow is taken whenever reached
 		}
-		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		// Resolve the condition over the gateway's scope chain, so a gateway inside a
+		// subprocess or multi-instance body branches on that scope's variables, not
+		// only the process root (ADR-0085). For a top-level gateway FlowScopeKey is
+		// the process-instance key, so this reads exactly the root as before.
+		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
 		if err == nil && expr.IsTrue(v) {
 			return flowID
 		}
@@ -1709,8 +3177,45 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 			MessageName:        d.MessageName,
 			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
 		})
+	case compiler.BoundarySignal:
+		// A name-only subscription (no correlation key). A later broadcast of the
+		// name drives this boundary instance to Completing exactly as a correlating
+		// message does — the fire path (interrupt-or-take-flow) is shared (ADR-0088).
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
+		})
+	case compiler.BoundaryError:
+		// An error boundary opens nothing — it is inert, armed only to be *found* by
+		// propagateError walking the scope chain when an error is thrown, then driven to
+		// Completing (ADR-0089). No subscription, timer, or record.
+	case compiler.BoundaryCancel:
+		// A cancel boundary opens nothing either — it is inert, armed only to be *found* when
+		// its host transaction is cancelled (its scope has drained after compensation), then
+		// driven to Completing to take the recovery flow (ADR-0108).
+	case compiler.BoundaryEscalation:
+		// An escalation boundary opens nothing — it is inert, armed only to be *found* by
+		// propagateEscalation walking the scope chain when an escalation is raised, then driven
+		// to Completing (ADR-0125). Its OnCompleting path already honors d.Interrupting, so a
+		// non-interrupting escalation boundary runs its handler while the host keeps running.
+	case compiler.BoundaryConditional:
+		// A conditional boundary opens nothing either — it arms inert and is driven to
+		// Completing by a variable-change re-check when its FEEL condition becomes true
+		// (ADR-0137). If the condition already holds the moment the host activates, defer the
+		// fire to a re-check (mark the instance dirty) rather than firing synchronously: an
+		// interrupting boundary on a subprocess host would otherwise tear the host down while
+		// its inner flow is still activating in the same wave, orphaning the not-yet-activated
+		// inner elements. The re-check runs on the next batch, once the host has settled, so
+		// interruptHost tears it down cleanly. Its OnCompleting honors d.Interrupting.
+		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
+			c.markConditionDirty(ei.FlowScopeKey)
+		}
 	}
-	// Stays Activated: waits until the timer fires or the message correlates.
+	// Stays Activated: waits until the timer fires, the message correlates, the signal
+	// broadcasts, or (for an error/escalation/conditional boundary) it is found/fires.
 }
 
 func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -1748,6 +3253,11 @@ func (subProcessBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 		c.AppendElementCommand(key, model.IntentCompleting, *ei)
 		return
 	}
+	// Arm this subprocess scope's event subprocesses (ADR-0082 Phase 4) — the analog of
+	// arming the root's at instance creation. They are disarmed when this scope completes
+	// (completeScope) or is torn down by an interrupt (terminateScope terminates every
+	// element scoped under it, triggers included).
+	armEventSubprocesses(c, ei.ProcessInstanceKey, ei.ProcessDefKey, key, cp.EventSubprocesses(ei.ElementId))
 	for _, startID := range starts {
 		node := cp.Node(startID)
 		k := c.NewKey()
@@ -1770,7 +3280,565 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// drained by handleElementCompleting (after promoting), so this is a no-op there;
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
+	// A cancelled transaction: its scope drained after compensation, so route the
+	// cancellation out its cancel boundary instead of taking the transaction's normal
+	// outgoing flow (ADR-0108).
+	if c.process(ei.ProcessDefKey).IsTransaction(ei.ElementId) && c.IsCanceling(key) {
+		cancelTransaction(c, key, ei)
+		return
+	}
+	// An event-subprocess handler has no outgoing flow; its completion instead drains
+	// the parent scope it ran in, which may in turn complete that scope (ADR-0082).
+	if c.process(ei.ProcessDefKey).IsEventSubProcess(ei.ElementId) {
+		c.AppendElementEvent(key, model.IntentCompleted, *ei)
+		completeScope(c, ei.FlowScopeKey)
+		return
+	}
 	completeAndTakeFlows(c, key, ei)
+}
+
+// armEventSubprocesses activates one waiting trigger instance per event subprocess in a
+// scope, scoped by it (ADR-0082). A trigger is a TypeEventSubProcessStart element whose
+// ElementId is the handler container node — so its behavior can read the handler's
+// trigger detail and, on firing, seed the handler — and is excluded from the scope's
+// active-child counter (apply.go), so an armed trigger never blocks scope completion.
+// Called when a scope is entered: the process root at instance creation (and, later,
+// a subprocess on its activation).
+func armEventSubprocesses(c *ProcessingContext, piKey, defKey, scopeKey uint64, handlers []int32) {
+	for _, handlerNode := range handlers {
+		armEventSubTrigger(c, piKey, defKey, scopeKey, handlerNode)
+	}
+}
+
+// armEventSubTrigger activates one waiting event-subprocess trigger instance for a
+// handler, scoped by its parent (ADR-0082). It is used both to arm at scope entry and
+// to re-arm a non-interrupting message trigger after it fires, so a later message
+// triggers it again.
+func armEventSubTrigger(c *ProcessingContext, piKey, defKey, scopeKey uint64, handlerNode int32) {
+	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: piKey,
+		ProcessDefKey:      defKey,
+		ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
+		FlowScopeKey:       scopeKey,
+		BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+		SourceFlowId:       -1, // armed with its scope, not entered over a flow
+	})
+}
+
+// activateEventSubHandler activates the handler subprocess of a fired event-subprocess
+// trigger, in the parent scope (ADR-0082). The handler seeds its inner start (which
+// flows straight on) and runs to its end; having no outgoing flow, its completion
+// drains the parent scope (subProcessBehavior.OnCompleting).
+func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValue, parentScope uint64) {
+	k := c.NewKey()
+	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+		FlowScopeKey:       parentScope,
+		BpmnElementType:    uint8(c.process(ei.ProcessDefKey).Node(ei.ElementId).Type), // TypeSubProcess
+		TokenID:            k,
+		SourceFlowId:       -1,
+	})
+}
+
+// disarmEventSubprocesses terminates every still-armed event-subprocess trigger in a
+// scope, when the scope completes (ADR-0082). A trigger is uncounted, so the scope
+// drained with it still armed; its Terminated event drops the element and its
+// message subscription / timer self-retires (it fires later, finds no element, does
+// nothing) — the same pattern disarmBoundaryEvents uses.
+func disarmEventSubprocesses(c *ProcessingContext, procKey, scope uint64) {
+	var triggers []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if t := c.GetElementInstance(elKey); t != nil &&
+			t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) && t.FlowScopeKey == scope {
+			triggers = append(triggers, elKey)
+		}
+	})
+	for _, tk := range triggers {
+		if t := c.GetElementInstance(tk); t != nil {
+			c.AppendElementEvent(tk, model.IntentTerminated, *t)
+		}
+	}
+}
+
+// eventSubProcessStartBehavior is the armed trigger of an event subprocess (ADR-0082).
+// On activation it opens its trigger — a message/signal subscription or a one-shot timer,
+// exactly as a boundary event does — and waits. When the trigger fires, the existing
+// timer/message/signal path drives it to Completing: it terminates the parent scope's
+// other work if interrupting, then activates the handler subprocess. The handler runs as
+// an ordinary subprocess scope; its inner start (a message/timer/signal start) flows
+// straight on.
+type eventSubProcessStartBehavior struct{}
+
+func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.EventSubProcess(cp.Node(ei.ElementId).EventSub)
+	switch d.Kind {
+	case compiler.BoundaryTimer:
+		armOneShotTimer(c, key, ei, d.Schedule)
+	case compiler.BoundaryMessage:
+		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			MessageName:        d.MessageName,
+			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		})
+	case compiler.BoundarySignal:
+		// A name-only subscription (no correlation key). A broadcast of the name drives
+		// this trigger to Completing through the shared fire path (ADR-0088), exactly as
+		// a boundary signal — then the handler runs and a non-interrupting trigger re-arms.
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
+		})
+	case compiler.BoundaryError:
+		// An error event subprocess arms inert — it opens nothing, waiting only to be found
+		// by propagateError when an error is thrown in its scope, then driven to Completing
+		// (ADR-0089). Always interrupting, so firing terminates the scope and runs the handler.
+	case compiler.BoundaryConditional:
+		// A conditional event subprocess arms inert too — it opens nothing and is driven to
+		// Completing by a variable-change re-check when its FEEL condition over the parent
+		// scope's variables becomes true (ADR-0137). Unlike a boundary (which arms on an
+		// already-established host and may fire at once), this trigger arms while its scope's
+		// inner flow is still activating in the same wave, so firing synchronously here would
+		// interrupt the scope mid-activation and orphan the not-yet-activated inner elements.
+		// If the condition already holds, defer the fire to a re-check (mark the instance dirty):
+		// it runs on the next batch, once the inner flow has settled and terminateScope can tear
+		// it down cleanly. OnCompleting honors d.Interrupting.
+		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
+			c.markConditionDirty(ei.FlowScopeKey)
+		}
+	}
+	// Stays Activated: waits until the trigger fires.
+}
+
+func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A parent-scope interrupt (or the scope completing) may have terminated this armed
+	// trigger after its Completing command was queued; if so, there is nothing to fire.
+	if c.GetElementInstance(key) == nil {
+		return
+	}
+	cp := c.process(ei.ProcessDefKey)
+	handlerNode := ei.ElementId
+	d := cp.EventSubProcess(cp.Node(handlerNode).EventSub)
+	parentScope := ei.FlowScopeKey
+	// The trigger fired: it completes (uncounted, so no counter change).
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	if d.Interrupting {
+		// Terminate the parent scope's other work — the main flow and, since event-sub
+		// triggers live in the same scope, the sibling triggers — before the handler runs.
+		terminateScope(c, ei.ProcessInstanceKey, parentScope)
+	}
+	activateEventSubHandler(c, ei, parentScope)
+	// A non-interrupting message or signal trigger re-arms a fresh subscription so a
+	// subsequent message/broadcast fires it again (ADR-0082/ADR-0088). A one-shot timer
+	// fires once (no re-arm); a recurring timer re-arms through the timer path
+	// (fireRecurringEventSub), not here.
+	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) {
+		armEventSubTrigger(c, ei.ProcessInstanceKey, ei.ProcessDefKey, parentScope, handlerNode)
+	}
+}
+
+// loopCounterVar is the standard multi-instance per-iteration counter variable
+// (1-based), bound into each inner iteration's scope (ADR-0077, matching Zeebe).
+const loopCounterVar = "loopCounter"
+
+// seedMultiInstance runs a multi-instance body's activation (ADR-0077): it evaluates
+// the loop's input collection (or cardinality) over the body's scope chain to N items
+// and seeds inner iterations of the same node scoped under the body — all N at once
+// (parallel), or just the first (sequential; the rest follow one per completion). Each
+// inner carries loopCounter (1-based) and, when the loop names an input element, its
+// item, written into the inner's own scope so the iteration's behavior resolves them up
+// the chain. When the loop has an output collection, a slot-per-iteration list is
+// initialised on the body scope so each iteration writes its own index (order-
+// preserving). An empty collection seeds nothing and completes the body at once. The
+// collection is evaluated live; the inner Activated and variable events persist, so
+// replay rebuilds the iterations without re-evaluating (I6).
+func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	if d.Standard {
+		// A standard loop's iteration set is a condition, not a collection (ADR-0133):
+		// with testBefore the condition is checked before the first iteration — a while
+		// loop that may run zero times — otherwise the first iteration always runs and
+		// the condition decides on every next one, one at a time.
+		if d.TestBefore && !standardLoopContinues(c, d, bodyKey, 0) {
+			c.AppendElementCommand(bodyKey, model.IntentCompleting, *ei)
+			return
+		}
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, expr.Null)
+		return
+	}
+	items := multiInstanceItems(c, d, bodyKey)
+	if d.OutputCollection >= 0 {
+		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
+	}
+	if len(items) == 0 {
+		// No iterations: the body completes immediately, taking its outgoing flow.
+		c.AppendElementCommand(bodyKey, model.IntentCompleting, *ei)
+		return
+	}
+	if d.Sequential {
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, items[0])
+		return
+	}
+	for i := range items {
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, i, items[i])
+	}
+}
+
+// seedMultiInstanceIteration activates one inner iteration i (0-based) of the body,
+// scoped under it, binding its loopCounter (1-based) and — when the loop names an input
+// element — its item, both as variable events in the inner's own scope (ADR-0077).
+func seedMultiInstanceIteration(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, cp *compiler.CompiledProcess, d *compiler.MultiInstanceDetail, i int, item expr.Value) {
+	k := c.NewKey()
+	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ProcessDefKey:      body.ProcessDefKey,
+		ElementId:          body.ElementId, // the same node, run again
+		FlowScopeKey:       bodyKey,        // scoped under the body
+		BpmnElementType:    body.BpmnElementType,
+		MultiInstance:      miInner,
+		TokenID:            k,
+		ParentTokenID:      body.TokenID,
+		SourceFlowId:       -1,
+	})
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: k, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(i + 1),
+	})
+	if inputElem := cp.Intern(d.InputElement); inputElem != "" {
+		kind, b, text := expr.Classify(item)
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: k, Name: inputElem, Kind: toVarKind(kind), Bool: b, Text: text,
+		})
+	}
+}
+
+// standardLoopContinues reports whether a standard loop runs (another) iteration
+// (ADR-0133): its cap is not reached and its condition still holds. done is the number
+// of iterations already finished; scope starts the chain the condition is evaluated
+// over — the finished iteration's own scope, so the condition reads its loopCounter
+// and everything the iteration wrote, or the body's scope for the testBefore check
+// before the first iteration, where loopCounter is bound to 0. A condition-less loop
+// is bounded by the cap alone; an evaluation error ends the loop rather than spinning.
+func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail, scope uint64, done int32) bool {
+	if d.LoopMaximum > 0 && done >= d.LoopMaximum {
+		return false
+	}
+	if d.LoopCondition == nil {
+		return true
+	}
+	vars := bindInputsChain(c, d.LoopCondition.Inputs(), scope)
+	if _, ok := vars[loopCounterVar]; !ok && vars != nil {
+		vars[loopCounterVar] = expr.FromStored(expr.KindNumber, false, strconv.FormatInt(int64(done), 10))
+	}
+	v, err := d.LoopCondition.Eval(vars)
+	return err == nil && expr.IsTrue(v)
+}
+
+// parkRunawayLoop stops a standard loop that has run SafeLoopCeiling times without
+// stating a maximum, and raises an incident on its body (ADR-0133, amended). The body
+// stays active and takes no outgoing flow — the loop is parked, not finished, so
+// nothing downstream runs on a result the loop never reached. done (the number of runs
+// so far) is written to the body's own scope so a resolve resumes the count instead of
+// restarting it; it rides there as the standard loopCounter, shadowed by each
+// iteration's own, and is dropped rather than promoted when the loop ends.
+func parkRunawayLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, done int) {
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: bodyKey, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(done),
+	})
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ElementInstanceKey: bodyKey,
+		ElementId:          body.ElementId,
+		RaisedAt:           c.Now(),
+		Message: "loop ran " + strconv.Itoa(done) +
+			" times without a loop maximum; resolve to run " + strconv.Itoa(compiler.SafeLoopCeiling) + " more",
+	})
+}
+
+// resumeStandardLoop continues a parked runaway loop when its incident is resolved: it
+// seeds the next iteration, counting on from where the loop stopped (the body scope's
+// loopCounter), so the operator grants another SafeLoopCeiling runs rather than
+// restarting the loop. A vanished body — its instance was cancelled — is a no-op.
+func resumeStandardLoop(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	// The body scope holds the *count* of finished runs, which is already the next
+	// iteration's 0-based index — unlike an iteration's own 1-based loopCounter, so this
+	// deliberately does not go through iterationIndex.
+	next := 0
+	if v := c.GetVariable(bodyKey, loopCounterVar); v != nil {
+		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
+			next = n
+		}
+	}
+	seedMultiInstanceIteration(c, bodyKey, ei, cp, d, next, expr.Null)
+}
+
+// standardLoop reports whether a node's loop marker is a standard loop rather than a
+// multi-instance one (ADR-0133). The two share the compiled loop table and the body/
+// iteration runtime, but differ in what an iteration's result means: multi-instance
+// iterations are independent (each result is its own, aggregated into the output
+// collection), while a standard loop's iterations are successive runs of one activity
+// whose state carries forward and escapes the loop.
+func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
+	idx := cp.Node(elementId).MultiInstance
+	return idx >= 0 && cp.MultiInstance(idx).Standard
+}
+
+// multiInstanceItems evaluates a loop's iteration set over the body's scope chain to a
+// concrete list of N items: the input collection's elements, or — for a cardinality —
+// N nulls (there is no input element to bind). A non-list collection, a non-integer or
+// negative cardinality, or an evaluation error yields no iterations rather than a panic.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) []expr.Value {
+	if d.InputCollection != nil {
+		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
+		if err != nil {
+			return nil
+		}
+		items, ok := expr.AsList(v)
+		if !ok {
+			return nil
+		}
+		return items
+	}
+	if d.Cardinality != nil {
+		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
+		if err != nil {
+			return nil
+		}
+		if n, ok := expr.AsInt(v); ok && n >= 0 {
+			return nullList(n)
+		}
+	}
+	return nil
+}
+
+// finishMultiInstanceIteration completes one inner iteration (ADR-0077): it collects the
+// iteration's output element into the body's output collection (at its own index, so
+// the list preserves iteration order regardless of completion order), drops the
+// iteration's local scope, and emits Completed — which decrements the body's
+// active-child counter. Then it decides how the loop proceeds: a satisfied completion
+// condition ends the loop early (cancelling any still-running iterations); otherwise a
+// sequential loop seeds the next iteration if one remains, and the body completes once
+// the last iteration has drained. An inner never takes an outgoing flow; the body owns it.
+func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	bodyKey := ei.FlowScopeKey
+	idx := iterationIndex(c, key)
+	if d.OutputCollection >= 0 && d.OutputElement != nil {
+		val, err := d.OutputElement.Eval(bindInputsChain(c, d.OutputElement.Inputs(), key))
+		if err != nil {
+			val = expr.Null
+		}
+		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
+	}
+	// The completion condition — for a standard loop, the loop condition (ADR-0133) —
+	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
+	// item, and the accumulating output collection at the body) before the iteration's
+	// locals are dropped (ADR-0077).
+	done, again := false, false
+	switch {
+	case d.Standard:
+		again = standardLoopContinues(c, d, key, int32(idx)+1)
+	case d.CompletionCondition != nil:
+		v, err := d.CompletionCondition.Eval(bindInputsChain(c, d.CompletionCondition.Inputs(), key))
+		done = err == nil && expr.IsTrue(v)
+	}
+	dropLocalScope(c, key)
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	if done {
+		// Early exit: cancel any iterations still running (a no-op for a sequential loop,
+		// where this was the only one live), then complete the body once its scope drains.
+		terminateScope(c, ei.ProcessInstanceKey, bodyKey)
+		completeScope(c, bodyKey)
+		return
+	}
+	if d.Standard {
+		// The condition still holds (and the cap is not reached): run the activity again.
+		if again {
+			if body := c.GetElementInstance(bodyKey); body != nil {
+				// A loop that states no maximum is bounded only by a FEEL condition, which
+				// may never turn false. Every SafeLoopCeiling runs it parks with an incident
+				// rather than spinning on the partition (ADR-0133, amended): the operator
+				// sees why it stopped and resolves it to grant another ceiling's worth. A
+				// loop that states its own maximum is governed by that number instead.
+				if d.LoopMaximum == 0 && (idx+1)%compiler.SafeLoopCeiling == 0 {
+					parkRunawayLoop(c, bodyKey, body, idx+1)
+					return
+				}
+				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, expr.Null)
+				return // the body completes after this next iteration, not yet
+			}
+		}
+	} else if d.Sequential {
+		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
+			if body := c.GetElementInstance(bodyKey); body != nil {
+				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
+			}
+			return // the body completes after this next iteration, not yet
+		}
+	}
+	completeScope(c, bodyKey)
+}
+
+// promoteMultiInstanceOutput moves a completed body's output collection up to its
+// enclosing scope and drops the body's own locals (the collection plus any per-
+// iteration scratch), so only the assembled list escapes (ADR-0077). A no-op for a loop
+// with no output collection beyond the scope drop.
+func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	if d.Standard {
+		// A standard loop has no output collection: what its iterations wrote *is* its
+		// result, held at the body scope so each round could read the previous one's work
+		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
+		// leave behind exactly what the same activity would have left running once.
+		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
+			if v.Name == loopCounterVar {
+				return // the parked-run bookkeeping of parkRunawayLoop, not the loop's work
+			}
+			v.ScopeKey = ei.FlowScopeKey
+			c.AppendVariableEvent(model.IntentVariableCreated, v)
+		})
+		dropLocalScope(c, bodyKey)
+		return
+	}
+	if d.OutputCollection >= 0 {
+		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
+			out := *v
+			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
+			c.AppendVariableEvent(model.IntentVariableCreated, out)
+		}
+	}
+	dropLocalScope(c, bodyKey)
+}
+
+// iterationIndex reads an inner iteration's 0-based index from its loopCounter (1-based).
+func iterationIndex(c *ProcessingContext, key uint64) int {
+	if v := c.GetVariable(key, loopCounterVar); v != nil {
+		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
+			return n - 1
+		}
+	}
+	return 0
+}
+
+// nullList returns a slice of n FEEL nulls — the initial output-collection slots and a
+// cardinality loop's (bindingless) items.
+func nullList(n int) []expr.Value {
+	items := make([]expr.Value, n)
+	for i := range items {
+		items[i] = expr.Null
+	}
+	return items
+}
+
+// writeList writes a FEEL list value (canonical JSON) into scope under name (ADR-0077).
+func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) {
+	kind, b, text := expr.Classify(expr.ListOf(elems...))
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: scope, Name: name, Kind: toVarKind(kind), Bool: b, Text: text,
+	})
+}
+
+// readList reads a stored JSON list variable back into FEEL values; nil if absent or
+// not a list.
+func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
+	if v := c.GetVariable(scope, name); v != nil && v.Kind == model.VarJSON {
+		if elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, v.Text)); ok {
+			return elems
+		}
+	}
+	return nil
+}
+
+// setListElement sets index idx of a stored JSON list variable and writes it back; a
+// no-op if idx is out of range (ADR-0077).
+func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) {
+	elems := readList(c, scope, name)
+	if idx < 0 || idx >= len(elems) {
+		return
+	}
+	elems[idx] = val
+	writeList(c, scope, name, elems)
+}
+
+// callActivityBehavior runs a call activity: on activation it starts a separate
+// process as a child instance (in this partition) seeded with the variables to
+// pass in, then parks — it does not complete until the child does. Variables in:
+// the input mappings (evaluated generically into this element's local scope on
+// activation) plus, when propagateAllParentVariables is on, all the caller's
+// instance variables; the mapped locals win on name clash. The child records this
+// element instance as its parent so its completion resumes the caller (see
+// completeScope / resumeCaller). Variables out are applied there, not here, so the
+// generic output-mapping path is skipped for a call activity in
+// handleElementCompleting (ADR-0076).
+type callActivityBehavior struct{}
+
+func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.CallActivity(cp.Node(ei.ElementId).Detail)
+	childDefKey, ok := c.resolveCallTarget(cp.Intern(detail.CalledProcessId))
+	if !ok {
+		// The called process is not deployed (yet), or a per-server override
+		// disabled it or pinned/redirected to a target that is not deployed
+		// (ADR-0105). Park — the token stays on the call activity; a
+		// deploy-then-retry / incident is a follow-up (ADR-0076).
+		return
+	}
+	var startVars []model.VariableValue
+	if detail.PropagateAllParent {
+		c.VariablesOfScope(ei.ProcessInstanceKey, func(v model.VariableValue) {
+			startVars = append(startVars, v)
+		})
+	}
+	// The input-mapped locals are appended last so they override same-named
+	// propagated variables when re-applied to the child (last write wins).
+	c.VariablesOfScope(key, func(v model.VariableValue) {
+		startVars = append(startVars, v)
+	})
+	c.AppendCreateChildInstanceCommand(childDefKey, startVars, key)
+	// Stays Activated: no Completing until the child instance completes.
+}
+
+func (callActivityBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// resumeCaller promotes a completed child instance's variables into its caller and
+// resumes the caller's call-activity element (ADR-0076). It is called from
+// completeScope when a completing instance has a parent element instance, and is a
+// pure function of persisted state (the child's ParentElementInstanceKey, the
+// child's variables, the caller's compiled output mappings), so recovery
+// reconstructs it identically. A caller already gone (interrupted) is a no-op.
+func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
+	caller := c.GetElementInstance(callerKey)
+	if caller == nil {
+		return
+	}
+	callerCp := c.process(caller.ProcessDefKey)
+	detail := callerCp.CallActivity(callerCp.Node(caller.ElementId).Detail)
+	if detail.PropagateAllChild {
+		// All child variables merge into the caller's instance scope.
+		c.VariablesOfScope(childScope, func(v model.VariableValue) {
+			v.ScopeKey = caller.ProcessInstanceKey
+			c.AppendVariableEvent(model.IntentVariableCreated, v)
+		})
+	} else {
+		// Only the output mappings escape: each source is FEEL over the child's
+		// variables, promoted to the caller's instance scope.
+		for _, m := range callerCp.IOOutputs(caller.ElementId) {
+			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
+		}
+	}
+	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 
 type endEventBehavior struct{}

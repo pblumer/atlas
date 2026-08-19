@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "risky",
+    "start"
+  ],
+  "path": [
+    "start",
+    "risky",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "onb-architecture",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🏗️ Architektur & die 6 Invarianten\n\nDu willst mitentwickeln — stark! Ein Schritt vor dem ersten `git commit`: **lies `AGENTS.md`**, die kanonische Betriebsanleitung des Repos. Diese sechs Invarianten sind *load-bearing* und unverhandelbar:\n\n1. **Keine Allocation auf dem Hot-Path** — der Processor-Batch-Zyklus darf pro Kommando nichts allozieren. (ADR-0010)\n2. **Durable before visible** — Reihenfolge immer: Log anhängen → *ein* `fsync` → State committen → Side-Effects. (ADR-0005)\n3. **Single Writer pro Partition** — eine Goroutine besitzt den State, keine Locks; Cross-Partition nur async. (ADR-0002/0006)\n4. **Ein `applyToState`** — State-Mutation lebt in genau einer Funktion, identisch live und bei Recovery. (ADR-0001)\n5. **Compile, don't interpret** — was zur Deploy-Zeit passieren kann, gehört nicht auf den Hot-Path. (ADR-0004/0008)\n6. **Events sind Fakten, Kommandos sind Absichten** — nur Events werden persistiert; Keys/Timestamps landen *in* den Events (deterministisches Replay). (ADR-0001)\n\n> ⚠️ Wenn eine Aufgabe eine Invariante zu brechen scheint: **stopp und melde es** — das braucht einen neuen ADR, keinen Workaround.\n\n📖 Tiefer: `docs/ARCHITECTURE.md` · `docs/architecture/invariants.md` · `docs/adr/`"
+    },
+    {
+      "key": "archAck",
+      "type": "checklist",
+      "label": "Ich nehme mit:",
+      "values": [
+        { "label": "Ich lese AGENTS.md, bevor ich Code schreibe", "value": "agents" },
+        { "label": "Ich kenne die 6 Invarianten", "value": "invarianten" },
+        { "label": "Bei Zweifeln: stoppen und einen ADR anstoßen", "value": "adr" }
+      ]
+    }
+  ]
+}

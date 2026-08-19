@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas documentation modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         the element Documentation property (ADR-0025): every element — task, gateway,
+         event, sequence flow, data object — plus the process, the collaboration and each
+         pool carries a <bpmn:documentation> child the panel reads and writes. Atlas
+         treats it as passthrough, so the assertions are about the exported XML: what the
+         author types must land on the documented element and survive a round-trip.
+
+         Two models are served: a single process (default) and a collaboration with two
+         pools, one of them a black box. window.__mount("collab") picks the second, so
+         both showPool branches are reachable without a second harness file. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // Start_1, the branch flow f2 and the process itself arrive documented, so the panel must
+      // show what the model carries; everything else is blank and gets documented by
+      // the tests.
+      const PROCESS_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_doc" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="dokumentiert" name="Dokumentierter Prozess" isExecutable="true">
+    <bpmn:documentation>Bearbeitet eingehende Anträge bis zur Auszahlung.</bpmn:documentation>
+    <bpmn:startEvent id="Start_1" name="Antrag geht ein">
+      <bpmn:documentation>Startet, sobald der Antrag im Portal eingeht.</bpmn:documentation>
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Activity_user" name="Prüfen">
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_1" name="Genehmigt?">
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Activity_pay" name="Auszahlen">
+      <bpmn:extensionElements><zeebe:taskDefinition type="payment"/></bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:dataObjectReference id="DataObj_1" name="antrag" dataObjectRef="DataObject_1"/>
+    <bpmn:dataObject id="DataObject_1"/>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_user"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_user" targetRef="Gateway_1"/>
+    <bpmn:sequenceFlow id="f2" name="ja" sourceRef="Gateway_1" targetRef="Activity_pay">
+      <bpmn:documentation>Nur bei vollständigen Unterlagen.</bpmn:documentation>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f3" sourceRef="Activity_pay" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="dokumentiert">
+    <bpmndi:BPMNShape id="Start_1_s" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_user_s" bpmnElement="Activity_user"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Gateway_1_s" bpmnElement="Gateway_1"><dc:Bounds x="425" y="113" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_pay_s" bpmnElement="Activity_pay"><dc:Bounds x="540" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="700" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="DataObj_1_s" bpmnElement="DataObj_1"><dc:Bounds x="292" y="240" width="36" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_e" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="425" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_e" bpmnElement="f2"><di:waypoint x="475" y="138"/><di:waypoint x="540" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_e" bpmnElement="f3"><di:waypoint x="640" y="138"/><di:waypoint x="700" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Two pools: Pool_sales executes a process, Pool_bank is a black box (no
+      // processRef) — the two branches of the panel's pool view.
+      const COLLAB_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_collab" targetNamespace="http://atlas/bpmn">
+  <bpmn:collaboration id="Collab_1">
+    <bpmn:participant id="Pool_sales" name="Vertrieb" processRef="vertrieb"/>
+    <bpmn:participant id="Pool_bank" name="Bank"/>
+  </bpmn:collaboration>
+  <bpmn:process id="vertrieb" name="Vertrieb" isExecutable="true">
+    <bpmn:startEvent id="Start_v" name="Anfrage"><bpmn:outgoing>fv</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:endEvent id="End_v" name="Ende"><bpmn:incoming>fv</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="fv" sourceRef="Start_v" targetRef="End_v"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Dc"><bpmndi:BPMNPlane id="Pc" bpmnElement="Collab_1">
+    <bpmndi:BPMNShape id="Pool_sales_s" bpmnElement="Pool_sales" isHorizontal="true"><dc:Bounds x="130" y="60" width="600" height="180"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Pool_bank_s" bpmnElement="Pool_bank" isHorizontal="true"><dc:Bounds x="130" y="270" width="600" height="140"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Start_v_s" bpmnElement="Start_v"><dc:Bounds x="220" y="130" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_v_s" bpmnElement="End_v"><dc:Bounds x="380" y="130" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="fv_e" bpmnElement="fv"><di:waypoint x="256" y="148"/><di:waypoint x="380" y="148"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      let current = PROCESS_XML;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return current;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/forms/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = (kind) => {
+        current = kind === "collab" ? COLLAB_XML : PROCESS_XML;
+        return mountEditor(view, { api, toast: noop, key: 42 });
+      };
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      window.__deselect = () => window.__atlasModeler.get("selection").select(null);
+      window.__undo = () => window.__atlasModeler.get("commandStack").undo();
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

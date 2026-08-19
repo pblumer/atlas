@@ -1,0 +1,19 @@
+{
+  "completed": true,
+  "activities": [
+    "cancel",
+    "charge",
+    "done",
+    "refund",
+    "start"
+  ],
+  "path": [
+    "start",
+    "charge",
+    "cancel",
+    "refund",
+    "done"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

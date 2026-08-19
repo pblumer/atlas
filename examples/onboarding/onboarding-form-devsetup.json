@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "onb-devsetup",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔧 Setup & Definition of Done\n\nAlle Befehle vom Repo-Root ausführen:\n\n```\ngo build ./...\ngo test ./...\ngo test -race ./...   # PFLICHT, bevor etwas \"fertig\" ist\ngo vet ./...\ngofmt -l .            # muss leere Ausgabe liefern\n```\n\n**Definition of Done:** `go build ./...`, `go test -race ./...`, `go vet ./...` sind grün und `gofmt -l .` ist leer. Vorher gilt keine Änderung als abgeschlossen.\n\n## Arbeitsweise\n\n- **TDD ist Default** (ADR-0018): erst der failing Test, dann der minimale Code, dann refactoren.\n- **Coverage-Floor: 95 %** statement-coverage, repo-weit in CI geprüft.\n- **Recovery-Tests sind first-class**: „State nach Replay == State live gebaut\".\n- **Determinismus**: keine Abhängigkeit von Wall-Clock oder Goroutine-Scheduling — `Clock` injizieren.\n- Kleine, fokussierte Changes; `gofmt` ist nicht verhandelbar."
+    },
+    {
+      "key": "devAck",
+      "type": "checklist",
+      "label": "Mein Dev-Setup:",
+      "values": [
+        { "label": "Go-Toolchain steht, `go build ./...` läuft", "value": "build" },
+        { "label": "Ich laufe `go test -race ./...` vor jedem \"fertig\"", "value": "race" },
+        { "label": "Ich arbeite test-first (TDD)", "value": "tdd" }
+      ]
+    }
+  ]
+}

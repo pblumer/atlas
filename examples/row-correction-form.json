@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "row-correction-form",
+  "components": [
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail"
+    },
+    {
+      "key": "group",
+      "type": "textfield",
+      "label": "Gruppe"
+    },
+    {
+      "key": "license",
+      "type": "textfield",
+      "label": "Lizenz"
+    }
+  ]
+}

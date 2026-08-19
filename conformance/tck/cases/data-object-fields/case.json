@@ -1,0 +1,11 @@
+{
+  "name": "data-object-fields",
+  "model": "data-object-fields.bpmn",
+  "features": [
+    "field-level-data-object"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

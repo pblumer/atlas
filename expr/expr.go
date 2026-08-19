@@ -166,6 +166,37 @@ func FromStored(kind ValueKind, b bool, text string) Value {
 	}
 }
 
+// AsList returns the elements of a FEEL list value and true, or nil and false if v
+// is not a list. It fans a multi-instance activity's input collection into its
+// per-iteration items (ADR-0077).
+func AsList(v Value) ([]Value, bool) {
+	l, ok := v.(value.List)
+	if !ok {
+		return nil, false
+	}
+	return l.Elements, true
+}
+
+// ListOf builds a FEEL list value from the given elements — the inverse of AsList,
+// for assembling a multi-instance output collection (ADR-0077).
+func ListOf(elems ...Value) Value {
+	return value.NewList(elems...)
+}
+
+// AsInt returns a FEEL number as an int and true if v is a whole number within int
+// range, else 0 and false. Used for a multi-instance loop cardinality (ADR-0077).
+func AsInt(v Value) (int, bool) {
+	n, ok := v.(value.Number)
+	if !ok {
+		return 0, false
+	}
+	i, ok := n.Int64()
+	if !ok {
+		return 0, false
+	}
+	return int(i), true
+}
+
 // IsTrue reports whether v is FEEL boolean true. A non-boolean (including null,
 // the result of a failed comparison) is not true — which is how a sequence-flow
 // condition that doesn't evaluate to true is simply not taken.

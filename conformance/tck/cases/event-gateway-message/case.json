@@ -1,0 +1,20 @@
+{
+  "name": "event-gateway-message",
+  "model": "event-based-gateway.bpmn",
+  "features": [
+    "event-based-gateway"
+  ],
+  "patterns": [
+    "WCP-16"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "publish",
+      "correlation": "",
+      "message": "go"
+    }
+  ]
+}

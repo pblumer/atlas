@@ -1,7 +1,7 @@
 // Package mcp is Atlas's Model Context Protocol server: it lets an AI agent
-// (Claude Desktop, Claude Code, or any MCP client) drive a running Atlas server
-// through tools — deploy a BPMN model, start an instance, and inspect live
-// runtime state.
+// drive a running Atlas server through tools — deploy a BPMN model, manage
+// design-time projects and artifacts, start an instance, complete human tasks,
+// and inspect live runtime state.
 //
 // # Shape: an adapter over the HTTP API, on two transports
 //
@@ -12,9 +12,8 @@
 //   - stdio (Serve) — newline-delimited JSON, one message per line. This is the
 //     MCP stdio transport a local client (Claude Desktop, Claude Code) spawns.
 //   - Streamable HTTP (ServeHTTP) — the remote transport. Mount it at a path
-//     such as /mcp and a remote client (e.g. a claude.ai custom connector) can
-//     reach the same tools. It performs no authentication; front it with a
-//     reverse proxy before exposing it publicly.
+//     such as /mcp and a remote client can reach the same tools. It performs no
+//     authentication; front it with a reverse proxy before exposing it publicly.
 //
 // This is deliberate. The engine is a single-writer partition (invariant I3):
 // exactly one goroutine may touch a partition's processor and state, a
@@ -23,6 +22,15 @@
 // never violate an engine invariant — it only ever makes HTTP calls. It is a
 // pure adapter, and an AI agent sees the same deployments and instances a human
 // sees in the web UI.
+//
+// # Project deletion
+//
+// A design-time project is a grouping folder, not an execution aggregate
+// (ADR-0034). atlas_delete_project therefore calls the public project DELETE
+// endpoint and removes only that folder. Drafts and decision references tagged
+// with its id remain available as ungrouped artifacts; deployed definitions and
+// process instances are unaffected. The API operation is idempotent and enforces
+// the project owner role when authentication is enabled.
 //
 // # No new dependencies
 //

@@ -112,6 +112,91 @@ const RestJobType = "io.atlas.http.rest"
 // process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0067).
 const RestJobTypeIndex int32 = 4
 
+// MailJobType is the reserved job type an outbound mail connector task carries.
+// The in-process mail connector worker subscribes to it to send the model-authored
+// message through a server-registered mail provider off the hot path (ADR-0079),
+// the same way the clio worker subscribes to ClioWriteJobType.
+const MailJobType = "io.atlas.mail.send"
+
+// MailJobTypeIndex is the interned index MailJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it eleventh (after the ten job types
+// above), so it is always 10. This lets a single in-process mail worker subscribe by
+// one global index across every deployed process, the same way the REST worker uses
+// RestJobTypeIndex (ADR-0067/0078).
+const MailJobTypeIndex int32 = 10
+
+// CsvImportJobType is the reserved job type a CSV-import service task carries. An
+// in-process worker parses an uploaded CSV (a `csvText` variable) against a column
+// layout (a `columnConfig` variable, typically set by a preceding script task) into
+// a `rows` collection — so a process ingests and validates a batch of records
+// entirely on the engine, the upload arriving through a user-task form rather than a
+// side-channel endpoint (ADR-0087).
+const CsvImportJobType = "io.atlas.csv-import"
+
+// CsvImportJobTypeIndex is the interned index CsvImportJobType is guaranteed to
+// occupy: NewBuilder reserves it twelfth, so it is always 11. A single in-process
+// CSV worker subscribes by this global index across every deployed process, the same
+// way the mail worker uses MailJobTypeIndex.
+const CsvImportJobTypeIndex int32 = 11
+
+// SharePointJobType is the reserved job type a SharePoint connector task carries.
+// The in-process SharePoint connector worker subscribes to it to create a list item
+// in a model-authored SharePoint site/list through a server-registered SharePoint
+// provider (Microsoft Graph) off the hot path (ADR-0141), the same way the mail
+// worker subscribes to MailJobType.
+const SharePointJobType = "io.atlas.sharepoint.createitem"
+
+// SharePointJobTypeIndex is the interned index SharePointJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirteenth (after the
+// twelve job types above), so it is always 12. This lets a single in-process
+// SharePoint worker subscribe by one global index across every deployed process, the
+// same way the mail worker uses MailJobTypeIndex (ADR-0141).
+const SharePointJobTypeIndex int32 = 12
+
+// RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
+// in-process Remedy connector worker subscribes to it to create an entry (e.g. an
+// incident) in a Remedy form through the BMC AR System REST API off the hot path
+// (ADR-0106), the same way the mail worker subscribes to MailJobType. The provider
+// host and credentials live in a server-registered connector, like clio/mail; only
+// the form name and its field values are model-authored.
+const RemedyJobType = "io.atlas.remedy.entry"
+
+// RemedyJobTypeIndex is the interned index RemedyJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it fourteenth (after the thirteen job
+// types above), so it is always 13. This lets a single in-process Remedy worker
+// subscribe by one global index across every deployed process, the same way the mail
+// worker uses MailJobTypeIndex (ADR-0079/0106).
+const RemedyJobTypeIndex int32 = 13
+
+// WebScrapeJobType is the reserved job type a web-scraping connector task carries.
+// The in-process web-scraping worker subscribes to it to fetch a model-authored URL
+// and extract the elements matching a CSS selector off the hot path (ADR-0118), the
+// same way the REST worker subscribes to RestJobType. The URL and selector live in
+// the model (like REST's endpoint); nothing about the target is registry-held.
+const WebScrapeJobType = "io.atlas.webscrape"
+
+// WebScrapeJobTypeIndex is the interned index WebScrapeJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it fifteenth (after the
+// fourteen job types above), so it is always 14. This lets a single in-process
+// web-scraping worker subscribe by one global index across every deployed process,
+// the same way the mail worker uses MailJobTypeIndex (ADR-0118).
+const WebScrapeJobTypeIndex int32 = 14
+
+// UserConnectorJobType is the reserved job type a user-provisioning connector task
+// carries (ADR-0123). The in-process user-provisioning worker subscribes to it to
+// create, set the password of, or disable an Atlas login through the internal user
+// store off the hot path, the same way the mail worker subscribes to MailJobType.
+// It is gated to the protected system project and opt-in server-side; nothing about
+// the credential is model-authored (there is none — it mutates the local store).
+const UserConnectorJobType = "io.atlas.user.provision"
+
+// UserConnectorJobTypeIndex is the interned index UserConnectorJobType is guaranteed
+// to occupy in every compiled process: NewBuilder reserves it sixteenth (after the
+// fifteen job types above), so it is always 15. This lets a single in-process
+// user-provisioning worker subscribe by one global index across every deployed
+// process, the same way the mail worker uses MailJobTypeIndex (ADR-0123).
+const UserConnectorJobTypeIndex int32 = 15
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -135,29 +220,47 @@ type Builder struct {
 	bpmnProcessId string
 	version       int32
 
-	nodes             []CompiledNode
-	flows             []CompiledFlow
-	serviceTasks      []ServiceTaskDetail
-	scriptTasks       []ScriptTaskDetail
-	scriptJobTasks    []ScriptJobTaskDetail
-	businessRuleTasks []BusinessRuleTaskDetail
-	timerCatches      []TimerCatchDetail
-	connectorTasks    []ConnectorTaskDetail
-	userTasks         []UserTaskDetail
-	boundaryEventDets []BoundaryEventDetail
-	messageCatches    []MessageDetail
-	messageThrows     []MessageDetail
-	messageStarts     []MessageDetail
-	timerStarts       []TimerStartDetail
-	dataObjects       []CompiledDataObject
-	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
-	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
-	ioInputs          []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
-	ioOutputs         []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
-	elementIds        []int32          // interned source BPMN id per node, -1 if unset
-	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
-	versionTag        int32            // interned atlas:versionTag revision label, -1 if none
-	isExecutable      bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
+	nodes              []CompiledNode
+	flows              []CompiledFlow
+	serviceTasks       []ServiceTaskDetail
+	scriptTasks        []ScriptTaskDetail
+	callActivities     []CallActivityDetail
+	multiInstances     []MultiInstanceDetail
+	scriptJobTasks     []ScriptJobTaskDetail
+	businessRuleTasks  []BusinessRuleTaskDetail
+	timerCatches       []TimerCatchDetail
+	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
+	userTasks          []UserTaskDetail
+	boundaryEventDets  []BoundaryEventDetail
+	eventSubProcesses  []EventSubProcessDetail
+	messageCatches     []MessageDetail
+	receiveTasks       []MessageDetail // receive tasks (ADR-0102)
+	messageThrows      []MessageDetail
+	messageStarts      []MessageDetail
+	signalCatches      []SignalDetail
+	signalThrows       []SignalDetail // shared by signal throw and signal end events
+	signalStarts       []SignalDetail
+	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
+	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
+	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts        []TimerStartDetail
+	dataObjects        []CompiledDataObject
+	dataOutAssocs      []pendingDataOut // data-output associations, grouped by node in Build
+	dataInAssocs       []pendingDataIn  // data-input associations, grouped by node in Build
+	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
+	elementIds         []int32          // interned source BPMN id per node, -1 if unset
+	elementDocs        []int32          // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
+	lanes              []LaneDetail     // organizational lanes (ADR-0121)
+	documentation      int32            // interned <bpmn:documentation> of the process itself, -1 if none
+	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
+	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64            // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	isExecutable       bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
 	// process root, or a subprocess node's ElementId while its children are being
@@ -178,6 +281,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		key:           key,
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
+		documentation: -1,
 		startFormId:   -1,
 		versionTag:    -1,
 		isExecutable:  true, // BPMN default; the parser sets false only for isExecutable="false"
@@ -194,6 +298,12 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioWriteJobType)     // reserve ClioWriteJobTypeIndex == 7
 	b.intern(ClioQueryJobType)     // reserve ClioQueryJobTypeIndex == 8
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
+	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
+	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
+	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
+	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
+	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
+	b.intern(UserConnectorJobType) // reserve UserConnectorJobTypeIndex == 15
 	return b
 }
 
@@ -213,13 +323,79 @@ func (b *Builder) intern(s string) int32 {
 func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	id := int32(len(b.nodes))
 	b.nodes = append(b.nodes, CompiledNode{
-		ElementId: id,
-		Type:      t,
-		FlowScope: b.flowScope, // the scope currently open (-1 = process root)
-		Detail:    detail,
+		ElementId:     id,
+		Type:          t,
+		FlowScope:     b.flowScope, // the scope currently open (-1 = process root)
+		Detail:        detail,
+		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
+		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
+		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0121)
 	})
-	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
+	b.elementIds = append(b.elementIds, -1)   // kept in lockstep with nodes
+	b.elementDocs = append(b.elementDocs, -1) // likewise: -1 = undocumented
 	return id
+}
+
+// AddCallActivity adds a call activity that starts the process with the given bpmn
+// id as a child instance, under the given binding and variable-propagation flags
+// (ADR-0076), and returns its element id. The called process id is interned; the
+// called def key is resolved at deploy/runtime, not here.
+func (b *Builder) AddCallActivity(calledProcessId string, binding DecisionBinding, propagateAllParent, propagateAllChild bool) int32 {
+	detail := int32(len(b.callActivities))
+	b.callActivities = append(b.callActivities, CallActivityDetail{
+		CalledProcessId:    b.intern(calledProcessId),
+		Binding:            binding,
+		PropagateAllParent: propagateAllParent,
+		PropagateAllChild:  propagateAllChild,
+	})
+	return b.addNode(TypeCallActivity, detail)
+}
+
+// SetMultiInstance marks an already-added node a multi-instance activity carrying
+// the given loop characteristics (ADR-0077), interning the per-iteration and result
+// variable names. The node keeps its real activity type; its MultiInstance field is
+// set to index the loop detail. Applied after the node exists (like io-mappings), so
+// any activity — task, subprocess, or call activity — can be a loop. Exactly one of
+// inputCollection or cardinality should be non-nil (the parser enforces it).
+func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, outputCollection string, inputCollection, cardinality, outputElement, completionCondition *expr.Compiled) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.multiInstances))
+	b.multiInstances = append(b.multiInstances, MultiInstanceDetail{
+		InputCollection:     inputCollection,
+		Cardinality:         cardinality,
+		InputElement:        b.intern(inputElement),
+		OutputCollection:    b.intern(outputCollection),
+		OutputElement:       outputElement,
+		CompletionCondition: completionCondition,
+		Sequential:          sequential,
+	})
+	b.nodes[nodeID].MultiInstance = idx
+}
+
+// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0133): it
+// repeats its activity one iteration at a time while condition holds (nil = repeat
+// until the cap), checked before the first iteration when testBefore is set, and at
+// most loopMaximum times (0 = uncapped). It shares the multi-instance loop table and
+// the node's MultiInstance index because it shares the runtime — a standard loop is a
+// sequential loop whose iteration set is a condition rather than a collection — so a
+// node carries at most one of the two markers (the parser refuses both).
+func (b *Builder) SetStandardLoop(nodeID int32, testBefore bool, loopMaximum int32, condition *expr.Compiled) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.multiInstances))
+	b.multiInstances = append(b.multiInstances, MultiInstanceDetail{
+		InputElement:     -1,
+		OutputCollection: -1,
+		Sequential:       true, // a standard loop is one iteration at a time, by definition
+		Standard:         true,
+		TestBefore:       testBefore,
+		LoopCondition:    condition,
+		LoopMaximum:      loopMaximum,
+	})
+	b.nodes[nodeID].MultiInstance = idx
 }
 
 // AddSubProcess adds an embedded subprocess container node and returns its element
@@ -227,6 +403,18 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 // linked back to it only by the children's FlowScope. Create it first, then
 // PushScope(its id) before adding its children so they land in its scope (ADR-0074).
 func (b *Builder) AddSubProcess() int32 { return b.addNode(TypeSubProcess, -1) }
+
+// AddAdHocSubProcess adds an ad-hoc subprocess container node and returns its element id
+// (ADR-0138). Like an embedded subprocess it is a scope whose inner flow lives in the flat
+// node/flow arrays — create it first, then PushScope(its id) before adding its children — but
+// its contained activities are not sequenced from a start event: on entry the runtime activates
+// every entry activity (a contained node with no incoming flow) at once. d carries the optional
+// FEEL completion condition, the cancel-remaining flag, and the ordering.
+func (b *Builder) AddAdHocSubProcess(d AdHocDetail) int32 {
+	detail := int32(len(b.adHocs))
+	b.adHocs = append(b.adHocs, d)
+	return b.addNode(TypeAdHocSubProcess, detail)
+}
 
 // PushScope opens scope id: every node added until the matching PopScope carries id
 // as its FlowScope. Scopes nest, so the outer scope is saved and restored.
@@ -245,6 +433,20 @@ func (b *Builder) PopScope() {
 // CurrentScope reports the scope nodes are added into now (-1 at the process root).
 func (b *Builder) CurrentScope() int32 { return b.flowScope }
 
+// SetEventSubProcess marks an already-added subprocess node event-triggered (ADR-0082),
+// carrying the trigger detail its start event describes. It is applied after the
+// subprocess and its inner start exist (like SetMultiInstance), and its EventSub field
+// then indexes the detail. Build groups event-subprocess handlers by their parent scope
+// so the runtime can arm them when the scope is entered.
+func (b *Builder) SetEventSubProcess(nodeID int32, d EventSubProcessDetail) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.eventSubProcesses))
+	b.eventSubProcesses = append(b.eventSubProcesses, d)
+	b.nodes[nodeID].EventSub = idx
+}
+
 // SetElementBpmnId records the source BPMN element id (e.g. "StartEvent_1") for a
 // node so it can be mapped back for diagnostics and the live diagram overlay. It
 // is optional: nodes without one report "" from CompiledProcess.ElementBpmnId.
@@ -253,6 +455,23 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 		b.elementIds[nodeID] = b.intern(bpmnID)
 	}
 }
+
+// SetElementDocumentation records a node's <bpmn:documentation> — the prose an author
+// writes about the element in the Modeler (ADR-0025). It is design-time metadata: the
+// processor never reads it, so it changes no execution; it is carried so a surface that
+// shows an element to a person (the Tasks app, for a user task's work instruction) can
+// read it from the compiled process instead of re-parsing the model (invariant I5).
+// Empty text interns to -1, so an undocumented node costs nothing.
+func (b *Builder) SetElementDocumentation(nodeID int32, text string) {
+	if b.validNode(nodeID) {
+		b.elementDocs[nodeID] = b.intern(text)
+	}
+}
+
+// SetDocumentation records the process's own <bpmn:documentation> — the summary a reader
+// wants before following the diagram. Design-time metadata, like the element-level
+// documentation above.
+func (b *Builder) SetDocumentation(text string) { b.documentation = b.intern(text) }
 
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
@@ -271,15 +490,26 @@ func (b *Builder) SetExecutable(v bool) { b.isExecutable = v }
 // (e.g. "1.4.0") shown in Operations beside the deploy version. Design-time metadata.
 func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
 
+// SetInstanceTtl records the process's instance TTL in nanoseconds — the self-cleaning
+// expiry bound (ADR-0085). Zero (the default) means no TTL: instances never expire on
+// their own. The parser passes an already-validated positive duration.
+func (b *Builder) SetInstanceTtl(nanos int64) { b.instanceTtlNanos = nanos }
+
+// SetHistoryTtl records the process's history TTL in nanoseconds — how long a *finished*
+// instance of this definition is kept before retention hard-deletes it (ADR-0144). Zero
+// (the default) means the definition has no opinion: the server-wide max age applies, if
+// one is configured. The parser passes an already-validated positive duration.
+func (b *Builder) SetHistoryTtl(nanos int64) { b.historyTtlNanos = nanos }
+
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
 // straight on — but the engine also registers it at deploy time so a correlating
 // message (a throw event or an API publish of messageName) instantiates a fresh
 // process instance seeded with the message's payload (ADR-0035). correlationKey
 // is compiled for future use; message-start matching is by name today.
-func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
+func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled, singletonStart bool) int32 {
 	detail := int32(len(b.messageStarts))
-	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey, SingletonStart: singletonStart})
 	return b.addNode(TypeMessageStartEvent, detail)
 }
 
@@ -307,12 +537,63 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddSendTask adds a send task with the given job type and retries and returns its
+// element id (ADR-0112). A send task is a service task under a different BPMN label: it
+// creates a job and waits, so it reuses the service-task detail table and (at runtime)
+// serviceTaskBehavior. Only its node type (TypeSendTask) differs, to preserve the
+// send-task identity — the TypeConnectorTask "distinct type, shared behavior" pattern.
+func (b *Builder) AddSendTask(jobType string, retries int32) int32 {
+	detail := int32(len(b.serviceTasks))
+	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
+		JobType: b.intern(jobType),
+		Retries: retries,
+	})
+	return b.addNode(TypeSendTask, detail)
+}
+
 // AddScriptTask adds a script task that evaluates the given compiled FEEL
 // expression and writes the result to resultVar. Returns its element id.
 func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 	detail := int32(len(b.scriptTasks))
 	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
 	return b.addNode(TypeScriptTask, detail)
+}
+
+// MockupConfig is the authored configuration of a mockup (engine-simulated)
+// service task (ADR-0120). MinNanos/MaxNanos bound the random simulated duration
+// (MaxNanos >= MinNanos, both >= 0). Expr, when non-nil, is the compiled FEEL
+// result expression written to ResultVar on activation (the input→output script).
+// FailPerMillion is the failure probability in parts-per-million (0..1_000_000).
+// FailMessage is the incident message used when a simulated failure occurs.
+type MockupConfig struct {
+	MinNanos       int64
+	MaxNanos       int64
+	ResultVar      string
+	Expr           *expr.Compiled
+	FailPerMillion int32
+	FailMessage    string
+	ErrorCode      string
+}
+
+// AddMockupTask adds a mockup service task the engine simulates itself (ADR-0120)
+// and returns its element id. Unlike a service task it creates no job: at runtime
+// mockupTaskBehavior writes the optional FEEL result, arms a one-shot timer for a
+// random duration, and completes (or raises an incident per the fail probability).
+// The result variable and fail message are stored as raw strings (like
+// ScriptTaskDetail.ResultVar); the FEEL expression is compiled by the caller at
+// deploy time (invariant I5), as AddScriptTask takes a pre-compiled expression.
+func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
+	detail := int32(len(b.mockupTasks))
+	b.mockupTasks = append(b.mockupTasks, MockupTaskDetail{
+		MinNanos:       cfg.MinNanos,
+		MaxNanos:       cfg.MaxNanos,
+		ResultVar:      cfg.ResultVar,
+		Expr:           cfg.Expr,
+		FailPerMillion: cfg.FailPerMillion,
+		FailMessage:    cfg.FailMessage,
+		ErrorCode:      cfg.ErrorCode,
+	})
+	return b.addNode(TypeMockupTask, detail)
 }
 
 // AddScriptJobTask adds a job-based script task authored in a general-purpose
@@ -533,6 +814,279 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 	return b.intern(string(raw))
 }
 
+// MailConfig is the deploy-time configuration of an outbound mail connector task
+// (ADR-0079). Connector names the server-registered mail provider (its host and
+// credentials live server-side, never in the model); To/Cc/Bcc/From/Subject/Body
+// carry literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over
+// the instance's variables at send time. To and Subject/Body are the message; Cc,
+// Bcc and From are optional (a zero RestExpr means unset).
+type MailConfig struct {
+	Connector string
+	To        RestExpr
+	Cc        RestExpr
+	Bcc       RestExpr
+	From      RestExpr
+	Subject   RestExpr
+	Body      RestExpr
+	BodyHTML  RestExpr
+	Retries   int32
+}
+
+// AddMailConnectorTask adds an outbound mail connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved MailJobType so the in-process mail worker picks it up, evaluates any
+// FEEL recipient/subject/body values over the instance's variables, resolves the
+// named connector's provider client, sends the message, and completes the job
+// (ADR-0079). The provider endpoint and credentials are resolved server-side from
+// the named connector, never authored in the model — mirroring clio (ADR-0036).
+func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:     b.intern(MailJobType),
+		Connector:   b.intern(cfg.Connector),
+		Subject:     -1, // not a clio task
+		EventType:   -1,
+		ClioQuery:   -1,
+		ReduceSpec:  -1,
+		Method:      -1, // not a REST task
+		ResultVar:   -1, // mail sends, it produces no result variable
+		Auth:        -1,
+		To:          cfg.To,
+		Cc:          cfg.Cc,
+		Bcc:         cfg.Bcc,
+		From:        cfg.From,
+		MailSubject: cfg.Subject,
+		Body:        cfg.Body,
+		BodyHTML:    cfg.BodyHTML,
+		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// UserConnectorConfig is the deploy-time configuration of a user-provisioning
+// connector task (ADR-0123). Operation is one of "create", "set-password", or
+// "disable". Username identifies the account; Email/DisplayName/Roles/Password are
+// the create/update fields — each a literal-or-FEEL value (the parser compiles the
+// FEEL ones) evaluated over the instance's variables at call time. There is no
+// connector name and no credential: the worker mutates the internal user store
+// directly, gated to the protected system project (ADR-0122) and opt-in server-side.
+type UserConnectorConfig struct {
+	Operation   string
+	Username    RestExpr
+	Email       RestExpr
+	DisplayName RestExpr
+	Roles       RestExpr
+	Password    RestExpr
+	Retries     int32
+}
+
+// AddUserConnectorTask adds a user-provisioning connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved UserConnectorJobType so the in-process user-provisioning
+// worker picks it up, evaluates any FEEL field over the instance's variables,
+// performs the operation against the internal user store, and completes the job
+// (ADR-0123). No provider or credential is involved.
+func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(UserConnectorJobType),
+		Connector:       -1, // no server-registered provider; it mutates the local store
+		Subject:         -1,
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1,
+		ResultVar:       -1,
+		Auth:            -1,
+		UserOp:          b.intern(cfg.Operation),
+		UserName:        cfg.Username,
+		UserEmail:       cfg.Email,
+		UserDisplayName: cfg.DisplayName,
+		UserRoles:       cfg.Roles,
+		UserPassword:    cfg.Password,
+		Retries:         cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
+// (ADR-0139). Source names the process variable holding the raw CSV text
+// (empty → the worker's default "csvText"); Result the variable the parsed rows
+// are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
+// HasHeader whether the first row is a header; Columns the field names (empty →
+// derive them from the header row). All are interned deploy-time data (I5).
+type CsvConfig struct {
+	Source    string
+	Result    string
+	Delimiter string
+	HasHeader bool
+	Columns   []string
+	Retries   int32
+}
+
+// AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
+// raw text from the named source variable, parses it against the authored
+// delimiter/header/columns with the same parser the ingestion endpoint uses, and
+// writes the JSON rows (and a rowCount) into the result variable (ADR-0139). The
+// layout lives in the model — unlike the ADR-0087 convention, which read it from a
+// columnConfig variable — so nothing but the file arrives at runtime.
+func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	cols := make([]int32, 0, len(cfg.Columns))
+	for _, c := range cfg.Columns {
+		cols = append(cols, b.intern(c))
+	}
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(CsvImportJobType),
+		Connector:    -1, // CSV carries its layout in the model, not a registry name
+		Subject:      -1,
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1,
+		ResultVar:    -1, // CSV uses its own CsvResult field, not the REST/clio one
+		Auth:         -1,
+		CsvSource:    b.intern(cfg.Source),
+		CsvResult:    b.intern(cfg.Result),
+		CsvDelimiter: b.intern(cfg.Delimiter),
+		CsvHasHeader: cfg.HasHeader,
+		CsvColumns:   cols,
+		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SharePointConfig is the deploy-time configuration of a SharePoint connector task
+// (ADR-0141). Connector names the server-registered SharePoint provider (its Graph
+// base and OAuth credential live server-side, never in the model); Site and List
+// address the target list, and Fields are the created item's column values — all
+// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
+// instance's variables at call time. ResultVar, if set, is the process variable the
+// created item's JSON is written back into (empty = discard it).
+type SharePointConfig struct {
+	Connector string
+	Site      RestExpr
+	List      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddSharePointConnectorTask adds a SharePoint connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved SharePointJobType so the in-process SharePoint worker picks it up,
+// evaluates any FEEL site/list/field values over the instance's variables, resolves
+// the named connector's Graph client, creates the list item, writes the created
+// item's JSON into ResultVar, and completes the job (ADR-0141). The Graph base and
+// credentials are resolved server-side from the named connector, never authored in
+// the model — mirroring the mail connector (ADR-0079).
+func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:    b.intern(SharePointJobType),
+		Connector:  b.intern(cfg.Connector),
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // not a REST task
+		ResultVar:  b.intern(cfg.ResultVar),
+		Auth:       -1,
+		Site:       cfg.Site,
+		List:       cfg.List,
+		Fields:     cfg.Fields,
+		Retries:    cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// RemedyConfig is the deploy-time configuration of a BMC Remedy connector task
+// (ADR-0106). Connector names the server-registered Remedy instance (its base URL
+// and credentials live server-side, never in the model). Form is the Remedy form
+// the entry is created in (e.g. "HPD:IncidentInterface_Create"); Fields carries the
+// entry's field values as name/literal-or-FEEL pairs evaluated over the instance's
+// variables at call time (the fx toggle, ADR-0067). ResultVar, if set, is the
+// process variable the created entry's id is written back into.
+type RemedyConfig struct {
+	Connector string
+	Form      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddRemedyConnectorTask adds a BMC Remedy connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved RemedyJobType so the in-process Remedy worker picks it up, evaluates
+// any FEEL form/field values over the instance's variables, resolves the named
+// connector's AR System REST client, creates the entry, writes the new entry id into
+// ResultVar (empty = discard it), and completes the job (ADR-0106). The Remedy base
+// URL and credentials are resolved server-side from the named connector, never
+// authored in the model — mirroring clio and mail (ADR-0036/0079).
+func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(RemedyJobType),
+		Connector:    b.intern(cfg.Connector),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // not a REST task
+		ResultVar:    b.intern(cfg.ResultVar),
+		Auth:         -1,
+		RemedyForm:   cfg.Form,
+		RemedyFields: cfg.Fields,
+		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// WebScrapeConfig is the deploy-time configuration of a web-scraping connector task
+// (ADR-0118). Url is the page to fetch and Selector the CSS selector whose matches
+// are extracted — both literal-or-FEEL values (the parser compiles the FEEL ones)
+// evaluated over the instance's variables at call time. Attribute, when set, names
+// the HTML attribute to read from each match (empty → each match's text content);
+// Result is the process variable the extracted values are written to as a JSON
+// array. Like REST, the target lives entirely in the model, not a registry.
+type WebScrapeConfig struct {
+	Url       RestExpr
+	Selector  RestExpr
+	Attribute string
+	Result    string
+	Retries   int32
+}
+
+// AddWebScrapeConnectorTask adds a web-scraping connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved WebScrapeJobType so the in-process web-scraping worker picks
+// it up, evaluates any FEEL url/selector values over the instance's variables,
+// fetches the page, extracts the text (or the named attribute) of every element
+// matching the selector, writes the values into Result as a JSON array, and
+// completes the job (ADR-0118). The URL and selector live in the model, mirroring
+// the REST connector (ADR-0067); nothing about the target is registry-held.
+func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(WebScrapeJobType),
+		Connector:       -1, // scrape carries its URL in the model, not a registry name
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       b.intern(cfg.Result),
+		Auth:            -1,
+		Url:             cfg.Url,
+		ScrapeSelector:  cfg.Selector,
+		ScrapeAttribute: b.intern(cfg.Attribute),
+		Retries:         cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
@@ -584,6 +1138,20 @@ func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, message
 		Kind:           BoundaryMessage,
 		MessageName:    messageName,
 		CorrelationKey: correlationKey,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddBoundarySignalEvent adds a signal boundary event attached to host that fires when a
+// signal named signalName is broadcast (ADR-0088). interrupting mirrors BPMN cancelActivity.
+// Returns its element id.
+func (b *Builder) AddBoundarySignalEvent(host int32, interrupting bool, signalName string) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundarySignal,
+		SignalName:   signalName,
 	})
 	return b.addNode(TypeBoundaryEvent, detail)
 }
@@ -710,6 +1278,12 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 // and SetFlowDefault.
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
+// AddEventBasedGateway adds an event-based gateway (deferred choice) and returns its
+// element id. It carries no detail: at runtime it arms every target catch event (each
+// outgoing flow must lead to a message/timer/signal intermediate catch) and takes the
+// branch whose event fires first, cancelling the rest (ADR-0110).
+func (b *Builder) AddEventBasedGateway() int32 { return b.addNode(TypeEventBasedGateway, -1) }
+
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
 // fixed duration (nanoseconds) before continuing, and returns its element id. It
 // is the duration convenience over AddTimerCatchSchedule.
@@ -736,6 +1310,16 @@ func (b *Builder) AddMessageCatchEvent(messageName string, correlationKey *expr.
 	return b.addNode(TypeMessageCatchEvent, detail)
 }
 
+// AddReceiveTask adds a receive task that, on activation, subscribes to the named message
+// with a correlation key produced by the given compiled FEEL expression, then waits until a
+// matching message is correlated — the message-catch semantics as an activity (ADR-0102).
+// Returns its element id.
+func (b *Builder) AddReceiveTask(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.receiveTasks))
+	b.receiveTasks = append(b.receiveTasks, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeReceiveTask, detail)
+}
+
 // AddMessageThrowEvent adds an intermediate message throw event that, on
 // activation, publishes the named message with a correlation key produced by the
 // given compiled FEEL expression (evaluated over the throwing instance's
@@ -756,6 +1340,252 @@ func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Co
 	detail := int32(len(b.messageThrows))
 	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageEndEvent, detail)
+}
+
+// AddSignalCatchEvent adds an intermediate signal catch event that waits for a broadcast
+// signal of the given name (ADR-0088). Returns its element id.
+func (b *Builder) AddSignalCatchEvent(signalName string) int32 {
+	detail := int32(len(b.signalCatches))
+	b.signalCatches = append(b.signalCatches, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalCatchEvent, detail)
+}
+
+// AddSignalThrowEvent adds an intermediate signal throw event that, on activation,
+// broadcasts the named signal to every waiting catch, then completes (ADR-0088).
+func (b *Builder) AddSignalThrowEvent(signalName string) int32 {
+	detail := int32(len(b.signalThrows))
+	b.signalThrows = append(b.signalThrows, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalThrowEvent, detail)
+}
+
+// AddSignalEndEvent adds an end event that broadcasts the named signal, then ends the
+// instance — the send-and-stop counterpart of a signal throw, reusing the throw detail
+// table like a message end event (ADR-0088).
+func (b *Builder) AddSignalEndEvent(signalName string) int32 {
+	detail := int32(len(b.signalThrows))
+	b.signalThrows = append(b.signalThrows, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalEndEvent, detail)
+}
+
+// AddSignalStartEvent adds a start event that a broadcast signal instantiates (ADR-0088);
+// at runtime it flows straight on like a message start.
+func (b *Builder) AddSignalStartEvent(signalName string) int32 {
+	detail := int32(len(b.signalStarts))
+	b.signalStarts = append(b.signalStarts, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalStartEvent, detail)
+}
+
+// AddErrorEndEvent adds an end event that throws the given error code — ending its scope
+// abnormally and propagating up to the nearest matching handler rather than completing
+// normally (ADR-0089). A code-less error end throws "". Returns its element id.
+func (b *Builder) AddErrorEndEvent(errorCode string) int32 {
+	detail := int32(len(b.errorEnds))
+	b.errorEnds = append(b.errorEnds, ErrorEndDetail{ErrorCode: errorCode})
+	return b.addNode(TypeErrorEndEvent, detail)
+}
+
+// AddBoundaryErrorEvent adds an error boundary event attached to host that catches an
+// error propagating up to the host whose code matches errorCode ("" is a catch-all). An
+// error boundary is always interrupting (ADR-0089): it opens no subscription and waits
+// only to be found by propagation. Returns its element id.
+func (b *Builder) AddBoundaryErrorEvent(host int32, errorCode string) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // an error boundary is always interrupting
+		Kind:         BoundaryError,
+		ErrorCode:    errorCode,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddEscalationThrowEvent adds an intermediate throw event that raises the given escalation
+// code — propagating up to the nearest matching handler — then continues on its outgoing
+// flow (ADR-0125). A code-less escalation raises "". Returns its element id.
+func (b *Builder) AddEscalationThrowEvent(escalationCode string) int32 {
+	detail := int32(len(b.escalations))
+	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
+	return b.addNode(TypeEscalationThrowEvent, detail)
+}
+
+// AddEscalationEndEvent adds an end event that raises the given escalation code —
+// propagating up to the nearest matching handler — then ends its path (ADR-0125). Unlike an
+// error end, an uncaught escalation is benign (no incident) and a matching catch may be
+// non-interrupting. A code-less escalation raises "". Returns its element id.
+func (b *Builder) AddEscalationEndEvent(escalationCode string) int32 {
+	detail := int32(len(b.escalations))
+	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
+	return b.addNode(TypeEscalationEndEvent, detail)
+}
+
+// AddLinkThrowEvent adds a link intermediate throw event — a goto (ADR-0133). It carries no
+// detail: the link name matters only at compile, where connectScope resolves the pair to a
+// synthetic sequence flow to the matching link catch. At runtime it is a pass-through, taking
+// that synthetic flow. Returns its element id.
+func (b *Builder) AddLinkThrowEvent() int32 { return b.addNode(TypeLinkThrowEvent, -1) }
+
+// AddLinkCatchEvent adds a link intermediate catch event — the landing point of a link throw
+// of the same name (ADR-0133). Like the throw it carries no detail and runs as a pass-through,
+// flowing on its real outgoing sequence flow when the synthetic link edge activates it.
+// Returns its element id.
+func (b *Builder) AddLinkCatchEvent() int32 { return b.addNode(TypeLinkCatchEvent, -1) }
+
+// AddBoundaryEscalationEvent adds an escalation boundary event attached to host that catches
+// an escalation propagating up to the host whose code matches escalationCode ("" is a
+// catch-all). Unlike an error boundary it honors interrupting: an interrupting escalation
+// boundary tears the host down on fire, a non-interrupting one runs the handler alongside
+// the still-running host (ADR-0125). It opens no subscription and waits only to be found by
+// propagation. Returns its element id.
+func (b *Builder) AddBoundaryEscalationEvent(host int32, escalationCode string, interrupting bool) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:       host,
+		Interrupting:   interrupting,
+		Kind:           BoundaryEscalation,
+		EscalationCode: escalationCode,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddConditionalCatchEvent adds a conditional intermediate catch event that waits until the
+// given boolean FEEL condition over the process's variables becomes true, then flows on
+// (ADR-0137). It arms inert (opens no subscription) and is driven to Completing by a
+// variable-change re-check. Returns its element id.
+func (b *Builder) AddConditionalCatchEvent(condition *expr.Compiled) int32 {
+	detail := int32(len(b.conditionals))
+	b.conditionals = append(b.conditionals, ConditionalDetail{Condition: condition})
+	return b.addNode(TypeConditionalCatchEvent, detail)
+}
+
+// AddBoundaryConditionalEvent adds a conditional boundary event attached to host that fires
+// while the host runs when the given boolean FEEL condition becomes true (ADR-0137). It honors
+// interrupting: an interrupting conditional boundary tears the host down on fire, a
+// non-interrupting one runs the handler alongside the still-running host. It opens no
+// subscription and is re-evaluated on variable change. Returns its element id.
+func (b *Builder) AddBoundaryConditionalEvent(host int32, condition *expr.Compiled, interrupting bool) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundaryConditional,
+		Condition:    condition,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddCompensationThrowEvent adds an intermediate throw event that, on activation, triggers
+// compensation — running the handlers of completed compensable activities in its scope (or
+// of the single activity later set via SetCompensationActivityRef) — then flows on (ADR-0103).
+// ActivityRef defaults to -1 (compensate the whole scope). Returns its element id.
+func (b *Builder) AddCompensationThrowEvent() int32 {
+	detail := int32(len(b.compensationThrows))
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	return b.addNode(TypeCompensationThrowEvent, detail)
+}
+
+// AddCompensationEndEvent adds an end event that triggers compensation, then ends its scope
+// — the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
+// like a signal end event (ADR-0103). Returns its element id.
+func (b *Builder) AddCompensationEndEvent() int32 {
+	detail := int32(len(b.compensationThrows))
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	return b.addNode(TypeCompensationEndEvent, detail)
+}
+
+// AddCancelEndEvent adds a cancel end event: an end event inside a transaction that cancels
+// it — compensating the transaction's completed activities in reverse order, then routing out
+// the transaction's cancel boundary (ADR-0108). It carries no detail (a cancel always
+// compensates the whole transaction). Returns its element id.
+func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
+
+// AddTerminateEndEvent adds a terminate end event: reaching it ends the enclosing flow scope at
+// once — every other live token in the scope is terminated, then the scope completes (ADR-0116).
+// It carries no detail (a terminate has no code, message, or handler). Returns its element id.
+func (b *Builder) AddTerminateEndEvent() int32 { return b.addNode(TypeTerminateEndEvent, -1) }
+
+// AddBoundaryCancelEvent adds a cancel boundary event attached to host (a transaction): it
+// catches the transaction's cancellation and routes its recovery flow. Armed inert like an
+// error boundary and always interrupting (ADR-0108). Returns its element id.
+func (b *Builder) AddBoundaryCancelEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // a cancel boundary is always interrupting
+		Kind:         BoundaryCancel,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetTransaction marks an already-added subprocess node as a <transaction> (ADR-0108), so the
+// runtime and validation know it may host a cancel boundary and hold a cancel end event. A
+// no-op for an out-of-range node.
+func (b *Builder) SetTransaction(nodeID int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Transaction = true
+	}
+}
+
+// AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
+// the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
+// affects no token flow.
+func (b *Builder) AddLane(name string, parent int32) int32 {
+	idx := int32(len(b.lanes))
+	b.lanes = append(b.lanes, LaneDetail{Name: b.intern(name), Parent: parent})
+	return idx
+}
+
+// SetLane records that a flow node belongs to a lane (ADR-0121). A no-op for an unknown node.
+func (b *Builder) SetLane(nodeID, laneIdx int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Lane = laneIdx
+	}
+}
+
+// AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert
+// marker (never armed as an element instance) that makes the host compensable and links it to
+// a compensation handler, resolved later from a BPMN <association> via SetCompensationHandler
+// (ADR-0103). CompensationHandler starts unresolved (-1). Returns its element id.
+func (b *Builder) AddBoundaryCompensationEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:            host,
+		Interrupting:        false, // a compensation boundary never interrupts; it is inert
+		Kind:                BoundaryCompensation,
+		CompensationHandler: -1,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetCompensationHandler resolves a compensation boundary event's handler link: it points the
+// boundary node (a BoundaryCompensation) at the handler activity's element id (ADR-0103). The
+// boundary must be a compensation boundary; other kinds are left untouched.
+func (b *Builder) SetCompensationHandler(boundaryNodeID, handlerNodeID int32) {
+	if !b.validNode(boundaryNodeID) {
+		return
+	}
+	n := &b.nodes[boundaryNodeID]
+	if n.Type != TypeBoundaryEvent {
+		return
+	}
+	d := &b.boundaryEventDets[n.Detail]
+	if d.Kind != BoundaryCompensation {
+		return
+	}
+	d.CompensationHandler = handlerNodeID
+}
+
+// SetCompensationActivityRef narrows a compensation throw/end event to compensate a single
+// activity (by element id) rather than the whole scope (ADR-0103). The node must be a
+// compensation throw or end event.
+func (b *Builder) SetCompensationActivityRef(throwNodeID, activityRef int32) {
+	if !b.validNode(throwNodeID) {
+		return
+	}
+	n := &b.nodes[throwNodeID]
+	if n.Type != TypeCompensationThrowEvent && n.Type != TypeCompensationEndEvent {
+		return
+	}
+	b.compensationThrows[n.Detail].ActivityRef = activityRef
 }
 
 // Connect adds a sequence flow from source to target and returns its flow id, so
@@ -824,6 +1654,13 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
 	}
 
+	// Count incoming flows per node, so a parallel join knows how many tokens to
+	// wait for — and so the ad-hoc grouping below can tell an entry activity (nothing
+	// sequences into it) from one a contained flow reaches (ADR-0138).
+	for _, f := range b.flows {
+		b.nodes[f.Target].IncomingCount++
+	}
+
 	// Group nested start events by their enclosing subprocess into one shared array,
 	// mirroring the boundary-event grouping, so a subprocess behavior seeds its
 	// scope's entry points as an allocation-free slice at runtime. A start event's
@@ -833,15 +1670,55 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	for i := range b.nodes {
 		n := &b.nodes[i]
 		n.ScopeStartStart = int32(len(scopeStarts))
-		if n.Type == TypeSubProcess {
+		switch n.Type {
+		case TypeSubProcess:
 			for j := range b.nodes {
 				s := &b.nodes[j]
 				if isStartEvent(s.Type) && s.FlowScope == n.ElementId {
 					scopeStarts = append(scopeStarts, s.ElementId)
 				}
 			}
+		case TypeAdHocSubProcess:
+			// An ad-hoc subprocess has no start event: its scope's entry points are its
+			// *entry activities* — the contained flow nodes nothing sequences into, which
+			// the runtime activates on entry (ADR-0138). A node targeted by a flow inside
+			// the ad-hoc is reached by that flow instead, a boundary event arms on its host,
+			// and an event-subprocess handler is armed as a trigger — none are entries.
+			for j := range b.nodes {
+				s := &b.nodes[j]
+				if s.FlowScope == n.ElementId && s.IncomingCount == 0 &&
+					s.Type != TypeBoundaryEvent && s.EventSub < 0 {
+					scopeStarts = append(scopeStarts, s.ElementId)
+				}
+			}
 		}
 		n.ScopeStartCount = int32(len(scopeStarts)) - n.ScopeStartStart
+	}
+
+	// Group event-subprocess handler nodes by their parent scope, mirroring the nested-
+	// start grouping, so the runtime arms a scope's event-subprocess triggers as an
+	// allocation-free slice when the scope is entered. A handler's FlowScope is its
+	// parent scope (a subprocess node, or -1 for the process root — collected separately
+	// into rootEventSubs) (ADR-0082).
+	var eventSubs []int32
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.EventSubStart = int32(len(eventSubs))
+		if n.Type == TypeSubProcess || n.Type == TypeAdHocSubProcess {
+			for j := range b.nodes {
+				h := &b.nodes[j]
+				if h.EventSub >= 0 && h.FlowScope == n.ElementId {
+					eventSubs = append(eventSubs, h.ElementId)
+				}
+			}
+		}
+		n.EventSubCount = int32(len(eventSubs)) - n.EventSubStart
+	}
+	var rootEventSubs []int32
+	for i := range b.nodes {
+		if b.nodes[i].EventSub >= 0 && b.nodes[i].FlowScope == -1 {
+			rootEventSubs = append(rootEventSubs, b.nodes[i].ElementId)
+		}
 	}
 
 	// Group data-output associations by their activity node into one shared array,
@@ -900,12 +1777,6 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.IOOutCount = int32(len(ioOut)) - n.IOOutStart
 	}
 
-	// Count incoming flows per node, so a parallel join knows how many tokens to
-	// wait for.
-	for _, f := range b.flows {
-		b.nodes[f.Target].IncomingCount++
-	}
-
 	// Only root-scope start events are process entry points — the engine seeds a
 	// token at each when an instance starts. A start event nested in a subprocess is
 	// that scope's entry and is seeded by the subprocess behavior, not at instance
@@ -917,38 +1788,73 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		}
 	}
 
+	// Does this process contain any conditional event? The runtime only schedules a
+	// variable-change re-check for instances of a process that has one (ADR-0137), so a
+	// process without conditionals pays nothing on a variable write.
+	hasConditional := false
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		if n.Type == TypeConditionalCatchEvent ||
+			(n.Type == TypeBoundaryEvent && b.boundaryEventDets[n.Detail].Kind == BoundaryConditional) ||
+			(n.EventSub >= 0 && b.eventSubProcesses[n.EventSub].Kind == BoundaryConditional) {
+			hasConditional = true
+			break
+		}
+	}
+
 	return &CompiledProcess{
-		Key:               b.key,
-		BpmnProcessId:     b.intern(b.bpmnProcessId),
-		Version:           b.version,
-		nodes:             b.nodes,
-		flows:             b.flows,
-		outgoingFlows:     outgoing,
-		boundaryEvents:    boundary,
-		scopeStarts:       scopeStarts,
-		serviceTasks:      b.serviceTasks,
-		scriptTasks:       b.scriptTasks,
-		scriptJobTasks:    b.scriptJobTasks,
-		businessRuleTasks: b.businessRuleTasks,
-		timerCatches:      b.timerCatches,
-		connectorTasks:    b.connectorTasks,
-		userTasks:         b.userTasks,
-		boundaryEventDets: b.boundaryEventDets,
-		messageCatches:    b.messageCatches,
-		messageThrows:     b.messageThrows,
-		messageStarts:     b.messageStarts,
-		timerStarts:       b.timerStarts,
-		dataObjects:       b.dataObjects,
-		dataOutAssocs:     dataOut,
-		dataInAssocs:      dataIn,
-		ioInputs:          ioIn,
-		ioOutputs:         ioOut,
-		startEvents:       startEvents,
-		elementIds:        b.elementIds,
-		startFormId:       b.startFormId,
-		versionTag:        b.versionTag,
-		isExecutable:      b.isExecutable,
-		strings:           b.strings,
+		Key:                b.key,
+		BpmnProcessId:      b.intern(b.bpmnProcessId),
+		Version:            b.version,
+		hasConditional:     hasConditional,
+		nodes:              b.nodes,
+		flows:              b.flows,
+		outgoingFlows:      outgoing,
+		boundaryEvents:     boundary,
+		scopeStarts:        scopeStarts,
+		serviceTasks:       b.serviceTasks,
+		scriptTasks:        b.scriptTasks,
+		callActivities:     b.callActivities,
+		multiInstances:     b.multiInstances,
+		scriptJobTasks:     b.scriptJobTasks,
+		businessRuleTasks:  b.businessRuleTasks,
+		timerCatches:       b.timerCatches,
+		connectorTasks:     b.connectorTasks,
+		mockupTasks:        b.mockupTasks,
+		userTasks:          b.userTasks,
+		boundaryEventDets:  b.boundaryEventDets,
+		eventSubProcesses:  b.eventSubProcesses,
+		eventSubs:          eventSubs,
+		rootEventSubs:      rootEventSubs,
+		messageCatches:     b.messageCatches,
+		receiveTasks:       b.receiveTasks,
+		messageThrows:      b.messageThrows,
+		messageStarts:      b.messageStarts,
+		signalCatches:      b.signalCatches,
+		signalThrows:       b.signalThrows,
+		signalStarts:       b.signalStarts,
+		errorEnds:          b.errorEnds,
+		escalations:        b.escalations,
+		conditionals:       b.conditionals,
+		adHocs:             b.adHocs,
+		compensationThrows: b.compensationThrows,
+		timerStarts:        b.timerStarts,
+		dataObjects:        b.dataObjects,
+		dataOutAssocs:      dataOut,
+		dataInAssocs:       dataIn,
+		ioInputs:           ioIn,
+		ioOutputs:          ioOut,
+		startEvents:        startEvents,
+		elementIds:         b.elementIds,
+		elementDocs:        b.elementDocs,
+		lanes:              b.lanes,
+		documentation:      b.documentation,
+		startFormId:        b.startFormId,
+		versionTag:         b.versionTag,
+		instanceTtlNanos:   b.instanceTtlNanos,
+		historyTtlNanos:    b.historyTtlNanos,
+		isExecutable:       b.isExecutable,
+		strings:            b.strings,
 	}, nil
 }
 
@@ -973,5 +1879,5 @@ func (b *Builder) hasStartEvent() bool {
 // plain create then activates it like a none start (ADR-0035). A timer start
 // event likewise: a due timer instantiates it, and it then flows on (ADR-0051).
 func isStartEvent(t BpmnType) bool {
-	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent
+	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent || t == TypeSignalStartEvent
 }

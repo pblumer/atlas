@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "on_schedule",
+    "tick"
+  ],
+  "path": [
+    "on_schedule",
+    "tick",
+    "end"
+  ],
+  "variables": {
+    "fired": "1"
+  },
+  "dataObjects": []
+}

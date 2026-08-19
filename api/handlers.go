@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,6 +52,11 @@ type processResp struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
+	// ProjectID names the project this definition's draft belonged to at deploy time,
+	// so the Modeler home groups deployed definitions into the same project folders as
+	// design-time artifacts (ADR-0034). Empty for a definition deployed outside a
+	// project, which the UI shows under "Ungrouped".
+	ProjectID string `json:"projectId,omitempty"`
 	// CollaborationKey groups a collaboration's pools: when non-zero, this process
 	// is a pool of a collaboration and the value is the stable key the Operations
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
@@ -66,6 +72,11 @@ type processResp struct {
 	Executable bool `json:"executable"`
 	// VersionTag is the process's atlas:versionTag revision label, empty when unset.
 	VersionTag string `json:"versionTag,omitempty"`
+	// Active reports whether the definition may auto-start new instances from its
+	// timer/message/signal start events. A deactivated definition (false) stays
+	// deployed and keeps its running instances, but does not self-start (ADR-0119).
+	// Always emitted so the UI can render the active/inactive control unambiguously.
+	Active bool `json:"active"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -216,6 +227,12 @@ type timelineStep struct {
 	SourceElementID    string         `json:"sourceElementId,omitempty"`
 	Action             string         `json:"action,omitempty"`
 	Relation           string         `json:"relation,omitempty"`
+	// ChildInstanceKey is the process instance a call activity started as its child
+	// (ADR-0076), so the replay view can drill from the caller's call activity into
+	// the child's own replay. Zero for a non-call-activity step, or a call activity
+	// whose child was never created (it parked). Resolved by the reverse
+	// ParentElementInstanceKey link, covering active and completed children.
+	ChildInstanceKey uint64 `json:"childInstanceKey,omitempty"`
 }
 
 type timelineToken struct {
@@ -276,9 +293,19 @@ type cancelInstanceResp struct {
 	Stats       statsResp `json:"stats"`
 }
 
+type cancelInstancesResp struct {
+	DefinitionKey uint64    `json:"definitionKey"`
+	Canceled      int       `json:"canceled"`
+	Remaining     bool      `json:"remaining"` // the per-call cap was hit; call again to continue
+	Stats         statsResp `json:"stats"`
+}
+
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
+	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
+	RetryBackoff int64 `json:"retryBackoff"`
 }
 
 type resolveIncidentReq struct {
@@ -503,14 +530,40 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the project this deploy files under, so the Modeler home groups the
+	// deployed definition into the same folder as its draft (ADR-0034). An explicit
+	// ?projectId= (the editor sends its current project) wins and, when non-empty,
+	// must name an existing project; without the param we inherit the matching draft's
+	// project so an API/MCP deploy of a project draft still lands in its folder. A
+	// deploy with neither is Ungrouped.
+	projectID := r.URL.Query().Get("projectId")
+	hasProjectParam := r.URL.Query().Has("projectId")
+	pid, _ := processIdentity(body)
 	var (
-		resp       deployResp
-		compErr    error
-		persistErr error
+		resp           deployResp
+		compErr        error
+		persistErr     error
+		projErr        error
+		unknownProject bool
 	)
 	s.do(func() {
+		if !hasProjectParam {
+			if d, ok, e := s.drafts.get(pid); e == nil && ok {
+				projectID = d.ProjectID
+			}
+		} else if projectID != "" {
+			_, ok, e := s.projects.get(projectID)
+			if e != nil {
+				projErr = e
+				return
+			}
+			if !ok {
+				unknownProject = true
+				return
+			}
+		}
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix(), projectID)
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -522,6 +575,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	switch {
+	case projErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+	case unknownProject:
+		writeError(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		writeError(w, http.StatusBadRequest, compErr.Error())
@@ -548,7 +605,11 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // deployment record and registered in the DMN registry under the process key, so
 // the tasks run now and re-register on restart (ADR-0014/ADR-0034). The caller is
 // responsible for having validated it; a compile failure here is a server error.
-func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+//
+// projectID files every process the model deploys under a project, so the Modeler
+// home can group deployed definitions the way it groups design-time artifacts
+// (ADR-0034). Empty for a deploy made outside a project.
+func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID string) (deployed []deployedProcess, compErr, persistErr error) {
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -576,6 +637,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			XML:        string(body),
 			DMNXMLs:    dmnStrings,
 		}); err != nil {
@@ -606,6 +668,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			xml:        body,
 			cp:         cp,
 		}
@@ -636,10 +699,12 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Name:             d.Name,
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
+				ProjectID:        d.ProjectID,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
+				Active:           !d.inactive,
 			})
 		}
 	})
@@ -669,6 +734,27 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
+// handleLayout regenerates a posted model's diagram layout: it discards whatever
+// diagram interchange the BPMN carries and returns the model with a freshly
+// generated left-to-right layout, backing the Modeler's "Auto-layout" button. Like
+// validate it is a pure transform — no key minted, no definition registered, no
+// state touched — so it runs off the run-loop goroutine. A model whose layout can't
+// be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
+// unreadable body is a 4xx, matching the deploy and validate endpoints.
+func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write(relayoutDiagram(body))
+}
+
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
 // definition by key on every batch.
@@ -680,15 +766,23 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found      bool
+		protected  bool
 		running    int
 		scanErr    error
 		persistErr error
 	)
 	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
+		d, ok := s.deployments[key]
+		if !ok {
 			return
 		}
 		found = true
+		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
+		// refuse deletion for every caller.
+		if s.systemPIDs[d.ProcessID] {
+			protected = true
+			return
+		}
 		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey == key {
 				running++
@@ -716,6 +810,8 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:
@@ -724,6 +820,74 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSetProcessActive activates or deactivates a deployed definition (ADR-0119).
+// A deactivated definition stays deployed and keeps its running instances, but no
+// longer auto-starts new ones when its timer, message, or signal start events fire —
+// the operator has paused it (e.g. a timer-driven process). Reactivating restores
+// automatic starts. The flag persists in the deployment sidecar and is re-applied on
+// restart. Body: {"active": bool}.
+func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+		return
+	}
+	var (
+		found      bool
+		loadErr    error
+		persistErr error
+	)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+		// No-op fast path: an unchanged flag rewrites nothing (idempotent PUT).
+		if d.inactive == !body.Active {
+			return
+		}
+		// Read the full record so the rewrite preserves the XML and DMN models the
+		// in-memory deployment does not hold, then flip the flag. Durable before visible
+		// (I2, ADR-0019): persist first, then apply to the engine and the display copy.
+		rec, ok, err := s.deploys.load(key)
+		if err != nil {
+			loadErr = err
+			return
+		}
+		if !ok {
+			// The registry and the sidecar have diverged (should not happen); treat it as
+			// not found rather than silently applying an unpersisted change.
+			found = false
+			return
+		}
+		rec.Inactive = !body.Active
+		if err := s.deploys.save(rec); err != nil {
+			persistErr = err
+			return
+		}
+		s.proc.SetProcessActive(key, body.Active)
+		d.inactive = !body.Active
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case loadErr != nil:
+		writeError(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
 	}
 }
 
@@ -779,47 +943,67 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
-		// Live tokens: element instances sitting on an element right now.
-		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
-			if v.ProcessDefKey != key {
+		if instanceFilter == 0 {
+			// Aggregate over the whole definition: read the maintained per-element
+			// and per-definition counters (ADR-0080). This is O(elements), never a
+			// scan over every instance, so the view stays responsive — and the run
+			// loop unblocked — at hundreds of thousands of instances. The reads nest
+			// so a failure short-circuits to the single error check below.
+			if scanErr = s.store.ElementLiveTokens(key, func(elementId int32, count int64) error {
+				if count == 0 {
+					return nil
+				}
+				if e := get(elementId); e != nil {
+					e.Tokens += int(count)
+					resp.Tokens += int(count)
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitTotals(key, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					resp.Instances, scanErr = s.store.DefInstanceCount(key)
+				}
 			}
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
+		} else {
+			// Isolating one instance on the diagram (a deliberate single-instance
+			// action, not the default view): the overlay walks instances filtered to
+			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
+			// aggregate default view above is what mattered for scale).
+			if scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
+					return nil
+				}
+				if e := get(v.ElementId); e != nil {
+					e.Tokens++
+					resp.Tokens++
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
+						if v.ProcessDefKey == key && piKey == instanceFilter {
+							resp.Instances++
+						}
+						return nil
+					})
+				}
 			}
-			if e := get(v.ElementId); e != nil {
-				e.Tokens++
-				resp.Tokens++
-			}
-			return nil
-		})
-		if scanErr != nil {
-			return
 		}
-		// History: every token that has ever passed through an element, so the
-		// overlay shows the flow distribution even once instances have finished.
-		scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
-			if e := get(elementId); e != nil {
-				e.Visits += int(count)
-			}
-			return nil
-		})
 		if scanErr != nil {
 			return
 		}
 		for _, bid := range order {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
-		scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey != key {
-				return nil
-			}
-			if instanceFilter != 0 && piKey != instanceFilter {
-				return nil
-			}
-			resp.Instances++
-			return nil
-		})
 	})
 	switch {
 	case !found:
@@ -1035,6 +1219,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return nil
 			})
 		}
+		// Reverse call-activity link: a child instance records the call-activity element
+		// instance that started it (ParentElementInstanceKey, ADR-0076). Build the map
+		// once — only if this definition actually has call activities — so a call
+		// activity's step can carry its childInstanceKey and the replay can drill in.
+		// Covers active and completed children (the child usually outlives the caller's
+		// step but may already be done).
+		var childByParent map[uint64]uint64
+		if scanErr == nil && len(d.cp.CallActivities()) > 0 {
+			childByParent = map[uint64]uint64{}
+			link := func(childKey uint64, v *model.ProcessInstanceValue) error {
+				if v.ParentElementInstanceKey != 0 {
+					childByParent[v.ParentElementInstanceKey] = childKey
+				}
+				return nil
+			}
+			if scanErr = s.store.ActiveProcessInstances(link); scanErr == nil {
+				scanErr = s.store.CompletedProcessInstances(link)
+			}
+		}
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
 		// each embedded subprocess scope of this instance, so a subprocess's local
 		// variables (its input mappings) are visible in the replay, labeled by their
@@ -1061,9 +1264,27 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				sp.endPos = rr.pos
 			}
 		}
+		// External-override attribution (ADR-0098): an operator override emits a
+		// variable event immediately followed by its audit event, so the audit's log
+		// position is the variable change's position plus one. Map each override's actor
+		// back onto the variable change's position, keyed by the global log position so
+		// it matches whichever scope's snapshot fold carries that change. Overrides
+		// keyed by the process instance cover every scope. An audit with no identity
+		// (auth off) is skipped — there is no actor to surface.
+		actorByPos := map[uint64]string{}
+		if scanErr == nil {
+			scanErr = s.store.VariableAuditHistory(key, func(_ int64, pos uint64, v *model.VariableAuditValue) error {
+				if v.Actor != "" && pos > 0 {
+					actorByPos[pos-1] = v.Actor
+				}
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
-				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: toVariableView(v)})
+				view := toVariableView(v)
+				view.Actor = actorByPos[pos]
+				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: view})
 				return nil
 			})
 		}
@@ -1074,6 +1295,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
+				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, view: view})
 				return nil
 			})
@@ -1100,6 +1322,12 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// consumes every waiting arrival in a single transition. Only a leaf
 		// completion (an end event, no outgoing flow) removes its token at once,
 		// yielding the one legitimate empty frame that marks the instance done.
+		//
+		// A *termination* is never deferred. An element torn down by an interrupting
+		// boundary event, a cancelled instance, or a terminate end event hands its
+		// token to no one — its outgoing flow is never taken — so waiting for a
+		// successor would leave a ghost token parked on it forever, outliving the
+		// instance itself (ADR-0136).
 		active := map[uint64]timelineToken{}
 		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
@@ -1119,7 +1347,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		}
 		for _, rr := range replayRows {
 			v := rr.v
-			if v.Action == 1 {
+			switch {
+			case v.Action == state.ReplayActivated:
 				activations[rr.pos] = v
 				// This activation is the successor of any deferred completion on its
 				// incoming flow's source node: those tokens move into it now.
@@ -1139,17 +1368,28 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
-				// A leaf has no successor to move into: remove it at once.
+			case v.Action == state.ReplayTerminated, d.cp.Node(v.ElementID).OutgoingCount == 0:
+				// Nothing will activate from here — a termination hands its token on to
+				// no one, and a leaf has no successor to move into — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
 				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
 				emitFrame(rr.pos, rr.at)
-			} else {
+			default:
 				// Defer: keep the token visible until its successor activates.
 				endAt[v.ElementInstanceKey] = rr.at
 				pending[v.ElementInstanceKey] = v
 			}
+		}
+		// A finished instance holds no element instance, so it can hold no token: drop
+		// anything still deferred and show the empty terminal frame. Live folds resolve
+		// every deferral above; this catches history written before terminations were
+		// recorded distinctly (ADR-0136), which would otherwise strand a ghost token on
+		// the last frame of an already-completed instance.
+		if len(active) > 0 && pi.State != model.PIActive && len(replayRows) > 0 {
+			last := replayRows[len(replayRows)-1]
+			active = map[uint64]timelineToken{}
+			emitFrame(last.pos, last.at)
 		}
 
 		// Walk the steps in order, advancing through every variable change at or
@@ -1196,6 +1436,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// A call activity carries the child instance it started, so the replay
+				// can drill from the caller into the child (ADR-0076).
+				if childByParent != nil && d.cp.Node(sr.elementID).Type == compiler.TypeCallActivity {
+					step.ChildInstanceKey = childByParent[rv.ElementInstanceKey]
+				}
 				// The completion of this same element instance (Action==2) gives the
 				// element's end time, so the history can show start → end per element
 				// like Operate. Absent (still active / parked), endAt stays zero.
@@ -1305,11 +1550,21 @@ func parseStartVariables(body []byte) ([]model.VariableValue, error) {
 	if err := dec.Decode(&payload); err != nil {
 		return nil, fmt.Errorf("invalid JSON body: %v", err)
 	}
-	if len(payload.Variables) == 0 {
+	return startVarsFromMap(payload.Variables)
+}
+
+// startVarsFromMap converts a name→value map (values in the encoding/json shape
+// produced with UseNumber: nil, bool, json.Number, string, map, slice) into
+// VariableValues. Scalars are stored directly, keeping a number's exact textual
+// form for FEEL's decimal semantics; objects and arrays are stored as canonical
+// JSON under VarJSON, so they bind back into FEEL as contexts and lists
+// (ADR-0037). Shared by the JSON start body and the CSV upload path (ADR-0084).
+func startVarsFromMap(vars map[string]any) ([]model.VariableValue, error) {
+	if len(vars) == 0 {
 		return nil, nil
 	}
-	out := make([]model.VariableValue, 0, len(payload.Variables))
-	for name, raw := range payload.Variables {
+	out := make([]model.VariableValue, 0, len(vars))
+	for name, raw := range vars {
 		vv := model.VariableValue{Name: name}
 		switch x := raw.(type) {
 		case nil:
@@ -1342,6 +1597,11 @@ type variableView struct {
 	// Scope labels a subprocess-local variable with the id of the embedded
 	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
 	Scope string `json:"scope,omitempty"`
+	// Actor names the operator who last set this value via an external override
+	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
+	// value was written by the model itself or the override carried no identity (auth
+	// off). It is populated only by the timeline fold, which has the audit trail.
+	Actor string `json:"actor,omitempty"`
 }
 
 func toVariableView(v *model.VariableValue) variableView {
@@ -1385,11 +1645,15 @@ func nativeVar(v *model.VariableValue) any {
 	}
 }
 
-// handleInstanceVariables returns a process instance's variables as a typed JSON
-// object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a bound form
-// so a field whose key matches a variable is prefilled (ADR-0028). An instance
-// with no variables (or an unknown key) yields an empty object, not a 404: the
-// endpoint is a convenience read, not an existence check.
+// handleInstanceVariables returns the variables visible at an instance scope as a
+// typed JSON object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a
+// bound form so a field whose key matches a variable is prefilled (ADR-0028). The
+// key may be a process-instance root or a task's element-instance scope; the read
+// resolves up the enclosing-scope chain (ADR-0068), so a user task without its own
+// input-mapped locals still prefills from the process variables it inherits — the
+// same set the token itself sees. An instance with no variables (or an unknown
+// key) yields an empty object, not a 404: the endpoint is a convenience read, not
+// an existence check.
 func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -1399,13 +1663,182 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
+		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
 			out[v.Name] = nativeVar(v)
 			return nil
 		})
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleSetInstanceVariables sets or overwrites variables on a running instance
+// from outside the model (ADR-0095): an operator correction to a stuck or
+// misconfigured instance, the manual counterpart to the writes the model makes for
+// itself. Body: {"variables": {…}, "scopeKey": <optional>}. Variables land in the
+// instance root scope by default; a scopeKey (a live element instance key belonging
+// to the instance) targets a subprocess/multi-instance-body local scope instead.
+//
+// It is admin-gated when auth is on — a deliberately narrower right than starting an
+// instance, because it edits live process state — and open in single-user mode like
+// the rest of the runtime surface. 404 if the instance is not running (a finished
+// instance's state is history, not something to correct); 400 if the target scope
+// does not belong to the instance. The change is recorded in the instance's variable
+// timeline as the audit trail, and it does NOT re-evaluate any gateway a token has
+// already passed — only the stored values change.
+func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	// Decode variables and the optional scopeKey in one pass (UseNumber so a
+	// number's exact textual form survives for FEEL's decimal semantics), then reuse
+	// the shared start-variable conversion.
+	var payload struct {
+		Variables map[string]any `json:"variables"`
+		ScopeKey  uint64         `json:"scopeKey"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	vars, err := startVarsFromMap(payload.Variables)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(vars) == 0 {
+		writeError(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
+		return
+	}
+	scopeKey := payload.ScopeKey
+	// Who is making the change, for the audit trail (ADR-0098): the authenticated
+	// principal's username, or "" when auth is off (single-user) or the caller is
+	// unidentified. Read off the request before the run loop, like every other
+	// principal read.
+	actor := ""
+	if p := principalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
+
+	var (
+		found    bool
+		scopeBad bool
+		scanErr  error
+		runErr   error
+	)
+	s.do(func() {
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			scanErr = err
+			return
+		}
+		if !ok || pi.State != model.PIActive {
+			return // not found stays 404: only a running instance can be corrected
+		}
+		found = true
+		if scopeKey != 0 && scopeKey != key {
+			ei, ok, err := s.store.GetElementInstance(scopeKey)
+			if err != nil {
+				scanErr = err
+				return
+			}
+			if !ok || ei.ProcessInstanceKey != key {
+				scopeBad = true
+				return
+			}
+		}
+		s.proc.SetVariables(key, scopeKey, actor, vars...)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no running instance with that key")
+	case scopeBad:
+		writeError(w, http.StatusBadRequest, "scopeKey is not an element instance of this process instance")
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
+	}
+}
+
+// variableAuditView renders one external variable override for the audit view
+// (ADR-0098): when it happened, who made it, on which scope, and the variable name
+// and typed new value. It is the "who changed it" surface over the append-only audit
+// history — the read side of POST /instances/{key}/variables.
+type variableAuditView struct {
+	At    int64  `json:"at"`
+	Actor string `json:"actor"`
+	Scope uint64 `json:"scope"`
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+// varKindName maps a stored variable kind to the API's kind label, shared by the
+// variable-audit view (and available to any other typed-variable view).
+func varKindName(k model.VarKind) string {
+	switch k {
+	case model.VarBool:
+		return "boolean"
+	case model.VarNumber:
+		return "number"
+	case model.VarString:
+		return "string"
+	case model.VarJSON:
+		return "json"
+	default:
+		return "null"
+	}
+}
+
+// handleInstanceVariableAudit returns the external variable overrides a process
+// instance received, in the order they happened, each with who made it, on which
+// scope, and the variable name and typed new value (ADR-0098). It is the audit
+// counterpart to the read-only variables view: because the records are append-only
+// history, it works while the instance runs and after it has finished. An instance
+// with no overrides (or an unknown key) yields an empty array, not a 404 — like the
+// variables and decisions endpoints, it is a convenience read, not an existence check.
+func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []variableAuditView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
+			out = append(out, variableAuditView{
+				At:    ts,
+				Actor: v.Actor,
+				Scope: v.ScopeKey,
+				Name:  v.Name,
+				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
+				Kind:  varKindName(v.Kind),
+			})
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read variable audit: "+scanErr.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -1536,9 +1969,60 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.
-func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
+// errListTruncated stops a bounded list scan once the page cap is reached. It is a
+// sentinel to break the scan early, not a failure.
+var errListTruncated = errors.New("list page full")
+
+// unlessTruncated maps a bounded-scan result to a real error: the page-full sentinel
+// (a deliberate early stop) becomes nil, any other error passes through. It lets the
+// capped list handlers report a genuine scan failure without treating truncation as one.
+func unlessTruncated(err error) error {
+	if errors.Is(err, errListTruncated) {
+		return nil
+	}
+	return err
+}
+
+const (
+	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
+	// completed instances GET /api/v1/instances returns (each capped independently),
+	// so the endpoint can never try to enrich and serialize hundreds of thousands of
+	// rows — the shape that made the operations page unreachable during the reported
+	// flood. Raise per request with ?limit= (up to the max); narrow to one definition
+	// with ?process=. The overview reads per-definition counts from
+	// /api/v1/instances/summary instead, so the cap does not skew its tallies.
+	maxInstanceListDefault = 1000
+	maxInstanceListMax     = 10000
+)
+
+func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
+	limit := maxInstanceListDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxInstanceListMax {
+		limit = maxInstanceListMax
+	}
+	var (
+		filterDef uint64
+		hasFilter bool
+	)
+	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid process key")
+			return
+		}
+		filterDef, hasFilter = n, true
+	}
 	active := []instanceResp{}
 	done := []instanceResp{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
 		// Attach the definition's id/version and the scope's variables to a row.
@@ -1556,7 +2040,14 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err := s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(active) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop enriching further rows
+			}
 			elements := 0
 			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
 				elements++
@@ -1579,11 +2070,19 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			active = append(active, r)
 			return nil
 		})
-		if scanErr != nil {
+		if err != nil && !errors.Is(err, errListTruncated) {
+			scanErr = err
 			return
 		}
 
-		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(done) >= limit {
+				truncated = true
+				return errListTruncated
+			}
 			r := instanceResp{
 				Key:            key,
 				ProcessDefKey:  v.ProcessDefKey,
@@ -1599,6 +2098,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			done = append(done, r)
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
@@ -1606,7 +2106,192 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 	}
 	// Finished instances: most recently completed first.
 	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	if truncated {
+		// Signal that the page was capped so a client can page with ?process=/?limit=
+		// rather than assume it received every instance.
+		w.Header().Set("X-Instances-Truncated", "true")
+	}
 	writeJSON(w, http.StatusOK, append(active, done...))
+}
+
+type instanceSummaryRow struct {
+	ProcessDefKey     uint64 `json:"processDefKey"`
+	ProcessID         string `json:"processId"`
+	Version           int32  `json:"version"`
+	Active            int    `json:"active"`
+	Completed         int    `json:"completed"`
+	LatestCompletedAt int64  `json:"latestCompletedAt"`
+}
+
+// handleInstancesSummary returns per-definition instance counts (active and finished,
+// plus the last-activity time) read from the maintained O(1) counters — one point read
+// per deployed definition, no instance scan (ADR-0083, extending ADR-0080). This is
+// what keeps the operations overview responsive even when a definition has hundreds of
+// thousands of instances: the earlier scan-based version blocked the single-writer loop
+// on every load (the reported flood), and draining active instances into the history
+// only moved that cost rather than removing it.
+func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) {
+	var out []instanceSummaryRow
+	s.do(func() {
+		out = make([]instanceSummaryRow, 0, len(s.order))
+		for _, key := range s.order {
+			d := s.deployments[key]
+			// Each is one O(1) point read of a maintained counter (ADR-0083/0080); the
+			// only failure mode is a catastrophic store error, and this is a display
+			// aggregate — a counter that cannot be read is shown as 0 rather than failing
+			// the whole overview.
+			active, _ := s.store.DefInstanceCount(key)
+			completed, _ := s.store.DefCompletedCount(key)
+			lastAct, _ := s.store.DefLastActivity(key)
+			out = append(out, instanceSummaryRow{
+				ProcessDefKey:     key,
+				ProcessID:         d.ProcessID,
+				Version:           d.Version,
+				Active:            active,
+				Completed:         completed,
+				LatestCompletedAt: lastAct,
+			})
+		}
+	})
+	writeJSON(w, http.StatusOK, out)
+}
+
+// maxInstanceSearchResults caps a variable search so a single query can't return
+// an unbounded response on a large deployment. The search is a full scan (v1, no
+// index); the cap keeps the answer size and scan cost bounded — active instances
+// first, then finished ones most-recently-completed first, so the newest matches
+// survive truncation.
+const maxInstanceSearchResults = 200
+
+// varQuery is a parsed instance-variable search. Two shapes: a structured
+// name=value match (variable name exact, value substring) when the query
+// contains "="; otherwise a free-text substring over variable names and values.
+// All comparisons are case-insensitive.
+type varQuery struct {
+	structured bool
+	name       string // lower-cased variable name; structured only
+	needle     string // lower-cased substring (value in structured, term in free-text)
+}
+
+// parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
+// caller returns an empty result set rather than scanning everything). A query
+// like "=value" with no name degrades to free text — an empty exact name can
+// never match, so treating it structurally would be a silent dead end.
+func parseVarQuery(q string) (varQuery, bool) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return varQuery{}, false
+	}
+	if i := strings.IndexByte(q, '='); i >= 0 {
+		if name := strings.TrimSpace(q[:i]); name != "" {
+			return varQuery{
+				structured: true,
+				name:       strings.ToLower(name),
+				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
+			}, true
+		}
+	}
+	return varQuery{needle: strings.ToLower(q)}, true
+}
+
+// match reports whether a variable satisfies the query.
+func (p varQuery) match(v variableView) bool {
+	if p.structured {
+		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
+	}
+	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
+}
+
+// handleSearchInstances finds process instances by the content of their
+// variables — the operator "which instance had customerType=Business?" surface.
+// It reuses the same live+history scan as handleListInstances, but keeps only
+// instances with a variable matching ?q= and, on each row, only the matching
+// variables (so the UI can highlight them). A blank query returns an empty list,
+// not every instance. This is a full scan with no value index (v1): finished
+// instances are searchable only while their scope's variables are retained, same
+// as the instances list. Results are capped at maxInstanceSearchResults.
+func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
+	pred, ok := parseVarQuery(r.URL.Query().Get("q"))
+	if !ok {
+		writeJSON(w, http.StatusOK, []instanceResp{})
+		return
+	}
+	active := []instanceResp{}
+	done := []instanceResp{}
+	var scanErr error
+	s.do(func() {
+		// matchingVars returns the scope's variables that satisfy the query, or
+		// nil if none do (so the caller can drop the instance).
+		matchingVars := func(key uint64) ([]variableView, error) {
+			var hits []variableView
+			err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
+				if view := toVariableView(vv); pred.match(view) {
+					hits = append(hits, view)
+				}
+				return nil
+			})
+			return hits, err
+		}
+		enrichDef := func(r *instanceResp) {
+			if d, ok := s.deployments[r.ProcessDefKey]; ok {
+				r.ProcessID = d.ProcessID
+				r.Version = d.Version
+				if d.cp != nil {
+					r.VersionTag = d.cp.VersionTag()
+				}
+			}
+		}
+
+		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			hits, err := matchingVars(key)
+			if err != nil || len(hits) == 0 {
+				return err
+			}
+			r := instanceResp{
+				Key:            key,
+				ProcessDefKey:  v.ProcessDefKey,
+				State:          "active",
+				CreatedAt:      v.CreatedAt,
+				CorrelationKey: v.CorrelationKey,
+				Variables:      hits,
+			}
+			enrichDef(&r)
+			active = append(active, r)
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+
+		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			hits, err := matchingVars(key)
+			if err != nil || len(hits) == 0 {
+				return err
+			}
+			r := instanceResp{
+				Key:            key,
+				ProcessDefKey:  v.ProcessDefKey,
+				State:          v.State.String(),
+				CreatedAt:      v.CreatedAt,
+				CompletedAt:    v.CompletedAt,
+				CorrelationKey: v.CorrelationKey,
+				Variables:      hits,
+			}
+			enrichDef(&r)
+			done = append(done, r)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
+		return
+	}
+	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	out := append(active, done...)
+	if len(out) > maxInstanceSearchResults {
+		out = out[:maxInstanceSearchResults]
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 type publishMessageResp struct {
@@ -1718,6 +2403,273 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// errCancelBatchFull stops the active-instance scan once a bulk cancel has collected
+// its per-call cap of instance keys. It is a sentinel to break the scan early, not a
+// failure — the handler treats it as success.
+var errCancelBatchFull = errors.New("cancel batch full")
+
+const (
+	// bulkCancelBatchDefault and bulkCancelBatchMax bound how many of a definition's
+	// instances one POST .../cancel-instances call terminates. The cap keeps a single
+	// call from holding the single-writer run loop while it terminates a runaway
+	// backlog of hundreds of thousands of instances; the caller repeats while the
+	// response reports remaining=true. This is the drain path for the reported
+	// /employees flood, where per-instance cancellation is infeasible.
+	bulkCancelBatchDefault = 5000
+	bulkCancelBatchMax     = 50000
+)
+
+// handleCancelInstancesOfProcess terminates a bounded batch of a definition's running
+// instances in one call: it scans the active process instances, cancels up to the
+// per-call cap that belong to the definition, and reports how many it cancelled and
+// whether the cap was hit (remaining=true → call again). All work happens in one run-
+// loop turn so the terminations are atomic with the scan; the cap bounds the turn.
+func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	limit := bulkCancelBatchDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > bulkCancelBatchMax {
+		limit = bulkCancelBatchMax
+	}
+	var (
+		found     bool
+		remaining bool
+		keys      []uint64
+		opErr     error // any scan / drive / stats failure inside the run loop
+		stats     statsResp
+	)
+	s.do(func() {
+		if _, ok := s.deployments[key]; !ok {
+			return
+		}
+		found = true
+		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != key {
+				return nil
+			}
+			keys = append(keys, k)
+			if len(keys) >= limit {
+				return errCancelBatchFull // stop early: this batch is full
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, errCancelBatchFull) {
+			opErr = err
+			return
+		}
+		remaining = errors.Is(err, errCancelBatchFull) // hit the cap → more may remain
+		for _, k := range keys {
+			s.proc.CancelInstance(k)
+		}
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instances: "+opErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
+	}
+}
+
+// terminateInstancesReq selects which running instances to terminate. Exactly one
+// mode is used per call: Keys picks an explicit, hand-selected set (the operator
+// ticked rows); ProcessDefKey (optionally narrowed by Query) terminates every active
+// instance of one definition that matches — the "select all N matching" scope. Limit
+// bounds a filter-mode call the way the bulk-drain endpoint does (repeat while the
+// response reports remaining=true); it is ignored in keys mode, where the request is
+// already the bound.
+type terminateInstancesReq struct {
+	Keys          []uint64 `json:"keys"`
+	ProcessDefKey uint64   `json:"processDefKey"`
+	Query         string   `json:"q"`
+	Limit         int      `json:"limit"`
+}
+
+// terminateInstancesResp reports what a terminate call did: how many instances it
+// terminated, how many requested keys had no active instance (keys mode only), and —
+// for a filter-mode call that hit its per-call cap — whether more may remain.
+type terminateInstancesResp struct {
+	Terminated int       `json:"terminated"`
+	NotFound   int       `json:"notFound"`
+	Remaining  bool      `json:"remaining"`
+	Stats      statsResp `json:"stats"`
+}
+
+// handleTerminateInstances terminates a selected set of running instances in one
+// call. Two mutually exclusive modes: an explicit set of instance keys, or every
+// active instance of a definition matching an optional variable query. It is the
+// operator's bulk-terminate surface over the instances list; single-instance cancel
+// (DELETE /instances/{key}) and the per-definition drain (cancel-instances) remain
+// for their narrower uses. All terminations for a call happen in one run-loop turn so
+// they are atomic with the scan/lookups; filter mode's Limit bounds that turn.
+func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request) {
+	var req terminateInstancesReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	switch {
+	case len(req.Keys) > 0 && req.ProcessDefKey != 0:
+		writeError(w, http.StatusBadRequest, "specify either keys or processDefKey, not both")
+		return
+	case len(req.Keys) > 0:
+		s.terminateByKeys(w, req.Keys)
+	case req.ProcessDefKey != 0:
+		s.terminateByFilter(w, req)
+	default:
+		writeError(w, http.StatusBadRequest, "want keys or processDefKey")
+	}
+}
+
+// terminateByKeys terminates an explicit set of instance keys. Each key is checked
+// with an O(1) point lookup (not a scan over the whole active set), so a hand-picked
+// terminate stays cheap even under a flood; a key with no active instance — already
+// finished, or never valid — is counted as notFound rather than failing the call.
+// Duplicate keys in the request are collapsed. The request body limit already bounds
+// the batch (a few thousand keys at most), which keeps one call from holding the run
+// loop; the unbounded "drain everything" path is filter mode, which batches with
+// remaining.
+func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
+	uniq := make(map[uint64]struct{}, len(keys))
+	for _, k := range keys {
+		uniq[k] = struct{}{}
+	}
+	var (
+		terminated int
+		opErr      error
+		stats      statsResp
+	)
+	s.do(func() {
+		active := make([]uint64, 0, len(uniq))
+		for k := range uniq {
+			v, ok, err := s.store.ProcessInstance(k)
+			if err != nil {
+				opErr = err
+				return
+			}
+			// Only a record in the active keyspace (State PIActive) is terminable; a
+			// key found only in history is already finished → notFound.
+			if ok && v.State == model.PIActive {
+				active = append(active, k)
+			}
+		}
+		for _, k := range active {
+			s.proc.CancelInstance(k)
+		}
+		terminated = len(active)
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	if opErr != nil {
+		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, terminateInstancesResp{
+		Terminated: terminated,
+		NotFound:   len(uniq) - terminated,
+		Stats:      stats,
+	})
+}
+
+// terminateByFilter terminates every active instance of one definition that matches
+// the request's optional variable query, up to a per-call cap. A blank query matches
+// all of the definition's active instances. Like the bulk-drain endpoint it reports
+// remaining=true when the cap was hit, so the caller repeats until it clears.
+func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstancesReq) {
+	limit := bulkCancelBatchDefault
+	if req.Limit != 0 {
+		if req.Limit < 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = req.Limit
+	}
+	if limit > bulkCancelBatchMax {
+		limit = bulkCancelBatchMax
+	}
+	// A blank query matches every active instance of the definition; otherwise only
+	// those with a variable satisfying it (same matcher as the instances search).
+	pred, hasQuery := parseVarQuery(req.Query)
+	var (
+		found     bool
+		remaining bool
+		keys      []uint64
+		opErr     error
+		stats     statsResp
+	)
+	s.do(func() {
+		if _, ok := s.deployments[req.ProcessDefKey]; !ok {
+			return
+		}
+		found = true
+		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != req.ProcessDefKey {
+				return nil
+			}
+			if hasQuery {
+				matched := false
+				if verr := s.store.VariablesOfScope(k, func(vv *model.VariableValue) error {
+					if pred.match(toVariableView(vv)) {
+						matched = true
+					}
+					return nil
+				}); verr != nil {
+					return verr
+				}
+				if !matched {
+					return nil
+				}
+			}
+			keys = append(keys, k)
+			if len(keys) >= limit {
+				return errCancelBatchFull // batch full: more may match, stop here
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, errCancelBatchFull) {
+			opErr = err
+			return
+		}
+		remaining = errors.Is(err, errCancelBatchFull)
+		for _, k := range keys {
+			s.proc.CancelInstance(k)
+		}
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, terminateInstancesResp{
+			Terminated: len(keys),
+			Remaining:  remaining,
+			Stats:      stats,
+		})
+	}
+}
+
 // --- user tasks (ADR-0028) ---
 
 // jobResp is one activatable job an instance is parked on: its key (what
@@ -1776,68 +2728,253 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 type taskResp struct {
 	Key                uint64 `json:"key"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	// ElementInstanceKey scopes the task's own variables — its input-mapped fields
+	// live here, so the Tasks app pre-fills a bound form by reading this scope's
+	// variables rather than the process root (ADR-0084 Slice 4).
+	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
 	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
 	Name               string `json:"name,omitempty"`
-	Assignee           string `json:"assignee,omitempty"`
-	CandidateGroups    string `json:"candidateGroups,omitempty"`
-	FormID             string `json:"formId,omitempty"`
+	// Documentation is the element's <bpmn:documentation> — the work instruction the
+	// modeler wrote for whoever picks the task up (ADR-0025). Design-time metadata: the
+	// engine never reads it, the Tasks app shows it above the form.
+	Documentation   string `json:"documentation,omitempty"`
+	Assignee        string `json:"assignee,omitempty"`
+	CandidateGroups string `json:"candidateGroups,omitempty"`
+	FormID          string `json:"formId,omitempty"`
 	// Priority is the task's importance from the model (default 50); the inbox
 	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
-	// when the task has no due date (ADR-0051).
+	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
+	// Lane is the organizational lane the task's element is drawn in (ADR-0121), leaf name
+	// for a flat model; LanePath is the outermost-to-leaf path for a nested lane. Both empty
+	// when the task is in no lane. Metadata only — the Tasks app groups/labels by it.
+	Lane     string   `json:"lane,omitempty"`
+	LanePath []string `json:"lanePath,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
 // user-task type. Each entry carries the task's key, the instance it belongs to,
 // and the element's assignment metadata from the compiled process.
-func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
+// maxTaskListDefault and maxTaskListMax bound how many user tasks GET /api/v1/tasks
+// returns per call, so the inbox loads even when a definition has parked hundreds of
+// thousands of instances on a user task (the reported flood): the scan stops at the
+// cap instead of enriching and shipping every job. Raise per request with ?limit= (up
+// to the max); a capped page is flagged with X-Tasks-Truncated.
+const (
+	maxTaskListDefault = 500
+	maxTaskListMax     = 5000
+)
+
+func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := maxTaskListDefault
+	if v := strings.TrimSpace(q.Get("limit")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxTaskListMax {
+		limit = maxTaskListMax
+	}
+
+	// ?processInstance= scopes the list to one instance's open user tasks, resolved
+	// through that instance's own element index rather than the global activatable
+	// scan — so a small embedded client (the order-to-cash demo, which asks only for
+	// its own instance's task) always finds it, even when a flood has pushed that
+	// task past the global page cap.
+	if v := strings.TrimSpace(q.Get("processInstance")); v != "" {
+		s.listTasksForInstance(w, v, limit)
+		return
+	}
+
+	// ?before= is the newest-first pagination cursor: the job key handed back as
+	// X-Tasks-Next-Cursor on the previous (truncated) page. Absent, the scan starts
+	// from the newest task.
+	var before uint64
+	if v := strings.TrimSpace(q.Get("before")); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid before cursor (want a job key)")
+			return
+		}
+		before = n
+	}
+
 	tasks := []taskResp{}
+	truncated := false
+	var nextCursor uint64
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+		// Newest-first so a capped page shows the most recently created tasks — the
+		// ones a just-started instance is parked on — instead of the oldest backlog
+		// that a flood would otherwise pin to the front forever.
+		err := s.store.ActivatableJobsDesc(compiler.UserTaskJobTypeIndex, before, func(jobKey uint64) error {
+			if len(tasks) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop before enriching more jobs
+			}
 			jv, ok, err := s.store.GetJob(jobKey)
 			if err != nil || !ok {
 				return err
 			}
-			tr := taskResp{
-				Key:                jobKey,
-				ProcessInstanceKey: jv.ProcessInstanceKey,
-			}
-			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
-				tr.ProcessDefKey = ei.ProcessDefKey
-				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
-					tr.ProcessID = d.ProcessID
-					cp := d.cp
-					tr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
-						detail := cp.UserTask(n.Detail)
-						tr.Name = cp.Intern(detail.Name)
-						// The assignee is the job's runtime value (claim/unclaim
-						// rewrite it, ADR-0042); candidate groups stay the
-						// compile-time attribute.
-						tr.Assignee = jv.Assignee
-						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
-						tr.FormID = cp.Intern(detail.FormId)
-						tr.Priority = detail.Priority
-						// The due date is frozen on the job as an absolute instant
-						// (nanoseconds); expose it as Unix ms for the browser.
-						if jv.Deadline != 0 {
-							tr.DueDate = jv.Deadline / int64(time.Millisecond)
-						}
-					}
-				}
-			}
-			tasks = append(tasks, tr)
+			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			nextCursor = jobKey // desc scan: the last kept key is the smallest on the page
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
-	} else {
-		writeJSON(w, http.StatusOK, tasks)
+		return
+	}
+	if truncated {
+		// Signal a capped page and hand back the cursor for the next (older) page, so a
+		// client can page through or narrow rather than assume it received every task.
+		w.Header().Set("X-Tasks-Truncated", "true")
+		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+	}
+	writeJSON(w, http.StatusOK, tasks)
+}
+
+// listTasksForInstance writes one process instance's open user tasks, resolved
+// through that instance's own element index (bounded by the instance's size) rather
+// than the global activatable scan. This keeps a client that only cares about its
+// own instance — the order-to-cash demo — working under a flood that has pushed that
+// instance's task past the global /tasks page cap.
+func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit int) {
+	instKey, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
+		return
+	}
+	tasks := []taskResp{}
+	truncated := false
+	var scanErr error
+	s.do(func() {
+		err := s.store.ElementInstancesOfProcess(instKey, func(elKey uint64) error {
+			if len(tasks) >= limit {
+				truncated = true
+				return errListTruncated
+			}
+			jobKey, ok, err := s.store.JobOfElement(elKey)
+			if err != nil || !ok {
+				return err // no job on this element (or a read error)
+			}
+			jv, ok, err := s.store.GetJob(jobKey)
+			if err != nil || !ok {
+				return err
+			}
+			// Only open (activatable) user tasks — the same rows the global list
+			// returns. Retries == 0 means the job is parked behind an incident.
+			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
+				return nil
+			}
+			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			return nil
+		})
+		scanErr = unlessTruncated(err)
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
+		return
+	}
+	if truncated {
+		w.Header().Set("X-Tasks-Truncated", "true")
+	}
+	writeJSON(w, http.StatusOK, tasks)
+}
+
+// enrichTask turns a user-task job into the response row the inbox and the
+// single-task lookup both return: the job's key and instance, plus the element's
+// name, documentation, assignment metadata, form, priority and due date from the
+// compiled process.
+// It is the one place that shape is built, so the list and the by-key fetch can never
+// drift. Callers run it inside s.do (it reads the store and the deployments map).
+func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
+	tr := taskResp{
+		Key:                jobKey,
+		ProcessInstanceKey: jv.ProcessInstanceKey,
+		ElementInstanceKey: jv.ElementInstanceKey,
+	}
+	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+		tr.ProcessDefKey = ei.ProcessDefKey
+		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+			tr.ProcessID = d.ProcessID
+			cp := d.cp
+			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+			// The organizational lane the task is drawn in (ADR-0121) — metadata for
+			// grouping in the inbox: the leaf name plus the outermost-to-leaf path.
+			if path := cp.LanePath(ei.ElementId); len(path) > 0 {
+				tr.Lane = path[len(path)-1]
+				tr.LanePath = path
+			}
+			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
+				detail := cp.UserTask(n.Detail)
+				tr.Name = cp.Intern(detail.Name)
+				// What the task is actually asking the person to do, if the modeler
+				// wrote it down (ADR-0025).
+				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
+				// The assignee is the job's runtime value (claim/unclaim rewrite it,
+				// ADR-0042); candidate groups stay the compile-time attribute.
+				tr.Assignee = jv.Assignee
+				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				tr.FormID = cp.Intern(detail.FormId)
+				tr.Priority = detail.Priority
+				// The due date is frozen on the job as an absolute instant
+				// (nanoseconds); expose it as Unix ms for the browser.
+				if jv.Deadline != 0 {
+					tr.DueDate = jv.Deadline / int64(time.Millisecond)
+				}
+			}
+		}
+	}
+	return tr
+}
+
+// handleGetTask returns one open user task by its job key, enriched the same way as a
+// list row. It is what keeps a deep link (…/tasks/t/{key}, e.g. from the Operations
+// live view) working when the task falls outside the capped task-list page during a
+// flood: the client fetches the one task directly instead of scanning a bounded list
+// for it. 404 if no open job has that key (never existed, or already completed).
+func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	var (
+		task  taskResp
+		found bool
+		opErr error
+	)
+	s.do(func() {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil {
+			opErr = err
+			return
+		}
+		// A completed or unknown job leaves found=false → 404. Only genuine user-task
+		// jobs are addressable here; anything else (a service-task job) is treated as
+		// absent so this stays the inbox's read side, not a generic job peek.
+		if !ok || jv.JobType != compiler.UserTaskJobTypeIndex {
+			return
+		}
+		found = true
+		task = s.enrichTask(key, jv)
+	})
+	switch {
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "get task: "+opErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no open task with that key")
+	default:
+		writeJSON(w, http.StatusOK, task)
 	}
 }
 
@@ -1867,7 +3004,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.FailJob(key, req.Retries, req.Message)
+		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -1979,11 +3116,27 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
 // view (ADR-0061).
-func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		if limit = n; limit > maxTaskListMax {
+			limit = maxTaskListMax
+		}
+	}
 	list := []incidentView{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			if len(list) >= limit {
+				truncated = true
+				return errListTruncated // page full: bound the response even under a flood of failures
+			}
 			list = append(list, incidentView{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
@@ -1994,10 +3147,14 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
 			})
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
+	}
+	if truncated {
+		w.Header().Set("X-Incidents-Truncated", "true")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
 }
@@ -2195,6 +3352,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	var (
 		saveErr, projErr error
 		unknownProject   bool
+		protectedProject bool
 	)
 	s.do(func() {
 		if !hasProjectParam {
@@ -2203,13 +3361,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				rec.ProjectID = existing.ProjectID
 			}
 		} else if projectID != "" {
-			_, ok, e := s.projects.get(projectID)
+			proj, ok, e := s.projects.get(projectID)
 			if e != nil {
 				projErr = e
 				return
 			}
 			if !ok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse authoring a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -2220,6 +3384,8 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
@@ -2269,6 +3435,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found, unknownProject    bool
+		protectedProject         bool
 		getErr, projErr, saveErr error
 		view                     draftResp
 	)
@@ -2283,13 +3450,19 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if payload.ProjectID != "" {
-			_, pok, pe := s.projects.get(payload.ProjectID)
+			proj, pok, pe := s.projects.get(payload.ProjectID)
 			if pe != nil {
 				projErr = pe
 				return
 			}
 			if !pok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse moving a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -2308,6 +3481,8 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 	default:

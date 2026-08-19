@@ -111,6 +111,41 @@ func (s TimerSchedule) ResolveFeel(text string) (TimerSchedule, bool) {
 	}
 }
 
+// ResolveConstant evaluates a constant FEEL schedule — one whose expression reads
+// no variables — exactly as the runtime would at arm (against an empty binding) and
+// returns the concrete schedule, or an error if it does not resolve to a valid one.
+// A timer *start* event's FEEL schedule is required to be constant (ADR-0056), so
+// this lets deploy-time validation prove it will actually arm instead of being
+// silently dropped at runtime (ADR-0111). A non-FEEL schedule resolves trivially.
+// It must not be called on a FEEL schedule with variable inputs — those have no
+// value at deploy — so callers check Expr.Inputs() first.
+func (s TimerSchedule) ResolveConstant() (TimerSchedule, error) {
+	if !s.IsFeel() {
+		return s, nil
+	}
+	v, err := s.Expr.Eval(nil)
+	if err != nil {
+		return TimerSchedule{}, err
+	}
+	r, ok := s.ResolveFeelValue(v)
+	if !ok {
+		return TimerSchedule{}, fmt.Errorf("FEEL result is not a valid %s", feelFieldName(s.Kind))
+	}
+	return r, nil
+}
+
+// feelFieldName names a FEEL schedule's field for a deploy-time error message.
+func feelFieldName(k TimerScheduleKind) string {
+	switch k {
+	case TimerFeelDate:
+		return "date"
+	case TimerFeelCycle:
+		return "cycle"
+	default:
+		return "duration"
+	}
+}
+
 // FirstDue returns the due date of the first (or only) firing of a timer armed at
 // now. The clock is read by the caller and frozen into the arming event, never
 // here (invariant I4/I6).

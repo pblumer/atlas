@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "set_a",
+    "start"
+  ],
+  "path": [
+    "start",
+    "set_a",
+    "end"
+  ],
+  "variables": {
+    "a": "1"
+  },
+  "dataObjects": []
+}

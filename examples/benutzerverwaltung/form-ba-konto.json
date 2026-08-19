@@ -1,0 +1,72 @@
+{
+  "type": "default",
+  "id": "ba-konto",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** vergibst du die Rolle, das Atlas-Konto wird automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Der Antragsteller wählt seine Rolle nicht selbst — das ist die Sicherheitsgrenze, die dieses Formular auch als öffentliches Registrierungs-Formular (ADR-0126) tragfähig macht. Die Anlage läuft über den gated userConnector (ADR-0122/0123), der standardmäßig aktiv ist (opt-out). Ist die Provisionierung abgeschaltet, wartet der Prozess, bis ein Operator sie wieder einschaltet."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "disabled": true
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "disabled": true
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse",
+      "disabled": true
+    },
+    {
+      "key": "rolle",
+      "type": "radio",
+      "label": "Rolle",
+      "description": "Der Antragsteller wählt die Rolle nicht selbst — der Administrator vergibt sie bei der Freigabe.",
+      "values": [
+        { "label": "Benutzer (user)", "value": "user" },
+        { "label": "Administrator (admin)", "value": "admin" }
+      ],
+      "value": "user",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true }
+    },
+    {
+      "key": "benutzername",
+      "type": "textfield",
+      "label": "Benutzername",
+      "description": "Vorschlag aus vorname.nachname – bei Bedarf anpassen.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "entscheidung",
+      "type": "radio",
+      "label": "Entscheidung",
+      "values": [
+        { "label": "Freigeben – Konto anlegen und Zugang versenden", "value": "anlegen" },
+        { "label": "Antrag ablehnen", "value": "ablehnen" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initiales Passwort",
+      "description": "Mindestens 8 Zeichen. Wird dem Benutzer per E-Mail zugesendet; beim ersten Login zu ändern.",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true, "minLength": 8 }
+    },
+    {
+      "key": "ablehnungsgrund",
+      "type": "textarea",
+      "label": "Ablehnungsgrund",
+      "conditional": { "hide": "=entscheidung != \"ablehnen\"" }
+    }
+  ]
+}

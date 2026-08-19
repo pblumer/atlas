@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an interrupting boundary signal event.
+
+  Start -> parallel fork -> two branches:
+    A: userTask "review" with an interrupting boundary signal "abort" -> "aborted"
+    B: script "prep" -> intermediate signal throw "abort" -> "thrown"
+  When branch B throws "abort", branch A's boundary signal fires; being
+  interrupting it cancels the still-parked "review" and routes to "aborted". The
+  script keeps the throw one hop behind the boundary's arming, so the boundary is
+  always subscribed first — self-completing, no driver. The user task is never
+  completed; being interrupted is the point.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_signal_boundary" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_abort" name="abort"/>
+  <process id="signal-boundary" name="Signal boundary" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <parallelGateway id="fork"/>
+    <userTask id="review" name="Review">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <boundaryEvent id="on_abort" name="On abort" attachedToRef="review">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </boundaryEvent>
+    <endEvent id="reviewed" name="Reviewed"/>
+    <endEvent id="aborted" name="Aborted"/>
+    <scriptTask id="prep" name="Prep">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="ready"/>
+      </extensionElements>
+    </scriptTask>
+    <intermediateThrowEvent id="raise_abort" name="Raise abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateThrowEvent>
+    <endEvent id="thrown" name="Thrown"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="review"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="prep"/>
+    <sequenceFlow id="f4" sourceRef="review" targetRef="reviewed"/>
+    <sequenceFlow id="f5" sourceRef="on_abort" targetRef="aborted"/>
+    <sequenceFlow id="f6" sourceRef="prep" targetRef="raise_abort"/>
+    <sequenceFlow id="f7" sourceRef="raise_abort" targetRef="thrown"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="signal-boundary">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="120" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="fork"><dc:Bounds x="210" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_review" bpmnElement="review"><dc:Bounds x="330" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reviewed" bpmnElement="reviewed"><dc:Bounds x="560" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_on_abort" bpmnElement="on_abort"><dc:Bounds x="362" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_aborted" bpmnElement="aborted"><dc:Bounds x="560" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_prep" bpmnElement="prep"><dc:Bounds x="330" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_raise_abort" bpmnElement="raise_abort"><dc:Bounds x="500" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_thrown" bpmnElement="thrown"><dc:Bounds x="620" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="156" y="200"/><di:waypoint x="210" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="260" y="200"/><di:waypoint x="330" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="235" y="225"/><di:waypoint x="235" y="460"/><di:waypoint x="330" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="430" y="200"/><di:waypoint x="560" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="380" y="258"/><di:waypoint x="380" y="320"/><di:waypoint x="560" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6"><di:waypoint x="430" y="460"/><di:waypoint x="500" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7"><di:waypoint x="536" y="460"/><di:waypoint x="620" y="460"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -1,0 +1,4 @@
+state: completed
+path: on_launch -> handle -> end
+vars:
+  handled=1

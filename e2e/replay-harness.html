@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas instance-replay re-entrancy e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`,
+         so the test can force the router re-entrancy that used to overlay two
+         instances' diagrams. bpmn assets are the production ones, served at root. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000; // fixed wall-clock (ms) so timestamps are deterministic
+      const ns = (ms) => ms * 1e6;
+
+      // Two distinct, valid definitions so a leaked second render is unmistakable:
+      // the "clio" process (Start → Prüfen → Ende) and the "csv" process.
+      const XML = {
+        clio: def("Clio_Test", [
+          ["Start_1", "bpmn:startEvent", "Start", 160],
+          ["Task_1", "bpmn:userTask", "Prozess prüfen", 260],
+          ["End_1", "bpmn:endEvent", "Ende", 420],
+        ]),
+        csv: def("CSV_Import", [
+          ["Up_1", "bpmn:userTask", "CSV hochladen", 160],
+          ["Cfg_1", "bpmn:userTask", "Spaltenkonfiguration", 320],
+          ["Read_1", "bpmn:endEvent", "CSV einlesen", 480],
+        ]),
+      };
+
+      const TIMELINE = {
+        // key -> timeline the /timeline endpoint returns
+        "281474976723211": timeline("clio", "Clio_Test", 4, ["Start_1", "Task_1", "End_1"]),
+        "281474978839056": timeline("csv", "CSV_Import", 2, ["Up_1", "Cfg_1", "Read_1"]),
+      };
+
+      function timeline(defKey, procId, version, ids) {
+        const steps = ids.map((elementId, i) => ({
+          elementId,
+          elementInstanceKey: String(1000 + i),
+          at: ns(T + i * 1000),
+          endAt: ns(T + i * 1000 + 500),
+          position: i + 1,
+          type: "bpmn:flowNode",
+          tokenId: "1",
+        }));
+        const frames = ids.map((elementId, i) => ({
+          position: i + 1,
+          at: ns(T + i * 1000),
+          tokens: i < ids.length - 1 ? [{ elementId, tokenId: "1", state: "active" }] : [],
+        }));
+        return { processDefKey: defKey, processId: procId, version, state: "completed", steps, frames };
+      }
+
+      // A minimal but renderable BPMN definition: a straight chain with hand-authored DI.
+      function def(procId, nodes) {
+        const y = 120;
+        const shapes = nodes.map(([id, type, name, x], i) => {
+          const w = type === "bpmn:userTask" ? 100 : 36;
+          const h = type === "bpmn:userTask" ? 80 : 36;
+          const oy = type === "bpmn:userTask" ? y : y + 22;
+          return `<bpmndi:BPMNShape id="${id}_di" bpmnElement="${id}"><dc:Bounds x="${x}" y="${oy}" width="${w}" height="${h}"/></bpmndi:BPMNShape>`;
+        });
+        const flows = [];
+        const flowDi = [];
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const a = nodes[i][0], b = nodes[i + 1][0];
+          const fid = `f_${i}`;
+          flows.push(`<bpmn:sequenceFlow id="${fid}" sourceRef="${a}" targetRef="${b}"/>`);
+          flowDi.push(`<bpmndi:BPMNEdge id="${fid}_di" bpmnElement="${fid}"><di:waypoint x="${nodes[i][3] + 60}" y="${y + 40}"/><di:waypoint x="${nodes[i + 1][3]}" y="${y + 40}"/></bpmndi:BPMNEdge>`);
+        }
+        const els = nodes.map(([id, type, name], i) => {
+          const inc = i > 0 ? `<bpmn:incoming>f_${i - 1}</bpmn:incoming>` : "";
+          const out = i < nodes.length - 1 ? `<bpmn:outgoing>f_${i}</bpmn:outgoing>` : "";
+          const tag = type.replace("bpmn:", "bpmn:");
+          return `<${tag} id="${id}" name="${name}">${inc}${out}</${tag}>`;
+        });
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${procId}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${procId}" isExecutable="true">
+    ${els.join("\n    ")}
+    ${flows.join("\n    ")}
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="${procId}">
+    ${shapes.join("\n    ")}
+    ${flowDi.join("\n    ")}
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+      }
+
+      // makeApi builds a mock `api` for one mount. `timelineDelay` stalls only the
+      // /timeline call, so we can make an earlier mount resume *after* a later one has
+      // already rendered — the exact interleaving the router's re-entrancy produced.
+      function makeApi(timelineDelay) {
+        return async (method, url) => {
+          let m;
+          if ((m = url.match(/\/instances\/(\d+)\/timeline$/))) {
+            if (timelineDelay) await new Promise((r) => setTimeout(r, timelineDelay));
+            return TIMELINE[m[1]];
+          }
+          if ((m = url.match(/\/processes\/([\w-]+)\/xml$/))) return XML[m[1]];
+          if (url.includes("/runtime")) return { elements: [] };
+          if (url.match(/\/instances\/\d+\/decisions$/)) return [];
+          return {};
+        };
+      }
+
+      // Kick off one replay mount; returns the mount promise (which resolves when the
+      // mount finishes or bails). Exposed so the Playwright driver controls the timing.
+      window.__mountReplay = (key, timelineDelay) =>
+        mountInstanceReplay(view, { api: makeApi(timelineDelay), toast: noop, key });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

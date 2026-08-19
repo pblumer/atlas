@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a signal broadcast within one instance.
+
+  Start -> parallel fork -> two branches that rendezvous on a signal:
+    A: intermediate signal catch "abort" -> join
+    B: script "prep" -> intermediate signal throw "abort" -> join
+  When branch B's throw is reached it broadcasts "abort", firing branch A's armed
+  catch; the join then synchronizes and the instance ends. The script on the throw
+  branch keeps the throw one hop behind the catch's arming, so the catch is always
+  subscribed before the broadcast — self-completing, no driver needed.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_signal_throw_catch" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_abort" name="abort"/>
+  <process id="signal-throw-catch" name="Signal throw/catch" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <parallelGateway id="fork"/>
+    <intermediateCatchEvent id="await_abort" name="Await abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateCatchEvent>
+    <scriptTask id="prep" name="Prep">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="ready"/>
+      </extensionElements>
+    </scriptTask>
+    <intermediateThrowEvent id="raise_abort" name="Raise abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateThrowEvent>
+    <parallelGateway id="join"/>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="await_abort"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="prep"/>
+    <sequenceFlow id="f4" sourceRef="prep" targetRef="raise_abort"/>
+    <sequenceFlow id="f5" sourceRef="await_abort" targetRef="join"/>
+    <sequenceFlow id="f6" sourceRef="raise_abort" targetRef="join"/>
+    <sequenceFlow id="f7" sourceRef="join" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="signal-throw-catch">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="fork"><dc:Bounds x="240" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_await" bpmnElement="await_abort"><dc:Bounds x="360" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="join"><dc:Bounds x="480" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="600" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_prep" bpmnElement="prep"><dc:Bounds x="330" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_raise" bpmnElement="raise_abort"><dc:Bounds x="487" y="242" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="120"/><di:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="290" y="120"/><di:waypoint x="360" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="265" y="145"/><di:waypoint x="265" y="260"/><di:waypoint x="330" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="430" y="260"/><di:waypoint x="487" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="396" y="120"/><di:waypoint x="480" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6"><di:waypoint x="505" y="242"/><di:waypoint x="505" y="145"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7"><di:waypoint x="530" y="120"/><di:waypoint x="600" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

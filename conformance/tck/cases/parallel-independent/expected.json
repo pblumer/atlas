@@ -1,0 +1,25 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "fork",
+    "join",
+    "set_x",
+    "set_y",
+    "start"
+  ],
+  "path": [
+    "start",
+    "fork",
+    "set_x",
+    "set_y",
+    "join",
+    "join",
+    "end"
+  ],
+  "variables": {
+    "x": "1",
+    "y": "2"
+  },
+  "dataObjects": []
+}

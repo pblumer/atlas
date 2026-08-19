@@ -1,0 +1,4 @@
+state: completed
+path: start -> seed -> step -> step -> step -> step -> end
+vars:
+  n=3

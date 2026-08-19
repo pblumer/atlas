@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,6 +10,16 @@ import (
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
+
+// defaultInboundBatch caps how many clio events a single poll of one subscription
+// reads and republishes as Atlas messages (ADR-0075). It exists so a watch pointed
+// at a subject with a large backlog cannot hand the single-writer run loop one
+// unbounded publish storm — every matching event starts a process, so an
+// N-event backlog is N instances in one batch without this bound. With the cap a
+// backlog drains as bounded catch-up: each tick advances the resume cursor by at
+// most this many events and the next tick continues. Overridable per server with
+// WithInboundBatchLimit (tests use a tiny value).
+const defaultInboundBatch = 256
 
 // inboundBridge polls the configured clio inbound subscriptions and republishes new
 // clio events as Atlas messages, so an external event both starts message-start
@@ -51,10 +62,15 @@ func (s *Server) pollInbound(ctx context.Context) {
 	s.do(func() { subs = s.resolveInboundSubs() })
 
 	for _, sb := range subs {
+		if sb.rec.StartFromTip && !sb.rec.Primed {
+			s.primeInbound(ctx, sb) // skip the backlog to the tip, publishing nothing
+			continue
+		}
 		events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
 			Subject:   sb.rec.WatchedSubject,
 			AfterID:   sb.rec.LastEventID,
 			Recursive: sb.rec.Recursive,
+			Limit:     s.inboundBatch,
 		})
 		if err != nil || len(events) == 0 {
 			continue // transient read failure or nothing new; retry next tick
@@ -67,7 +83,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 		}
 		pubs := make([]pub, len(events))
 		for i, ev := range events {
-			pubs[i] = pub{seq: ev.Seq, key: correlationKeyOf(sb.key, ev), vars: eventVars(ev.Data)}
+			pubs[i] = pub{seq: inboundSeq(ev.ID), key: correlationKeyOf(sb.key, ev), vars: eventVars(ev)}
 		}
 		sourceID := inboundSourceID(sb.rec)
 		lastID := events[len(events)-1].ID
@@ -83,6 +99,56 @@ func (s *Server) pollInbound(ctx context.Context) {
 			s.advanceInboundCursor(subID, lastID)
 		})
 	}
+}
+
+// inboundPrimeBatch is the page size the priming path reads while skipping a
+// forward-only subscription's backlog. It is larger than the live cap because
+// priming publishes nothing (no run-loop work per event), so a big page just
+// advances the cursor toward the tip faster; a backlog larger than one page is
+// primed across several polls, one page each.
+const inboundPrimeBatch = 4096
+
+// primeInbound advances a forward-only (StartFromTip) subscription's resume cursor
+// past the subject's existing backlog WITHOUT republishing it, so enabling a watch
+// on a subject that already has history does not start a process per historical
+// event (the reported /employees flood, ADR-0075). It reads one bounded page off the
+// run loop; a short page means the tip is reached and the subscription is marked
+// primed, after which pollInbound publishes new events normally. Publishing nothing
+// here means a lost cursor update is harmless — a re-prime simply skips again.
+func (s *Server) primeInbound(ctx context.Context, sb pendingSub) {
+	events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
+		Subject:   sb.rec.WatchedSubject,
+		AfterID:   sb.rec.LastEventID,
+		Recursive: sb.rec.Recursive,
+		Limit:     inboundPrimeBatch,
+	})
+	if err != nil {
+		return // transient read failure; retry next tick
+	}
+	var lastID string
+	if len(events) > 0 {
+		lastID = events[len(events)-1].ID
+	}
+	caughtUp := len(events) < inboundPrimeBatch // a short (or empty) page reached the tip
+	subID := sb.rec.ID
+	s.do(func() { s.markInboundPrimed(subID, lastID, caughtUp) })
+}
+
+// markInboundPrimed persists one priming step: it advances the resume cursor to the
+// last skipped event (when the page carried any) and sets Primed once the backlog is
+// exhausted. It runs on the run loop (the store's owner).
+func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
+	rec, ok, err := s.inboundSubs.get(subID)
+	if err != nil || !ok {
+		return
+	}
+	if lastEventID != "" {
+		rec.LastEventID = lastEventID
+	}
+	if primed {
+		rec.Primed = true
+	}
+	_ = s.inboundSubs.save(rec)
 }
 
 // resolveInboundSubs loads the enabled subscriptions whose connector is an enabled
@@ -146,17 +212,60 @@ func inboundSourceID(r inboundSubscription) string {
 	return "clio:" + r.ConnectorID + ":" + r.WatchedSubject
 }
 
+// inboundSeq parses a clio event id — a per-partition monotonic sequence rendered
+// as a decimal string — into the uint64 the engine deduplicates on (ADR-0075).
+// clio events carry no separate `seq` field; the id itself is the order. A
+// non-numeric id (not a real clio event) yields 0, which the engine treats as
+// already-applied and skips, so a garbled line can never double-start a process.
+func inboundSeq(id string) uint64 {
+	n, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// eventFields is the binding environment a clio event exposes to correlation-key
+// expressions and as seeded process variables: the event body, plus four reserved
+// envelope fields the body cannot see on its own. subjectTail is the last
+// '/'-segment of the subject — "E-123456" for "/employees/E-123456" — so a watch
+// on a parent subject can key on the child id. The envelope fields take precedence
+// over a body field of the same name, so a subscription can always rely on them.
+func eventFields(ev clio.InboundEvent) map[string]any {
+	fields := make(map[string]any, len(ev.Data)+4)
+	for k, v := range ev.Data {
+		fields[k] = v
+	}
+	fields["subject"] = ev.Subject
+	fields["subjectTail"] = subjectTail(ev.Subject)
+	fields["eventType"] = ev.Type
+	fields["eventId"] = ev.ID
+	return fields
+}
+
+// subjectTail returns the last '/'-separated segment of a clio subject (trailing
+// slashes ignored): the leaf id an event is scoped to.
+func subjectTail(subject string) string {
+	trimmed := strings.TrimRight(subject, "/")
+	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
+		return trimmed[i+1:]
+	}
+	return trimmed
+}
+
 // correlationKeyOf evaluates a subscription's compiled correlation key over a clio
-// event's data, returning the key as a string. A nil expression (keyless
-// subscription) yields ""; a failed evaluation (e.g. a missing field) also yields ""
-// so the message publishes keyless rather than being dropped.
+// event's fields (body plus reserved envelope fields), returning the key as a
+// string. A nil expression (keyless subscription) yields ""; a failed evaluation
+// (e.g. a missing field) also yields "" so the message publishes keyless rather
+// than being dropped.
 func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
 	if compiled == nil {
 		return ""
 	}
+	fields := eventFields(ev)
 	binds := make(map[string]expr.Value, len(compiled.Inputs()))
 	for _, name := range compiled.Inputs() {
-		if v, ok := ev.Data[name]; ok {
+		if v, ok := fields[name]; ok {
 			binds[name] = expr.FromJSON(v)
 		}
 	}
@@ -168,15 +277,16 @@ func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
 	return text
 }
 
-// eventVars turns a clio event's data into the payload variables carried into the
-// woken/started instances, canonicalized through expr so each round-trips on replay
-// exactly like any other variable.
-func eventVars(data map[string]any) []model.VariableValue {
-	if len(data) == 0 {
-		return nil
-	}
-	out := make([]model.VariableValue, 0, len(data))
-	for name, raw := range data {
+// eventVars turns a clio event's fields (body plus reserved envelope fields) into
+// the payload variables carried into the woken/started instances, canonicalized
+// through expr so each round-trips on replay exactly like any other variable. The
+// envelope fields (subject, subjectTail, eventType, eventId) let a process read the
+// event's subject and derive keys from it — e.g. a message-start correlation key of
+// subjectTail.
+func eventVars(ev clio.InboundEvent) []model.VariableValue {
+	fields := eventFields(ev)
+	out := make([]model.VariableValue, 0, len(fields))
+	for name, raw := range fields {
 		kind, b, text := expr.Classify(expr.FromJSON(raw))
 		out = append(out, model.VariableValue{Name: name, Kind: inboundVarKind(kind), Bool: b, Text: text})
 	}

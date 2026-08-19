@@ -18,7 +18,7 @@ import (
 func parkingResponder(t testing.TB, key uint64) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(key, "responder", 1)
-	ms := b.AddMessageStartEvent("request", nil)
+	ms := b.AddMessageStartEvent("request", nil, false)
 	park := b.AddMessageCatchEvent("never", nil)
 	end := b.AddEndEvent()
 	b.Connect(ms, park)
@@ -167,7 +167,7 @@ func TestMessageStartInstanceRecovers(t *testing.T) {
 func keyedResponder(t testing.TB, key uint64) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(key, "keyed-responder", 1)
-	ms := b.AddMessageStartEvent("request", mustCompile(t, "orderId"))
+	ms := b.AddMessageStartEvent("request", mustCompile(t, "orderId"), false)
 	park := b.AddMessageCatchEvent("never", nil)
 	end := b.AddEndEvent()
 	b.Connect(ms, park)
@@ -254,6 +254,110 @@ func TestMessageStartWithoutCorrelationKeyRecordsEmpty(t *testing.T) {
 	}
 }
 
+// responderVersion builds parkingResponder's shape at a given def key and version,
+// all under the same bpmn process id "responder", so deploying two is deploying two
+// versions of one process (as redeploying a model in the modeler does).
+func responderVersion(t testing.TB, key uint64, version int32) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(key, "responder", version)
+	ms := b.AddMessageStartEvent("request", nil, false)
+	park := b.AddMessageCatchEvent("never", nil)
+	end := b.AddEndEvent()
+	b.Connect(ms, park)
+	b.Connect(park, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestMessageStartNewVersionSupersedes proves deploying a new version of a
+// message-start process retires the prior version's start subscription, so one
+// incoming message starts exactly one instance — the latest version — not one per
+// deployed version. Redeploying the same model (e.g. iterating in the modeler) must
+// not multiply the instances, and thus the side effects (a welcome e-mail), a single
+// event produces. Timer starts already supersede this way (ADR-0051); message starts
+// must match (ADR-0035/0076).
+func TestMessageStartNewVersionSupersedes(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	v1 := responderVersion(t, 700, 1)
+	v2 := responderVersion(t, 701, 2)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(v1)
+	p.Deploy(v2) // same process id: supersedes v1's message-start subscription
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	p.PublishMessage("request", "", numVar("orderId", "42"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("after one request across two deployed versions: active=%d, want 1 (only the latest version starts)", pi)
+	}
+	inst := singleActiveInstance(t, h.store)
+	if live := activeInstance(t, h.store, inst); live == nil || live.ProcessDefKey != v2.Key {
+		t.Fatalf("started instance defKey=%+v, want v2 (%d)", live, v2.Key)
+	}
+}
+
+// TestMessageStartSupersedeRecovers proves the supersession is deterministic across
+// recovery: deployments reload oldest-first, so replaying v1 then v2 rebuilds the
+// message-start index with only v2 — one message still starts exactly one instance
+// after a restart (invariant I4).
+func TestMessageStartSupersedeRecovers(t *testing.T) {
+	dir := t.TempDir()
+	v1 := responderVersion(t, 700, 1)
+	v2 := responderVersion(t, 701, 2)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(v1)
+	p1.Deploy(v2)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.PublishMessage("request", "", numVar("orderId", "42"))
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi := activeProcs(t, h1.store); pi != 1 {
+		t.Fatalf("live: active=%d, want 1", pi)
+	}
+	h1.close(t)
+
+	// Replay into a fresh store: deploys reload oldest-first (v1 then v2).
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(v1)
+	p2.Deploy(v2)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	// A second message after recovery still starts exactly one more instance.
+	p2.PublishMessage("request", "", numVar("orderId", "43"))
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+	if pi := activeProcs(t, store2); pi != 2 {
+		t.Fatalf("after replay + one more request: active=%d, want 2 (one per message, latest version only)", pi)
+	}
+}
+
 // TestProcessInstanceKeyBuiltin proves the reserved FEEL identifier
 // processInstanceKey resolves to the evaluating instance's own key, as a string
 // (so the full 64-bit key is exact), usable in any expression (ADR-0035).
@@ -304,7 +408,7 @@ func TestMessageStartRequestResponse(t *testing.T) {
 
 	// Responder: messageStart("request") → throw("reply", key = senderId) → End.
 	rb := compiler.NewBuilder(20, "responder", 1)
-	rms := rb.AddMessageStartEvent("request", nil)
+	rms := rb.AddMessageStartEvent("request", nil, false)
 	rthrow := rb.AddMessageThrowEvent("reply", mustCompile(t, "senderId"))
 	rend := rb.AddEndEvent()
 	rb.Connect(rms, rthrow)

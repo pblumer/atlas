@@ -94,6 +94,18 @@ export function attachCodeEditor(textarea, opts = {}) {
   const gutterOn = opts.gutter !== false;
   const wrap = opts.wrap === true; // scripts default to no-wrap (horizontal scroll)
 
+  // A locked prefix is a leading run the editor shows dimmed and protects — the FEEL
+  // '=' expression marker (ADR-0067, the fx toggle). It cannot be edited or deleted,
+  // the caret cannot enter it, and it is stripped before validation (the parser wants
+  // the bare expression, not the storage form). opts.lockPrefix(value) returns the
+  // protected length for the current value (0 = none). No-op for every other field.
+  const lockPrefix = typeof opts.lockPrefix === "function" ? opts.lockPrefix : null;
+  const lockLen = () => {
+    if (!lockPrefix) return 0;
+    const v = textarea.value;
+    return Math.max(0, Math.min(lockPrefix(v) | 0, v.length));
+  };
+
   // --- chrome ---
   const wrapEl = document.createElement("div");
   wrapEl.className = "code-editor" + (wrap ? "" : " nowrap") + (gutterOn ? " has-gutter" : "");
@@ -176,7 +188,13 @@ export function attachCodeEditor(textarea, opts = {}) {
   function renderHighlight() {
     // A trailing newline is not rendered by <pre> unless followed by content;
     // a zero-width space keeps the last line's height and the caret aligned.
-    code.innerHTML = highlightTokens(lang.tokenize(textarea.value), varNames) + "​";
+    // A locked prefix is rendered verbatim in its own dimmed span and excluded from
+    // tokenisation; the two segments still cover every character in order, so the
+    // transparent textarea on top stays aligned character-for-character.
+    const v = textarea.value;
+    const lp = lockLen();
+    const head = lp ? `<span class="ce-locked">${escapeHTML(v.slice(0, lp))}</span>` : "";
+    code.innerHTML = head + highlightTokens(lang.tokenize(v.slice(lp)), varNames) + "​";
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
     renderGutter();
@@ -367,7 +385,9 @@ export function attachCodeEditor(textarea, opts = {}) {
   }
   async function runValidate() {
     if (!validate) return;
-    const src = textarea.value;
+    // Validate the bare expression: the locked '=' marker is the storage form, not
+    // part of what the FEEL parser accepts (a leading '=' is "unexpected").
+    const src = textarea.value.slice(lockLen());
     const seq = ++validateSeq;
     if (src.trim() === "") { showValid(); return; }
     let res;
@@ -413,6 +433,47 @@ export function attachCodeEditor(textarea, opts = {}) {
     hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; updateTip(x, y); });
   };
 
+  // --- drag-and-drop insert (a variable dragged from the Variables panel) ---
+  // Panel rows carry the variable name as a text/plain payload; dropping one inserts
+  // it at the drop point. We handle it explicitly rather than lean on the textarea's
+  // native drop so the insertion lands where the pointer is (not at the old caret),
+  // never bites into the locked '=' prefix, and re-highlights and re-validates like
+  // any other edit. Only a plain-text drag is claimed — a file or richer payload
+  // falls through to the default handling.
+  const hasPlainText = (dt) => !!dt && Array.prototype.includes.call(dt.types || [], "text/plain");
+  function dropIndex(e) {
+    // Map the drop coordinates to a caret offset in the textarea; fall back to the
+    // current caret when the platform can't (or maps outside the text).
+    const doc = textarea.ownerDocument;
+    let pos = null;
+    if (doc.caretPositionFromPoint) {
+      const cp = doc.caretPositionFromPoint(e.clientX, e.clientY);
+      if (cp && cp.offsetNode === textarea) pos = cp.offset;
+    } else if (doc.caretRangeFromPoint) {
+      const r = doc.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r) pos = r.startOffset;
+    }
+    if (pos == null || pos > textarea.value.length) pos = textarea.selectionStart;
+    return Math.max(lockLen(), Math.min(pos, textarea.value.length));
+  }
+  function onDragover(e) {
+    if (!hasPlainText(e.dataTransfer)) return;
+    e.preventDefault(); // required for the textarea to accept the drop
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function onDrop(e) {
+    if (!hasPlainText(e.dataTransfer)) return;
+    const text = e.dataTransfer.getData("text/plain");
+    if (!text) return;
+    e.preventDefault();
+    const at = dropIndex(e);
+    textarea.setRangeText(text, at, at, "end");
+    textarea.focus();
+    closePopup();
+    afterEdit();
+    scheduleValidate();
+  }
+
   // --- events ---
   const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
   const onScroll = () => {
@@ -421,6 +482,33 @@ export function attachCodeEditor(textarea, opts = {}) {
     renderMarkers();
   };
   const onBlur = () => { setTimeout(closePopup, 120); };
+
+  // --- locked-prefix protection ---
+  // Keep a collapsed caret out of the locked run (a click or Arrow-Left that lands
+  // inside the dimmed '=' snaps back to just after it).
+  function clampCaret() {
+    const lp = lockLen();
+    if (!lp) return;
+    const { selectionStart: s, selectionEnd: e2 } = textarea;
+    if (s === e2 && s < lp) textarea.setSelectionRange(lp, lp);
+  }
+  // Reject any edit that would reach into the locked run: an insertion or a
+  // replacement bites from selectionStart; a backward delete also bites the character
+  // left of a collapsed caret, so it's blocked when the caret sits at the boundary.
+  function onBeforeInput(e) {
+    const lp = lockLen();
+    if (!lp) return;
+    const s = textarea.selectionStart, e2 = textarea.selectionEnd;
+    const t = e.inputType || "";
+    let hit;
+    if (s !== e2) hit = s < lp;
+    else if (t.startsWith("delete") && /Backward/i.test(t)) hit = s <= lp;
+    else if (t.startsWith("delete") && /Forward/i.test(t)) hit = s < lp;
+    else hit = s < lp;
+    if (!hit) return;
+    e.preventDefault();
+    if (s < lp) textarea.setSelectionRange(lp, Math.max(lp, e2)); // nudge the caret out
+  }
 
   function onKeydown(e) {
     if (!pop.hidden) {
@@ -448,6 +536,13 @@ export function attachCodeEditor(textarea, opts = {}) {
   textarea.addEventListener("blur", onBlur);
   textarea.addEventListener("mousemove", onHover);
   textarea.addEventListener("mouseleave", hideTip);
+  textarea.addEventListener("dragover", onDragover);
+  textarea.addEventListener("drop", onDrop);
+  if (lockPrefix) {
+    textarea.addEventListener("beforeinput", onBeforeInput);
+    textarea.addEventListener("keyup", clampCaret);
+    textarea.addEventListener("click", clampCaret);
+  }
 
   renderHighlight();
   runValidate();
@@ -464,6 +559,13 @@ export function attachCodeEditor(textarea, opts = {}) {
       textarea.removeEventListener("blur", onBlur);
       textarea.removeEventListener("mousemove", onHover);
       textarea.removeEventListener("mouseleave", hideTip);
+      textarea.removeEventListener("dragover", onDragover);
+      textarea.removeEventListener("drop", onDrop);
+      if (lockPrefix) {
+        textarea.removeEventListener("beforeinput", onBeforeInput);
+        textarea.removeEventListener("keyup", clampCaret);
+        textarea.removeEventListener("click", clampCaret);
+      }
       textarea.classList.remove("ce-input");
       delete textarea.dataset.ceOn;
       if (statusEl) statusEl.remove();

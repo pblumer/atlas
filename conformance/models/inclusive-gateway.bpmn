@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an inclusive (OR) gateway.
+
+  Start -> script "seed" (order = {priority: true, region: "EU"}) -> inclusive
+  split -> up to three branches -> inclusive join -> End. The split opens every
+  branch whose condition holds (priority, EU region) plus the default only if none
+  do; the join waits for exactly the branches that opened, then fires once. Seeded
+  so priority and EU both hold and the default "standard" branch is suppressed —
+  the join synchronizes those two. Self-completing (inline scripts).
+  Realizes WCP-6 (Multi-Choice) and WCP-7 (Structured Synchronizing Merge).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_inclusive_gateway" targetNamespace="http://atlas/conformance">
+  <process id="inclusive-gateway" name="Inclusive gateway" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="seed" name="Seed order">
+      <extensionElements>
+        <zeebe:script expression="= { priority: true, region: &quot;EU&quot; }" resultVariable="order"/>
+      </extensionElements>
+    </scriptTask>
+    <inclusiveGateway id="split" name="Which handling?" default="f_standard"/>
+    <scriptTask id="priority" name="Priority handling">
+      <extensionElements>
+        <zeebe:script expression="= &quot;done&quot;" resultVariable="prio"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="eu_check" name="EU check">
+      <extensionElements>
+        <zeebe:script expression="= &quot;done&quot;" resultVariable="eu"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="standard" name="Standard handling">
+      <extensionElements>
+        <zeebe:script expression="= &quot;done&quot;" resultVariable="std"/>
+      </extensionElements>
+    </scriptTask>
+    <inclusiveGateway id="join"/>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="split"/>
+    <sequenceFlow id="f_prio" name="priority" sourceRef="split" targetRef="priority">
+      <conditionExpression>= order.priority</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_eu" name="region = EU" sourceRef="split" targetRef="eu_check">
+      <conditionExpression>= order.region = "EU"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_standard" name="default" sourceRef="split" targetRef="standard"/>
+    <sequenceFlow id="f3" sourceRef="priority" targetRef="join"/>
+    <sequenceFlow id="f4" sourceRef="eu_check" targetRef="join"/>
+    <sequenceFlow id="f5" sourceRef="standard" targetRef="join"/>
+    <sequenceFlow id="f6" sourceRef="join" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="inclusive-gateway">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="100" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_seed" bpmnElement="seed"><dc:Bounds x="190" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_split" bpmnElement="split"><dc:Bounds x="360" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="338" y="146" width="94" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_priority" bpmnElement="priority"><dc:Bounds x="480" y="40" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eu_check" bpmnElement="eu_check"><dc:Bounds x="480" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_standard" bpmnElement="standard"><dc:Bounds x="480" y="280" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="join"><dc:Bounds x="660" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="770" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="136" y="200"/><di:waypoint x="190" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="290" y="200"/><di:waypoint x="360" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_prio" bpmnElement="f_prio"><di:waypoint x="385" y="175"/><di:waypoint x="385" y="80"/><di:waypoint x="480" y="80"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_eu" bpmnElement="f_eu"><di:waypoint x="410" y="200"/><di:waypoint x="480" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_standard" bpmnElement="f_standard"><di:waypoint x="385" y="225"/><di:waypoint x="385" y="320"/><di:waypoint x="480" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="580" y="80"/><di:waypoint x="685" y="80"/><di:waypoint x="685" y="175"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="580" y="200"/><di:waypoint x="660" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="580" y="320"/><di:waypoint x="685" y="320"/><di:waypoint x="685" y="225"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6"><di:waypoint x="710" y="200"/><di:waypoint x="770" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

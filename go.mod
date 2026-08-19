@@ -3,9 +3,13 @@ module github.com/pblumer/atlas
 go 1.26
 
 require (
+	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/andybalholm/cascadia v1.3.3
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d
 	github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc
+	github.com/prometheus/client_golang v1.15.0
+	github.com/prometheus/client_model v0.3.0
 	golang.org/x/crypto v0.54.0
 )
 
@@ -28,12 +32,11 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.15.0 // indirect
-	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

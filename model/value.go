@@ -36,10 +36,22 @@ type ElementInstanceValue struct {
 	TokenID       uint64
 	ParentTokenID uint64
 	SourceFlowId  int32
+	// MultiInstance marks an element instance's role in a multi-instance activity
+	// (ADR-0077): 0 = not multi-instance, 1 = the body (the scope that seeds the
+	// iterations), 2 = an inner iteration (running the node's real behavior, scoped
+	// under the body). Append-compatible: an old record without it decodes to 0.
+	MultiInstance uint8
+	// EventGatewayKey labels a catch event armed by an event-based gateway with the
+	// gateway's element-instance key — its race group (ADR-0110). The first armed catch to
+	// fire cancels every other live instance sharing this key. 0 for every element not armed
+	// by an event gateway. Append-compatible: an old record without it decodes to 0.
+	EventGatewayKey uint64
 }
 
 const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
 const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
+const elementInstanceMISize = elementInstanceSize + 1
+const elementInstanceEGSize = elementInstanceMISize + 8
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -52,7 +64,9 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	dst = append(dst, v.MultiInstance)
+	return binary.LittleEndian.AppendUint64(dst, v.EventGatewayKey)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -70,6 +84,12 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 		v.ParentTokenID = binary.LittleEndian.Uint64(src[45:])
 		v.SourceFlowId = int32(binary.LittleEndian.Uint32(src[53:]))
 	}
+	if len(src) >= elementInstanceMISize {
+		v.MultiInstance = src[57]
+	}
+	if len(src) >= elementInstanceEGSize {
+		v.EventGatewayKey = binary.LittleEndian.Uint64(src[58:])
+	}
 	return nil
 }
 
@@ -86,6 +106,12 @@ type JobValue struct {
 	Retries            int32
 	Deadline           int64
 	Assignee           string
+	// RetryDueDate is the unix-nano instant a failed-but-retryable job may be handed to a
+	// worker again — a retry backoff (ADR-0111). While it is non-zero and in the future the
+	// job is held OFF the activatable index; a retry timer clears it when the backoff elapses.
+	// 0 means "pullable now" (no backoff), which is every job's steady state. Append-compatible:
+	// an old record without it decodes to 0.
+	RetryDueDate int64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -98,7 +124,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.JobType))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Retries))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
-	return appendString(dst, v.Assignee)
+	dst = appendString(dst, v.Assignee)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -110,11 +137,16 @@ func (v *JobValue) decode(src []byte) error {
 	v.JobType = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.Retries = int32(binary.LittleEndian.Uint32(src[20:]))
 	v.Deadline = int64(binary.LittleEndian.Uint64(src[24:]))
-	assignee, _, err := readString(src[jobSize:])
+	assignee, rest, err := readString(src[jobSize:])
 	if err != nil {
 		return err
 	}
 	v.Assignee = assignee
+	// RetryDueDate is an appended field: a record written before it ends after the assignee
+	// string and leaves it zero (ADR-0111).
+	if len(rest) >= 8 {
+		v.RetryDueDate = int64(binary.LittleEndian.Uint64(rest))
+	}
 	return nil
 }
 
@@ -132,9 +164,14 @@ type TimerValue struct {
 	// start timer is precisely one with ProcessInstanceKey == 0 and
 	// ProcessDefKey != 0; TargetElementId then names its timer-start element.
 	ProcessDefKey uint64
+	// JobKey marks a retry-backoff timer (ADR-0111): non-zero means this timer, when due,
+	// re-activates the failed job with that key rather than firing an element. 0 for every
+	// ordinary (catch/boundary/start/TTL) timer. Append-compatible: an old record decodes to 0.
+	JobKey uint64
 }
 
 const timerSize = 8 + 8 + 4 + 8 + 4 + 8
+const timerJobSize = timerSize + 8
 
 func (*TimerValue) ValueType() ValueType { return VTTimer }
 
@@ -144,7 +181,8 @@ func (v *TimerValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.TargetElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.DueDate))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
-	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	return binary.LittleEndian.AppendUint64(dst, v.JobKey)
 }
 
 func (v *TimerValue) decode(src []byte) error {
@@ -157,6 +195,11 @@ func (v *TimerValue) decode(src []byte) error {
 	v.DueDate = int64(binary.LittleEndian.Uint64(src[20:]))
 	v.Repetitions = int32(binary.LittleEndian.Uint32(src[28:]))
 	v.ProcessDefKey = binary.LittleEndian.Uint64(src[32:])
+	// JobKey is an appended field: a record written before it ends at timerSize and leaves it
+	// zero (an ordinary timer, ADR-0111).
+	if len(src) >= timerJobSize {
+		v.JobKey = binary.LittleEndian.Uint64(src[timerSize:])
+	}
 	return nil
 }
 
@@ -195,6 +238,26 @@ type ProcessInstanceValue struct {
 	CompletedAt    int64  // unix nano when it reached a terminal state; 0 while active
 	CreatedAt      int64  // unix nano when the instance was activated
 	CorrelationKey string // message correlation key a message-start instance began with; "" otherwise
+	// ParentElementInstanceKey is the call-activity element instance that started
+	// this instance as its child, 0 for a root instance (API/message/timer start).
+	// A completing child resumes its caller through it (ADR-0076).
+	ParentElementInstanceKey uint64
+	// ExpiryDueDate is the due date (unix nano) of this instance's TTL expiry timer,
+	// 0 when the definition has no TTL (ADR-0085). Stored so completion/termination can
+	// cancel that timer by key (the instance key) without scanning the timer index.
+	ExpiryDueDate int64
+	// CompletedPosition is the log position of the instance's terminal event, set only
+	// on the history record (0 while active, and 0 on records written before this field,
+	// ADR-0115). Since the terminal event is an instance's last, it is the instance's
+	// highest position — so history retention can prove every event is exported
+	// (CompletedPosition <= exported position) before hard-deleting the instance.
+	CompletedPosition uint64
+	// PurgeDueDate is when history retention is scheduled to hard-delete this finished
+	// instance: CompletedAt + the definition's atlas:historyTtl, 0 when it declares none
+	// (ADR-0146). Frozen on the terminal event so applyToState can index the instance by
+	// it — and read back from the purge event to drop that index entry — without either
+	// fold reading a clock or a definition.
+	PurgeDueDate int64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -210,7 +273,11 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = append(dst, byte(v.State))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
-	return appendString(dst, v.CorrelationKey)
+	dst = appendString(dst, v.CorrelationKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -227,11 +294,31 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 		return nil
 	}
 	v.CreatedAt = int64(binary.LittleEndian.Uint64(rest))
-	key, _, err := readString(rest[8:])
+	key, tail, err := readString(rest[8:])
 	if err != nil {
 		return err
 	}
 	v.CorrelationKey = key
+	// ParentElementInstanceKey is a later appended field: a record written before it
+	// ends after the correlation key and leaves it zero (a root instance).
+	if len(tail) >= 8 {
+		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
+	}
+	// ExpiryDueDate is a later appended field: a record written before it ends after
+	// the parent key and leaves it zero (no TTL).
+	if len(tail) >= 16 {
+		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
+	}
+	// CompletedPosition is a later appended field: a record written before it ends
+	// after the expiry due date and leaves it zero (no terminal position recorded).
+	if len(tail) >= 24 {
+		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
+	}
+	// PurgeDueDate is the newest appended field: a record written before it ends after
+	// the completed position and leaves it zero (no history TTL scheduled it).
+	if len(tail) >= 32 {
+		v.PurgeDueDate = int64(binary.LittleEndian.Uint64(tail[24:]))
+	}
 	return nil
 }
 
@@ -431,6 +518,71 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 	return nil
 }
 
+// VariableAuditValue records one external variable override for audit (ADR-0098):
+// who set which variable, to what value, on which scope. It is keyed under its
+// owning ProcessInstanceKey as append-only history — one record per variable an
+// operator sets — so the "who changed it" trail folds into the same instance
+// timeline as the variable snapshot at the same log position, and survives the
+// instance finishing. Actor is the acting principal's username, or "" when auth is
+// off (single-user) or the caller is unidentified. Name/Kind/Bool/Text mirror the
+// VariableValue that was written, so the audit row is self-contained. Like a variable
+// it carries genuine runtime data, so its encoding is length-prefixed.
+type VariableAuditValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ScopeKey           uint64 // the scope the variable was written to (root or a sub-scope)
+	Actor              string // who performed the override; "" when auth is off / unidentified
+	Name               string // the variable that was set
+	Kind               VarKind
+	Bool               bool
+	Text               string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*VariableAuditValue) ValueType() ValueType { return VTVariableAudit }
+
+func (v *VariableAuditValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Actor)
+	dst = appendString(dst, v.Name)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *VariableAuditValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ScopeKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	actor, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -478,6 +630,53 @@ func (v *MessageSubscriptionValue) decode(src []byte) error {
 		return err
 	}
 	v.CorrelationKey = key
+	if len(rest) < 12 {
+		return ErrShortBuffer
+	}
+	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	return nil
+}
+
+// SignalSubscriptionValue is an open subscription to a broadcast signal: an
+// element instance (a signal intermediate catch event, later a signal boundary
+// or event subprocess) waiting for a named signal. It is the
+// MessageSubscriptionValue shape (ADR-0020) minus the correlation key — a signal
+// matches by name alone and fans out 1:n, so there is nothing to correlate on
+// (ADR-0088). The SignalName is the sole match key a broadcast scans for.
+type SignalSubscriptionValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	SignalName         string
+	// ProcessDefKey and ElementId identify the waiting catch on its diagram; set at
+	// subscribe time from the element instance and carried so the record locates its
+	// own state index entry (invariant I4), mirroring MessageSubscriptionValue.
+	ProcessDefKey uint64
+	ElementId     int32
+}
+
+func (*SignalSubscriptionValue) ValueType() ValueType { return VTSignal }
+
+func (v *SignalSubscriptionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = appendString(dst, v.SignalName)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+}
+
+func (v *SignalSubscriptionValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.SignalName = name
 	if len(rest) < 12 {
 		return ErrShortBuffer
 	}
@@ -629,6 +828,51 @@ func (v *IncidentValue) decode(src []byte) error {
 	return nil
 }
 
+// CompensableValue is one completed compensable activity: an activity that bore a
+// compensation boundary and finished successfully, retained so a later compensation
+// throw can run its handler (ADR-0103). It is keyed under ScopeKey in completion order
+// (by the event's log position), so a reverse scan yields reverse completion order.
+// ElementId identifies the compensated activity (for activityRef matching); HandlerNode
+// is the compensation handler to activate; Seq carries the record's key sequence back on
+// the consume event so its index entry can be deleted. All fields are fixed-width.
+type CompensableValue struct {
+	ProcessInstanceKey uint64
+	ProcessDefKey      uint64
+	ScopeKey           uint64 // FlowScopeKey the compensable activity lived in
+	ElementInstanceKey uint64 // the completed activity's element-instance key
+	Seq                uint64 // the record's key sequence (log position), set on consume
+	ElementId          int32  // the compensable activity's compiled node id
+	HandlerNode        int32  // the compensation handler's compiled node id
+}
+
+const compensableSize = 8 + 8 + 8 + 8 + 8 + 4 + 4
+
+func (*CompensableValue) ValueType() ValueType { return VTCompensable }
+
+func (v *CompensableValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.Seq)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.HandlerNode))
+}
+
+func (v *CompensableValue) decode(src []byte) error {
+	if len(src) < compensableSize {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[8:])
+	v.ScopeKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[24:])
+	v.Seq = binary.LittleEndian.Uint64(src[32:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[40:]))
+	v.HandlerNode = int32(binary.LittleEndian.Uint32(src[44:]))
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -645,6 +889,8 @@ func newValue(vt ValueType) Value {
 		return &VariableValue{}
 	case VTMessageSubscription:
 		return &MessageSubscriptionValue{}
+	case VTSignal:
+		return &SignalSubscriptionValue{}
 	case VTMessageFlow:
 		return &MessageFlowValue{}
 	case VTDataObject:
@@ -655,6 +901,10 @@ func newValue(vt ValueType) Value {
 		return &DecisionEvaluationValue{}
 	case VTInboundDelivery:
 		return &InboundDeliveryValue{}
+	case VTVariableAudit:
+		return &VariableAuditValue{}
+	case VTCompensable:
+		return &CompensableValue{}
 	default:
 		return nil
 	}

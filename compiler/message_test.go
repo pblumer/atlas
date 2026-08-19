@@ -200,6 +200,50 @@ func TestParseMessageStartEvent(t *testing.T) {
 	}
 }
 
+// singletonMessageStartBPMN is messageStartBPMN with singletonStart="true" on the
+// message start event.
+const singletonMessageStartBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
+  <bpmn:message id="Msg_req" name="request">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="= orderId"/>
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:process id="responder" isExecutable="true">
+    <bpmn:startEvent id="start" singletonStart="true">
+      <bpmn:messageEventDefinition id="sed" messageRef="Msg_req"/>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="end"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="end"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestParseSingletonMessageStart proves the singletonStart attribute compiles onto the
+// message-start detail, and that its absence defaults to false (ADR-0094).
+func TestParseSingletonMessageStart(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(singletonMessageStartBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	events := cp.MessageStartEvents()
+	if len(events) != 1 || !events[0].SingletonStart {
+		t.Fatalf("MessageStartEvents = %+v, want one with SingletonStart=true", events)
+	}
+	if !cp.MessageStarts()[0].SingletonStart {
+		t.Error("MessageStarts()[0].SingletonStart = false, want true")
+	}
+
+	// The default model (no attribute) is not singleton.
+	def, err := Parse(1, 1, strings.NewReader(messageStartBPMN))
+	if err != nil {
+		t.Fatalf("Parse default: %v", err)
+	}
+	if def.MessageStartEvents()[0].SingletonStart {
+		t.Error("default message start SingletonStart = true, want false")
+	}
+}
+
 // TestParseAllMessageStartPoolExecutable checks that a collaboration pool whose
 // only start event is a message start event is compiled (not skipped as a
 // black box), so a message can instantiate it.

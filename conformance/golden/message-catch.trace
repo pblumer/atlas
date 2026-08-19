@@ -1,0 +1,3 @@
+state: completed
+path: start -> await_payment -> end
+vars: (none)

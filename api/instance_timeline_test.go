@@ -8,6 +8,84 @@ import (
 	"testing"
 )
 
+// TestInstanceTimelineCallActivityChildLink checks that a call activity's timeline
+// step carries the child instance it started (ADR-0076), so the replay view can
+// drill from caller to child. The caller (callerBPMN) calls "child"; its callChild
+// step must point at a child instance whose own timeline is the "child" process.
+func TestInstanceTimelineCallActivityChildLink(t *testing.T) {
+	ts := newTestServer(t)
+
+	// child must be deployed for the call to resolve; then the caller.
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", childBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy child: %d %s", code, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", callerBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy caller: %d %s", code, body)
+	}
+	var caller struct {
+		Key uint64 `json:"key"`
+	}
+	_ = json.Unmarshal(body, &caller)
+
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", caller.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("start caller: %d %s", code, body)
+	}
+	// The caller parks at its second call activity (target "missing" is undeployed),
+	// so it is an active instance; find its key by process id.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances: %d %s", code, body)
+	}
+	var instances []struct {
+		Key       uint64 `json:"key"`
+		ProcessID string `json:"processId"`
+	}
+	if err := json.Unmarshal(body, &instances); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	var callerInst uint64
+	for _, in := range instances {
+		if in.ProcessID == "caller" {
+			callerInst = in.Key
+		}
+	}
+	if callerInst == 0 {
+		t.Fatalf("no active caller instance found: %s", body)
+	}
+
+	tl := getTimeline(t, ts, callerInst)
+	var childKey uint64
+	for _, st := range tl.Steps {
+		if st.ElementID == "callChild" {
+			childKey = st.ChildInstanceKey
+		}
+	}
+	if childKey == 0 {
+		t.Fatalf("callChild step carried no childInstanceKey; steps=%+v", tl.Steps)
+	}
+	// The linked instance is really the called "child" process.
+	child := getTimeline(t, ts, childKey)
+	if child.ProcessID != "child" {
+		t.Errorf("child instance %d processId = %q, want child", childKey, child.ProcessID)
+	}
+}
+
+func getTimeline(t *testing.T, ts *httptest.Server, key uint64) instanceTimeline {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("timeline %d: status=%d body=%s", key, code, body)
+	}
+	var tl instanceTimeline
+	if err := json.Unmarshal(body, &tl); err != nil {
+		t.Fatalf("decode timeline: %v (%s)", err, body)
+	}
+	return tl
+}
+
 // autoDoneBPMN runs straight from start to end with no wait, so creating an
 // instance completes it in one drain — the finished-instance timeline path.
 const autoDoneBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -38,6 +116,7 @@ type timelineVar struct {
 	Value string `json:"value"`
 	Kind  string `json:"kind"`
 	Scope string `json:"scope"`
+	Actor string `json:"actor"`
 }
 
 type timelineStep struct {
@@ -49,6 +128,7 @@ type timelineStep struct {
 	SourceElementID    string        `json:"sourceElementId"`
 	Relation           string        `json:"relation"`
 	ElementInstanceKey uint64        `json:"elementInstanceKey"`
+	ChildInstanceKey   uint64        `json:"childInstanceKey"`
 }
 
 type instanceTimeline struct {

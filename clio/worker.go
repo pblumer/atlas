@@ -38,6 +38,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 			return fmt.Errorf("clio: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
 		return client.WriteEvent(context.Background(), Event{
+			Source:         DefaultEventSource,
 			Subject:        cp.Intern(detail.Subject),
 			Type:           cp.Intern(detail.EventType),
 			Data:           data,
@@ -61,14 +62,17 @@ func QueryHandler(store *state.Store, lookup ProcessLookup, reg *Registry) job.O
 			return nil, err
 		}
 		resultVar := cp.Intern(detail.ResultVar)
+		subject := cp.Intern(detail.Subject)
 		var result any
-		if query := cp.Intern(detail.ClioQuery); query != "" {
-			if result, err = client.Query(context.Background(), query); err != nil {
+		if where := cp.Intern(detail.ClioQuery); where != "" {
+			// run_query: filter the subject's events with a CEL predicate.
+			if result, err = client.Query(context.Background(), subject, where); err != nil {
 				return nil, err
 			}
 		} else {
+			// get_state: the subject's folded projection.
 			var state map[string]any
-			if state, err = client.GetState(context.Background(), cp.Intern(detail.Subject), cp.Intern(detail.ReduceSpec)); err != nil {
+			if state, err = client.GetState(context.Background(), subject, cp.Intern(detail.ReduceSpec)); err != nil {
 				return nil, err
 			}
 			result = state
@@ -126,7 +130,10 @@ func resolveConnector(store *state.Store, lookup ProcessLookup, reg *Registry, j
 	if cp == nil {
 		return nil, nil, nil, nil, false, fmt.Errorf("clio: no compiled process for def %d", ei.ProcessDefKey)
 	}
-	detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+	detail, err := cp.ConnectorTaskOf(ei.ElementId)
+	if err != nil {
+		return nil, nil, nil, nil, false, fmt.Errorf("clio: %w", err)
+	}
 	name := cp.Intern(detail.Connector)
 	client, ok := reg.Client(name)
 	if !ok {

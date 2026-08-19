@@ -100,7 +100,7 @@ func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink f
 		if err != nil {
 			return job.Completion{}, err
 		}
-		inputs, err := buildInputs(store, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
+		inputs, err := buildInputs(store, j.ElementInstanceKey, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
 		if err != nil {
 			return job.Completion{}, fmt.Errorf("dmn: build inputs for element %d: %w", j.ElementInstanceKey, err)
 		}
@@ -180,7 +180,13 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(
 // a base, overlaid with the input mappings evaluated over the instance's live
 // variables (a mapping overrides a static input of the same name). A nil result
 // evaluates every referenced decision input to FEEL null.
-func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
+//
+// The mappings resolve over the business rule task's full scope chain (elementKey
+// up to the process root), not just the process scope, so a task nested in a
+// subprocess or a multi-instance body reads its enclosing scope's variables — e.g.
+// a per-row `inputElement` bound by a multi-instance loop (ADR-0068 scope-chain
+// resolution, ADR-0077, ADR-0084). piKey binds the reserved processInstanceKey.
+func buildInputs(store *state.Store, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
 	base, err := decodeInputs(staticJSON)
 	if err != nil {
 		return nil, err
@@ -188,7 +194,7 @@ func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings [
 	if len(mappings) == 0 {
 		return base, nil
 	}
-	scopeVars, err := readScopeVars(store, scope)
+	scopeVars, err := readScopeChainVars(store, elementKey)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +203,7 @@ func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings [
 		out[k] = v
 	}
 	for _, m := range mappings {
-		out[m.Target] = evalMapping(scope, scopeVars, m.Source)
+		out[m.Target] = evalMapping(piKey, scopeVars, m.Source)
 	}
 	return out, nil
 }
@@ -214,16 +220,38 @@ func evalMapping(scope uint64, scopeVars map[string]model.VariableValue, source 
 	return feelToInput(v)
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each mapping reads without a per-name store lookup.
-func readScopeVars(store *state.Store, scope uint64) (map[string]model.VariableValue, error) {
+// maxScopeDepth bounds the scope-chain walk, a defensive guard against a cyclic or
+// corrupt FlowScopeKey chain. Real nesting is far shallower; it mirrors the script
+// worker's guard (script/worker.go) and the engine's own.
+const maxScopeDepth = 64
+
+// readScopeChainVars reads the variables a business rule task sees into a map keyed
+// by name, resolving up the element instance's scope chain: its own scope first,
+// then each enclosing scope up to the process root, with the nearest scope winning
+// on a name clash (ADR-0068). A top-level task's chain is just the process scope, so
+// this degenerates to the previous single-scope read. The chain is walked via each
+// scope's element instance's FlowScopeKey; the process-instance root has no element
+// instance, which ends it.
+func readScopeChainVars(store *state.Store, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	scope := elementInstanceKey
+	for depth := 0; depth <= maxScopeDepth; depth++ {
+		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
+			if _, seen := vars[v.Name]; !seen { // a nearer scope already bound this name; it wins
+				vars[v.Name] = *v
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		ei, ok, err := store.GetElementInstance(scope)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || ei.FlowScopeKey == 0 || ei.FlowScopeKey == scope {
+			break // reached the process-instance root (no element instance) or a chain end
+		}
+		scope = ei.FlowScopeKey
 	}
 	return vars, nil
 }

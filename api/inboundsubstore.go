@@ -29,6 +29,14 @@ type inboundSubscription struct {
 	Enabled        bool   `json:"enabled"`
 	CreatedAt      int64  `json:"createdAt"`
 	LastEventID    string `json:"lastEventId,omitempty"` // best-effort resume cursor
+	// StartFromTip makes a new subscription forward-only: on first activation the
+	// bridge primes its cursor past the subject's existing backlog WITHOUT
+	// republishing it, so connecting a watch to a subject that already has history
+	// does not start a process per historical event (the reported /employees flood,
+	// ADR-0075). Defaults to true on create; set false to intentionally backfill the
+	// whole history. Primed records that the one-time skip has completed.
+	StartFromTip bool `json:"startFromTip"`
+	Primed       bool `json:"primed,omitempty"`
 }
 
 // inboundSubStore is a durable store for inbound subscriptions, one JSON file per id

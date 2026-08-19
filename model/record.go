@@ -81,6 +81,19 @@ const (
 	// — the engine never interprets the opaque source id — and appended last so every
 	// prior value type keeps its numeric value on the log.
 	VTInboundDelivery
+	// VTVariableAudit is one external variable override retained for audit (ADR-0098):
+	// who set which variable, to what value, on which scope, keyed under its process
+	// instance. Like VTMessageFlow and VTDecisionEvaluation it is append-only history
+	// (one record per variable an operator sets, never deleted), so the "who changed
+	// it" trail survives the instance and rebuilds from the log. Appended last so every
+	// prior value type keeps its numeric value on the log.
+	VTVariableAudit
+	// VTCompensable is one completed compensable activity retained so a later
+	// compensation throw can run its handler (ADR-0103). Written on the activity's
+	// successful completion, keyed under its scope in completion order, and deleted when
+	// compensated or when its scope tears down. Appended last so every prior value type
+	// keeps its numeric value on the log.
+	VTCompensable
 )
 
 func (t ValueType) String() string {
@@ -115,6 +128,10 @@ func (t ValueType) String() string {
 		return "DecisionEvaluation"
 	case VTInboundDelivery:
 		return "InboundDelivery"
+	case VTVariableAudit:
+		return "VariableAudit"
+	case VTCompensable:
+		return "Compensable"
 	default:
 		return "ValueType(?)"
 	}
@@ -214,6 +231,69 @@ const (
 	// log. It rides in the same batch as the message publish it guards, so the
 	// dedup mark and the correlate/start effects it authorizes commit atomically.
 	IntentInboundDeliveryApplied
+
+	// IntentVariableModify is a command-only intent (never persisted as an event),
+	// like IntentTimerStartArm: it directs the processor to set or overwrite
+	// variables on a running instance's scope from outside the model — an operator
+	// correction to a live instance (ADR-0095). The handler validates the target
+	// scope, then emits a VariableCreated event for a new name or a VariableUpdated
+	// event for an existing one, so the change is a durable, replayable fact recorded
+	// in the instance's variable timeline (the audit trail), not a raw store write.
+	// Because commands are not replayed (invariant I6), its numeric value never
+	// reaches the log, so it is appended at the end without disturbing the persisted
+	// intents' values.
+	IntentVariableModify
+
+	// IntentVariableAudited records that an external actor set a variable on a running
+	// instance (ADR-0098). It is a pure history event, like IntentDecisionEvaluated:
+	// emitted alongside the VariableCreated/VariableUpdated the override produces, it
+	// freezes who made the change into the log so replay rebuilds the identical audit
+	// trail without re-running the command (invariant I6). Appended at the end so every
+	// prior intent keeps its numeric value on the log.
+	IntentVariableAudited
+
+	// IntentJobErrorThrown is a command-only intent (never persisted as an event): a
+	// worker reports that its job threw a BPMN error code (ADR-0089). Its handler cancels
+	// the job and propagates the error from the job's element to the nearest matching error
+	// handler — so, unlike IntentJobFailed, it is control flow, not a retry/incident.
+	// Because commands are not replayed (invariant I6), its numeric value never reaches the
+	// log. Appended at the end so every prior intent keeps its numeric value.
+	IntentJobErrorThrown
+
+	// IntentCompensableRecorded records that a compensable activity (one bearing a
+	// compensation boundary) completed successfully, so a later compensation throw can
+	// run its handler (ADR-0103). It is a pure state event, keyed under the activity's
+	// scope in completion order: applyToState writes it into the compensable index off
+	// the completion event, so recovery rebuilds the identical index (invariant I6).
+	// Appended at the end so every prior intent keeps its numeric value on the log.
+	IntentCompensableRecorded
+	// IntentCompensableConsumed removes a compensable record once its activity has been
+	// compensated (the handler was activated), so it is compensated at most once (ADR-0103).
+	// It carries the record's scope and sequence; applyToState deletes that index entry.
+	IntentCompensableConsumed
+
+	// IntentPurging is a command-only intent (never persisted as an event), like
+	// IntentTimerStartArm: the retention sweep directs the processor to hard-delete a
+	// finished instance's history (ADR-0115). Its handler emits IntentPurged for the
+	// instance it carries. Because commands are not replayed (invariant I6), its numeric
+	// value never reaches the log. Appended at the end so every prior intent keeps its
+	// numeric value.
+	IntentPurging
+	// IntentPurged removes a finished process instance's history from the state store —
+	// the terminal record and every per-instance family (ADR-0115). It is the durable
+	// delete: applyToState folds it into the removals, so recovery reproduces the purge
+	// (invariants I4/I6). Appended at the end so every prior intent keeps its numeric
+	// value on the log.
+	IntentPurged
+
+	// IntentConditionRecheck is a command-only intent (never persisted as an event), like
+	// IntentJobErrorThrown: after a batch writes one or more variables in an instance, the
+	// processor schedules a re-check of that instance's armed conditional events (ADR-0137).
+	// Its handler evaluates each armed conditional's FEEL condition over its scope chain and
+	// drives the ones now true to Completing. Because commands are not replayed (invariant
+	// I6) — the fire is the persisted Completing→Completed chain — its numeric value never
+	// reaches the log. Appended at the end so every prior intent keeps its numeric value.
+	IntentConditionRecheck
 )
 
 func (i Intent) String() string {
@@ -278,6 +358,22 @@ func (i Intent) String() string {
 		return "VariableDeleted"
 	case IntentInboundDeliveryApplied:
 		return "InboundDeliveryApplied"
+	case IntentVariableModify:
+		return "VariableModify"
+	case IntentVariableAudited:
+		return "VariableAudited"
+	case IntentCompensableRecorded:
+		return "CompensableRecorded"
+	case IntentCompensableConsumed:
+		return "CompensableConsumed"
+	case IntentJobErrorThrown:
+		return "JobErrorThrown"
+	case IntentPurging:
+		return "Purging"
+	case IntentPurged:
+		return "Purged"
+	case IntentConditionRecheck:
+		return "ConditionRecheck"
 	default:
 		return "Intent(?)"
 	}

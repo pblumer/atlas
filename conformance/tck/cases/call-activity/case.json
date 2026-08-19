@@ -1,0 +1,12 @@
+{
+  "name": "call-activity",
+  "model": "call-activity.bpmn",
+  "features": [
+    "call-activity"
+  ],
+  "root": "call-parent",
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

@@ -64,8 +64,15 @@ The control-flow basics most real models use.
   (activation writes locals, completion promotes, then drops), the inline and
   polyglot script workers reading up the chain, and the **Modeler properties-panel
   I/O-mapping editor** (input/output lists on service, script, and user tasks).
-  Remaining: extend the scope-chain read to the DMN/REST/clio workers, and reuse
-  the local-scope machinery for embedded subprocess scopes.
+  The **DMN worker now resolves input mappings up the full scope chain**
+  ([ADR-0084](docs/adr/0084-csv-batch-validation.md)), and **exclusive/inclusive
+  gateway conditions resolve over the scope chain too**
+  ([ADR-0086](docs/adr/0086-gateway-conditions-resolve-over-scope-chain.md)), so a
+  business rule task or a gateway nested in a subprocess or a multi-instance body
+  reads its enclosing scope's variables (e.g. a per-row `inputElement` or a
+  per-row `verdict`) rather than only the process root. Remaining: extend the same
+  scope-chain read to the REST/clio workers, and reuse the local-scope machinery
+  for embedded subprocess scopes.
 - 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
@@ -101,7 +108,56 @@ The control-flow basics most real models use.
   folding the `SourcePos` chain, item-definition schema validation, list-index path
   targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
-- 🔲 Conformance tests against a curated BPMN model set
+- 🚧 **Conformance tests against a curated BPMN model set** — the
+  [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
+  execution features mapped onto the workflow control-flow patterns (so gaps are
+  visible in `conformance/COVERAGE.md`), plus four layered correctness oracles per
+  model — golden token traces, replay equivalence (I4, free on every model),
+  structural invariants (no orphan tokens), and metamorphic equivalence
+  (behaviorally equal models must agree despite different shapes). Self-completing
+  scenarios landed (sequence, exclusive gateway, parallel fork/join, a metamorphic
+  pair), plus a **deterministic driver for parking features** — declarative steps
+  that complete a job (user/service task), deliver a message, or advance the clock
+  past a timer, driving the parked instance to completion while replay stays
+  log-only, reaching parked jobs, messages and timers, **receive tasks**,
+  interrupting/non-interrupting **boundary events**, the **event-based gateway**
+  (deferred choice, WCP-16), **message/timer start events** (where the instance is
+  born from a trigger, not CreateInstance), and the **incident lifecycle**
+  (`FailJob` raises, `ResolveIncident` resumes) — 16 scenarios. It also has an
+  **adversarial half**: negative models that are well-formed but structurally
+  invalid and must be rejected at compile (dangling flow, bad boundary host,
+  unknown message), asserted by `TestNegativeModels`. Now also covering the
+  **interrupting boundary error** event (a job throws a business error the
+  boundary catches) and **signal** throw/catch (a 1:n broadcast within an
+  instance), **embedded subprocess**, **parallel and sequential multi-instance**
+  (the sequential one driven one job at a time), and **call activity** (a
+  two-process model where the runner deploys both, instantiates the named root,
+  and filters the spawned child instance out of the captured trace), **interrupting
+  signal boundary**, **compensation** (a compensable activity's boundary links to a
+  handler that a compensation throw runs), and the **inclusive (OR) gateway**
+  (multi-choice split + synchronizing merge, WCP-6/7), and the **signal start
+  event** (a trigger process's broadcast births the root instance, captured while
+  the trigger instance is filtered out by definition key), and a **first-class data
+  object** written by an output association and read back by an input one (the
+  trace now surfaces data objects with their advancing data state, e.g.
+  `order[approved]=100`), and **field-level data-object writes** (members accrued
+  across steps into one structured object, `order={"id":"ORD-1","total":100}`), and
+  a **collection data object** (an `isCollection` list-valued object round-tripped,
+  the trace marking it `items[collection]=[10,20,30]` — collection-ness is
+  compile-time metadata surfaced from the process, not the runtime value), and a
+  **transaction subprocess with cancel** (a cancel end event rolls the transaction
+  back — compensating a completed compensable activity — and the transaction's
+  cancel boundary routes to a handler instead of the normal end, ADR-0108) — 30
+  scenarios, plus a fourth negative model pinning that a **terminate end event** is
+  rejected at compile rather than silently degraded. A **fifth oracle** now
+  landed: a **differential** against an independent engine (Node's `bpmn-engine`) —
+  the same process run on both, comparing a normalized control-flow projection
+  (did it complete, which activities ran), so a bug where Atlas is consistently
+  wrong shows up as disagreement with a second implementation. It covers the pure
+  control-flow subset (sequence, exclusive/parallel/inclusive gateways) and is
+  opt-in behind a build tag (needs Node), out of the default test/coverage path.
+  Next: grow the differential's reference translations, plus data-object lineage
+  and error/message end events.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical
@@ -191,6 +247,18 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
+  **A BMC Remedy connector is another catalog kind**
+  ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
+  `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on
+  `HPD:IncidentInterface_Create`) in a Remedy form through the BMC AR System REST API on
+  the job path — the form and its field values are model-authored (literal-or-FEEL), the
+  created entry's id is written into a result variable, and the AR System base URL plus
+  the `{username,password}` credential bundle are server-registered and vault-resolved
+  like mail/clio, never in the model. The `remedy` connector trio (registry/client/worker)
+  is wired into the single-binary server run loop under the reserved Remedy job type and
+  authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
+  Create-entry is the first operation; update/query, JWT caching, typed field values, and
+  a Remedy-side dedup field are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -234,8 +302,89 @@ Making processes wait, react, and time out.
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
   Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
-- 🔲 Signal events (broadcast)
-- 🔲 Error events and error propagation
+- ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
+  — no correlation key, delivered 1:n to **every** waiting catch of the same name across
+  all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
+  instance's variables as payload to every intermediate catch, signal boundary
+  (interrupting and non-interrupting), and signal event subprocess (interrupting and
+  re-arming) of that name, and instantiates every deployed process with a matching signal
+  start event. Built on the message delivery machinery over a parallel, name-keyed
+  subscription family, so cross-instance reach and recovery are inherited; all phases
+  recovery-tested. Authored in the Modeler's Implement panel (a signal picker on every
+  signal event, plus a central signals manager on the diagram root).
+- ✅ **Error events and error propagation**: an `errorEventDefinition` is a **named, coded
+  failure** propagated **structurally** to the **nearest enclosing** matching handler — not
+  broadcast (ADR-0089). An error end event (or a worker failing a job to a code via
+  `ThrowJobError`) throws; it walks up the live scope chain to the first error boundary or
+  error event subprocess whose code matches (a code-less catch is a catch-all), always
+  interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
+  it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident
+  (ADR-0061). Built on the scope chain, `interruptHost`/`terminateScope`, and the
+  boundary/event-subprocess lifecycle — no subscription, value type, or recovery path;
+  propagation is a pure function of committed scope state. Recovery-tested; authored in the
+  Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
+  events, plus a central errors manager).
+- ✅ **Escalation events** ([ADR-0125](docs/adr/0125-escalation-events.md)): an
+  `escalationEventDefinition` is a **named, coded signal** raised up the scope chain to the
+  **nearest enclosing** matching handler — the non-interrupting, benign sibling of error events.
+  An **escalation intermediate throw** (which raises it and then **continues on its outgoing
+  flow**) or an **escalation end event** raises it; the nearest **escalation boundary** or
+  **escalation event subprocess** whose code matches (a code-less catch is a catch-all) catches
+  it. Two things set it apart from an error: the catch may be **non-interrupting** — the handler
+  runs alongside the still-running activity (reusing the ADR-0040/0082 non-interrupting fire
+  path) — and an **uncaught escalation is benign** (no incident; the throw's own flow semantics
+  apply and the instance runs on). An escalation unhandled in a call-activity child propagates to
+  the caller without aborting the child (ADR-0076). Reuses `propagateError`'s scope walk and the
+  scope-teardown primitives — no subscription, value type, or recovery path; propagation is a
+  pure function of committed scope state. Recovery-tested; authored in the Modeler's Implement
+  panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
+  keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
+  the throw/catch event family (message, error, signal, escalation).
+- ✅ **Link events** ([ADR-0133](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
+  **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
+  by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
+  stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
+  Atlas resolves the pair **entirely at compile time**: the throw→catch link compiles to a
+  **synthetic sequence flow** (`b.Connect`) and both events reuse the existing `passThroughBehavior`,
+  so a token flows throw ⇢ catch ⇢ the catch's outgoing flow exactly as through a none event — **no
+  new runtime behavior, value type, event, or recovery path**, just two identity types for the
+  Operations overlay. One catch per name (the destination) and one-or-more throws; a deploy rejects
+  an unmatched throw or a duplicate catch name. Recovery-tested; authored in the Modeler (a link-name
+  field on the throw/catch). The last common intermediate throw/catch event type.
+- ✅ **Conditional events** ([ADR-0137](docs/adr/0137-conditional-events.md)): the one BPMN event
+  family triggered by **process data** rather than a message, timer, signal, or throw — a
+  **conditional intermediate catch** (wait until a boolean condition holds), a **conditional boundary
+  event** (fire while the host activity runs), and a **conditional event subprocess** (fire while the
+  scope runs), each carrying a boolean **FEEL condition over the instance's variables**. The condition
+  compiles to FEEL at deploy (the same machinery as a gateway condition) and is **re-evaluated when a
+  variable it reads changes**: every committed write funnels through the one `AppendVariableEvent`
+  chokepoint, which marks the instance dirty and schedules a transient command-path `ConditionRecheck`
+  follow-up that fires the armed conditionals now true — reusing the **inert-armed catch** +
+  `AppendElementCommand(IntentCompleting)` pattern that error (ADR-0089) and escalation (ADR-0125)
+  boundaries established. It also self-evaluates at arm (firing at once if already true), opens **no
+  subscription**, and reacts correctly to an **external `SetVariables`** with no activity completing.
+  The re-check runs **live only** and its fire is an ordinary persisted event, so recovery replays it
+  identically (I6); a process with no conditional pays nothing on a variable write. Interrupting forms
+  and the intermediate catch fire once; non-interrupting forms currently fire once per arm (repeatable
+  false→true edge-triggering is a documented follow-up). Recovery-tested; authored in the Modeler (a
+  FEEL condition field on the catch/boundary/event-subprocess start). The last unimplemented BPMN
+  intermediate-event trigger, and the first that reacts to variable state.
+- ✅ **Ad-hoc subprocesses** ([ADR-0138](docs/adr/0138-adhoc-subprocesses.md)): the last major
+  **structural** BPMN element — a container whose contained activities are **not driven by sequence
+  flow**. Entering it activates every **entry activity** (a contained node with no incoming flow)
+  **at once**, each an independent token in the ad-hoc's scope; contained activities may still be
+  wired to each other, and a token then flows on inside the scope like anywhere else. It finishes
+  either when its scope **drains** — the ordinary embedded-subprocess rule — or, if it carries an
+  optional boolean **FEEL completion condition**, the first time that condition holds at the
+  checkpoint run **after each contained activity completes**: the still-running activities are then
+  cancelled (`cancelRemainingInstances`, the BPMN default) or, with `"false"`, left to finish. It is
+  built on the **existing scope machinery** (ADR-0074) and the multi-instance **completion-condition
+  eval + `terminateScope` cancel** (ADR-0077), so it adds **no value type, event, or recovery path** —
+  boundary events on it, interrupts, and recovery come for free (all recovery-tested). This is what
+  BPMN offers for **flexible / case-management** work: "do any of these, in whatever order, until
+  we're done." Authored in the Modeler (completion condition + cancel-remaining). **Sequential
+  ordering is refused at deploy** rather than silently run as parallel — a documented follow-up,
+  since a "which entries have started" cursor needs durable state.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -244,9 +393,61 @@ Making processes wait, react, and time out.
   a repeating reminder that fires while the host runs (ADR-0054); each field may be
   a literal or a **FEEL expression** over the instance's variables, including a
   FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
-  (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
-  remain.
-- 🔲 Receive tasks
+  (ADR-0040, ADR-0054). **Signal boundaries** are delivered (ADR-0088) and **error
+  boundaries** via error propagation to the nearest handler (ADR-0089). **Boundaries
+  on subprocesses** work for every kind — timer, message, and signal: a boundary
+  attached to an embedded subprocess arms when the subprocess activates, and an
+  interrupting one tears the whole subprocess scope down (every inner token
+  terminated, its jobs canceled) before routing out its flow, because a subprocess
+  is a first-class activity (ADR-0074) and boundaries are generic over activities.
+  Recovery-tested.
+- ✅ **Receive tasks** ([ADR-0102](docs/adr/0102-receive-tasks.md)): a `<receiveTask
+  messageRef="…">` is the message intermediate catch event's wait-for-a-message semantics in
+  **task** form — so, unlike the catch event, it is an *activity* that accepts **boundary
+  events** (the "wait for a reply, else time out" pattern), I/O and data mappings, and
+  multi-instance. It opens a message subscription on activation and continues when a
+  correlating publish/throw arrives, reusing the ADR-0020 subscription/correlate path
+  wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
+  the Modeler's Implement panel via the shared message picker.
+- ✅ **Send tasks** ([ADR-0112](docs/adr/0112-send-tasks.md)): a `<sendTask>` is the **single
+  outbound element**, its kind chosen in the Implement panel. A **job/connector** kind
+  (`zeebe:taskDefinition` or an `atlas:*Connector`) is a job-creating *activity* identical in
+  execution to a service task — it reuses `serviceTaskBehavior`, so connectors (e-mail, REST, …),
+  boundary timeouts, I/O/data/multi-instance, retry backoff, and incidents all apply. A **message**
+  kind (`messageRef`, or an `operationRef` naming a `<bpmn:operation>` whose `inMessageRef` is
+  resolved to that message) is a correlating throw in task form: it compiles to the message throw
+  path (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. `operationRef` is a
+  deploy-time compatibility path for imported WSDL-style models (its `outMessageRef` response is
+  not supported). Recovery-tested; the Modeler offers the connector/job-worker catalog plus a
+  Message entry on the send task.
+- ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
+  target catch event at once — each outgoing flow leads to a message/timer/signal
+  intermediate catch — and takes the branch whose event fires **first**, cancelling the rest
+  (the classic request-with-timeout: a message catch raced against a timer catch). It reuses
+  the catch-event, subscription, timer, and correlate/fire machinery wholesale; the gateway
+  labels its armed catches with a **race group** (a new `EventGatewayKey` on the element
+  instance), and the winner runs an `interruptHost`-shaped sibling loop to terminate the
+  losers (their subscriptions/timers self-retire). The compiler validates every target is a
+  catch event; recovery rebuilds the armed race and its group from the log, so the first fire
+  after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
+  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
+- ✅ **Terminate end events** ([ADR-0116](docs/adr/0116-terminate-end-events.md)): an
+  `<endEvent><terminateEventDefinition/>` — the "abort" end — ends its **enclosing flow scope** at
+  once, terminating every other live token in the scope (cancelling their jobs). At the process
+  root the instance ends; inside an embedded subprocess only that subprocess ends and the parent
+  continues on its outgoing flow (scoped BPMN semantics). It reuses `terminateScopeExcept` +
+  `completeScope` — `cancelEndEventBehavior` minus compensation and the cancel boundary — so no new
+  recovery path; recovery-tested. The last unimplemented standard end-event type (none/message/
+  signal/error/cancel already run). bpmn-js draws it natively.
+- ✅ **Lanes** (organizational metadata — Layer A) ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a
+  `<laneSet>`/`<lane>` with `<flowNodeRef>` children (and nested `<childLaneSet>`) partitions a
+  process's flow nodes into named lanes. Faithful to BPMN 2.x and Camunda 8, a lane is **metadata
+  with no execution semantics** — the compiler records each node's leaf lane (and its outermost→leaf
+  path) and the task API exposes it (`lane`, `lanePath`), which the Tasks app surfaces as a lane
+  chip and detail row; the engine, `applyToState`, and token flow are untouched. A deploy rejects a
+  `flowNodeRef` naming no flow node or a node claimed by two lanes. **Layer B** (a lane referencing
+  an Atlas group as a compile-time `candidateGroups` default) and **Layer C** (instance-level access
+  control) are designed in the ADR and deferred to their own PRs.
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
@@ -261,11 +462,18 @@ Making processes wait, react, and time out.
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
   firing immediately; resolving re-arms the timer against the instance's current
-  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
-  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
-  to come.
+  variables (re-raising if it still fails). Recovery-tested. **Retry backoff and the
+  remaining FEEL-failure gaps now closed** ([ADR-0111](docs/adr/0111-incident-model-completion.md)):
+  a worker can fail a job with a **backoff** — the job is held off the activatable
+  index until a retry timer re-activates it (durable across a crash), instead of
+  hammering immediately; a **recurring** boundary or event-subprocess timer whose
+  FEEL cadence stops resolving mid-cycle raises the same job-less incident and parks
+  rather than silently ceasing to recur; and a **timer start** event's constant FEEL
+  schedule that can't resolve is now a deploy-time validation error
+  (`timer.start-schedule`) instead of a start timer that silently never arms. An
+  operator UI for incidents is the last piece still to come.
 
-## Milestone 3 — Structure 🔲
+## Milestone 3 — Structure ✅
 
 Composition and reuse.
 
@@ -278,11 +486,51 @@ Composition and reuse.
   authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
   deploy and message-flow validation still to come.
 - ✅ **Embedded subprocesses** (scope lifecycle via child counters): a `<subProcess>` runs its inner start→…→end in a child scope keyed by its element instance, completes when that scope drains, supports interrupting/non-interrupting boundary events (with scope-recursive termination), nests, and passes variables in/out via I/O mappings — including the Modeler's I/O-mapping editor for a subprocess ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)).
-- 🔲 Event subprocesses (interrupting and non-interrupting)
-- 🔲 Call activities (single-partition)
-- 🔲 Multi-instance activities (sequential and parallel)
-- 🔲 Compensation and compensation handlers
-- 🔲 BPMN transactions (with cancel/compensation)
+- ✅ **Event subprocesses** (interrupting and non-interrupting): a `<subProcess
+  triggeredByEvent="true">` arms its start event's trigger while its enclosing scope
+  runs; firing interrupts the scope (or runs alongside and re-arms, non-interrupting)
+  and runs the handler. Message and timer triggers ([ADR-0082](docs/adr/0082-event-subprocesses.md)),
+  plus **signal** ([ADR-0088](docs/adr/0088-signal-events.md)) and **error**
+  ([ADR-0089](docs/adr/0089-error-events.md)) triggers; nests in embedded subprocesses
+  and at the process root; recovery-tested; authored in the Modeler.
+- ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
+  as a child instance in the caller's partition, passes variables in/out (isolated or
+  propagate-all), resumes the caller on completion, and tears the child down when the
+  caller is cancelled or interrupted (recursively, through a call chain) — including an
+  error unhandled in a child propagating to the caller's error boundary ([ADR-0089](docs/adr/0089-error-events.md)).
+  Recovery-tested; authored in the Modeler's Implement panel (called process id, binding,
+  propagation toggles, I/O mappings, and multi-instance) ([ADR-0076](docs/adr/0076-call-activities.md)).
+- ✅ **Multi-instance activities** (sequential and parallel): a `<multiInstanceLoopCharacteristics>` runs an activity — task, subprocess, or call activity — once per element of a FEEL input collection (or a fixed cardinality) as inner iterations scoped under a body, binding each iteration's `inputElement` and the standard `loopCounter`; parallel seeds all at once, sequential one at a time. It assembles an ordered `outputCollection` from each iteration's `outputElement`, honours a `completionCondition` (early exit, cancelling the rest), is interruptible (the body is a scope, so an interrupting boundary terminates every iteration and, for call-activity iterations, each child), and is authored in the Modeler's Implement panel. Reuses the ADR-0074 scope lifecycle wholesale — no new value type, counter, or recovery path; recovery-tested ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
+- ✅ **Standard loop activities** (the ↻ marker): a `<standardLoopCharacteristics>` repeats an activity while its FEEL `<loopCondition>` holds — one run at a time, each bound the 1-based `loopCounter` — with `testBefore` choosing the while form (checked before the first run, so the activity may be skipped) or BPMN's default repeat-until (always at least one run), and an optional `loopMaximum` as a hard cap; a loop with neither, an invalid maximum, or both loop markers on one activity is refused at deploy. It runs on the ADR-0077 body/iteration machinery as a sequential loop whose iteration set is a condition rather than a collection, so it adds no value type, counter, or recovery path; a run's result stays visible to the next run and to the loop condition and is promoted to the enclosing scope when the loop ends. Recovery-tested, covered by the conformance suite (WCP-21 Structured Loop), and authored in the Modeler's Implement panel, where the Mode property and the marker drawn on the shape are the same fact. Both loop markers run on **every activity kind** Atlas executes — including business rule, manual and undefined tasks, which used to drop them silently ([ADR-0133](docs/adr/0133-standard-loop-activities.md)).
+- ✅ **Compensation and compensation handlers**: a compensable activity carries a
+  compensation boundary event (`<compensateEventDefinition/>`) linked by a BPMN
+  `<association>` to an off-flow `isForCompensation` handler; the boundary is inert
+  (never armed), just marking the activity compensable. On successful completion the
+  activity is recorded in a durable per-scope index (`cfCompensable`), keyed by the
+  completion event's log position so a reverse scan is reverse completion order. A
+  compensation **throw** (intermediate) or **end** event triggers compensation — of one
+  named activity (`activityRef`) or, broadcast, every completed compensable activity in
+  its scope — running each handler newest-first (reverse completion order) and consuming
+  the record so it compensates at most once. Compensation is scope-confined, the index is
+  cleaned when a scope or instance tears down (no leak), and it survives recovery (the
+  index rebuilds from the log — no new recovery path; the throw is a command-path scope
+  walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
+  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
+- ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
+  embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
+  end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
+  back: it terminates the transaction's other running work, **compensates** every
+  completed compensable activity in the transaction scope (ADR-0103, reverse
+  completion order), then — once compensation drains the scope — routes the token out
+  an always-interrupting **cancel boundary** (`<boundaryEvent><cancelEventDefinition/>`,
+  valid only on a transaction). A committing transaction takes its normal flow and does
+  not compensate. Built on the subprocess scope (ADR-0074), the `compensate` walk, and
+  `interruptHost`, reusing `TypeSubProcess` (marked `IsTransaction`) so every scope
+  site is inherited; the compensate-then-continue ordering rides the existing
+  scope-drain through a small event-derived canceling marker, so recovery rebuilds it
+  with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
+  transactions and cancel events; the cancel boundary/end panels are wired)
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
 ## Milestone 4 — Operability 🔲
 
@@ -291,8 +539,41 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
-- 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
-- 🔲 Log compaction / snapshotting so recovery doesn't replay from genesis
+- 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+  ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
+  exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
+  applied log position, checkpoints and the position/age of the newest that still
+  verifies, the last pass's outcome, WAL segments and bytes, exporter position and lag —
+  all collected at scrape time from durable state, so they cannot over-report and cost
+  the engine nothing. The **engine batch metrics** landed too: batches, commands and
+  events processed, events per batch, fsync and state-commit duration and failures, and
+  command queue depth, reported after each batch is durable and proven allocation-free by
+  two tests and a paired benchmark. The **runtime population gauges** landed
+  too — active process instances and live element tokens, summed from ADR-0080's
+  per-definition counters rather than by scanning the runtime set, with a benchmark
+  showing the sum is flat in the number of running instances once Pebble has compacted
+  its merge operands. Remaining: durable counters for jobs, timers, messages and
+  incidents (and the gauges over them); job-protocol counters; recovery duration;
+  readiness distinct from liveness; then structured log event names and OTel traces.
+- ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
+  ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
+  programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
+  store at a known applied log position plus a versioned, self-checksummed manifest,
+  taken on the run loop at a batch boundary and published atomically by rename;
+  `RecoverFrom` restores the newest usable one and replays only the WAL suffix past it
+  (falling back to an older checkpoint or genesis on anything untrustworthy); and
+  `CompactLog` deletes the segments that become redundant, gated on a fully verified
+  checkpoint **and** every consumer watermark (ADR-0114 exporter, ADR-0115 retention).
+  Both halves now run in the server. `atlas serve` checkpoints every
+  `--checkpoint-interval` (default 5m, keeping 3) and recovers through
+  `<data-dir>/checkpoints` at startup, so restart time follows the cadence rather than
+  the log's length; `--compact-wal` (opt-in, because deletion is irreversible) then
+  deletes the segments that checkpoint and every consumer watermark make redundant, so
+  the log's disk is bounded too. The whole-instance snapshot (ADR-0109, amended) carries
+  a verified checkpoint and installs it on restore, so backup/restore survives a
+  compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
+  checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
+  checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 
@@ -313,7 +594,25 @@ Adoption and polish.
 
 - 🔲 Worker SDKs in more languages
 - 🔲 BPMN modeler interoperability (import from common tools)
-- 🔲 Benchmark suite and published performance numbers
+- 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
+  a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
+  (real WAL `fsync` per batch) steady-state benchmarks for the minimal
+  self-completing, service-task-lifecycle, and variable+gateway workloads, across
+  **three profiles**: the pure engine, the end-to-end HTTP/API path through
+  `api.Server` (so the difference reads off the API-layer overhead), and a RAM-backed
+  in-memory profile (so the difference from durable reads off the disk-`fsync`
+  latency, ~95% of the durable per-op time on the CI machine). It also covers the
+  **startup/recovery axis** — recovery benchmarks that replay a `b.N`-instance WAL
+  from genesis into a fresh state store, measuring the per-instance recovery cost —
+  and **P50/P95/P99 latency** benchmarks that sample each operation so the `fsync`
+  tail the mean hides is visible. They report `ns/op` (→ instances/sec), `events/op`,
+  `walB/op`, allocations, and (for the latency benchmarks) the percentile
+  distribution, with a Markdown-summary script and a CI smoke run. A first
+  **published, reproducible baseline** — machine-labelled raw capture plus a
+  `benchstat` summary — is committed under
+  [`benchmarks/results/`](benchmarks/results/). Still to come: a loopback-socket HTTP
+  variant and a large parked-workload profile
+  ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
@@ -472,8 +771,11 @@ panel only ever authors what the engine actually runs. The ADRs below are
 **Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
 the hand-written Details panel one vertical slice at a time:
 - 🔲 General: element id, name.
-- 🔲 Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
-  codec preserves it).
+- ✅ Documentation: `<bpmn:documentation>` — a Documentation field beside every
+  element's name and id, on the process, each pool and the process it executes, and
+  the collaboration itself. The compiler carries it as metadata but never acts on it
+  ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended), so the Tasks app can
+  show a **user task's** documentation to the assignee as the work instruction.
 - ✅ Input/output variable mappings (`zeebe:ioMapping`) — the properties-panel
   editor (input/output lists on service, script, and user tasks) landed with the
   Milestone 1 variable subsystem ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).
