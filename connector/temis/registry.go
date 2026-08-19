@@ -28,6 +28,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Client evaluates a decision on one temis instance. It is an interface so the
@@ -94,7 +96,7 @@ type HTTPClient struct {
 
 // NewHTTPClient builds a temis HTTP client for a configured connector.
 func NewHTTPClient(conn Connector) *HTTPClient {
-	return &HTTPClient{conn: conn, http: http.DefaultClient}
+	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }
 
 // Evaluate posts the decision id and input context to the temis service and

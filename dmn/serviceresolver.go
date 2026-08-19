@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // ServiceResolver resolves a DMN reference handle against a temis model source
@@ -24,7 +26,9 @@ type ServiceResolver struct {
 	// BaseURL is the model source root; the handle "risk-score" resolves to
 	// <BaseURL>/risk-score.dmn.
 	BaseURL string
-	// Client is the HTTP client to use; nil uses http.DefaultClient.
+	// Client is the HTTP client to use; nil uses a client bounded by the shared
+	// connector call budget (nettimeout.Default), never an unbounded one — this
+	// resolver is called from the DMN worker on the run-loop goroutine.
 	Client *http.Client
 	// Token, if set, is sent as an "Authorization: Bearer <Token>" header — the
 	// credential for a private temis service or git host.
@@ -54,7 +58,7 @@ func (r ServiceResolver) Resolve(ctx context.Context, modelRef string) ([]byte, 
 	}
 	client := r.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = nettimeout.HTTPClient()
 	}
 	resp, err := client.Do(req)
 	if err != nil {
