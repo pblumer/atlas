@@ -121,6 +121,25 @@ func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 			ApiKeyName: strings.TrimSpace(c.AuthApiKeyName),
 			SecretRef:  strings.TrimSpace(c.AuthSecret),
 		}, nil
+	case "oauth2":
+		// Client-credentials grant (ADR-0152): the token endpoint and client id are
+		// model data; the client secret is a reference. Scope is optional.
+		if strings.TrimSpace(c.AuthTokenURL) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
+		}
+		if strings.TrimSpace(c.AuthClientID) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
+		}
+		if strings.TrimSpace(c.AuthSecret) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
+		}
+		return RestAuth{
+			Type:      t,
+			ClientID:  strings.TrimSpace(c.AuthClientID),
+			SecretRef: strings.TrimSpace(c.AuthSecret),
+			TokenURL:  strings.TrimSpace(c.AuthTokenURL),
+			Scope:     strings.TrimSpace(c.AuthScope),
+		}, nil
 	default:
 		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q has an unsupported auth type %q", taskID, c.AuthType)
 	}
@@ -1786,9 +1805,11 @@ type xmlClioConnector struct {
 // url is the full request URL, authored in the model; resultVariable, if set, is
 // the process variable the JSON response is written back into. Header and
 // QueryParam child elements add request headers and query parameters. The auth*
-// attributes describe authentication: authType is "basic"/"bearer"/"apiKey";
-// authUsername (basic) and authApiKeyName (the apiKey header name) are model data;
-// authSecret names a server-side secret (ADR-0041) — never the secret value.
+// attributes describe authentication: authType is "basic"/"bearer"/"apiKey"/
+// "oauth2"; authUsername (basic) and authApiKeyName (the apiKey header name) are
+// model data; authSecret names a server-side secret (ADR-0041) — never the secret
+// value. For oauth2 (client-credentials, ADR-0152) authTokenUrl/authClientId/
+// authScope are model data and authSecret is the client secret reference.
 type xmlRestConnector struct {
 	Method         string      `xml:"method,attr"`
 	Url            string      `xml:"url,attr"`
@@ -1797,6 +1818,9 @@ type xmlRestConnector struct {
 	AuthUsername   string      `xml:"authUsername,attr"`
 	AuthApiKeyName string      `xml:"authApiKeyName,attr"`
 	AuthSecret     string      `xml:"authSecret,attr"`
+	AuthTokenURL   string      `xml:"authTokenUrl,attr"`
+	AuthClientID   string      `xml:"authClientId,attr"`
+	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
