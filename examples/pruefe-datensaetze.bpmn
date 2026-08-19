@@ -76,12 +76,12 @@
 
       <businessRuleTask id="regelpruefung" name="Regelprüfung">
         <extensionElements>
-          <calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
-          <ioMapping>
-            <input source="=row.email" target="email"/>
-            <input source="=row.group" target="group"/>
-            <input source="=row.license" target="license"/>
-          </ioMapping>
+          <zeebe:calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
+          <zeebe:ioMapping>
+            <zeebe:input source="=row.email" target="email"/>
+            <zeebe:input source="=row.group" target="group"/>
+            <zeebe:input source="=row.license" target="license"/>
+          </zeebe:ioMapping>
         </extensionElements>
       </businessRuleTask>
 
