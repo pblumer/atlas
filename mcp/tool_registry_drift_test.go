@@ -191,6 +191,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	"GET /api/v1/connectors":                             "connector infrastructure is admin config",
 	"POST /api/v1/connectors":                            "connector infrastructure is admin config",
+	"POST /api/v1/connectors/test":                       "connector infrastructure is admin config",
 	"PATCH /api/v1/connectors/{id}":                      "connector infrastructure is admin config",
 	"DELETE /api/v1/connectors/{id}":                     "connector infrastructure is admin config",
 	"GET /api/v1/connectors/{id}/inbound-subscriptions":  "connector infrastructure is admin config",

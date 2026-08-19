@@ -1,6 +1,6 @@
 # ADR-0149: A preview mail provider, and incidents on the live diagram
 
-- **Status:** Accepted
+- **Status:** Accepted (amended)
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 
@@ -135,6 +135,59 @@ which is the harder half of the problem.
   instances; auto-provisioning a preview connector on a fresh install so the first mail
   task has something to point at; and an incident count in the Operations nav, so the
   visibility this ADR gives the diagram also reaches the shell.
+
+## Amendment (2026-08-19): the check button, and the transport it forced
+
+The follow-up this ADR named first — "a test-send / connection check on the connector
+form (option 2)" — is now part of it, because the argument for deferring it did not
+survive contact with the second report: the preview provider helps the author who has
+no provider yet, and nothing helped the operator who *had* one and could not tell
+whether it worked.
+
+**What a check does is the provider's own question.** `mail.Prober` is a separate,
+optional interface rather than a method on `Client`, so "can this be checked?" stays
+answerable with "no" — a provider that cannot be checked short of sending says so
+instead of returning a hollow success. Each provider answers what its configuration
+actually raises: SMTP opens the session a send opens (connect, STARTTLS, AUTH) and
+hangs up; a native provider acquires an access token, which is precisely the step that
+fails on a revoked refresh token; preview confirms it has an outbox. `POST
+/api/v1/connectors/test` takes the connector's fields rather than its id, so the form
+can check what is *typed*, before it is saved — the moment a mistake is cheapest to
+fix and the only moment someone is looking. An optional `to` turns the check into a
+real send, the one thing that proves delivery rather than reachability. A failed check
+is a 200 carrying `ok:false`: the request was served correctly and the answer is "no";
+only an unusable request (a kind with nothing to check, an endpoint that cannot dial)
+is a 400.
+
+**A truthful check needed a truthful transport.** The endpoint normalization above maps
+`smtps://` to port 465 — and `net/smtp.SendMail`, which the SMTP client was built on,
+cannot reach a submissions-port server at all: it dials in the clear and waits for a
+greeting that a TLS-first server will never send, so the send does not fail, it hangs.
+A check that reported "connected" there would have been worse than no check. The
+transport is therefore ours now (`dialSMTP` + `submit`): TLS from the first byte on the
+submissions port, STARTTLS wherever a server offers it, AUTH after the upgrade, then
+the envelope — each step naming itself, so "relay denied" points at the address it was
+about. The probe and the send share the front half of it, which is what makes the check
+meaningful; a check that exercised a different path could only tell you about that path.
+It also closes an ADR-0079 follow-up in passing: the transport takes the caller's
+context, so a send is bounded by the job that asked for it rather than by the network.
+
+One behavior is inherited rather than chosen: `net/smtp` refuses PLAIN auth on an
+unencrypted connection (outside localhost) rather than putting a password on the wire.
+That is right, but "unencrypted connection" says nothing about what to do, so a check
+against such a server answers with what it means — no STARTTLS offered, use 587 or 465.
+
+- **Positive:** both failures from the original reports — a revoked Gmail refresh token
+  and an SMTP endpoint that could not dial — are now answerable in a second, at the
+  form, by the person who typed them. A submissions-port (465) connector works at all,
+  which it did not before.
+- **Negative / trade-offs accepted:** the send path is our code rather than the standard
+  library's, so its correctness is now our problem — covered by tests that speak SMTP to
+  a real socket rather than substituting the seam. The check is not admin-gated, matching
+  the rest of the connector API: anyone who can configure a connector can already send
+  through it from a process.
+- **Follow-ups:** the remaining items above are unchanged, and the check makes the first
+  of them cheaper — a periodic credential health probe is this same `Prober` on a timer.
 
 ## Pros and cons of the options
 

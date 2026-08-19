@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -610,4 +611,108 @@ func (s *Server) handleClearMailOutbox(w http.ResponseWriter, _ *http.Request) {
 		s.mailOutbox.Clear()
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// connectorTestTimeout bounds a connector check. A submission server or a token
+// endpoint that has not answered within this is a failed check as far as the person
+// waiting in front of the form is concerned.
+const connectorTestTimeout = 20 * time.Second
+
+// connectorTestReq is the body of a connector check: the connector's own fields — the
+// same shape a create takes, so the form can check what is *typed*, before it is
+// saved, which is the moment a mistake is cheapest to fix — plus an optional
+// recipient. Without a recipient the check stops at the door: connect, upgrade,
+// authenticate. With one it sends a real message, the only way to learn what the
+// provider does with a message rather than with a connection.
+type connectorTestReq struct {
+	createConnectorParams
+	To string `json:"to"`
+}
+
+// handleTestConnector checks a mail connector and reports what happened in words the
+// person who typed it can act on (ADR-0149).
+//
+// It exists because every failure this catches used to be discovered the same way: a
+// process ran, a token parked, and an incident carried the provider's error to
+// whoever thought to look for it, hours later and far from the form where the mistake
+// was made. A revoked refresh token, a host that does not resolve, a password the
+// server rejects — all of them are answerable in a second at configuration time, and
+// none of them were being asked.
+//
+// A failed check is a 200 carrying ok:false, not an HTTP error: the request was
+// served correctly and the answer is "no". Only a malformed or unusable request
+// (a kind with nothing to check, an endpoint that cannot dial) is a 400. The vault
+// read rides the run loop because the store's owner is the run loop; the network call
+// never does (I3).
+func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
+	var req connectorTestReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = connectorKindMail
+	}
+	if req.Kind != connectorKindMail {
+		httpapi.Error(w, http.StatusBadRequest, "only a mail connector can be checked today")
+		return
+	}
+	if msg := validateMailConnector(&req.createConnectorParams); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	var secret string
+	s.do(func() { secret = s.resolveConnectorSecret(req.CredentialsRef) })
+
+	client, err := mail.NewProviderClient(mail.ProviderConfig{
+		Provider: req.Provider,
+		Endpoint: req.Endpoint,
+		Sender:   req.Sender,
+		Secret:   secret,
+		Name:     req.Name,
+		Outbox:   s.mailOutbox,
+	})
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), connectorTestTimeout)
+	defer cancel()
+
+	to := strings.TrimSpace(req.To)
+	if to == "" {
+		err = mail.Probe(ctx, client)
+	} else {
+		err = client.Send(ctx, mail.Message{
+			To:      []string{to},
+			Subject: "Atlas connector test",
+			Body: "This is a test message from the Atlas connector \"" + req.Name + "\".\n\n" +
+				"It was sent from the connector form, not by a process. If it reached you, " +
+				"the connector can deliver mail.\n",
+		})
+	}
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": err.Error()})
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true, "detail": connectorTestDetail(req.Provider, req.Endpoint, to)})
+}
+
+// connectorTestDetail says what the check actually proved, rather than "OK" — the
+// difference between "the credential was accepted" and "a message was delivered"
+// matters to whoever has to decide the connector is finished.
+func connectorTestDetail(provider, endpoint, to string) string {
+	switch {
+	case to != "" && provider == mail.ProviderPreview:
+		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
+	case to != "":
+		return "Test message sent to " + to + ". If it does not arrive, the message left Atlas and the provider still has it."
+	case provider == mail.ProviderPreview:
+		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
+	case provider == mail.ProviderSMTP:
+		return "Connected to " + endpoint + " and authenticated. No message was sent."
+	default:
+		return "Credential accepted — the provider issued an access token. No message was sent."
+	}
 }

@@ -33,8 +33,29 @@ _Changed_ / _Removed_ for each version.
   raising the incident correctly (ADR-0061) since the first failure, but only the
   separate Incidents view ever showed it.
 
+- **A connector can be checked before it is trusted with anything**
+  ([ADR-0149](docs/adr/0149-preview-mail-provider-and-visible-incidents.md)): the
+  connector form has a **Test connection** button, and every configured mail connector
+  a **Test** action. The check runs against what is *typed* — nothing is saved to run it
+  — and each provider answers the question its own configuration raises: SMTP opens the
+  session a send opens (connect, STARTTLS, authenticate) and hangs up without a message;
+  Gmail and Microsoft Graph acquire an access token, which is exactly the step a revoked
+  or expired refresh token fails at; preview confirms it has an outbox. Give the check a
+  recipient and it sends a real test message instead, the only thing that proves
+  delivery. Both failures behind the outage this release fixes — a revoked Gmail refresh
+  token and an endpoint that could not dial — are now answered in a second, at the form,
+  by the person who typed them.
+
 ### Fixed
 
+- **An SMTP connector on the implicit-TLS submissions port (465) works at all**
+  (ADR-0149): the client was built on `net/smtp.SendMail`, which dials in the clear and
+  waits for a greeting a TLS-first server never sends — so such a connector did not
+  fail, it hung. Atlas now opens the connection itself: TLS from the first byte on 465,
+  STARTTLS wherever a server offers it, authentication after the upgrade, then the
+  envelope — with each step naming itself, so a rejection points at the address it was
+  about ("recipient x@y refused") instead of at the send as a whole. A send is also
+  bounded by the context of the job that asked for it, which it never was before.
 - **An SMTP endpoint written without a port is completed instead of failing at send
   time** (ADR-0149): `mail.example.com` now becomes `mail.example.com:587` (and
   `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is

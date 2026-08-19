@@ -58,7 +58,7 @@ func TestPreviewClientDeliversToOutbox(t *testing.T) {
 func TestPreviewFramesExactlyWhatSMTPWouldSend(t *testing.T) {
 	var sent []byte
 	sc := NewSMTPClient(Connector{Endpoint: "mail.example.com:587", From: "bot@example.com"})
-	sc.send = func(_ string, _ smtp.Auth, _ string, _ []string, msg []byte) error {
+	sc.send = func(_ context.Context, _ string, _ smtp.Auth, _ string, _ []string, msg []byte) error {
 		sent = msg
 		return nil
 	}

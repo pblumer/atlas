@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -200,5 +201,90 @@ func TestMisconfiguredMailConnectorIsSkippedNotFatal(t *testing.T) {
 	}
 	if _, ok := clients["broken"]; ok {
 		t.Error("an unusable endpoint produced a client; want it skipped so its tasks park")
+	}
+}
+
+// postTest runs a connector check and returns the status plus the verdict.
+func postTest(t *testing.T, srv *Server, body string) (int, struct {
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail"`
+	Error  string `json:"error"`
+}) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors/test", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	var out struct {
+		OK     bool   `json:"ok"`
+		Detail string `json:"detail"`
+		Error  string `json:"error"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec.Code, out
+}
+
+// TestConnectorCheckAnswersBeforeAnythingIsSaved is the point of the check: it runs
+// against what is typed, so a wrong host or a dead credential is answered at the form
+// rather than hours later as an incident on a parked token (ADR-0149).
+func TestConnectorCheckAnswersBeforeAnythingIsSaved(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	// A preview connector has nothing to dial and says so.
+	code, res := postTest(t, srv, `{"name":"trial","kind":"mail","provider":"preview","sender":"bot@example.com"}`)
+	if code != http.StatusOK || !res.OK {
+		t.Fatalf("preview check: status=%d ok=%v detail=%q", code, res.OK, res.Detail)
+	}
+	if !strings.Contains(res.Detail, "outbox") {
+		t.Errorf("preview detail = %q, want it to name where messages land", res.Detail)
+	}
+	// Nothing was saved by checking.
+	if recs, err := srv.connectors.LoadAll(); err != nil || len(recs) != 0 {
+		t.Errorf("the check stored %d connector(s) (err=%v), want none", len(recs), err)
+	}
+
+	// A recipient turns the check into a real send — for preview, into the outbox.
+	code, res = postTest(t, srv, `{"name":"trial","kind":"mail","provider":"preview","sender":"bot@example.com","to":"her@example.com"}`)
+	if code != http.StatusOK || !res.OK {
+		t.Fatalf("preview test send: status=%d ok=%v detail=%q", code, res.OK, res.Detail)
+	}
+	msgs, _ := srv.mailOutbox.Messages(0)
+	if len(msgs) != 1 || msgs[0].To[0] != "her@example.com" || !strings.Contains(msgs[0].Subject, "test") {
+		t.Errorf("outbox after a test send = %+v, want the test message", msgs)
+	}
+}
+
+// TestConnectorCheckReportsAFailureAsAnAnswer: a connector that cannot connect is a
+// 200 carrying ok:false — the request was served, and the answer is "no". Only an
+// unusable *request* is a 400.
+func TestConnectorCheckReportsAFailureAsAnAnswer(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	// A port nobody listens on, so the dial is refused immediately.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	dead := ln.Addr().String()
+	_ = ln.Close()
+
+	code, res := postTest(t, srv, `{"name":"relay","kind":"mail","provider":"smtp","endpoint":"`+dead+`","sender":"bot@example.com"}`)
+	if code != http.StatusOK {
+		t.Fatalf("unreachable check: status=%d, want 200 carrying the verdict", code)
+	}
+	if res.OK {
+		t.Fatal("the check passed against a closed port")
+	}
+	if !strings.Contains(res.Detail, "connect to") {
+		t.Errorf("detail = %q, want it to name the connection attempt", res.Detail)
+	}
+
+	// An endpoint that cannot dial at all never gets that far: it is a bad request,
+	// with the same message the create would have given.
+	if code, _ := postTest(t, srv, `{"name":"relay","kind":"mail","provider":"smtp","endpoint":"bot@example.com","sender":"bot@example.com"}`); code != http.StatusBadRequest {
+		t.Errorf("mailbox as endpoint: status=%d, want 400", code)
+	}
+	if code, _ := postTest(t, srv, `{"name":"c1","kind":"clio","endpoint":"https://clio.example"}`); code != http.StatusBadRequest {
+		t.Errorf("a kind with nothing to check: status=%d, want 400", code)
 	}
 }

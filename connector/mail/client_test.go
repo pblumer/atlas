@@ -20,7 +20,7 @@ type capture struct {
 
 // withCapture swaps the client's send seam for one that records into c.
 func withCapture(client *SMTPClient, c *capture) {
-	client.send = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	client.send = func(_ context.Context, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
 		c.addr, c.auth, c.from, c.to, c.msg = addr, a, from, to, msg
 		return nil
 	}
@@ -113,7 +113,7 @@ func TestSMTPClientErrors(t *testing.T) {
 	})
 	t.Run("send failure propagates", func(t *testing.T) {
 		client := NewSMTPClient(Connector{Endpoint: "smtp.example.com:587", From: "bot@example.com"})
-		client.send = func(string, smtp.Auth, string, []string, []byte) error { return errors.New("boom") }
+		client.send = func(context.Context, string, smtp.Auth, string, []string, []byte) error { return errors.New("boom") }
 		if err := client.Send(context.Background(), Message{To: []string{"a@b.c"}}); err == nil {
 			t.Fatal("want the send error propagated, got nil")
 		}

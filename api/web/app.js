@@ -924,6 +924,7 @@ async function viewConsoleOrg() {
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -2236,6 +2237,8 @@ function wireConnectorManagement(connectors) {
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit">Add</button>
+        <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
+        <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
         <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
@@ -2287,6 +2290,32 @@ function wireConnectorManagement(connectors) {
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
       sync();
+      // Check what is typed, before it is stored — the moment a wrong host or a dead
+      // credential is cheapest to fix, and the one where somebody is actually looking.
+      const testBtn = form.querySelector("#conn-test");
+      const testOut = form.querySelector(".conn-test-result");
+      testBtn.addEventListener("click", async () => {
+        const f = new FormData(form);
+        testOut.hidden = false;
+        testOut.className = "conn-test-result muted";
+        testOut.textContent = "Checking…";
+        testBtn.disabled = true;
+        try {
+          const res = await api("POST", "/api/v1/connectors/test", {
+            name: (f.get("name") || "unnamed").trim(),
+            kind: (f.get("kind") || "mail").trim(),
+            provider: (f.get("provider") || "smtp").trim(),
+            endpoint: (f.get("endpoint") || "").trim(),
+            sender: (f.get("sender") || "").trim(),
+            credentialsRef: (f.get("credentialsRef") || "").trim(),
+          });
+          testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
+          testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
+        } catch (err) {
+          testOut.className = "conn-test-result err";
+          testOut.textContent = "✕ " + err.message;
+        } finally { testBtn.disabled = false; }
+      });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
@@ -2320,6 +2349,23 @@ function wireConnectorManagement(connectors) {
           return;
         } else if (btn.dataset.cact === "provision") {
           toggleProvisionClio(btn.closest("tr"), id, c.name);
+          return;
+        } else if (btn.dataset.cact === "test") {
+          // Empty recipient = stop at the door (connect, authenticate). A recipient
+          // makes it a real send, which is the only thing that proves delivery.
+          const to = window.prompt(
+            `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
+          if (to == null) return;
+          btn.disabled = true;
+          try {
+            const res = await api("POST", "/api/v1/connectors/test", {
+              name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
+              sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
+            });
+            toast(res.detail || (res.ok ? "Connector works" : "Check failed"), res.ok ? "ok" : "warn");
+          } catch (err) {
+            toast("Check failed: " + err.message, "warn");
+          } finally { btn.disabled = false; }
           return;
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });

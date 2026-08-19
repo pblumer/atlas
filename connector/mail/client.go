@@ -105,12 +105,19 @@ type Connector struct {
 	Username string
 	Password string
 	From     string
+	// ImplicitTLS opens the connection with a TLS handshake instead of upgrading a
+	// plaintext one with STARTTLS. [NewSMTPClient] derives it from the endpoint's
+	// port (465, the RFC 8314 submissions port), which is what an "smtps://" endpoint
+	// normalizes to; a caller can also set it outright.
+	ImplicitTLS bool
 }
 
-// sendFunc is the seam a test substitutes for net/smtp's SendMail, so the worker and
-// the SMTP framing are exercised without a live server. Its signature matches
-// [smtp.SendMail].
-type sendFunc func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
+// sendFunc is the seam a test substitutes for the SMTP transport, so the worker and
+// the MIME framing are exercised without a live server. It once matched
+// [smtp.SendMail]; it now matches [submit], which does what SendMail does and also
+// reaches an implicit-TLS submissions server — and takes the caller's context, so a
+// send is bounded by the job that asked for it rather than by the network alone.
+type sendFunc func(ctx context.Context, addr string, a smtp.Auth, from string, to []string, msg []byte) error
 
 // SMTPClient sends a Message over SMTP (the submission endpoint of any standards
 // compliant provider, including Google and Microsoft 365). It authenticates with the
@@ -121,10 +128,41 @@ type SMTPClient struct {
 	send sendFunc
 }
 
-// NewSMTPClient builds an SMTP mail client for a configured connector, backed by
-// net/smtp's SendMail.
+// NewSMTPClient builds an SMTP mail client for a configured connector, backed by the
+// [submit] transport.
 func NewSMTPClient(conn Connector) *SMTPClient {
-	return &SMTPClient{conn: conn, send: smtp.SendMail}
+	conn.ImplicitTLS = conn.ImplicitTLS || portOf(conn.Endpoint) == submissionsPort
+	c := &SMTPClient{conn: conn}
+	c.send = c.submit
+	return c
+}
+
+// auth is the credential this connector presents, or nil when it is configured
+// without a username (an internal relay that authenticates by network position). Send
+// and Probe build it the same way, so what a check authenticates is what a send
+// authenticates.
+func (c *SMTPClient) auth() smtp.Auth {
+	if c.conn.Username == "" {
+		return nil
+	}
+	return smtp.PlainAuth("", c.conn.Username, c.conn.Password, hostOf(c.conn.Endpoint))
+}
+
+// Probe opens the session a send would open — connect, TLS, authenticate — and hangs
+// up without a message (ADR-0149). It is what the connector form's check button
+// calls: the failures it catches (a host that does not resolve, a port nothing
+// listens on, a credential the server rejects) are exactly the ones that otherwise
+// surface much later as an incident on a parked token.
+func (c *SMTPClient) Probe(ctx context.Context) error {
+	sess, err := dialSMTP(ctx, c.conn.Endpoint, c.conn.ImplicitTLS, c.auth())
+	if err != nil {
+		return fmt.Errorf("mail: %w", err)
+	}
+	defer func() { _ = sess.Close() }()
+	if err := sess.Quit(); err != nil {
+		return fmt.Errorf("mail: closing the session with %s: %w", c.conn.Endpoint, err)
+	}
+	return nil
 }
 
 // Send frames m as a UTF-8 MIME e-mail and submits it to the connector's SMTP
@@ -134,7 +172,6 @@ func NewSMTPClient(conn Connector) *SMTPClient {
 // addresses are delivered but never written into a header. A missing recipient or a
 // send failure returns an error so the job stays pending and is retried (at-least-once).
 func (c *SMTPClient) Send(ctx context.Context, m Message) error {
-	_ = ctx // net/smtp's SendMail predates context; ret/timeout handling is a follow-up (ADR-0079)
 	from := strings.TrimSpace(m.From)
 	if from == "" {
 		from = strings.TrimSpace(c.conn.From)
@@ -146,11 +183,7 @@ func (c *SMTPClient) Send(ctx context.Context, m Message) error {
 	if len(rcpts) == 0 {
 		return fmt.Errorf("mail: message has no recipients")
 	}
-	var auth smtp.Auth
-	if c.conn.Username != "" {
-		auth = smtp.PlainAuth("", c.conn.Username, c.conn.Password, hostOf(c.conn.Endpoint))
-	}
-	if err := c.send(c.conn.Endpoint, auth, from, rcpts, buildRFC822(m, from)); err != nil {
+	if err := c.send(ctx, c.conn.Endpoint, c.auth(), from, rcpts, buildRFC822(m, from)); err != nil {
 		return fmt.Errorf("mail: send via %s: %w", c.conn.Endpoint, err)
 	}
 	return nil

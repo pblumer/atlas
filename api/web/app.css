@@ -2370,6 +2370,13 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
 
+/* The verdict of a connector check, under the connector form (ADR-0149). It says
+   what was proved, so it is a sentence and not a status dot — and a failure keeps the
+   provider's own words, which is the part that tells an operator what to change. */
+.conn-test-result { font: 12.5px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
+.conn-test-result.ok { color: var(--ok); }
+.conn-test-result.err { color: var(--danger); }
+
 /* ---------- Preview mail outbox (ADR-0149) ---------- */
 /* One delivered-but-never-sent message per row: the summary is the envelope, the
    open state is the message — text, rendered HTML, and the framed source. */
