@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
 
 // This file serves the principals directory (ADR-0073): the minimal, id-keyed
 // identity list that member and assignee pickers need. A scope member is a
@@ -43,8 +47,8 @@ func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list principals: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list principals: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }

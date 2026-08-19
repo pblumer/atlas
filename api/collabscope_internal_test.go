@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // TestDraftSessionAccess exercises the session scope gate (ADR-0140/0071): a
@@ -31,19 +33,19 @@ func TestDraftSessionAccess(t *testing.T) {
 		}
 	})
 
-	reqAs := func(p *Principal) *http.Request {
+	reqAs := func(p *httpapi.Principal) *http.Request {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		if p != nil {
-			r = r.WithContext(withPrincipal(r.Context(), p))
+			r = r.WithContext(httpapi.WithPrincipal(r.Context(), p))
 		}
 		return r
 	}
-	user := func(id string) *Principal { return &Principal{UserID: id, Roles: []string{RoleUser}} }
+	user := func(id string) *httpapi.Principal { return &httpapi.Principal{UserID: id, Roles: []string{RoleUser}} }
 
 	cases := []struct {
 		name        string
 		draftID     string
-		pr          *Principal
+		pr          *httpapi.Principal
 		wantCanEdit bool
 		wantStatus  int
 	}{

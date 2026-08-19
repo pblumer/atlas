@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/engine"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // rowOverride is the per-server override applied to a call activity's target, as
@@ -111,10 +113,10 @@ func (s *Server) handleCallActivities(w http.ResponseWriter, _ *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "load overrides: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "load overrides: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	httpapi.JSON(w, http.StatusOK, rows)
 }
 
 // resolveEffectiveTarget computes the definition a call activity would reach on this
@@ -203,7 +205,7 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 	}
 	pid := r.PathValue("processId")
 	if strings.TrimSpace(pid) == "" {
-		writeError(w, http.StatusBadRequest, "missing called process id")
+		httpapi.Error(w, http.StatusBadRequest, "missing called process id")
 		return
 	}
 	var body struct {
@@ -212,7 +214,7 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 		TargetVersion   int32  `json:"targetVersion"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid override body")
+		httpapi.Error(w, http.StatusBadRequest, "invalid override body")
 		return
 	}
 	rec := callOverride{
@@ -240,14 +242,14 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 		s.proc.SetCallTargetOverride(pid, ov)
 	})
 	if badReq != nil {
-		writeError(w, http.StatusBadRequest, badReq.Error())
+		httpapi.Error(w, http.StatusBadRequest, badReq.Error())
 		return
 	}
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "save override: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save override: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	httpapi.JSON(w, http.StatusOK, rec)
 }
 
 // handleDeleteCallOverride clears a called process id's override, restoring the
@@ -267,7 +269,7 @@ func (s *Server) handleDeleteCallOverride(w http.ResponseWriter, r *http.Request
 		s.proc.ClearCallTargetOverride(pid)
 	})
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete override: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete override: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

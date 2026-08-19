@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // Process documentation export (ADR-0143). The document itself is produced in the
@@ -118,31 +120,31 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 	processID := r.PathValue("processId")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxProcessDocBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload createProcessDocReq
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if payload.PDFBase64 == "" {
-		writeError(w, http.StatusBadRequest, "pdfBase64 is required")
+		httpapi.Error(w, http.StatusBadRequest, "pdfBase64 is required")
 		return
 	}
 	pdf, err := base64.StdEncoding.DecodeString(payload.PDFBase64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "pdfBase64 is not valid base64: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "pdfBase64 is not valid base64: "+err.Error())
 		return
 	}
 	if !bytes.HasPrefix(pdf, pdfMagic) {
-		writeError(w, http.StatusBadRequest, "the uploaded bytes are not a PDF document")
+		httpapi.Error(w, http.StatusBadRequest, "the uploaded bytes are not a PDF document")
 		return
 	}
 
 	id, err := newProcessDocID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "mint documentation id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "mint documentation id: "+err.Error())
 		return
 	}
 	title := strings.TrimSpace(payload.Title)
@@ -150,7 +152,7 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 		title = processID
 	}
 	actor := ""
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		actor = p.Username
 	}
 
@@ -179,10 +181,10 @@ func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) 
 		s.docVersions[processID] = rec.Version
 	})
 	if opErr != nil {
-		writeError(w, http.StatusInternalServerError, "save documentation: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save documentation: "+opErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toProcessDocResp(rec, false))
+	httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
 }
 
 // handleListProcessDocs returns one process's documentation history, newest
@@ -202,10 +204,10 @@ func (s *Server) handleListProcessDocs(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list documentation: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list documentation: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // lookupProcessDoc reads one version on the run loop. It is the shared prologue
@@ -226,11 +228,11 @@ func (s *Server) handleGetProcessDoc(w http.ResponseWriter, r *http.Request) {
 	rec, found, err := s.lookupProcessDoc(r.PathValue("id"))
 	switch {
 	case err != nil:
-		writeError(w, http.StatusInternalServerError, "read documentation: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read documentation: "+err.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no documentation version with that id")
+		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		writeJSON(w, http.StatusOK, toProcessDocResp(rec, true))
+		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, true))
 	}
 }
 
@@ -238,11 +240,11 @@ func (s *Server) handleGetProcessDoc(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetProcessDocPDF(w http.ResponseWriter, r *http.Request) {
 	rec, found, err := s.lookupProcessDoc(r.PathValue("id"))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "read documentation: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read documentation: "+err.Error())
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, "no documentation version with that id")
+		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 		return
 	}
 	s.serveProcessDocPDF(w, rec)
@@ -258,7 +260,7 @@ func (s *Server) serveProcessDocPDF(w http.ResponseWriter, rec processDoc) {
 	)
 	s.do(func() { pdf, err = s.processDocs.pdf(rec.ID) })
 	if err != nil {
-		writeError(w, http.StatusNotFound, "the document for that version is not available")
+		httpapi.Error(w, http.StatusNotFound, "the document for that version is not available")
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")
@@ -314,11 +316,11 @@ func (s *Server) handleShareProcessDoc(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "share documentation: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "share documentation: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no documentation version with that id")
+		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		writeJSON(w, http.StatusOK, toProcessDocResp(rec, false))
+		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
 	}
 }
 
@@ -340,11 +342,11 @@ func (s *Server) handleUnshareProcessDoc(w http.ResponseWriter, r *http.Request)
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "revoke documentation link: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "revoke documentation link: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no documentation version with that id")
+		httpapi.Error(w, http.StatusNotFound, "no documentation version with that id")
 	default:
-		writeJSON(w, http.StatusOK, toProcessDocResp(rec, false))
+		httpapi.JSON(w, http.StatusOK, toProcessDocResp(rec, false))
 	}
 }
 
@@ -354,7 +356,7 @@ func (s *Server) handleDeleteProcessDoc(w http.ResponseWriter, r *http.Request) 
 	var delErr error
 	s.do(func() { delErr = s.processDocs.delete(r.PathValue("id")) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete documentation: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete documentation: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -383,20 +385,20 @@ func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) 
 	processID := r.PathValue("processId")
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload pruneProcessDocsReq
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if payload.Keep == nil {
-		writeError(w, http.StatusBadRequest, "keep is required")
+		httpapi.Error(w, http.StatusBadRequest, "keep is required")
 		return
 	}
 	if *payload.Keep < 0 {
-		writeError(w, http.StatusBadRequest, "keep must not be negative")
+		httpapi.Error(w, http.StatusBadRequest, "keep must not be negative")
 		return
 	}
 	var (
@@ -405,13 +407,13 @@ func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) 
 	)
 	s.do(func() { pruned, opErr = s.processDocs.pruneProcess(processID, *payload.Keep) })
 	if opErr != nil {
-		writeError(w, http.StatusInternalServerError, "prune documentation: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "prune documentation: "+opErr.Error())
 		return
 	}
 	if pruned == nil {
 		pruned = []string{}
 	}
-	writeJSON(w, http.StatusOK, pruneProcessDocsResp{Deleted: pruned, Kept: *payload.Keep})
+	httpapi.JSON(w, http.StatusOK, pruneProcessDocsResp{Deleted: pruned, Kept: *payload.Keep})
 }
 
 // --- public, unauthenticated endpoint (ADR-0143, ADR-0029's mechanism) ---
@@ -420,8 +422,8 @@ func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) 
 // account. An unknown, malformed, or revoked token is one indistinguishable 404:
 // the response must not reveal whether a document ever existed behind it.
 func (s *Server) handlePublicProcessDoc(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(clientIP(r)) {
-		writeError(w, http.StatusTooManyRequests, "too many requests")
+	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 	var (
@@ -431,7 +433,7 @@ func (s *Server) handlePublicProcessDoc(w http.ResponseWriter, r *http.Request) 
 	)
 	s.do(func() { rec, found, opErr = s.processDocs.byShareToken(r.PathValue("token")) })
 	if opErr != nil || !found {
-		writeError(w, http.StatusNotFound, "not found")
+		httpapi.Error(w, http.StatusNotFound, "not found")
 		return
 	}
 	s.serveProcessDocPDF(w, rec)

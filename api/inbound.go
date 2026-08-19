@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/expr"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // feelExpr normalizes a correlation-key input to a bare FEEL expression: it trims
@@ -40,13 +42,13 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list subscriptions: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list subscriptions: "+loadErr.Error())
 		return
 	}
 	if out == nil {
 		out = []inboundSubscription{}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleCreateInboundSubscription creates an inbound subscription for a clio
@@ -58,7 +60,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	connID := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
@@ -70,25 +72,25 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		StartFromTip   *bool  `json:"startFromTip"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	subject := strings.TrimSpace(p.WatchedSubject)
 	messageName := strings.TrimSpace(p.MessageName)
 	corr := feelExpr(p.CorrelationKey)
 	if messageName == "" || subject == "" {
-		writeError(w, http.StatusBadRequest, "messageName and watchedSubject are required")
+		httpapi.Error(w, http.StatusBadRequest, "messageName and watchedSubject are required")
 		return
 	}
 	if corr != "" {
 		if _, err := expr.CompileAuto(corr); err != nil {
-			writeError(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
 			return
 		}
 	}
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	enabled := true
@@ -125,13 +127,13 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	})
 	switch {
 	case notClio:
-		writeError(w, http.StatusBadRequest, "no clio connector with that id")
+		httpapi.Error(w, http.StatusBadRequest, "no clio connector with that id")
 		return
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	httpapi.JSON(w, http.StatusOK, rec)
 }
 
 // handleUpdateInboundSubscription applies a partial change to a subscription (its
@@ -141,7 +143,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
@@ -153,12 +155,12 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		StartFromTip   *bool   `json:"startFromTip"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if p.CorrelationKey != nil && feelExpr(*p.CorrelationKey) != "" {
 		if _, err := expr.CompileAuto(feelExpr(*p.CorrelationKey)); err != nil {
-			writeError(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
 			return
 		}
 	}
@@ -199,13 +201,13 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	})
 	switch {
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "update subscription: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update subscription: "+saveErr.Error())
 		return
 	case !found:
-		writeError(w, http.StatusNotFound, "no subscription with that id")
+		httpapi.Error(w, http.StatusNotFound, "no subscription with that id")
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	httpapi.JSON(w, http.StatusOK, rec)
 }
 
 // handleDeleteInboundSubscription removes a subscription so the bridge stops polling
@@ -215,7 +217,7 @@ func (s *Server) handleDeleteInboundSubscription(w http.ResponseWriter, r *http.
 	var delErr error
 	s.do(func() { delErr = s.inboundSubs.Delete(id) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete subscription: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete subscription: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

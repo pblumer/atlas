@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // The community marketplace (ADR-0081) distributes reusable building blocks —
@@ -268,17 +270,17 @@ func (s *Server) handleListMarketplace(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, p.manifest())
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleGetMarketplacePackage returns one package with its template payload.
 func (s *Server) handleGetMarketplacePackage(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.findPackage(r.PathValue("id"))
 	if !ok {
-		writeError(w, http.StatusNotFound, "no such marketplace package")
+		httpapi.Error(w, http.StatusNotFound, "no such marketplace package")
 		return
 	}
-	writeJSON(w, http.StatusOK, p.view())
+	httpapi.JSON(w, http.StatusOK, p.view())
 }
 
 // handleInstallMarketplacePackage installs a catalog package into this server's
@@ -289,14 +291,14 @@ func (s *Server) handleGetMarketplacePackage(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleInstallMarketplacePackage(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.findPackage(r.PathValue("id"))
 	if !ok {
-		writeError(w, http.StatusNotFound, "no such marketplace package")
+		httpapi.Error(w, http.StatusNotFound, "no such marketplace package")
 		return
 	}
 	if p.carriesCode() && !s.requireAdmin(w, r) {
 		return // requireAdmin wrote 403
 	}
 	if err := validatePackage(p); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		httpapi.Error(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	rec := installedTemplate{
@@ -306,10 +308,10 @@ func (s *Server) handleInstallMarketplacePackage(w http.ResponseWriter, r *http.
 	var saveErr error
 	s.do(func() { saveErr = s.marketplaceStore.Save(rec) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "install package: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "install package: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, struct {
+	httpapi.JSON(w, http.StatusOK, struct {
 		installedTemplate
 		ReviewRequired bool `json:"reviewRequired"`
 	}{installedTemplate: rec, ReviewRequired: p.carriesCode()})
@@ -323,13 +325,13 @@ func (s *Server) handleListInstalled(w http.ResponseWriter, _ *http.Request) {
 	)
 	s.do(func() { recs, loadErr = s.marketplaceStore.LoadAll() })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list installed templates: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list installed templates: "+loadErr.Error())
 		return
 	}
 	if recs == nil {
 		recs = []installedTemplate{}
 	}
-	writeJSON(w, http.StatusOK, recs)
+	httpapi.JSON(w, http.StatusOK, recs)
 }
 
 // handleUninstall removes an installed template. Idempotent: uninstalling one that
@@ -338,7 +340,7 @@ func (s *Server) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	var delErr error
 	s.do(func() { delErr = s.marketplaceStore.Delete(r.PathValue("id")) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "uninstall template: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "uninstall template: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // This file makes the /api/v1 surface self-describing (ADR-0043). The route
@@ -782,7 +784,7 @@ const docsHTML = `<!doctype html>
 // docs are enabled (--docs), so the API surface is not described to anonymous
 // callers unless an operator opts in (ADR-0043).
 func (s *Server) handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.openapiDoc())
+	httpapi.JSON(w, http.StatusOK, s.openapiDoc())
 }
 
 // handleDocs serves the Scalar API explorer shell. Registered only when docs

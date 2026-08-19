@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 func newPublicLinks(t *testing.T) *publicLinkStore {
@@ -286,12 +288,12 @@ func TestRateLimiterEviction(t *testing.T) {
 func TestClientIP(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "203.0.113.7:54321"
-	if got := clientIP(r); got != "203.0.113.7" {
+	if got := httpapi.ClientIP(r); got != "203.0.113.7" {
 		t.Errorf("clientIP host = %q, want 203.0.113.7", got)
 	}
 	// A RemoteAddr without a port falls back to the whole string.
 	r.RemoteAddr = "unixsocket"
-	if got := clientIP(r); got != "unixsocket" {
+	if got := httpapi.ClientIP(r); got != "unixsocket" {
 		t.Errorf("clientIP fallback = %q, want unixsocket", got)
 	}
 }

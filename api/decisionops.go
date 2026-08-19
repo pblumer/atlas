@@ -6,6 +6,8 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/model"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // deployedDecisionView is one row of the Operations "Decisions" overview: a DMN
@@ -110,7 +112,7 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list decision evaluations: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list decision evaluations: "+scanErr.Error())
 		return
 	}
 
@@ -137,7 +139,7 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 		}
 		return out[i].DecisionID < out[j].DecisionID
 	})
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // decisionEvaluationRow is one evaluation of a given decision — a "decision
@@ -191,9 +193,9 @@ func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Reques
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list decision evaluations: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list decision evaluations: "+scanErr.Error())
 		return
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].At > out[j].At })
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }

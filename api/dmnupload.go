@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/dmn"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // handleUploadDmnModel accepts a DMN model file, validates it compiles, and stores
@@ -27,21 +29,21 @@ import (
 func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 	dir, ok := s.dmnModelDir()
 	if !ok {
-		writeError(w, http.StatusConflict, "DMN models are served by a remote temis service (ATLAS_DMN_RESOLVER_URL); add models there and reference them by name")
+		httpapi.Error(w, http.StatusConflict, "DMN models are served by a remote temis service (ATLAS_DMN_RESOLVER_URL); add models there and reference them by name")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	if len(body) == 0 {
-		writeError(w, http.StatusBadRequest, "empty DMN model")
+		httpapi.Error(w, http.StatusBadRequest, "empty DMN model")
 		return
 	}
 	res := s.dmnValidator.ValidateXML(r.Context(), body)
 	if !res.Valid {
-		writeError(w, http.StatusBadRequest, "not a valid DMN model: "+res.Message)
+		httpapi.Error(w, http.StatusBadRequest, "not a valid DMN model: "+res.Message)
 		return
 	}
 
@@ -52,7 +54,7 @@ func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 	var final string
 	if want := sanitizeHandle(r.URL.Query().Get("handle")); want != "" {
 		if err := writeModelInPlace(dir, want, body); err != nil {
-			writeError(w, http.StatusInternalServerError, "store model: "+err.Error())
+			httpapi.Error(w, http.StatusInternalServerError, "store model: "+err.Error())
 			return
 		}
 		final = want
@@ -66,12 +68,12 @@ func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 		}
 		f, err := writeUniqueModel(dir, handle, body)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "store model: "+err.Error())
+			httpapi.Error(w, http.StatusInternalServerError, "store model: "+err.Error())
 			return
 		}
 		final = f
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"modelRef":  final,
 		"modelName": res.ModelName,
 		"decisions": res.Decisions,
