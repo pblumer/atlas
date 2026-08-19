@@ -1,4 +1,4 @@
-package api
+package csvimport
 
 import (
 	"encoding/json"
@@ -17,13 +17,13 @@ func num(s string) json.Number { return json.Number(s) }
 func TestParseCSVRows(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  csvConfig
+		cfg  Config
 		data string
 		want []map[string]any
 	}{
 		{
 			name: "header mapping, default comma, default string type",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "group"}, {Name: "license"},
 			}},
 			data: "email,group,license\nada@x.io,admin,pro\nbob@y.io,ops,basic\n",
@@ -34,7 +34,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "custom header names and type coercion",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email", Header: "E-Mail"},
 				{Name: "seats", Header: "Sitze", Type: "integer"},
 				{Name: "score", Header: "Punkte", Type: "number"},
@@ -47,18 +47,18 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "semicolon delimiter (Excel/German export)",
-			cfg: csvConfig{
+			cfg: Config{
 				Delimiter: ";",
-				Columns:   []csvColumn{{Name: "email"}, {Name: "group"}},
+				Columns:   []Column{{Name: "email"}, {Name: "group"}},
 			},
 			data: "email;group\nada@x.io;admin\n",
 			want: []map[string]any{{"email": "ada@x.io", "group": "admin"}},
 		},
 		{
 			name: "headerless with explicit index",
-			cfg: csvConfig{
+			cfg: Config{
 				HasHeader: ptrBool(false),
-				Columns: []csvColumn{
+				Columns: []Column{
 					{Name: "email", Index: ptrInt(0)},
 					{Name: "license", Index: ptrInt(2)},
 				},
@@ -71,7 +71,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "lenient coercion keeps a malformed cell as its raw string",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "seats", Type: "integer"},
 			}},
 			data: "email,seats\nada@x.io,not-a-number\n",
@@ -79,7 +79,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "short row yields empty cells, extra columns are ignored",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "group"}, {Name: "license"},
 			}},
 			data: "email,group,license\nada@x.io\n",
@@ -87,7 +87,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "quoted field with embedded delimiter and newline",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "note"},
 			}},
 			data: "email,note\nada@x.io,\"a, b\nc\"\n",
@@ -95,7 +95,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "leading UTF-8 BOM is stripped before the header row",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "group"},
 			}},
 			data: "\ufeffemail,group\nada@x.io,admin\n",
@@ -103,7 +103,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "header row only yields zero rows (non-nil)",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "group"},
 			}},
 			data: "email,group\n",
@@ -111,7 +111,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "boolean false tokens and lenient fallback",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "a", Type: "boolean"}, {Name: "b", Type: "boolean"}, {Name: "c", Type: "boolean"},
 			}},
 			data: "a,b,c\nnein,0,maybe\n",
@@ -119,7 +119,7 @@ func TestParseCSVRows(t *testing.T) {
 		},
 		{
 			name: "boolean true tokens",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "a", Type: "boolean"}, {Name: "b", Type: "boolean"}, {Name: "c", Type: "boolean"},
 				{Name: "d", Type: "boolean"}, {Name: "e", Type: "boolean"},
 			}},
@@ -130,9 +130,9 @@ func TestParseCSVRows(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseCSVRows(tc.cfg, []byte(tc.data))
+			got, err := ParseRows(tc.cfg, []byte(tc.data))
 			if err != nil {
-				t.Fatalf("parseCSVRows: unexpected error: %v", err)
+				t.Fatalf("ParseRows: unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("rows =\n  %#v\nwant\n  %#v", got, tc.want)
@@ -141,52 +141,28 @@ func TestParseCSVRows(t *testing.T) {
 	}
 }
 
-// TestStartVarsFromMap documents the shared map→VariableValues contract the CSV
-// upload path and the JSON start body both rely on (ADR-0084).
-func TestStartVarsFromMap(t *testing.T) {
-	if vs, err := startVarsFromMap(nil); err != nil || vs != nil {
-		t.Fatalf("empty map: got %v, %v; want nil, nil", vs, err)
-	}
-	// A raw int is outside the encoding/json-with-UseNumber shape and is rejected.
-	if _, err := startVarsFromMap(map[string]any{"x": 42}); err == nil ||
-		!strings.Contains(err.Error(), "unsupported value type") {
-		t.Fatalf("raw int: want unsupported value type error, got %v", err)
-	}
-	// Every supported kind converts, including a null and a nested array.
-	vs, err := startVarsFromMap(map[string]any{
-		"n": num("3"), "s": "hi", "b": true, "z": nil,
-		"j": []any{map[string]any{"k": "v"}},
-	})
-	if err != nil {
-		t.Fatalf("convert: %v", err)
-	}
-	if len(vs) != 5 {
-		t.Fatalf("converted %d variables, want 5", len(vs))
-	}
-}
-
 func TestParseCSVRowsErrors(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  csvConfig
+		cfg  Config
 		data string
 		want string // substring the error must contain
 	}{
 		{
 			name: "no columns and no header row",
-			cfg:  csvConfig{Columns: nil, HasHeader: csvBoolPtr(false)},
+			cfg:  Config{Columns: nil, HasHeader: csvBoolPtr(false)},
 			data: "ada@x.io\n",
 			want: "at least one column",
 		},
 		{
 			name: "column with empty name",
-			cfg:  csvConfig{Columns: []csvColumn{{Name: ""}}},
+			cfg:  Config{Columns: []Column{{Name: ""}}},
 			data: "email\nada@x.io\n",
 			want: "column name is required",
 		},
 		{
 			name: "duplicate column name",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "email"},
 			}},
 			data: "email\nada@x.io\n",
@@ -194,34 +170,34 @@ func TestParseCSVRowsErrors(t *testing.T) {
 		},
 		{
 			name: "headerless column without index",
-			cfg: csvConfig{
+			cfg: Config{
 				HasHeader: ptrBool(false),
-				Columns:   []csvColumn{{Name: "email"}},
+				Columns:   []Column{{Name: "email"}},
 			},
 			data: "ada@x.io\n",
 			want: "needs an index",
 		},
 		{
 			name: "headerless negative index",
-			cfg: csvConfig{
+			cfg: Config{
 				HasHeader: ptrBool(false),
-				Columns:   []csvColumn{{Name: "email", Index: ptrInt(-1)}},
+				Columns:   []Column{{Name: "email", Index: ptrInt(-1)}},
 			},
 			data: "ada@x.io\n",
 			want: "index must be >= 0",
 		},
 		{
 			name: "multi-rune delimiter",
-			cfg: csvConfig{
+			cfg: Config{
 				Delimiter: ";;",
-				Columns:   []csvColumn{{Name: "email"}},
+				Columns:   []Column{{Name: "email"}},
 			},
 			data: "email\nada@x.io\n",
 			want: "delimiter",
 		},
 		{
 			name: "configured header absent from the file",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email"}, {Name: "group", Header: "Gruppe"},
 			}},
 			data: "email,team\nada@x.io,admin\n",
@@ -229,7 +205,7 @@ func TestParseCSVRowsErrors(t *testing.T) {
 		},
 		{
 			name: "unknown column type",
-			cfg: csvConfig{Columns: []csvColumn{
+			cfg: Config{Columns: []Column{
 				{Name: "email", Type: "date"},
 			}},
 			data: "email\nada@x.io\n",
@@ -237,13 +213,13 @@ func TestParseCSVRowsErrors(t *testing.T) {
 		},
 		{
 			name: "empty file (no header row)",
-			cfg:  csvConfig{Columns: []csvColumn{{Name: "email"}}},
+			cfg:  Config{Columns: []Column{{Name: "email"}}},
 			data: "",
 			want: "empty",
 		},
 		{
 			name: "header row with only blank names, no columns to derive",
-			cfg:  csvConfig{Columns: nil},
+			cfg:  Config{Columns: nil},
 			data: " , \nx,y\n",
 			want: "no usable column names",
 		},
@@ -251,9 +227,9 @@ func TestParseCSVRowsErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseCSVRows(tc.cfg, []byte(tc.data))
+			_, err := ParseRows(tc.cfg, []byte(tc.data))
 			if err == nil {
-				t.Fatalf("parseCSVRows: expected error containing %q, got nil", tc.want)
+				t.Fatalf("ParseRows: expected error containing %q, got nil", tc.want)
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tc.want)
@@ -263,14 +239,14 @@ func TestParseCSVRowsErrors(t *testing.T) {
 }
 
 // csvBoolPtr returns a pointer to b, for setting the optional HasHeader field in a
-// test csvConfig literal.
+// test Config literal.
 func csvBoolPtr(b bool) *bool { return &b }
 
 // TestParseCSVRowsDeriveColumns covers ADR-0139's header-derivation mode: with a
 // header row and no explicit column layout, every distinct non-blank header cell
 // becomes a string field, and duplicate/blank header cells are skipped.
 func TestParseCSVRowsDeriveColumns(t *testing.T) {
-	rows, err := parseCSVRows(csvConfig{Columns: nil}, []byte("email,group,license\nada@x.io,users,PRO\nbob@x.io,ops,BASIC\n"))
+	rows, err := ParseRows(Config{Columns: nil}, []byte("email,group,license\nada@x.io,users,PRO\nbob@x.io,ops,BASIC\n"))
 	if err != nil {
 		t.Fatalf("derive: %v", err)
 	}
@@ -284,7 +260,7 @@ func TestParseCSVRowsDeriveColumns(t *testing.T) {
 
 	// A duplicate header cell is taken once (first occurrence wins); a blank one is
 	// dropped. Here "email" repeats and one cell is blank.
-	rows, err = parseCSVRows(csvConfig{Columns: nil}, []byte("email, ,email\na, b, c\n"))
+	rows, err = ParseRows(Config{Columns: nil}, []byte("email, ,email\na, b, c\n"))
 	if err != nil {
 		t.Fatalf("derive dup/blank: %v", err)
 	}

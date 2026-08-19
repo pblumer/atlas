@@ -1,4 +1,4 @@
-package api
+package csvimport
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// fakeVarStore is a csvVarStore for exercising the scope-chain walk and its error
+// fakeVarStore is a VarStore for exercising the scope-chain walk and its error
 // paths without a real store.
 type fakeVarStore struct {
 	vars    map[uint64][]model.VariableValue
@@ -55,7 +55,7 @@ func TestCSVScopeChainVars(t *testing.T) {
 		},
 		ei: map[uint64]model.ElementInstanceValue{10: {FlowScopeKey: 20}},
 	}
-	got, err := csvScopeChainVars(store, 10)
+	got, err := scopeChainVars(store, 10)
 	if err != nil {
 		t.Fatalf("walk: %v", err)
 	}
@@ -66,10 +66,10 @@ func TestCSVScopeChainVars(t *testing.T) {
 		t.Errorf("columnConfig = %q, want it read from the enclosing scope", got["columnConfig"].Text)
 	}
 
-	if _, err := csvScopeChainVars(fakeVarStore{varsErr: errors.New("boom")}, 1); err == nil {
+	if _, err := scopeChainVars(fakeVarStore{varsErr: errors.New("boom")}, 1); err == nil {
 		t.Error("VariablesOfScope error: want an error, got nil")
 	}
-	if _, err := csvScopeChainVars(fakeVarStore{eiErr: errors.New("boom")}, 1); err == nil {
+	if _, err := scopeChainVars(fakeVarStore{eiErr: errors.New("boom")}, 1); err == nil {
 		t.Error("GetElementInstance error: want an error, got nil")
 	}
 }
@@ -83,19 +83,19 @@ func TestCSVImportHandler(t *testing.T) {
 		ei:      map[uint64]model.ElementInstanceValue{1: {}},
 		varsErr: errors.New("boom"),
 	}
-	h := csvImportHandler(readErr, nil)
+	h := Handler(readErr, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil || !strings.Contains(err.Error(), "read variables") {
 		t.Fatalf("error = %v, want a read-variables error", err)
 	}
 
 	// GetElementInstance failing is surfaced as a get-element-instance error.
-	h = csvImportHandler(fakeVarStore{eiErr: errors.New("boom")}, nil)
+	h = Handler(fakeVarStore{eiErr: errors.New("boom")}, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil || !strings.Contains(err.Error(), "get element instance") {
 		t.Fatalf("error = %v, want a get-element-instance error", err)
 	}
 
 	// A gone element instance (ok=false) is a no-op, not an error.
-	h = csvImportHandler(fakeVarStore{}, nil)
+	h = Handler(fakeVarStore{}, nil)
 	if out, err := h(job.Job{ElementInstanceKey: 99}); err != nil || out != nil {
 		t.Fatalf("gone instance: out=%v err=%v, want nil, nil", out, err)
 	}
@@ -118,7 +118,7 @@ func TestCSVRowsFromVars(t *testing.T) {
 	okCfg := vjson(`{"columns":[{"name":"email"},{"name":"group"}]}`)
 
 	t.Run("happy path", func(t *testing.T) {
-		out, err := csvRowsFromVars(vars(map[string]model.VariableValue{
+		out, err := rowsFromVars(vars(map[string]model.VariableValue{
 			"csvText":      vstr("email,group\nada@x.io,users\nbob,ops\n"),
 			"columnConfig": okCfg,
 		}))
@@ -151,7 +151,7 @@ func TestCSVRowsFromVars(t *testing.T) {
 	}
 	for _, tc := range errCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := csvRowsFromVars(tc.in)
+			_, err := rowsFromVars(tc.in)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
@@ -160,7 +160,7 @@ func TestCSVRowsFromVars(t *testing.T) {
 }
 
 // TestCSVRowsFromConnector covers the connector-task path (ADR-0090). Its sibling
-// csvRowsFromVars is well covered; this one reads its layout from the compiled
+// rowsFromVars is well covered; this one reads its layout from the compiled
 // detail rather than a columnConfig variable, so it has its own input contract:
 // the documented csvText/rows defaults when the authoring left the names unset,
 // and a distinct error for each way the input can be wrong.
@@ -176,7 +176,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 
 	t.Run("defaults to csvText and rows", func(t *testing.T) {
 		detail := &compiler.ConnectorTaskDetail{CsvHasHeader: true}
-		out, err := csvRowsFromConnector(withText("email,group\nada@x.io,users\nbob@x.io,ops\n"), cp, detail, 1)
+		out, err := rowsFromConnector(withText("email,group\nada@x.io,users\nbob@x.io,ops\n"), cp, detail, 1)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -193,7 +193,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 
 	errCases := []struct {
 		name   string
-		store  csvVarStore
+		store  VarStore
 		detail *compiler.ConnectorTaskDetail
 		want   string
 	}{
@@ -213,7 +213,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 	}
 	for _, tc := range errCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := csvRowsFromConnector(tc.store, cp, tc.detail, 1); err == nil ||
+			if _, err := rowsFromConnector(tc.store, cp, tc.detail, 1); err == nil ||
 				!strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}

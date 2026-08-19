@@ -1,4 +1,15 @@
-package api
+// Package csvimport is Atlas's in-process worker for the CSV-to-JSON connector
+// task (ADR-0139), and the CSV parser the API's upload-validation endpoint shares
+// with it (ADR-0084).
+//
+// Like every package under connector/, it rides the standard service-task seam: a
+// CSV connector task compiles to a job carrying compiler.CsvImportJobTypeIndex, and
+// [Handler] picks that job up off the processor goroutine, after fsync, so parsing
+// a file never allocates on the hot path or runs on the recovery path (I1/I4).
+// Unlike its siblings it talks to no external system — the "connector" reads a
+// variable and writes rows back — which is why it also serves as the parser behind
+// the operator-facing CSV upload check.
+package csvimport
 
 import (
 	"bytes"
@@ -9,29 +20,29 @@ import (
 	"strings"
 )
 
-// csvColumn maps one CSV column into a field of the produced row object. The
+// Column maps one CSV column into a field of the produced row object. The
 // source column is located by Header (when the file has a header row) or by the
 // 0-based Index (when it does not); the cell is coerced to Type. This is the
 // "predefined column layout" a Quality Manager's upload is checked against
 // (ADR-0084).
-type csvColumn struct {
+type Column struct {
 	Name   string `json:"name"`             // field name in the row object (required, unique)
 	Header string `json:"header,omitempty"` // CSV header to read; defaults to Name when the file has a header row
 	Index  *int   `json:"index,omitempty"`  // 0-based source column, used when the file has no header row
 	Type   string `json:"type,omitempty"`   // "string" (default), "number", "integer", "boolean"
 }
 
-// csvConfig is the predefined column layout an uploaded CSV is parsed against.
-type csvConfig struct {
-	Columns   []csvColumn `json:"columns"`
-	Delimiter string      `json:"delimiter,omitempty"` // single character; defaults to ","
-	HasHeader *bool       `json:"hasHeader,omitempty"` // defaults to true (a header row is present)
+// Config is the predefined column layout an uploaded CSV is parsed against.
+type Config struct {
+	Columns   []Column `json:"columns"`
+	Delimiter string   `json:"delimiter,omitempty"` // single character; defaults to ","
+	HasHeader *bool    `json:"hasHeader,omitempty"` // defaults to true (a header row is present)
 }
 
 // hasHeader reports whether the file carries a header row (the default).
-func (c csvConfig) hasHeader() bool { return c.HasHeader == nil || *c.HasHeader }
+func (c Config) hasHeader() bool { return c.HasHeader == nil || *c.HasHeader }
 
-// parseCSVRows parses CSV data against the predefined column layout into a list
+// ParseRows parses CSV data against the predefined column layout into a list
 // of row objects ({fieldName: value}). It is a pure, side-effect-free transform
 // that runs in the API/side-effect phase, never on the processor hot path
 // (ADR-0084, invariant 1/5).
@@ -41,8 +52,8 @@ func (c csvConfig) hasHeader() bool { return c.HasHeader == nil || *c.HasHeader 
 // validated and corrected rather than being rejected at ingestion — that is the
 // point of the feature. A *structural* mismatch (a configured header absent from
 // the file, an unparseable CSV, an invalid layout) is an error.
-func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
-	if err := validateCSVConfig(cfg); err != nil {
+func ParseRows(cfg Config, data []byte) ([]map[string]any, error) {
+	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
 	comma, err := delimiterRune(cfg.Delimiter)
@@ -88,7 +99,7 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 					continue // first occurrence wins, like the header lookup below
 				}
 				seen[name] = struct{}{}
-				cfg.Columns = append(cfg.Columns, csvColumn{Name: name})
+				cfg.Columns = append(cfg.Columns, Column{Name: name})
 			}
 			if len(cfg.Columns) == 0 {
 				return nil, fmt.Errorf("CSV header row has no usable column names")
@@ -135,11 +146,11 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 	return rows, nil
 }
 
-// validateCSVConfig rejects a layout that could never map a file: no columns,
+// validateConfig rejects a layout that could never map a file: no columns,
 // blank/duplicate names, a headerless column without an index, or an unknown
 // type. Type is checked here (not lazily per cell) so a bad layout fails even on
 // a file that happens to contain no rows.
-func validateCSVConfig(cfg csvConfig) error {
+func validateConfig(cfg Config) error {
 	if len(cfg.Columns) == 0 && !cfg.hasHeader() {
 		return fmt.Errorf("column layout must declare at least one column (or set a header row to derive the columns)")
 	}
@@ -213,6 +224,6 @@ func coerceCell(raw, typ string) any {
 			return raw
 		}
 	default:
-		return raw // validateCSVConfig already rejected unknown types
+		return raw // validateConfig already rejected unknown types
 	}
 }

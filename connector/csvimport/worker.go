@@ -1,4 +1,4 @@
-package api
+package csvimport
 
 import (
 	"encoding/json"
@@ -11,19 +11,19 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// csvVarStore is the slice of the state store the CSV-import worker reads — a scope's
+// VarStore is the slice of the state store the CSV-import worker reads — a scope's
 // variables and an element instance's parent scope. A narrow interface so the
 // scope-chain walk (and its error paths) are testable with a fake (*state.Store
 // satisfies it).
-type csvVarStore interface {
+type VarStore interface {
 	VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
 	GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error)
 }
 
-// csvProcessLookup resolves a process-definition key to its compiled process, so the
+// ProcessLookup resolves a process-definition key to its compiled process, so the
 // worker can read a CSV connector task's authored layout from the model it belongs to
 // (ADR-0139) — mirroring the mail/rest/DMN workers' ProcessLookup.
-type csvProcessLookup func(defKey uint64) *compiler.CompiledProcess
+type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
 // csvSourceVar / csvConfigVar / csvRowsVar / csvRowCountVar are the conventional
 // variable names the CSV-import worker reads and writes on the legacy path (ADR-0087):
@@ -41,7 +41,7 @@ const (
 // or corrupt FlowScopeKey chain (mirrors the worker-side guards elsewhere).
 const csvMaxScopeDepth = 64
 
-// csvImportHandler is the in-process worker for a CSV-import service task
+// Handler is the in-process worker for a CSV-import service task
 // (compiler.CsvImportJobType). It converts an uploaded CSV into a JSON `rows`
 // collection so a batch of records is ingested entirely within the process, the file
 // having arrived through a user-task form.
@@ -59,7 +59,7 @@ const csvMaxScopeDepth = 64
 // A missing/empty source, an absent or malformed layout, or an unparseable CSV is a
 // worker error: the job fails and (retries exhausted) raises an incident, rather than
 // silently producing an empty batch.
-func csvImportHandler(store csvVarStore, lookup csvProcessLookup) job.OutputHandler {
+func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -75,29 +75,29 @@ func csvImportHandler(store csvVarStore, lookup csvProcessLookup) job.OutputHand
 		if lookup != nil {
 			if cp := lookup(ei.ProcessDefKey); cp != nil {
 				if node := cp.Node(ei.ElementId); node.Type == compiler.TypeConnectorTask {
-					return csvRowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey)
+					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey)
 				}
 			}
 		}
-		vars, err := csvScopeChainVars(store, j.ElementInstanceKey)
+		vars, err := scopeChainVars(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("csv-import: read variables: %w", err)
 		}
-		return csvRowsFromVars(vars)
+		return rowsFromVars(vars)
 	}
 }
 
-// csvRowsFromConnector runs a CSV-to-JSON connector task (ADR-0139): it reads the raw
+// rowsFromConnector runs a CSV-to-JSON connector task (ADR-0139): it reads the raw
 // text from the authored source variable up the task's scope chain, builds the column
 // layout from the compiled detail (delimiter, header flag, columns), parses it with
 // the same parser the endpoint uses, and returns the JSON rows under the authored
 // result variable plus rowCount. Source/result/delimiter default to csvText/rows/","
 // when unset; an empty column list derives the columns from the header row.
-func csvRowsFromConnector(store csvVarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) ([]model.VariableValue, error) {
+func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) ([]model.VariableValue, error) {
 	if detail == nil {
 		return nil, fmt.Errorf("csv-import: connector task has no detail")
 	}
-	vars, err := csvScopeChainVars(store, elementInstanceKey)
+	vars, err := scopeChainVars(store, elementInstanceKey)
 	if err != nil {
 		return nil, fmt.Errorf("csv-import: read variables: %w", err)
 	}
@@ -110,20 +110,20 @@ func csvRowsFromConnector(store csvVarStore, cp *compiler.CompiledProcess, detai
 		return nil, fmt.Errorf("csv-import: source variable %q is missing or not a non-empty string", sourceName)
 	}
 	hasHeader := detail.CsvHasHeader
-	cfg := csvConfig{
+	cfg := Config{
 		Delimiter: cp.Intern(detail.CsvDelimiter),
 		HasHeader: &hasHeader,
 	}
 	for _, ci := range detail.CsvColumns {
 		if name := cp.Intern(ci); name != "" {
-			cfg.Columns = append(cfg.Columns, csvColumn{Name: name})
+			cfg.Columns = append(cfg.Columns, Column{Name: name})
 		}
 	}
-	rows, err := parseCSVRows(cfg, []byte(text.Text))
+	rows, err := ParseRows(cfg, []byte(text.Text))
 	if err != nil {
 		return nil, fmt.Errorf("csv-import: %v", err)
 	}
-	rowsJSON, err := csvRowsToJSON(rows)
+	rowsJSON, err := rowsToJSON(rows)
 	if err != nil {
 		return nil, err
 	}
@@ -137,11 +137,11 @@ func csvRowsFromConnector(store csvVarStore, cp *compiler.CompiledProcess, detai
 	}, nil
 }
 
-// csvRowsFromVars is the legacy CSV-import worker's pure core (ADR-0087): given the
+// rowsFromVars is the legacy CSV-import worker's pure core (ADR-0087): given the
 // variables a task sees, it validates the csvText/columnConfig inputs, parses the CSV
 // against the layout, and returns the rows/rowCount output variables. Split out so its
 // input and parse-error branches are unit-testable without the engine.
-func csvRowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue, error) {
+func rowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue, error) {
 	text, ok := vars[csvSourceVar]
 	if !ok || text.Kind != model.VarString || text.Text == "" {
 		return nil, fmt.Errorf("csv-import: variable %q is missing or not a non-empty string", csvSourceVar)
@@ -150,15 +150,15 @@ func csvRowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue
 	if !ok || cfgVar.Kind != model.VarJSON {
 		return nil, fmt.Errorf("csv-import: variable %q is missing or not a JSON object", csvConfigVar)
 	}
-	var cfg csvConfig
+	var cfg Config
 	if err := json.Unmarshal([]byte(cfgVar.Text), &cfg); err != nil {
 		return nil, fmt.Errorf("csv-import: invalid %s: %v", csvConfigVar, err)
 	}
-	rows, err := parseCSVRows(cfg, []byte(text.Text))
+	rows, err := ParseRows(cfg, []byte(text.Text))
 	if err != nil {
 		return nil, fmt.Errorf("csv-import: %v", err)
 	}
-	rowsJSON, err := csvRowsToJSON(rows)
+	rowsJSON, err := rowsToJSON(rows)
 	if err != nil {
 		return nil, err
 	}
@@ -168,10 +168,10 @@ func csvRowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue
 	}, nil
 }
 
-// csvRowsToJSON canonicalizes the parsed rows into the JSON text a JSON process
+// rowsToJSON canonicalizes the parsed rows into the JSON text a JSON process
 // variable stores, through the same expr path as any other variable so it round-trips
 // on replay. Shared by both worker paths.
-func csvRowsToJSON(rows []map[string]any) (string, error) {
+func rowsToJSON(rows []map[string]any) (string, error) {
 	rowsAny := make([]any, len(rows))
 	for i := range rows {
 		rowsAny[i] = rows[i]
@@ -183,11 +183,11 @@ func csvRowsToJSON(rows []map[string]any) (string, error) {
 	return rowsJSON, nil
 }
 
-// csvScopeChainVars reads the variables an element sees up its scope chain (nearest
+// scopeChainVars reads the variables an element sees up its scope chain (nearest
 // scope wins), mirroring the worker scope-chain reads elsewhere (dmn/script), so a
 // CSV-import task nested in a subprocess still reads its enclosing scope's
 // csvText/columnConfig (or a connector's source variable).
-func csvScopeChainVars(store csvVarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
+func scopeChainVars(store VarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
 	scope := elementInstanceKey
 	for depth := 0; depth <= csvMaxScopeDepth; depth++ {

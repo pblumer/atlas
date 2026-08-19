@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+
+	"github.com/pblumer/atlas/connector/csvimport"
 )
 
 // maxCSVUploadBytes caps a CSV upload. Generous enough for a realistic batch of
@@ -31,7 +33,7 @@ type csvInstanceResp struct {
 
 // handleCreateInstanceFromCSV starts one instance of a deployed definition seeded
 // from an uploaded CSV (ADR-0084). The request is multipart/form-data with a
-// `file` part (the CSV) and a `config` part (a JSON csvConfig describing the
+// `file` part (the CSV) and a `config` part (a JSON csvimport.Config describing the
 // predefined column layout). The CSV is parsed against that layout into a list of
 // row objects, seeded as the start variables `rows` (a VarJSON array), `rowCount`
 // (a number), and `fileName` (a string), then the instance is created and driven
@@ -54,7 +56,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "missing config part (a JSON column layout)")
 		return
 	}
-	var cfg csvConfig
+	var cfg csvimport.Config
 	if err := json.Unmarshal([]byte(cfgRaw), &cfg); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid config JSON: "+err.Error())
 		return
@@ -72,7 +74,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	rows, err := parseCSVRows(cfg, data)
+	rows, err := csvimport.ParseRows(cfg, data)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
