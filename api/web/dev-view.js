@@ -534,17 +534,35 @@ export function openDevView(field, opts = {}) {
   }
 
   // place pins the modal at an explicit position and size, taking it out of the
-  // overlay's centering grid. x/y are clamped so a strip of the header — the handle
-  // that drags it back — always stays on screen.
-  function place(x, y, w, h) {
+  // overlay's centering grid.
+  //
+  // While a person *drags*, a position is honoured as given: pushing a window a bit
+  // past an edge is a real thing people do on purpose, and only the reachable-strip
+  // floor applies. `fit:true` — restoring a stored geometry, or reacting to the
+  // window shrinking — adds one more question: is the window still *substantially*
+  // on screen? A geometry made on a large monitor can leave a corner peeking into a
+  // laptop display, which satisfies the strip rule and is still the wrong window to
+  // open. So when less than half of it would show, it is pulled fully into view;
+  // when most of it shows, the authored position is kept, overhang and all.
+  function place(x, y, w, h, opts = {}) {
     const rect = modal.getBoundingClientRect();
     const width = Math.max(w === undefined ? rect.width : w, MIN_MODAL_W);
     const height = Math.max(h === undefined ? rect.height : h, MIN_MODAL_H);
+    let left = Math.min(Math.max(x, KEEP_ON_SCREEN - width), window.innerWidth - KEEP_ON_SCREEN);
+    let top = Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN);
+    if (opts.fit) {
+      const shownW = Math.min(left + width, window.innerWidth) - Math.max(left, 0);
+      const shownH = Math.min(top + height, window.innerHeight) - Math.max(top, 0);
+      if (shownW < width / 2 || shownH < height / 2) {
+        left = Math.min(Math.max(x, 0), Math.max(0, window.innerWidth - width));
+        top = Math.min(Math.max(y, 0), Math.max(0, window.innerHeight - height));
+      }
+    }
     modal.classList.add("placed");
     modal.style.width = width + "px";
     modal.style.height = height + "px";
-    modal.style.left = Math.round(Math.min(Math.max(x, KEEP_ON_SCREEN - width), window.innerWidth - KEEP_ON_SCREEN)) + "px";
-    modal.style.top = Math.round(Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN)) + "px";
+    modal.style.left = Math.round(left) + "px";
+    modal.style.top = Math.round(top) + "px";
   }
 
   let geomTimer = null; // pending debounced save, flushed when the view closes
@@ -650,7 +668,7 @@ export function openDevView(field, opts = {}) {
   const onWindowResize = () => {
     if (!modal.classList.contains("placed")) return;
     const r = modal.getBoundingClientRect();
-    place(r.left, r.top, Math.min(r.width, window.innerWidth), Math.min(r.height, window.innerHeight));
+    place(r.left, r.top, Math.min(r.width, window.innerWidth), Math.min(r.height, window.innerHeight), { fit: true });
   };
   window.addEventListener("resize", onWindowResize);
 
@@ -893,7 +911,7 @@ export function openDevView(field, opts = {}) {
   try {
     const g = JSON.parse(read(GEOM_KEY) || "null");
     if (g && g.w > 0 && g.h > 0) {
-      place(g.x, g.y, Math.min(g.w, window.innerWidth), Math.min(g.h, window.innerHeight));
+      place(g.x, g.y, Math.min(g.w, window.innerWidth), Math.min(g.h, window.innerHeight), { fit: true });
     }
   } catch { /* a corrupt entry just means the default layout */ }
 

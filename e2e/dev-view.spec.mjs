@@ -497,6 +497,46 @@ test("the modal cannot be dragged out of reach", async ({ page }) => {
   expect(r.bottom).toBeGreaterThan(0);
 });
 
+// A geometry is remembered from whatever screen it was made on, and the screen it is
+// restored onto may be far smaller — a laptop after a monitor. Keeping "a strip is
+// reachable" would be the letter of the rule and a bad window: the reader would find
+// a corner of the editor, not the editor. When it fits, it is placed whole.
+test("a geometry from a larger screen is fitted into a smaller window", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem(
+    "atlas.devview.geometry", JSON.stringify({ x: 2400, y: 1300, w: 1600, h: 1000 })));
+  await page.setViewportSize({ width: 900, height: 600 });
+  await openFeel(page);
+
+  const r = await page.locator(".dev-modal").evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) };
+  });
+  // Fully on screen, not a corner peeking in.
+  expect(r.x).toBeGreaterThanOrEqual(0);
+  expect(r.y).toBeGreaterThanOrEqual(0);
+  expect(r.x + r.w).toBeLessThanOrEqual(900);
+  expect(r.y + r.h).toBeLessThanOrEqual(600);
+});
+
+test("shrinking the window pulls the modal back into view", async ({ page }) => {
+  await openFeel(page);
+  // Put it well down and right first.
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + 300, head.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 900, head.y + 400, { steps: 6 });
+  await page.mouse.up();
+
+  await page.setViewportSize({ width: 700, height: 500 });
+  await expect
+    .poll(async () => page.locator(".dev-modal").evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return Math.round(b.x) >= 0 && Math.round(b.y) >= 0 &&
+        Math.round(b.right) <= 700 && Math.round(b.bottom) <= 500;
+    }))
+    .toBe(true);
+});
+
 test("the inline '</>' button opens the same view", async ({ page }) => {
   await page.locator("#feel-fld").hover();
   await page.locator(".code-editor .dev-open").click();
