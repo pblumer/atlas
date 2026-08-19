@@ -50,7 +50,13 @@ b { font-weight: 600; }
   width: 24px; height: 24px; border-radius: 6px;
   background: #14161a; color: #fff; font-weight: 800; font-size: 14px;
   font-family: ui-monospace, monospace;
+  overflow: hidden;
 }
+/* When an org logo is set, the mark holds the uploaded image instead of the "A":
+   drop the black tile so a transparent PNG/SVG sits on the bar cleanly, and fit
+   the image inside the box without distortion. */
+.mark.has-logo { background: transparent; }
+.mark .mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .divider { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
 .topnav { display: flex; align-items: center; gap: 2px; height: 100%; }
 .topnav a {
@@ -2116,6 +2122,15 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    the page. */
 .theme-preview { display: inline-flex; align-items: center; gap: 12px; }
 .theme-preview .theme-link { color: var(--accent); font-weight: 600; }
+
+/* Brand logo controls (ADR-0148): a live sample of the mark next to the upload
+   button, separated from the colour controls by a hairline. */
+.logo-row { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.logo-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.logo-sample {
+  width: 40px; height: 40px; border-radius: 8px; font-size: 20px;
+  border: 1px solid var(--border);
+}
 
 /* ---------- Developer View (dev-view.js, ADR-0145) ---------- */
 /* A full-screen modal that lifts one code-bearing field out of the property panel:

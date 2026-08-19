@@ -116,3 +116,79 @@ func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
 func (s *settingsStore) saveRegistration(r registrationSetting) error {
 	return sidecar.WriteJSON(s.dir, s.regFile, r)
 }
+
+// ---------- Org brand logo (ADR-0148) ----------
+//
+// The org logo is an opaque image (a customer's brand mark) that replaces the
+// built-in "A" letter mark across the Console and the login screen. It is
+// design-time operator configuration like the theme, so it lives in the same
+// settings directory (and is therefore captured by the design-time backup) and is
+// served to every browser. Only two formats are accepted: PNG for raster marks and
+// SVG for vector marks. The stored file's extension is the single source of truth
+// for its type, so no metadata sidecar is needed — the logo is stored as exactly
+// "logo.png" or "logo.svg".
+
+// logoExts is the fixed, ordered set of logo file extensions. Iterating a slice
+// (not the maps below) keeps getLogo deterministic if both files ever coexist.
+var logoExts = []string{"png", "svg"}
+
+// logoExtByType maps an accepted upload content type to its stored extension, and
+// logoTypeByExt is the reverse used to report the type on read.
+var (
+	logoExtByType = map[string]string{"image/png": "png", "image/svg+xml": "svg"}
+	logoTypeByExt = map[string]string{"png": "image/png", "svg": "image/svg+xml"}
+)
+
+func (s *settingsStore) logoPath(ext string) string {
+	return filepath.Join(s.dir, "logo."+ext)
+}
+
+// getLogo returns the stored brand logo's bytes and content type, and whether one
+// is set. A missing logo is not an error — it is the default (the built-in letter
+// mark). Only one logo exists at a time; getLogo returns whichever format is on
+// disk, checking the fixed order in logoExts.
+func (s *settingsStore) getLogo() (data []byte, contentType string, ok bool, err error) {
+	for _, ext := range logoExts {
+		b, readErr := os.ReadFile(s.logoPath(ext))
+		if readErr == nil {
+			return b, logoTypeByExt[ext], true, nil
+		}
+		if !os.IsNotExist(readErr) {
+			return nil, "", false, fmt.Errorf("settingsstore: read logo: %w", readErr)
+		}
+	}
+	return nil, "", false, nil
+}
+
+// saveLogo writes the logo durably under the extension for contentType, then drops
+// any previously-stored other format so a switch (e.g. PNG → SVG) never leaves a
+// stale file getLogo could serve. contentType must be one of logoExtByType.
+func (s *settingsStore) saveLogo(data []byte, contentType string) error {
+	ext, ok := logoExtByType[contentType]
+	if !ok {
+		return fmt.Errorf("settingsstore: unsupported logo type %q", contentType)
+	}
+	if err := sidecar.WriteFile(s.dir, s.logoPath(ext), data); err != nil {
+		return err
+	}
+	for _, other := range logoExts {
+		if other == ext {
+			continue
+		}
+		if err := os.Remove(s.logoPath(other)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("settingsstore: remove stale logo: %w", err)
+		}
+	}
+	return sidecar.FsyncDir(s.dir)
+}
+
+// clearLogo removes any stored logo, restoring the built-in letter mark. A missing
+// logo is not an error (idempotent).
+func (s *settingsStore) clearLogo() error {
+	for _, ext := range logoExts {
+		if err := os.Remove(s.logoPath(ext)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("settingsstore: remove logo: %w", err)
+		}
+	}
+	return sidecar.FsyncDir(s.dir)
+}

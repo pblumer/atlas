@@ -5,6 +5,10 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
+import {
+  LOGO_URL, hasLogoCached, applyLogo, syncLogoFromServer,
+  setServerLogo, deleteServerLogo,
+} from "./logo.js";
 import { enhanceTable } from "./table.js";
 
 const view = document.getElementById("view");
@@ -1108,6 +1112,22 @@ function appearanceCard() {
           <span class="pill">Accent</span>
         </span>
       </div>
+
+      <div class="logo-row">
+        <div class="between"><h3 style="margin:0">Logo</h3>
+          <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"}>Remove logo</button></div>
+        <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
+        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
+        <div class="logo-controls">
+          <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
+            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : "A"
+          }</span>
+          <label class="btn sm" style="cursor:pointer">
+            Upload logo…
+            <input type="file" id="logo-file" accept="image/png,image/svg+xml" hidden />
+          </label>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1179,6 +1199,65 @@ function wireAppearance() {
       toast("Theme reset for everyone", "ok");
     } catch (e) {
       toast(e.message || "Couldn't reset theme", "err");
+    }
+  });
+
+  wireLogo();
+}
+
+// wireLogo connects the Appearance panel's logo upload and remove controls to
+// logo.js. Uploading previews the new mark instantly (applyLogo runs against the
+// whole shell) and persists it org-wide; a failed write (e.g. a non-admin) is
+// surfaced. Remove clears it back to the built-in letter mark.
+function wireLogo() {
+  const file = document.getElementById("logo-file");
+  const remove = document.getElementById("logo-remove");
+  const sample = document.querySelector(".logo-sample");
+  if (!file || !remove || !sample) return;
+
+  // reflectLogo re-syncs the panel's own preview and the Remove button to the
+  // presence now in effect. The shell marks are repainted by logo.js directly.
+  const reflectLogo = (present) => {
+    remove.hidden = !present;
+    if (present) {
+      if (!sample.querySelector("img")) {
+        sample.textContent = "";
+        const img = document.createElement("img");
+        img.className = "mark-img";
+        img.alt = "";
+        img.src = LOGO_URL + "?t=" + Date.now(); // bypass the cache so a re-upload shows
+        sample.appendChild(img);
+        sample.classList.add("has-logo");
+      } else {
+        sample.querySelector("img").src = LOGO_URL + "?t=" + Date.now();
+      }
+    } else {
+      sample.classList.remove("has-logo");
+      sample.textContent = "A";
+    }
+  };
+
+  file.addEventListener("change", async () => {
+    const chosen = file.files && file.files[0];
+    if (!chosen) return;
+    try {
+      await setServerLogo(chosen);
+      reflectLogo(true);
+      toast("Logo updated for everyone", "ok");
+    } catch (e) {
+      toast(e.message || "Couldn't save logo", "err");
+    } finally {
+      file.value = ""; // allow re-choosing the same file after a failure
+    }
+  });
+
+  remove.addEventListener("click", async () => {
+    try {
+      await deleteServerLogo();
+      reflectLogo(false);
+      toast("Logo removed for everyone", "ok");
+    } catch (e) {
+      toast(e.message || "Couldn't remove logo", "err");
     }
   });
 }
@@ -4696,3 +4775,7 @@ loadAuth().then(route);
 // updates it once the network responds, and is the first paint of the accent for a
 // browser that has no cache yet.
 syncFromServer();
+// Paint the brand logo from the cached flag immediately (no flash of the "A" for a
+// branded instance), then reconcile the actual presence with the server.
+applyLogo(hasLogoCached());
+syncLogoFromServer();

@@ -312,11 +312,11 @@ func requiresAuth(path string) bool {
 	switch path {
 	case "/api/v1/auth/login", "/api/v1/info", "/api/v1/openapi.json":
 		return false
-	case "/api/v1/settings/theme", "/api/v1/settings/registration":
-		// The brand accent (theme) and the self-service registration link
-		// (ADR-0126) are both read by the login screen before authentication. Only
-		// GET is served pre-auth; PUT/DELETE re-check the admin role in the handler,
-		// so writes stay gated even though the path is public here.
+	case "/api/v1/settings/theme", "/api/v1/settings/logo", "/api/v1/settings/registration":
+		// The brand accent (theme), the brand logo (ADR-0148) and the self-service
+		// registration link (ADR-0126) are all read by the login screen before
+		// authentication. Only GET is served pre-auth; PUT/DELETE re-check the admin
+		// role in the handler, so writes stay gated even though the path is public here.
 		return false
 	}
 	return true

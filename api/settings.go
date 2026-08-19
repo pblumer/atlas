@@ -1,12 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pblumer/atlas/api/httpapi"
 
@@ -112,6 +114,127 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { clearErr = s.settings.clearTheme() })
 	if clearErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "clear theme: "+clearErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxLogoBytes bounds an uploaded org logo (ADR-0148). A brand mark is small — a
+// few KB of PNG or SVG — so a tight cap rejects an oversized or bogus upload fast
+// while leaving generous headroom for a high-resolution raster mark.
+const maxLogoBytes = 512 << 10 // 512 KiB
+
+// pngMagic is the 8-byte signature every PNG begins with. Validating the bytes
+// server-side (not just the client's Content-Type) means a mislabelled or corrupt
+// upload can never be persisted and served to every browser as the org logo.
+var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+
+// normalizeLogoType canonicalises an upload's Content-Type to a bare, lowercase
+// media type, dropping any parameters (e.g. "image/svg+xml; charset=utf-8").
+func normalizeLogoType(h string) string {
+	if i := strings.IndexByte(h, ';'); i >= 0 {
+		h = h[:i]
+	}
+	return strings.ToLower(strings.TrimSpace(h))
+}
+
+// validLogo checks the uploaded bytes actually look like the declared image type:
+// the PNG magic for a raster mark, and well-formed UTF-8 containing an "<svg" root
+// for a vector one. It is a sanity gate, not a sanitiser — the served response's
+// CSP (handleGetLogo) is what neutralises a hostile SVG, so this only rejects
+// obvious non-images.
+func validLogo(contentType string, data []byte) bool {
+	switch contentType {
+	case "image/png":
+		return bytes.HasPrefix(data, pngMagic)
+	case "image/svg+xml":
+		return utf8.Valid(data) && bytes.Contains(bytes.ToLower(data), []byte("<svg"))
+	}
+	return false
+}
+
+// handleGetLogo serves the org-wide brand logo image, or 404 when none is set. It
+// is public (like the theme) so the login screen and every browser can show the
+// customer's mark before authenticating. A stored SVG is attacker-influenced
+// content, so the response is locked down: nosniff pins the declared type, and a
+// strict CSP with the sandbox directive neutralises any script the SVG carries even
+// if it is opened as a top-level document — the app itself only ever renders it via
+// <img>, where SVG script never runs anyway.
+func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
+	var (
+		data []byte
+		ct   string
+		ok   bool
+		err  error
+	)
+	s.do(func() { data, ct, ok, err = s.settings.getLogo() })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read logo: "+err.Error())
+		return
+	}
+	if !ok {
+		httpapi.Error(w, http.StatusNotFound, "no org logo set")
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// handleSetLogo stores the org-wide brand logo. Admin-gated: it changes what every
+// user of the instance (and every visitor to the login screen) sees. The image is
+// the raw request body; its format comes from the Content-Type header and is
+// re-validated against the bytes before anything is persisted.
+func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	ct := normalizeLogoType(r.Header.Get("Content-Type"))
+	if _, ok := logoExtByType[ct]; !ok {
+		httpapi.Error(w, http.StatusUnsupportedMediaType, "logo must be uploaded as image/png or image/svg+xml")
+		return
+	}
+	// Read one byte past the cap so an over-limit body is detected, not silently
+	// truncated into a "valid" smaller image.
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxLogoBytes+1))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(data) == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "empty logo body")
+		return
+	}
+	if len(data) > maxLogoBytes {
+		httpapi.Error(w, http.StatusRequestEntityTooLarge, "logo exceeds the 512 KiB limit")
+		return
+	}
+	if !validLogo(ct, data) {
+		httpapi.Error(w, http.StatusBadRequest, "body is not a valid "+ct+" image")
+		return
+	}
+	var saveErr error
+	s.do(func() { saveErr = s.settings.saveLogo(data, ct) })
+	if saveErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "save logo: "+saveErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteLogo clears the org-wide logo, restoring the built-in letter mark.
+// Admin-gated.
+func (s *Server) handleDeleteLogo(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	var clearErr error
+	s.do(func() { clearErr = s.settings.clearLogo() })
+	if clearErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "clear logo: "+clearErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
