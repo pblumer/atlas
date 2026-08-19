@@ -42,6 +42,7 @@ const (
 	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
 	cfCompensable            columnFamily = 0x1E // comp:<scopeKey>:<seq> → CompensableValue (ADR-0103)
 	cfCanceling              columnFamily = 0x1F // canceling:<txScopeKey> → 1: a transaction being cancelled (ADR-0108)
+	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -162,6 +163,21 @@ func keyProcessInstance(key uint64) []byte {
 
 func keyProcessInstanceHistory(key uint64) []byte {
 	return appendBE64([]byte{byte(cfProcessInstanceHistory)}, key)
+}
+
+// keyHistoryExpiry keys a finished instance's scheduled hard delete by its purge due
+// date, so the retention sweep finds what is due with a range scan up to now instead of
+// walking the whole history (ADR-0146). The same shape as keyTimer, for the same reason:
+// the ordered due date leads, the instance key disambiguates entries sharing one date.
+func keyHistoryExpiry(dueDate int64, piKey uint64) []byte {
+	return appendBE64(appendOrderedInt64([]byte{byte(cfHistoryExpiry)}, dueDate), piKey)
+}
+
+// orderedInt64At decodes an int64 written by appendOrderedInt64 at the given offset —
+// the inverse sign-bit flip. Used to read a history-expiry entry's due date back out of
+// its key, which is where that date lives (the entry has no value).
+func orderedInt64At(k []byte, off int) int64 {
+	return int64(binary.BigEndian.Uint64(k[off:off+8]) ^ (1 << 63))
 }
 
 func keyActiveChildren(scope uint64) []byte {

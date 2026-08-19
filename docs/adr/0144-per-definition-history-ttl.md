@@ -144,6 +144,8 @@ unbounded.
 
 ## Links
 
+- extended by ADR-0146 (the sweep no longer walks the history to find what this TTL
+  scheduled — a due-date index does)
 - extends ADR-0115 (history retention — the sweep, the purge event, the export gate)
 - complements ADR-0085 (instance TTL — bounds the active set, per definition)
 - relates to ADR-0114 (OpenSearch exporter — the gate's high-water mark)
