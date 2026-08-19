@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/pblumer/atlas/logging"
 )
 
 // The HTTP face of the curated source layout (ADR-0134 Phase 4).
@@ -57,7 +59,8 @@ func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Re
 		// The 200 header is already out, so a mid-stream failure can only be logged;
 		// the truncated archive fails gzip/tar validation on the client rather than
 		// passing for a complete tree (the same posture as the ADR-0107 backup).
-		log.Printf("application source: streaming failed: %v", err)
+		logging.Error(logging.ApplicationSourceStreamFailed, "application source stream failed after the header was sent",
+			slog.String("error", err.Error()))
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/pblumer/atlas/logging"
 )
 
 // This file is the authentication boundary (ADR-0044). It is deliberately thin
@@ -444,9 +446,14 @@ func (s *Server) bootstrapAdmin(now int64) error {
 		return err
 	}
 	if generated {
-		// Logged once, to stderr, so the operator can capture it on first boot.
-		// A pre-set ATLAS_ADMIN_PASSWORD is never logged.
-		log.Printf("atlas: seeded admin user %q with a generated password: %s", username, password)
+		// Logged once so the operator can capture it on first boot; a pre-set
+		// ATLAS_ADMIN_PASSWORD is never logged. The password deliberately stays inside
+		// the message rather than becoming an attribute: an attribute is what a log
+		// shipper extracts, indexes and keeps (ADR-0142 — no secret becomes a field).
+		logging.Warn(logging.AuthAdminSeeded,
+			fmt.Sprintf("seeded admin user with a generated password: %s — capture it now, "+
+				"it is not shown again", password),
+			slog.String("username", username))
 	}
 	return nil
 }

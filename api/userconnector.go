@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +10,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -85,19 +86,23 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 			if err != nil {
 				return err
 			}
-			log.Printf("user provisioning: instance %d create user %q (id=%s created=%v)", scope, username, id, created)
+			logging.Info(logging.UserProvisioningUserCreated, "provisioned a user from a process instance",
+				slog.Uint64("instance", scope), slog.String("username", username),
+				slog.String("userId", id), slog.Bool("created", created))
 			return nil
 		case "set-password":
 			if err := s.provisionSetPassword(username, userResolve(detail.UserPassword, scope, scopeVars), now); err != nil {
 				return err
 			}
-			log.Printf("user provisioning: instance %d set password for %q", scope, username)
+			logging.Info(logging.UserProvisioningPasswordSet, "set a user password from a process instance",
+				slog.Uint64("instance", scope), slog.String("username", username))
 			return nil
 		case "disable":
 			if err := s.provisionDisableUser(username, now); err != nil {
 				return err
 			}
-			log.Printf("user provisioning: instance %d disable user %q", scope, username)
+			logging.Info(logging.UserProvisioningUserDisabled, "disabled a user from a process instance",
+				slog.Uint64("instance", scope), slog.String("username", username))
 			return nil
 		default:
 			return fmt.Errorf("user connector: unknown operation %q", op)

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
+	"github.com/pblumer/atlas/logging"
 )
 
 // A full snapshot (ADR-0109) is the whole-instance backup: unlike the design-time
@@ -116,7 +117,8 @@ func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
 	// Pick the checkpoint before reading the WAL, so the WAL copy is a superset of the
 	// segments that checkpoint's suffix needs (see the package comment above).
 	if err := streamFullBackup(w, os.DirFS(s.dataDir), newestVerifiedCheckpoint(s.dataDir)); err != nil {
-		log.Printf("full backup: streaming failed: %v", err)
+		logging.Error(logging.FullBackupStreamFailed, "whole-instance snapshot stream failed after the header was sent",
+			slog.String("error", err.Error()))
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -33,6 +33,7 @@ import (
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
@@ -52,17 +53,17 @@ func main() {
 	switch cmd {
 	case "serve":
 		if err := runServe(args); err != nil {
-			log.Fatalf("atlas: %v", err)
+			fatal("atlas", err)
 		}
 	case "mcp":
 		if err := runMCP(args); err != nil {
-			log.Fatalf("atlas mcp: %v", err)
+			fatal("atlas mcp", err)
 		}
 	case "version", "-v", "--version":
 		printVersion(os.Stdout)
 	case "reset-password":
 		if err := runResetPassword(args); err != nil {
-			log.Fatalf("atlas reset-password: %v", err)
+			fatal("atlas reset-password", err)
 		}
 	case "help", "-h", "--help":
 		usage()
@@ -162,6 +163,11 @@ func runServe(args []string) error {
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
 	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// How logs are rendered (ADR-0142). Text is the default because the console audience
+	// is the one Atlas has always had; json is for a deployment shipping logs somewhere
+	// that would otherwise need a parsing rule of its own. Either way every line carries
+	// a stable event= name, so what an alert matches on does not depend on this flag.
+	logFormat := fs.String("log-format", string(logging.DefaultFormat), "how to render logs: \"text\" (logfmt-style key=value, for a terminal) or \"json\" (one object per line, for a log shipper). Every line carries a stable event= name either way (ADR-0142)")
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
@@ -177,7 +183,7 @@ func runServe(args []string) error {
 		Index:    strings.TrimSpace(*osIndex),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat))
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -226,12 +232,14 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
 	logs := api.NewLogBuffer(2000)
-	log.SetOutput(io.MultiWriter(os.Stderr, logs))
+	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat); err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
@@ -244,12 +252,13 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if applied, err := api.ApplyPendingRestore(dataDir); err != nil {
 		return fmt.Errorf("apply pending restore: %w", err)
 	} else if applied {
-		log.Printf("applied a staged full-snapshot restore; state will be rebuilt from the restored WAL")
+		logging.Info(logging.RestoreApplied,
+			"applied a staged full-snapshot restore; state will be rebuilt from the restored WAL")
 	}
 
 	// Open durable stores. The wal is the source of truth; the store is its
 	// materialization, caught up on Recover below.
-	log.Printf("opening data directory %s", dataDir)
+	logging.Info(logging.DataDirOpened, "opening the data directory", slog.String("dataDir", dataDir))
 	wl, err := wal.Open(wal.Options{Dir: filepath.Join(dataDir, "wal")})
 	if err != nil {
 		return err
@@ -284,7 +293,8 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
-		log.Printf("opensearch exporter enabled: indexing events into %s at %s", osExport.Index, osExport.URL)
+		logging.Info(logging.ExporterEnabled, "opensearch exporter enabled",
+			slog.String("index", osExport.Index), slog.String("url", osExport.URL))
 	}
 	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
 	// The cadence and batch apply either way: retention also runs for a process that
@@ -296,21 +306,26 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 			gate = "OpenSearch export"
 		}
 		apiOpts = append(apiOpts, api.WithRetention(retention.maxAge))
-		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s, up to %d per %s",
-			retention.maxAge, gate, retention.batch, retention.interval)
+		logging.Info(logging.RetentionEnabled, "history retention enabled",
+			slog.Duration("maxAge", retention.maxAge), slog.String("gate", gate),
+			slog.Int("batch", retention.batch), slog.Duration("interval", retention.interval))
 	}
 	// Periodic recovery checkpoints keep restart time a function of the cadence rather
 	// than of the whole log's length (ADR-0131). Nothing is deleted by them.
 	if checkpointInterval > 0 {
 		apiOpts = append(apiOpts, api.WithCheckpoints(checkpointInterval), api.WithCheckpointRetention(checkpointKeep))
-		log.Printf("recovery checkpoints enabled: snapshotting applied state every %s, keeping %d", checkpointInterval, checkpointKeep)
+		logging.Info(logging.CheckpointEnabled, "recovery checkpoints enabled",
+			slog.Duration("interval", checkpointInterval), slog.Int("keep", checkpointKeep))
 		// Compaction rides the checkpoint tick, so it needs one to ride (ADR-0131).
 		if compactWAL {
 			apiOpts = append(apiOpts, api.WithWALCompaction())
-			log.Printf("wal compaction enabled: deleting segments already covered by a checkpoint and every consumer watermark")
+			logging.Info(logging.WALCompactionEnabled,
+				"wal compaction enabled: deleting segments already covered by a checkpoint and every consumer watermark")
 		}
 	} else if compactWAL {
-		log.Printf("WARNING: --compact-wal has no effect without checkpointing; set --checkpoint-interval to a positive duration to enable it (ADR-0131)")
+		logging.Warn(logging.WALCompactionInert,
+			"--compact-wal has no effect without checkpointing; set --checkpoint-interval to a "+
+				"positive duration to enable it (ADR-0131)")
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
@@ -332,9 +347,14 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		ex := script.New(lang)
 		ex.Timeout = scriptTimeout
 		if err := ex.Check(); err != nil {
-			log.Printf("WARNING: %s script worker enabled but %q was not found on PATH (%v); %s script tasks will park until it is installed", lang.Name, lang.Bin, err, lang.Name)
+			logging.Warn(logging.ScriptWorkerMissing,
+				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
+					"will park until it is installed",
+				slog.String("language", lang.Name), slog.String("binary", lang.Bin),
+				slog.String("error", err.Error()))
 		} else {
-			log.Printf("%s script worker enabled (%s found on PATH)", lang.Name, lang.Bin)
+			logging.Info(logging.ScriptWorkerEnabled, "script worker enabled",
+				slog.String("language", lang.Name), slog.String("binary", lang.Bin))
 		}
 		apiOpts = append(apiOpts, api.WithScriptWorker(lang.JobType, ex))
 	}
@@ -371,12 +391,16 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	errCh := make(chan error, 1)
 	go func() {
 		base := loopbackURL(addr)
-		log.Printf("listening on %s (UI at %s/, MCP at %s/mcp)", addr, base, base)
+		logging.Info(logging.ServerListening, "listening; recovery is complete and this instance is ready",
+			slog.String("addr", addr), slog.String("ui", base+"/"), slog.String("mcp", base+"/mcp"))
 		if docs {
-			log.Printf("API explorer at %s/api/docs (OpenAPI at %s/api/v1/openapi.json)", base, base)
+			logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
+				slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
 		}
 		if metricsOn {
-			log.Printf("Prometheus metrics at %s/metrics (unauthenticated; proxy it if exposed beyond the host)", base)
+			logging.Info(logging.ServerMetrics,
+				"Prometheus metrics enabled (unauthenticated; proxy it if exposed beyond the host)",
+				slog.String("metrics", base+"/metrics"))
 		}
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
@@ -389,7 +413,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		log.Printf("shutting down")
+		logging.Info(logging.ServerShuttingDown, "shutting down")
 		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		return httpSrv.Shutdown(shutCtx)
@@ -405,8 +429,11 @@ func runMCP(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	log.SetOutput(os.Stderr)
-	log.Printf("atlas mcp: proxying to %s (stdio)", *server)
+	// Protocol traffic owns stdout, so logs go to stderr and nothing else.
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+		return err
+	}
+	logging.Info(logging.MCPProxying, "proxying MCP over stdio", slog.String("server", *server))
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
@@ -471,7 +498,8 @@ Flags:
 	if res.Created {
 		verb = "created admin"
 	}
-	log.Printf("atlas: %s user %q (id %s)", verb, res.Username, res.UserID)
+	logging.Info(logging.AuthPasswordReset, "atlas "+verb+" user",
+		slog.String("username", res.Username), slog.String("userId", res.UserID))
 	if generated {
 		// The generated secret goes to stdout (not the log) so it is easy to
 		// capture and does not linger in a shared log buffer.
@@ -496,4 +524,13 @@ func resetPasswordValue(fromStdin bool) (password string, generated bool, err er
 		return "", false, fmt.Errorf("generate password: %w", err)
 	}
 	return hex.EncodeToString(b), true, nil
+}
+
+// fatal reports a top-level command failure and exits non-zero. It replaces log.Fatalf
+// so the last thing a failed command says is a record like every other one, with an
+// event name an operator's log pipeline can match (ADR-0142).
+func fatal(command string, err error) {
+	logging.Error(logging.CommandFailed, command+" failed",
+		slog.String("command", command), slog.String("error", err.Error()))
+	os.Exit(1)
 }
