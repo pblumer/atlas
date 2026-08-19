@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/collab"
 )
 
 // HTTP surface for live collaborative modeling sessions (ADR-0140). One SSE
@@ -70,7 +72,7 @@ func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bo
 // (ADR-0071). It writes 404 for an unknown participant and 403 for a viewer, and
 // returns false in both cases; true means the caller may proceed.
 func (s *Server) requireSessionEditor(w http.ResponseWriter, draftID, participantID string) bool {
-	canEdit, ok := s.collab.canEdit(draftID, participantID)
+	canEdit, ok := s.collab.CanEdit(draftID, participantID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 		return false
@@ -117,7 +119,7 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	participant, sync, leave := s.collab.joinStream(id, userID, name, canEdit)
+	participant, sync, leave := s.collab.JoinStream(id, userID, name, canEdit)
 	defer leave()
 
 	h := w.Header()
@@ -125,7 +127,7 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	h.Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
-	sseFrame(w, collabEventSync, 0, sync)
+	sseFrame(w, collab.EventSync, 0, sync)
 	flusher.Flush()
 
 	ctx := r.Context()
@@ -145,7 +147,7 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-		case ev, open := <-participant.ch:
+		case ev, open := <-participant.Events():
 			if !open {
 				return // torn down (e.g. server shutdown); end the stream
 			}
@@ -197,7 +199,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 	// A joined-over-MCP participant has no SSE stream to reap it on disconnect, so
 	// it joins detached and is kept alive by polling; the reaper evicts it if it
 	// falls silent (ADR-0140). Its project role decides whether it may edit.
-	_, sync := s.collab.joinDetachedAs(id, userID, name, canEdit)
+	_, sync := s.collab.JoinDetachedAs(id, userID, name, canEdit)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(sync)
@@ -218,7 +220,7 @@ func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
-	out, ok := s.collab.poll(id, body.ParticipantID)
+	out, ok := s.collab.Poll(id, body.ParticipantID)
 	if !ok {
 		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
@@ -243,7 +245,7 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
-	s.collab.leave(id, body.ParticipantID)
+	s.collab.Leave(id, body.ParticipantID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -282,7 +284,7 @@ func (s *Server) handleDraftSessionPresence(w http.ResponseWriter, r *http.Reque
 	if !s.requireSessionEditor(w, id, body.ParticipantID) {
 		return
 	}
-	if !s.collab.presence(id, body.ParticipantID, body.Selection) {
+	if !s.collab.Presence(id, body.ParticipantID, body.Selection) {
 		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
 	}
@@ -308,7 +310,7 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 	}
 	// Validate the action before the edit gate so a malformed request is a 400
 	// regardless of who sends it.
-	if body.Action != collabLockAcquire && body.Action != collabLockRelease {
+	if body.Action != collab.LockAcquire && body.Action != collab.LockRelease {
 		writeError(w, http.StatusBadRequest, `action must be "acquire" or "release"`)
 		return
 	}
@@ -316,8 +318,8 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	switch body.Action {
-	case collabLockAcquire:
-		granted, ok := s.collab.acquireLock(id, body.ParticipantID, body.ElementID)
+	case collab.LockAcquire:
+		granted, ok := s.collab.AcquireLock(id, body.ParticipantID, body.ElementID)
 		switch {
 		case !ok:
 			writeError(w, http.StatusNotFound, "no such participant in this draft's session")
@@ -326,8 +328,8 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		default:
 			w.WriteHeader(http.StatusNoContent)
 		}
-	case collabLockRelease:
-		if !s.collab.releaseLock(id, body.ParticipantID, body.ElementID) {
+	case collab.LockRelease:
+		if !s.collab.ReleaseLock(id, body.ParticipantID, body.ElementID) {
 			writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 			return
 		}
@@ -355,7 +357,7 @@ func (s *Server) handleDraftSessionChange(w http.ResponseWriter, r *http.Request
 	if !s.requireSessionEditor(w, id, body.ParticipantID) {
 		return
 	}
-	if !s.collab.change(id, body.ParticipantID, body.ElementID, body.XML) {
+	if !s.collab.Change(id, body.ParticipantID, body.ElementID, body.XML) {
 		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
 	}

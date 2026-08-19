@@ -42,6 +42,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
@@ -200,7 +201,7 @@ type Server struct {
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
 	// touches the engine — it is design-time coordination around a draft, not
 	// engine state.
-	collab *collabRegistry
+	collab *collab.Registry
 
 	// collabKeepalive is how often an idle SSE session stream writes a keepalive
 	// comment. net/http only learns a client vanished when a write fails, so these
@@ -781,8 +782,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		sessions:          newSessionStore(defaultSessionTTL),
-		collab:            newCollabRegistry(),
-		collabKeepalive:   collabKeepaliveInterval,
+		collab:            collab.NewRegistry(),
+		collabKeepalive:   collab.KeepaliveInterval,
 		dmnResolver:       resolver,
 		dmnValidator:      dmn.NewValidator(resolver),
 		dmnRegistry:       dmn.NewRegistry(),
@@ -961,7 +962,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
-	go s.collabReaper(collabReapInterval)
+	go s.collabReaper(collab.ReapInterval)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -1468,8 +1469,8 @@ func (s *Server) collabReaper(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
-			if n := s.collab.reap(); n > 0 {
-				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collabParticipantTTL)
+			if n := s.collab.Reap(); n > 0 {
+				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collab.ParticipantTTL)
 			}
 		}
 	}
