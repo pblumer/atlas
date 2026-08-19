@@ -18,3 +18,14 @@ spec:
         - --spider
         - --timeout=5
         - "http://{{ include "atlas.fullname" . }}:{{ .Values.service.port }}/healthz"
+    # /healthz only says the process is alive. /readyz is the one that says it can
+    # actually serve — recovery finished, the state store answers, the writer responds —
+    # so a release test that passes means more than "something is listening".
+    - name: readyz
+      image: busybox:1.36
+      command:
+        - wget
+      args:
+        - --spider
+        - --timeout=5
+        - "http://{{ include "atlas.fullname" . }}:{{ .Values.service.port }}/readyz"

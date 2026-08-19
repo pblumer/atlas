@@ -154,13 +154,31 @@ atlas:
   # -- Extra environment variables, standard Kubernetes env entries.
   extraEnv: []
 
-# -- Probes. /healthz is always unauthenticated, so it is safe under --auth.
+# -- Probes. /healthz and /readyz are both always unauthenticated, so they are safe
+# under --auth. They answer different questions and are deliberately not
+# interchangeable (ADR-0142):
+#
+#   /healthz — is the process alive. Unconditional. The only remedy a liveness probe
+#              has is a restart, so it must not fail for anything a restart would not
+#              fix; a liveness probe that waited for recovery would kill the pod
+#              mid-replay and make the next replay start over.
+#   /readyz  — should this pod be routed traffic. Fails while startup recovery is
+#              incomplete, while the state store cannot answer a read, while the
+#              partition writer is not responding, and while the server is shutting
+#              down.
+#
+# The startup probe is generous on purpose: it gates the other two, so it is the one
+# place where a slow start should be waited out rather than restarted. Recovery is
+# bounded by the checkpoint cadence (ADR-0131), but the log after the newest checkpoint
+# can still be large, and the port does not open until the replay finishes. 120 × 5s
+# gives that ten minutes before Kubernetes gives up; raise it if your restarts replay
+# more than that.
 startupProbe:
   httpGet:
-    path: /healthz
+    path: /readyz
     port: http
-  failureThreshold: 30
-  periodSeconds: 2
+  failureThreshold: 120
+  periodSeconds: 5
 livenessProbe:
   httpGet:
     path: /healthz
@@ -170,7 +188,7 @@ livenessProbe:
   failureThreshold: 3
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /readyz
     port: http
   periodSeconds: 10
   timeoutSeconds: 2

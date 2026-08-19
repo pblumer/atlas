@@ -273,8 +273,45 @@ This ADR is **not implemented in one change**. The slices:
    store's applied position is skipped rather than folded in, and a checkpoint lets
    recovery skip whole segments without reading them at all. That is precisely the number
    the cadence changes.
-7. Readiness semantics: a readiness probe distinct from liveness that fails while
-   startup recovery is incomplete or a required local store cannot operate.
+7. **Landed** — **readiness semantics**: `GET /readyz`, distinct from `/healthz`.
+
+   The audit that opened this slice found the split was not merely missing but *wrong*:
+   the bundled Helm chart pointed the startup, liveness **and** readiness probes at
+   `/healthz`, which returns an unconditional `ok`. Readiness was therefore decorative —
+   a pod whose state store could not answer a read, or whose single writer was wedged,
+   said `ok` and kept receiving traffic.
+
+   The two endpoints answer different questions and stay separate:
+   - `/healthz` — is the process alive. **Unconditional, and it stays that way.** The
+     only remedy a liveness probe has is a restart, so it must not fail for anything a
+     restart would not fix. A liveness probe that waited for recovery would kill a pod
+     mid-replay, and every restart makes that replay start over. `TestHealthzStaysLivenessOnly`
+     guards this from the other side.
+   - `/readyz` — should traffic be routed here. It fails while the server is shutting
+     down (`do` silently drops work once the run loop is gone), while startup recovery is
+     incomplete, while a point read of the state store fails, and while the run-loop
+     goroutine does not answer within two seconds.
+
+   The last check is the one `/healthz` structurally cannot make: a blocked fsync on a
+   hung volume leaves the process alive and answering HTTP while the writer is stuck. It
+   is an **empty closure with a deadline** — empty because a timed-out closure still runs
+   later with nobody listening, and deadlined because a probe must fail rather than hang
+   alongside what it is probing. Cost is one closure per probe interval; nothing touches
+   engine state, and I1/I3 are untouched.
+
+   Two honest limits. The shipped binary opens its listener only *after* recovery
+   returns, so a kubelet never observes the recovery reason — it observes a refused
+   connection, and the chart's startup budget was raised from 60s to 10m so a long replay
+   is waited out rather than restarted into a replay that starts over. The check is still
+   enforced, for anything that mounts the handler itself. And **draining on shutdown is
+   not solved here**: the reason exists and fires, but the process stops accepting
+   connections at SIGTERM anyway, so a pre-stop grace period is what would make a
+   readiness-based drain observable. That is chart and lifecycle work, not a metric.
+
+   `storeReadable` recovers a panic on purpose: Pebble panics rather than returning an
+   error when used after `Close`, and readiness is exactly the endpoint where "the store
+   is gone" should be reported as a 503 with a reason instead of a dropped connection and
+   a stack trace every ten seconds.
 8. Structured log event names and essential context, and only then OpenTelemetry
    traces — after the metric contract has settled, with sampling and export kept off
    the single-writer path.
