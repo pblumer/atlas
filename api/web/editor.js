@@ -5877,6 +5877,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         <button class="btn neutral" id="vars-toggle" aria-pressed="true" title="Show or hide the variables panel">Variables</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
+        <span class="pill err" id="incident-pill" style="margin-left:8px" hidden><span class="dot"></span><b id="incident-count">0</b>&nbsp;incidents</span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
@@ -5895,6 +5896,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         <span class="legend-swatch live"></span> live token
         <span class="legend-swatch history" style="margin-left:12px"></span> passed through
         <span class="badge" style="margin-left:12px">N</span> token count
+        <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -5943,12 +5945,16 @@ export async function mountLive(root, { api, toast, key, instance }) {
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
+  const incidentPill = root.querySelector("#incident-pill");
+  const incidentEl = root.querySelector("#incident-count");
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
+  let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
+  let incidentsTruncated = false;  // more elements are parked than the overlay lists
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
@@ -6206,10 +6212,48 @@ export async function mountLive(root, { api, toast, key, instance }) {
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
+    html = incidentPanelHTML() + html;
     if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
     varPanel.innerHTML = html;
     updateElapsed();
+  }
+
+  // incidentPanelHTML renders what is parked in view: which element, in which
+  // instance, why, and the one action that resumes it (ADR-0061). It leads the
+  // variables panel because an incident is the reason nothing else in that panel is
+  // changing — the question "why is this task still open?" is answered here, next to
+  // the diagram, instead of in a separate Incidents view an operator has to think to
+  // visit (ADR-0150).
+  function incidentPanelHTML() {
+    if (!incidents.length) return "";
+    const rows = incidents.map((inc) => `<div class="inc-row">
+        <div class="inc-where"><b>${esc(inc.elementId)}</b>
+          <span class="muted">· instance ${inc.processInstanceKey}</span>
+          ${inc.raisedAt ? `<span class="muted">· ${esc(fmtNano(inc.raisedAt))}</span>` : ""}</div>
+        <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
+        <div class="inc-actions"><button class="btn neutral sm" data-resolve="${inc.elementInstanceKey}"
+          title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button></div>
+      </div>`).join("");
+    return `<div class="vp-incidents">
+      <div class="vp-head"><span class="vp-title">&#9888; ${incidents.length}${incidentsTruncated ? "+" : ""} incident${incidents.length === 1 ? "" : "s"}</span>
+        <span class="vp-actions"><a class="replay-link" href="#/operations/incidents" title="Every unresolved incident on this server">All incidents &#8599;</a></span></div>
+      ${rows}</div>`;
+  }
+
+  // resolveIncident clears one incident and re-activates its job with a fresh single
+  // attempt (ADR-0061). One attempt is the right default from here: the operator has
+  // just read the message and fixed (or is testing) the cause, and a failure parks the
+  // token again with the new reason rather than burning a budget on the old one.
+  async function resolveIncident(key) {
+    try {
+      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: 1 });
+      toast("Incident resolved — retrying the job", "ok");
+    } catch (e) {
+      toast("Resolve failed: " + (e && e.message ? e.message : e), "err");
+      return;
+    }
+    await poll();
   }
 
   async function poll() {
@@ -6242,6 +6286,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
     // The business rule tasks the selected instance has already decided — each gets
     // a clickable badge that opens its decision inspection (ADR-0066).
     const decidedEls = new Set(decisions.map((d) => d.elementId));
+    // The elements whose token is parked behind an incident (ADR-0061). Without this
+    // the diagram draws a stuck task exactly like a waiting one, and the view reads
+    // "still running" for a process that has been failing for hours (ADR-0150).
+    incidents = rt.incidents || [];
+    incidentsTruncated = !!rt.incidentsTruncated;
+    const incidentsByElement = new Map();
+    for (const inc of incidents) {
+      const arr = incidentsByElement.get(inc.elementId) || [];
+      arr.push(inc);
+      incidentsByElement.set(inc.elementId, arr);
+    }
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
@@ -6253,6 +6308,18 @@ export async function mountLive(root, { api, toast, key, instance }) {
       const marker = live ? "atlas-active" : "atlas-visited";
       canvas.addMarker(e.elementId, marker);
       marked.push([e.elementId, marker]);
+      // A parked element is drawn red over its live-token green, and says why: the
+      // badge carries the incident message, the panel below carries the resolve.
+      const elIncidents = incidentsByElement.get(e.elementId) || [];
+      if (elIncidents.length) {
+        canvas.addMarker(e.elementId, "atlas-incident");
+        marked.push([e.elementId, "atlas-incident"]);
+        const label = elIncidents.length === 1 ? "incident" : `${elIncidents.length} incidents`;
+        overlays.add(e.elementId, "incident", {
+          position: { bottom: 4, left: 4 },
+          html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
+        });
+      }
       // Two badges per element: how many tokens have already passed through
       // (gray) and how many are live here right now (green). A visit is recorded
       // on activation, so e.visits already counts the live tokens — the number
@@ -6293,6 +6360,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
+    incidentEl.textContent = incidents.length + (incidentsTruncated ? "+" : "");
+    incidentPill.hidden = incidents.length === 0;
     runningCount = rt.instances || 0;
     renderVariables();
   }
@@ -6386,6 +6455,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
       return;
     }
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
+    const res = t.closest("[data-resolve]");
+    if (res) { await resolveIncident(res.dataset.resolve); return; }
   });
 
   // runTerminate confirms, then terminates either the whole version (filter mode,

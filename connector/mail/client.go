@@ -27,16 +27,11 @@ package mail
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
 	"fmt"
 	"mime"
 	"net"
 	"net/smtp"
 	"strings"
-	"time"
-
-	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Message is one e-mail an outbound mail connector task sends. To is the required
@@ -110,12 +105,19 @@ type Connector struct {
 	Username string
 	Password string
 	From     string
+	// ImplicitTLS opens the connection with a TLS handshake instead of upgrading a
+	// plaintext one with STARTTLS. [NewSMTPClient] derives it from the endpoint's
+	// port (465, the RFC 8314 submissions port), which is what an "smtps://" endpoint
+	// normalizes to; a caller can also set it outright.
+	ImplicitTLS bool
 }
 
-// sendFunc is the seam a test substitutes for net/smtp's SendMail, so the worker and
-// the SMTP framing are exercised without a live server. Its signature matches
-// [smtp.SendMail].
-type sendFunc func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
+// sendFunc is the seam a test substitutes for the SMTP transport, so the worker and
+// the MIME framing are exercised without a live server. It once matched
+// [smtp.SendMail]; it now matches [submit], which does what SendMail does and also
+// reaches an implicit-TLS submissions server — and takes the caller's context, so a
+// send is bounded by the job that asked for it rather than by the network alone.
+type sendFunc func(ctx context.Context, addr string, a smtp.Auth, from string, to []string, msg []byte) error
 
 // SMTPClient sends a Message over SMTP (the submission endpoint of any standards
 // compliant provider, including Google and Microsoft 365). It authenticates with the
@@ -126,132 +128,43 @@ type SMTPClient struct {
 	send sendFunc
 }
 
-// NewSMTPClient builds an SMTP mail client for a configured connector, backed by
-// [sendMailBounded] — net/smtp's SendMail flow with the connector call budget
-// applied, so a hung submission host cannot stall the run loop.
+// NewSMTPClient builds an SMTP mail client for a configured connector, backed by the
+// [submit] transport: net/smtp's SendMail flow under the shared connector call
+// budget (ADR-0149), extended to reach an implicit-TLS submissions server, which
+// SendMail cannot (ADR-0150).
 func NewSMTPClient(conn Connector) *SMTPClient {
-	return &SMTPClient{conn: conn, send: sendMailBounded}
+	conn.ImplicitTLS = conn.ImplicitTLS || usesImplicitTLS(conn.Endpoint)
+	c := &SMTPClient{conn: conn}
+	c.send = c.submit
+	return c
 }
 
-// sendMailBounded is net/smtp's SendMail with a deadline. SendMail itself dials
-// and converses with no timeout whatsoever, and the mail worker runs on the
-// run-loop goroutine — so a submission host that accepts the TCP connection and
-// then stops answering would park the engine's single writer indefinitely (see
-// the nettimeout package doc). An HTTP client's Timeout does not help here: this
-// is a raw TCP conversation, so the bound is a dial timeout plus an absolute
-// deadline on the connection, which covers every later read and write too.
-//
-// It otherwise mirrors SendMail's sequence — greeting, STARTTLS when offered,
-// AUTH when a mechanism is supplied, then the envelope and data — using only the
-// exported net/smtp API. SendMail's address validation is preserved: Client.Mail
-// and Client.Rcpt each call validateLine themselves, so a CR/LF-bearing address
-// is still rejected before it can inject an SMTP command.
-//
-// It also reaches submission endpoints SendMail cannot: an endpoint on the SMTPS
-// port speaks TLS from the first byte, which SendMail (always plaintext) can only
-// hang against. See usesImplicitTLS.
-func sendMailBounded(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return sendMailWithin(nettimeout.Default, addr, a, from, to, msg)
-}
-
-// implicitTLSPort is the IANA-registered SMTPS port. A server on 465 expects a TLS
-// handshake immediately, with no plaintext greeting and no STARTTLS (RFC 8314).
-const implicitTLSPort = "465"
-
-// usesImplicitTLS reports whether addr should be reached with implicit TLS
-// (SMTPS) rather than a plaintext connection upgraded by STARTTLS.
-//
-// The decision is made by port, because the connector configuration carries no TLS
-// mode: an operator supplies only "host:port". Port 465 is unambiguous — it is
-// registered for exactly this and serves nothing else — so keying off it makes the
-// common submission endpoints work with no extra configuration. Isolating the
-// choice here also means an explicit per-connector override, should one be added,
-// changes only this function's caller.
-//
-// Getting this wrong hangs rather than fails cleanly: a plaintext client waits for
-// a greeting the TLS server will never send while the server waits for a
-// ClientHello, until the deadline expires.
-func usesImplicitTLS(addr string) bool {
-	_, port, err := net.SplitHostPort(addr)
-	return err == nil && port == implicitTLSPort
-}
-
-// sendMailWithin is sendMailBounded with the budget injected, so a test can drive
-// the hang paths in milliseconds instead of waiting out the real budget. The
-// transport is chosen from the endpoint's port (see usesImplicitTLS).
-func sendMailWithin(budget time.Duration, addr string, a smtp.Auth, from string, to []string, msg []byte) error {
-	return sendMailOver(budget, addr, usesImplicitTLS(addr), nil, a, from, to, msg)
-}
-
-// sendMailOver is the send with the transport decision and TLS settings injected,
-// so a test can exercise the implicit-TLS path against a throwaway certificate on
-// an ordinary port (465 is privileged and unavailable to tests).
-func sendMailOver(budget time.Duration, addr string, implicitTLS bool, tlsCfg *tls.Config, a smtp.Auth, from string, to []string, msg []byte) error {
-	host := hostOf(addr)
-	if tlsCfg == nil {
-		tlsCfg = &tls.Config{ServerName: host}
+// auth is the credential this connector presents, or nil when it is configured
+// without a username (an internal relay that authenticates by network position). Send
+// and Probe build it the same way, so what a check authenticates is what a send
+// authenticates.
+func (c *SMTPClient) auth() smtp.Auth {
+	if c.conn.Username == "" {
+		return nil
 	}
-	dialer := &net.Dialer{Timeout: budget}
+	return smtp.PlainAuth("", c.conn.Username, c.conn.Password, hostOf(c.conn.Endpoint))
+}
 
-	var conn net.Conn
-	var err error
-	if implicitTLS {
-		// TLS from the first byte. DialWithDialer applies the dialer's timeout to
-		// the handshake as well, so a server that stalls mid-handshake is bounded too.
-		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsCfg)
-	} else {
-		conn, err = dialer.Dial("tcp", addr)
-	}
+// Probe opens the session a send would open — connect, TLS, authenticate — and hangs
+// up without a message (ADR-0150). It is what the connector form's check button
+// calls: the failures it catches (a host that does not resolve, a port nothing
+// listens on, a credential the server rejects) are exactly the ones that otherwise
+// surface much later as an incident on a parked token.
+func (c *SMTPClient) Probe(ctx context.Context) error {
+	sess, err := dialSMTP(ctx, c.conn.Endpoint, c.conn.ImplicitTLS, nil, c.auth())
 	if err != nil {
-		return err
+		return fmt.Errorf("mail: %w", err)
 	}
-	defer conn.Close()
-	// One absolute deadline for the whole exchange: the budget bounds the send as
-	// a unit, so no individual phase can hang past it.
-	if err := conn.SetDeadline(time.Now().Add(budget)); err != nil {
-		return err
+	defer func() { _ = sess.Close() }()
+	if err := sess.Quit(); err != nil {
+		return fmt.Errorf("mail: closing the session with %s: %w", c.conn.Endpoint, err)
 	}
-	c, err := smtp.NewClient(conn, host)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	// STARTTLS only upgrades a plaintext connection; on an implicit-TLS connection
-	// the session is already encrypted and the server offers no such extension.
-	if !implicitTLS {
-		if ok, _ := c.Extension("STARTTLS"); ok {
-			if err := c.StartTLS(tlsCfg); err != nil {
-				return err
-			}
-		}
-	}
-	if a != nil {
-		if ok, _ := c.Extension("AUTH"); !ok {
-			return errors.New("smtp: server doesn't support AUTH")
-		}
-		if err := c.Auth(a); err != nil {
-			return err
-		}
-	}
-	if err := c.Mail(from); err != nil {
-		return err
-	}
-	for _, rcpt := range to {
-		if err := c.Rcpt(rcpt); err != nil {
-			return err
-		}
-	}
-	w, err := c.Data()
-	if err != nil {
-		return err
-	}
-	if _, err := w.Write(msg); err != nil {
-		return err
-	}
-	if err := w.Close(); err != nil {
-		return err
-	}
-	return c.Quit()
+	return nil
 }
 
 // Send frames m as a UTF-8 MIME e-mail and submits it to the connector's SMTP
@@ -261,7 +174,6 @@ func sendMailOver(budget time.Duration, addr string, implicitTLS bool, tlsCfg *t
 // addresses are delivered but never written into a header. A missing recipient or a
 // send failure returns an error so the job stays pending and is retried (at-least-once).
 func (c *SMTPClient) Send(ctx context.Context, m Message) error {
-	_ = ctx // net/smtp's SendMail predates context; ret/timeout handling is a follow-up (ADR-0079)
 	from := strings.TrimSpace(m.From)
 	if from == "" {
 		from = strings.TrimSpace(c.conn.From)
@@ -273,11 +185,7 @@ func (c *SMTPClient) Send(ctx context.Context, m Message) error {
 	if len(rcpts) == 0 {
 		return fmt.Errorf("mail: message has no recipients")
 	}
-	var auth smtp.Auth
-	if c.conn.Username != "" {
-		auth = smtp.PlainAuth("", c.conn.Username, c.conn.Password, hostOf(c.conn.Endpoint))
-	}
-	if err := c.send(c.conn.Endpoint, auth, from, rcpts, buildRFC822(m, from)); err != nil {
+	if err := c.send(ctx, c.conn.Endpoint, c.auth(), from, rcpts, buildRFC822(m, from)); err != nil {
 		return fmt.Errorf("mail: send via %s: %w", c.conn.Endpoint, err)
 	}
 	return nil
@@ -294,8 +202,12 @@ func recipients(m Message) []string {
 }
 
 // hostOf returns the host part of a "host:port" endpoint (SMTP PLAIN auth is scoped
-// to the server host). An endpoint without a port is used verbatim.
+// to the server host). SplitHostPort leads so a bracketed IPv6 endpoint yields the
+// address itself rather than "[::1]"; an endpoint without a port is used verbatim.
 func hostOf(endpoint string) string {
+	if h, _, err := net.SplitHostPort(endpoint); err == nil {
+		return h
+	}
 	if i := strings.LastIndex(endpoint, ":"); i >= 0 {
 		return endpoint[:i]
 	}

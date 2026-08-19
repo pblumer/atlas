@@ -267,6 +267,14 @@ type Server struct {
 	// loop, so it needs no lock.
 	mailRegistry *mail.Registry
 
+	// mailOutbox is where the preview mail provider delivers (ADR-0150) — the
+	// zero-configuration provider a first mail task uses before anyone has a
+	// submission host or an OAuth bundle. It is created once and outlives every
+	// registry rebuild, holds its own lock (a mail worker writes it off the run loop
+	// while an HTTP read serves the Outbox view), and is deliberately not durable:
+	// nothing here was ever sent, so nothing survives a restart.
+	mailOutbox *mail.Outbox
+
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
 	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth

@@ -109,10 +109,18 @@ var managedConnectorKinds = []managedConnectorKind{
 		// An outbound mail connector task sends a model-authored message through a
 		// server-registered provider (ADR-0079). The provider host and credential live
 		// in the managed connector store; the credential is resolved from the vault at
-		// build time (ADR-0041), so a secret never lives in a model.
+		// build time (ADR-0041), so a secret never lives in a model. The preview
+		// provider (ADR-0150) is the exception that needs neither: it frames the message
+		// identically and delivers it to the server's outbox.
 		name:           connectorKindMail,
 		validateCreate: validateMailConnector,
-		newRegistry:    func(s *Server) { s.mailRegistry = mail.NewRegistry() },
+		newRegistry: func(s *Server) {
+			s.mailRegistry = mail.NewRegistry()
+			// The outbox is created with the registry but never swapped with it: a
+			// rebuild re-binds the preview clients and must not throw away what they
+			// already delivered (ADR-0150). 0 takes the default capacity.
+			s.mailOutbox = mail.NewOutbox(0)
+		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
 		},
@@ -247,28 +255,66 @@ func validateSharePointConnector(p *createConnectorParams) string {
 	return ""
 }
 
-// validateMailConnector validates a mail create request (ADR-0079/0081): the provider
-// is SMTP (the default), Gmail, or Microsoft Graph; a sender (default From address) is
-// always required; SMTP needs a submission endpoint (host:port) while a native
-// provider needs a credentialsRef pointing at a vault auth bundle instead.
+// normalizeConnectorUpdate re-applies the endpoint normalization a *create* gets from
+// the per-kind validator to a record a PATCH has just changed, returning a message
+// when the result is unusable. A partial update carries no kind and no provider, so it
+// cannot route through validateCreate — which is exactly how an SMTP endpoint could be
+// edited into a shape that only fails much later, at send time (ADR-0150). Only mail
+// normalizes anything today; every other kind passes through untouched.
+func normalizeConnectorUpdate(rec *connector) string {
+	if rec.Kind != connectorKindMail {
+		return ""
+	}
+	provider := strings.TrimSpace(rec.Provider)
+	if provider == "" {
+		provider = mail.ProviderSMTP
+	}
+	if provider != mail.ProviderSMTP {
+		return ""
+	}
+	endpoint, err := mail.NormalizeSMTPEndpoint(rec.Endpoint)
+	if err != nil {
+		return err.Error()
+	}
+	rec.Endpoint = endpoint
+	return ""
+}
+
+// validateMailConnector validates a mail create request (ADR-0079/0081/0150): the
+// provider is SMTP (the default), Gmail, Microsoft Graph, or preview; a sender
+// (default From address) is always required; SMTP needs a submission endpoint, which
+// is normalized to "host:port" here, so an endpoint written without a port is fixed
+// (or explained) at the moment someone types it rather than at the moment a token
+// parks behind an incident; a native provider needs a credentialsRef pointing at a
+// vault auth bundle instead; and preview needs neither, which is the point of it.
 func validateMailConnector(p *createConnectorParams) string {
 	if p.Provider == "" {
 		p.Provider = mail.ProviderSMTP
 	}
 	switch p.Provider {
-	case mail.ProviderSMTP, mail.ProviderGmail, mail.ProviderMicrosoft:
+	case mail.ProviderSMTP, mail.ProviderGmail, mail.ProviderMicrosoft, mail.ProviderPreview:
 	default:
-		return "mail connector provider must be \"smtp\", \"gmail\", or \"microsoft\""
+		return "mail connector provider must be \"smtp\", \"gmail\", \"microsoft\", or \"preview\""
 	}
 	if p.Sender == "" {
 		return "mail connector sender (default From address) is required"
 	}
-	if p.Provider == mail.ProviderSMTP {
-		if p.Endpoint == "" {
-			return "smtp mail connector endpoint (host:port) is required"
+	switch p.Provider {
+	case mail.ProviderSMTP:
+		endpoint, err := mail.NormalizeSMTPEndpoint(p.Endpoint)
+		if err != nil {
+			return err.Error()
 		}
-	} else if p.CredentialsRef == "" {
-		return "a " + p.Provider + " mail connector requires a credentialsRef naming a vault auth bundle"
+		p.Endpoint = endpoint
+	case mail.ProviderPreview:
+		// A preview connector dials nothing and authenticates against nothing, so an
+		// endpoint or credential written into the form would be dead configuration
+		// that reads as if it were in use.
+		p.Endpoint, p.CredentialsRef = "", ""
+	default:
+		if p.CredentialsRef == "" {
+			return "a " + p.Provider + " mail connector requires a credentialsRef naming a vault auth bundle"
+		}
 	}
 	return ""
 }

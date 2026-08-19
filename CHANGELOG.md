@@ -12,6 +12,61 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A mail task you can run before you own a mail server**
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail
+  connector can now use the **`preview`** provider, which asks for no submission host
+  and no OAuth credential — it frames the message with the very same code the SMTP and
+  Gmail providers send and delivers it to an in-server outbox, readable under
+  **Operations › Outbox** (and over `GET /api/v1/mail/outbox`, or the `atlas_mail_outbox`
+  MCP tool). What you read there is the RFC 5322 message that would have gone on the
+  wire, so a preview run proves something about the message and not just about the
+  model. The same sender/recipient checks a real provider applies are applied here, so
+  it is a rehearsal rather than a bypass. The outbox is bounded and not durable:
+  nothing in it was ever sent, and nothing in it survives a restart.
+- **The live diagram says why a token is not moving** (ADR-0150): the runtime overlay
+  now carries the unresolved incidents on a definition, so the Operations live view
+  marks a parked element red, badges it with the failure's own message, and offers
+  **Resolve & retry** next to the diagram. Previously a token parked behind an incident
+  was drawn identically to one legitimately waiting for a worker — the engine had been
+  raising the incident correctly (ADR-0061) since the first failure, but only the
+  separate Incidents view ever showed it.
+
+- **A connector can be checked before it is trusted with anything**
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): the
+  connector form has a **Test connection** button, and every configured mail connector
+  a **Test** action. The check runs against what is *typed* — nothing is saved to run it
+  — and each provider answers the question its own configuration raises: SMTP opens the
+  session a send opens (connect, STARTTLS, authenticate) and hangs up without a message;
+  Gmail and Microsoft Graph acquire an access token, which is exactly the step a revoked
+  or expired refresh token fails at; preview confirms it has an outbox. Give the check a
+  recipient and it sends a real test message instead, the only thing that proves
+  delivery. Both failures behind the outage this release fixes — a revoked Gmail refresh
+  token and an endpoint that could not dial — are now answered in a second, at the form,
+  by the person who typed them.
+
+### Fixed
+
+- **The SMTP client speaks over one transport that a check can share** (ADR-0150,
+  ADR-0149): the send no longer goes through `net/smtp.SendMail` but through a session
+  Atlas opens itself — the shared connector call budget as its ceiling, TLS from the
+  first byte on the submissions port (465), STARTTLS wherever a server offers it,
+  authentication after the upgrade, then the envelope. Each step names itself, so a
+  rejection points at the address it was about ("recipient x@y refused") instead of at
+  the send as a whole, and a connector check walks the same connection a send does. A
+  send is also bounded by the context of the job that asked for it, which it never was
+  before.
+- **An SMTP endpoint written without a port is completed instead of failing at send
+  time** (ADR-0150): `mail.example.com` now becomes `mail.example.com:587` (and
+  `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is
+  bracketed, and an endpoint that cannot dial — a mailbox address in the server field,
+  a non-numeric port — is refused with a message naming what was typed. This runs on
+  create, on `PATCH /api/v1/connectors/{id}` (which carries no kind or provider and so
+  never reached the create validator at all), and when the client is built, so a
+  connector already stored in the old shape starts working instead of parking one token
+  per attempt behind `dial tcp: missing port in address`.
+
 ## [0.2.0] — 2026-08-19
 
 Milestone 1's BPMN surface is essentially complete: this release lands the last
