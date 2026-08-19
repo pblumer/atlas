@@ -55,6 +55,27 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **How much is running, as a metric** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 3): `/metrics` now reports
+  `atlas_active_process_instances` and `atlas_live_element_tokens` — the first questions an
+  operator asks, and until now answerable only by a request to `/api/v1/stats`, which
+  *scans the runtime set* and so costs more the busier the engine is. New
+  `Store.TotalActiveInstances` / `TotalLiveTokens` sum the per-definition counters
+  ADR-0080 already maintains instead, reading one key per deployed definition.
+
+  Measuring that turned up a qualification worth stating: those are Pebble **merge**
+  counters, so a read also folds in whatever operands are not compacted yet — right after
+  a burst of starts the sum costs O(recent writes), not O(definitions). After a flush it
+  is flat, with 2,000 running instances read as fast as 100, and flushes happen on their
+  own (the ADR-0131 checkpoint cadence forces one every few minutes). Even un-compacted it
+  beats the scan. `BenchmarkTotalActiveInstances` measures all three states so the claim
+  can be rechecked rather than believed.
+
+  Jobs, timers, message subscriptions and incidents are deliberately **not** in this
+  slice: they have no maintained counter at all, and exporting them as scans would break
+  the rule ADR-0142 set rather than bend it. They need durable counters of their own,
+  which is a change to state and so its own change.
+
 ## [0.2.0] — 2026-08-18
 
 Milestone 1's BPMN surface is essentially complete: this release lands the last
