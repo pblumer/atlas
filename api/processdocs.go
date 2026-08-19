@@ -360,6 +360,60 @@ func (s *Server) handleDeleteProcessDoc(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// pruneProcessDocsReq is the retention request: keep the newest `keep` versions
+// of this process and prune the rest. `keep` is required and must be non-negative;
+// a document is a real artifact someone chose to publish, so nothing is pruned by
+// default and the caller has to say how much history to retain.
+type pruneProcessDocsReq struct {
+	Keep *int `json:"keep"`
+}
+
+// pruneProcessDocsResp reports what a prune removed, so the UI can tell the reader
+// exactly which versions are gone rather than silently shrinking the list.
+type pruneProcessDocsResp struct {
+	Deleted []string `json:"deleted"`
+	Kept    int      `json:"kept"`
+}
+
+// handlePruneProcessDocs applies a retention limit to a process's documentation
+// history (ADR-0143's bounded-growth follow-up): it keeps the newest `keep`
+// versions and deletes the older ones, PDF and all. Idempotent — pruning an
+// already-short history removes nothing.
+func (s *Server) handlePruneProcessDocs(w http.ResponseWriter, r *http.Request) {
+	processID := r.PathValue("processId")
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var payload pruneProcessDocsReq
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if payload.Keep == nil {
+		writeError(w, http.StatusBadRequest, "keep is required")
+		return
+	}
+	if *payload.Keep < 0 {
+		writeError(w, http.StatusBadRequest, "keep must not be negative")
+		return
+	}
+	var (
+		pruned []string
+		opErr  error
+	)
+	s.do(func() { pruned, opErr = s.processDocs.pruneProcess(processID, *payload.Keep) })
+	if opErr != nil {
+		writeError(w, http.StatusInternalServerError, "prune documentation: "+opErr.Error())
+		return
+	}
+	if pruned == nil {
+		pruned = []string{}
+	}
+	writeJSON(w, http.StatusOK, pruneProcessDocsResp{Deleted: pruned, Kept: *payload.Keep})
+}
+
 // --- public, unauthenticated endpoint (ADR-0143, ADR-0029's mechanism) ---
 
 // handlePublicProcessDoc serves a shared version's PDF to a reader with no

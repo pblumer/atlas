@@ -374,6 +374,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/processes/{processId}/documentation", s.handleListProcessDocs, apiOp{
 			summary: "A process's documentation history, newest version first (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("Documentation versions", tArray())}},
+		{"POST", "/api/v1/processes/{processId}/documentation/prune", s.handlePruneProcessDocs, apiOp{
+			summary: "Prune a process's documentation history to the newest `keep` versions, deleting older ones and their PDFs (ADR-0143 retention)", tag: "Documentation",
+			req: jsonBody("Retention limit", schemaObj(map[string]any{
+				"keep": tInteger(),
+			}, "keep")),
+			resp: jsonBody("The versions that were pruned", tObject())}},
 		{"GET", "/api/v1/documentation/{id}", s.handleGetProcessDoc, apiOp{
 			summary: "Fetch one documentation version in full: metadata, per-element prose, and the BPMN source it was produced from (ADR-0143)", tag: "Documentation",
 			resp: jsonBody("Documentation version", tObject())}},

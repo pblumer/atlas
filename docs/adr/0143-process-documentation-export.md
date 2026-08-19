@@ -63,12 +63,24 @@ of the layout generator ADR-0124 already owns).
 
 The PDF is written by a small, dependency-free PDF writer that ships with the web
 UI (`api/web/pdf.js`) rather than a vendored PDF library. What this document
-needs — pages, the standard Helvetica faces, wrapped paragraphs, tables of
-element prose, and one embedded raster of the diagram — is a small subset of PDF,
-and the vendored JS assets in this repository are already megabytes each. A
-focused writer we understand is cheaper to own than a general one we do not. The
-diagram raster is a JPEG produced from the bpmn-js SVG via a canvas, embedded
-with the `DCTDecode` filter so its bytes go into the file untranscoded.
+needs — pages, the standard Helvetica faces and a Courier face for code, wrapped
+paragraphs, tables of element prose, and one embedded raster of the diagram — is a
+small subset of PDF, and the vendored JS assets in this repository are already
+megabytes each. A focused writer we understand is cheaper to own than a general
+one we do not. The diagram raster is a JPEG produced from the bpmn-js SVG via a
+canvas, embedded with the `DCTDecode` filter so its bytes go into the file
+untranscoded.
+
+The document reproduces not only an element's prose but the **code it runs** — a
+script task's job source (PowerShell, Python or JavaScript, ADR-0047) and a flow's
+FEEL condition (ADR-0067) — set in the Courier face with its whitespace intact. A
+reader auditing a process needs to see what a step *does*, not merely what it is
+named, and that code is otherwise visible only inside the Modeler. When the
+diagram is large and wide enough that fitting it to a portrait page's content
+width would shrink it into an unreadable strip, it is placed on its own **A4
+landscape** page (per-page `MediaBox`); a small diagram stays in the flow of the
+document. The orientation decision is a pure function of the raster's aspect ratio
+and the element count, so it is deterministic and testable.
 
 ### The durable shape
 
@@ -82,9 +94,10 @@ A **process documentation version** (`processDoc`) is an immutable record:
   directory-fsync discipline (`api/sidecar.go`). The PDF is bytes, not JSON, so
   it gets `atomicWriteFile`; `atomicWriteJSON` becomes a thin caller of it.
 - The record **snapshots by value** what it documented: the process id, the
-  deployment key and version if the model was deployed, the element summaries,
-  and the BPMN XML the document was produced from. Later edits to the model
-  cannot rewrite the history of what was already documented.
+  deployment key and version if the model was deployed, the element summaries —
+  including each element's **code-bearing fields** (scripts, FEEL conditions) —
+  and the BPMN XML the document was produced from. Later edits to the model cannot
+  rewrite the history of what was already documented.
 - Like releases, the counter is **rebuilt from the records at startup**
   (`loadProcessDocVersions`), so a restart continues the sequence rather than
   restarting it at v1 — the same discipline `loadDeployments` and
@@ -117,8 +130,11 @@ shares it, because the whole point of the artifact is that it leaves the system.
   reader actually searches is rendered as real text in the structured section
   below it.
 - **Follow-ups / risks to watch:** the store grows without bound (each version
-  keeps a PDF); ADR-0115's retention discipline should eventually cover it. A
-  future slice could diff two versions.
+  keeps a PDF). This is now bounded by an explicit **retention prune**
+  (`POST .../documentation/prune` with a `keep` count, exposed in the export
+  panel) that keeps the newest N versions and deletes the rest; pruning stays a
+  deliberate act, not an automatic policy, so no history disappears without
+  someone asking. A future slice could diff two versions.
 
 ## Pros and cons of the options
 

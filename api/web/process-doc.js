@@ -62,6 +62,40 @@ export function documentationOf(bo) {
   return docs.map((d) => (d && d.text ? String(d.text) : "")).filter(Boolean).join("\n\n").trim();
 }
 
+// codeFieldsOf reads the code an element carries and reproduces it in the
+// document (ADR-0143): a script task's job source (PowerShell, Python or
+// JavaScript, ADR-0047) and a flow's FEEL condition (ADR-0067). The prose says
+// what a step is for; the code says what it actually runs, which is exactly what
+// an auditor or a new engineer opening the document needs to see. The source is
+// kept with its original whitespace, and its language travels with it.
+export function codeFieldsOf(bo) {
+  if (!bo) return [];
+  const out = [];
+  const ext = (bo.extensionElements && bo.extensionElements.values) || [];
+
+  // Atlas carries a script task's job source as an <atlas:jobScript> extension
+  // element (source body + language attribute).
+  for (const e of ext) {
+    if (e && /:JobScript$/.test(e.$type || "") && String(e.source || "").trim()) {
+      out.push({ label: "Script", language: String(e.language || "").trim(), source: String(e.source) });
+    }
+  }
+  // A plain BPMN <bpmn:script> body is read too, so an imported model documents
+  // its scripts as well — the field is scriptFormat, not a moddle extension.
+  if (String(bo.script || "").trim()) {
+    out.push({ label: "Script", language: String(bo.scriptFormat || "").trim(), source: String(bo.script) });
+  }
+
+  // A FEEL condition on a sequence flow — the branch rule a reader most needs to
+  // understand why a token went one way and not the other.
+  const cond = bo.conditionExpression;
+  if (cond && String(cond.body || "").trim()) {
+    out.push({ label: "Condition", language: String(cond.language || "feel").trim() || "feel", source: String(cond.body) });
+  }
+
+  return out;
+}
+
 // Containers and decorations, which never earn a section of their own. Pools and
 // lanes are structure rather than steps, and each element already reports the
 // lane it sits in; annotations are the *source* of prose, not subjects of it.
@@ -141,6 +175,7 @@ export function collectDocumentation(modeler) {
       documentation: documentationOf(bo),
       annotations: annotationsFor.get(bo.id) || [],
       lane: laneOf.get(bo.id) || "",
+      code: codeFieldsOf(bo),
     });
   }
 
@@ -290,6 +325,20 @@ export function sizeOfSvg(svg) {
 
 const GREY = [0.42, 0.42, 0.42];
 
+// wantsLandscape decides whether the diagram earns its own landscape page. A wide,
+// busy diagram fitted to a portrait page's narrow content width shrinks into a
+// thin, unreadable strip — turning the page to A4 landscape gives it the width it
+// needs. The trigger is deliberately narrow so a small diagram, which reads fine
+// in portrait, is left in the flow of the document: the diagram must be clearly
+// wider than tall *and* the process busy enough that the shrink would cost
+// legibility — or so extreme in aspect that portrait cannot serve it at any size.
+export function wantsLandscape(diagram, elementCount = 0, { minAspect = 1.3, minElements = 10, extremeAspect = 2.5 } = {}) {
+  if (!diagram || !diagram.width || !diagram.height) return false;
+  const aspect = diagram.width / diagram.height;
+  if (aspect >= extremeAspect) return true;
+  return aspect >= minAspect && elementCount >= minElements;
+}
+
 // buildDocumentationPdf lays out the document: a cover naming the process and the
 // version, the diagram, then one section per element carrying its prose. Returns
 // the finished bytes.
@@ -321,8 +370,13 @@ export function buildDocumentationPdf(spec) {
   }
 
   if (diagram && diagram.bytes) {
+    // A large, wide diagram gets its own landscape sheet so it is not squeezed
+    // into an unreadable strip; the document then returns to portrait.
+    const landscape = wantsLandscape(diagram, collection.elements.length);
+    if (landscape) doc.landscapePage();
     doc.heading("Diagram", 2);
     doc.image(diagram.bytes, diagram.width, diagram.height);
+    if (landscape) doc.portraitPage();
   }
 
   doc.heading("Elements", 2);
@@ -344,6 +398,11 @@ export function buildDocumentationPdf(spec) {
     }
     for (const note of el.annotations) {
       doc.paragraph("Note: " + note, { size: 9.5, indent: 12, after: 4 });
+    }
+    // The code the step runs — a script, a branch condition — set verbatim so a
+    // reader can audit it, not merely read its name.
+    for (const code of el.code || []) {
+      doc.codeBlock(code.source, { label: code.label, language: code.language });
     }
     doc.y += 4;
   }
