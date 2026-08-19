@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // Bundle import (ADR-0129): the receiving half of publishing an application to
@@ -71,34 +73,34 @@ type importBundleResp struct {
 func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxImportBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var req importBundleReq
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(req.Application)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "application name is required")
+		httpapi.Error(w, http.StatusBadRequest, "application name is required")
 		return
 	}
 	if req.Release.Version <= 0 {
-		writeError(w, http.StatusBadRequest, "release version must be positive")
+		httpapi.Error(w, http.StatusBadRequest, "release version must be positive")
 		return
 	}
 	if len(req.Artifacts) == 0 {
-		writeError(w, http.StatusBadRequest, "bundle carries no artifacts")
+		httpapi.Error(w, http.StatusBadRequest, "bundle carries no artifacts")
 		return
 	}
 	for i, a := range req.Artifacts {
 		if a.Kind != "" && a.Kind != "process" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("artifact %d: unsupported kind %q", i, a.Kind))
+			httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("artifact %d: unsupported kind %q", i, a.Kind))
 			return
 		}
 		if strings.TrimSpace(a.XML) == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("artifact %d: empty xml", i))
+			httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("artifact %d: empty xml", i))
 			return
 		}
 	}
@@ -107,7 +109,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	// bundle that does not compile is refused whole, exactly as a local publish is.
 	for _, a := range req.Artifacts {
 		if _, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(a.XML))); err != nil {
-			writeJSON(w, http.StatusConflict, importBundleResp{
+			httpapi.JSON(w, http.StatusConflict, importBundleResp{
 				Application: name, Imported: false,
 				Reason:      fmt.Sprintf("artifact %q does not compile: %s", a.ProcessID, err.Error()),
 				Definitions: []deployedProcess{},
@@ -210,7 +212,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			Note:          strings.TrimSpace(req.Release.Note),
 			Members:       members,
 		}
-		if p := principalFrom(r.Context()); p != nil {
+		if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 			rel.PublishedBy = p.UserID
 		}
 		if err := s.releases.Save(rel); err != nil {
@@ -224,9 +226,9 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "import bundle: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "import bundle: "+opErr.Error())
 	case already:
-		writeJSON(w, http.StatusConflict, importBundleResp{
+		httpapi.JSON(w, http.StatusConflict, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: false,
 			Reason: conflictMsg, Definitions: []deployedProcess{},
 		})
@@ -234,7 +236,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if deployed == nil {
 			deployed = []deployedProcess{}
 		}
-		writeJSON(w, http.StatusOK, importBundleResp{
+		httpapi.JSON(w, http.StatusOK, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: true,
 			Definitions: deployed, Release: &rel,
 		})

@@ -293,10 +293,14 @@ atlas/
 │   ├── script/        Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
 │   └── csvimport/     CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
 ├── api/           HTTP API, web UI, command submission and queries
+│   ├── runloop/       The single-writer boundary every service reaches state through
+│   ├── httpapi/       Response envelope, client IP, request principal
+│   ├── token/         Opaque share tokens: minting and shape guard
 │   ├── layout/        BPMN diagram auto-layout (ADR-0124/0127)
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
-│   └── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
+│   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
+│   └── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
 ├── mcp/           MCP server over the HTTP API (ADR-0016)
 ├── metrics/       Prometheus metrics (ADR-0142)
 ├── opensearch/    OpenSearch event exporter (ADR-0114)

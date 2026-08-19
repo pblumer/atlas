@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/collab"
+	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
@@ -62,6 +63,8 @@ import (
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
 
+	"github.com/pblumer/atlas/api/processdoc"
+	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 )
 
@@ -155,31 +158,34 @@ type Server struct {
 	// else needs it, so it is set once at construction and read-only thereafter.
 	dataDir string
 
-	// tasks carries closures to the single run-loop goroutine that owns the
-	// processor; quit stops that goroutine.
-	tasks chan func()
-	quit  chan struct{}
-	wg    sync.WaitGroup
+	// runLoop is the single-writer goroutine that owns the processor, the store
+	// and the registries; every handler reaches them through it (I3, ADR-0002).
+	// quit stops it, and every background sweeper alongside it.
+	runLoop *runloop.Loop
+	quit    chan struct{}
+	wg      sync.WaitGroup
 
 	// The fields below are touched only on the run-loop goroutine (via do), so
 	// they need no locking — the same single-owner discipline as process state.
 	deployments      map[uint64]*deployment
 	order            []uint64 // deployment keys in registration order, for stable listing
 	nextKey          uint64
-	versions         map[string]int32     // bpmnProcessId → highest version deployed
-	deploys          *deployStore         // durable sidecar for deployments (ADR-0019)
-	drafts           *draftStore          // durable sidecar for saved-but-not-deployed diagrams
-	forms            *formStore           // durable sidecar for form definitions (ADR-0028)
-	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
-	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
-	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
-	releases         *releaseStore        // durable sidecar for application releases (ADR-0128)
-	deployTokenStore *deployTokenStore    // durable sidecar for peer deploy tokens (ADR-0129)
-	deployTokens     *deployTokenIndex    // in-memory hash->token index, read on the handler goroutine
-	targets          *targetStore         // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0128)
-	processDocs      *processDocStore     // durable sidecar for process documentation versions (ADR-0143)
-	docVersions      map[string]int32     // bpmnProcessId → highest documentation version published (ADR-0143)
+	versions         map[string]int32  // bpmnProcessId → highest version deployed
+	deploys          *deployStore      // durable sidecar for deployments (ADR-0019)
+	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
+	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
+	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
+	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
+	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
+	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
+	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
+	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
+	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
+	// processDocs is the documentation area as a self-contained service: it owns
+	// its store and version counters and reaches shared state only through the run
+	// loop it was given (ADR-0143/0147).
+	processDocs      *processdoc.Service
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -704,7 +710,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
-	processDocs, err := newProcessDocStore(filepath.Join(dataDir, "process-docs"))
+	processDocStore, err := processdoc.NewStore(filepath.Join(dataDir, "process-docs"))
 	if err != nil {
 		return nil, err
 	}
@@ -758,12 +764,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
 	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
+	// quit stops the run loop and every background sweeper alike, so the loop is
+	// built from it rather than owning it.
+	quit := make(chan struct{})
 	s := &Server{
 		proc:        proc,
 		store:       store,
 		dataDir:     dataDir,
-		tasks:       make(chan func()),
-		quit:        make(chan struct{}),
+		quit:        quit,
+		runLoop:     runloop.New(quit),
 		deployments: map[uint64]*deployment{},
 		nextKey:     1,
 		versions:    map[string]int32{},
@@ -780,8 +789,6 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deployTokens:      newDeployTokenIndex(),
 		targets:           targets,
 		appVersions:       map[string]int32{},
-		processDocs:       processDocs,
-		docVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
@@ -816,6 +823,24 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// path through checkpoint.Dir, and a knob here could only make them disagree
 	// (ADR-0131). Set outside the literal for the same alignment reason as above.
 	s.checkpointRoot = checkpoint.Dir(dataDir)
+	// The documentation area is a service rather than a set of Server methods
+	// (ADR-0147). It is built here, after the Server exists, because two of its
+	// collaborators are the server's: the shared public-route rate limiter, and the
+	// deployment lookup, which reads the registry and so is only ever called from
+	// inside the run loop the service was given.
+	s.processDocs = processdoc.New(
+		s.runLoop,
+		processDocStore,
+		func(clientIP string) bool { return s.publicRate.allow(clientIP) },
+		func(processID string) (processdoc.Deployment, bool) {
+			d := s.latestDeploymentByProcessID(processID)
+			if d == nil {
+				return processdoc.Deployment{}, false
+			}
+			return processdoc.Deployment{Key: d.Key, Version: d.Version}, true
+		},
+		token.New,
+	)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -922,7 +947,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	// Same discipline for the per-process documentation counter, so an export after
 	// a restart continues the sequence instead of minting a second v1 (ADR-0143).
-	if err := s.loadProcessDocVersions(); err != nil {
+	if err := s.processDocs.LoadVersions(); err != nil {
 		return nil, err
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
@@ -1529,32 +1554,22 @@ func (s *Server) collabReaper(every time.Duration) {
 	}
 }
 
-// loop is the single owner of the processor. Every processor and registry access
-// funnels through here, so the single-writer invariant holds even though HTTP
-// handlers are concurrent.
+// loop runs the single-writer goroutine that owns the processor. Every processor
+// and registry access funnels through it, so the single-writer invariant holds
+// even though HTTP handlers are concurrent; see [runloop] for the boundary
+// itself.
 func (s *Server) loop() {
 	defer s.wg.Done()
-	for {
-		select {
-		case <-s.quit:
-			return
-		case fn := <-s.tasks:
-			fn()
-		}
-	}
+	s.runLoop.Run()
 }
 
 // do runs fn on the run-loop goroutine and blocks until it completes. If the
 // server is closing, fn does not run and do returns immediately; callers must
 // treat their result variables' zero values as "not produced".
-func (s *Server) do(fn func()) {
-	done := make(chan struct{})
-	select {
-	case s.tasks <- func() { defer close(done); fn() }:
-		<-done
-	case <-s.quit:
-	}
-}
+//
+// It is a shorthand for the server's own handlers; a per-area service holds the
+// [runloop.Loop] itself (ADR-0147).
+func (s *Server) do(fn func()) { s.runLoop.Do(fn) }
 
 // Close stops the run-loop goroutine. It does not close the processor, log, or
 // store — the caller owns those.
@@ -1605,7 +1620,7 @@ func (s *Server) Handler() http.Handler {
 	// Public, unauthenticated start links (ADR-0029). These live under /public/,
 	// outside the /api/v1 surface auth gates, and expose exactly one thing: the
 	// start form for one token. They are rate-limited in the handlers.
-	mux.HandleFunc("GET "+publicProcessDocPath+"{token}", s.handlePublicProcessDoc)
+	mux.HandleFunc("GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
 	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
 	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)

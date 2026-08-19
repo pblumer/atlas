@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/pblumer/atlas/connector/csvimport"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // maxCSVUploadBytes caps a CSV upload. Generous enough for a realistic batch of
@@ -41,42 +43,42 @@ type csvInstanceResp struct {
 func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxCSVUploadBytes)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
-		writeError(w, http.StatusBadRequest, "parse upload: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "parse upload: "+err.Error())
 		return
 	}
 
 	cfgRaw := r.FormValue("config")
 	if cfgRaw == "" {
-		writeError(w, http.StatusBadRequest, "missing config part (a JSON column layout)")
+		httpapi.Error(w, http.StatusBadRequest, "missing config part (a JSON column layout)")
 		return
 	}
 	var cfg csvimport.Config
 	if err := json.Unmarshal([]byte(cfgRaw), &cfg); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid config JSON: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid config JSON: "+err.Error())
 		return
 	}
 
 	file, hdr, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing file part (the CSV)")
+		httpapi.Error(w, http.StatusBadRequest, "missing file part (the CSV)")
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(file)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read file: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read file: "+err.Error())
 		return
 	}
 
 	rows, err := csvimport.ParseRows(cfg, data)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -94,7 +96,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		"fileName": fileName,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -124,15 +126,15 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
-		writeError(w, http.StatusConflict, "process is not executable and cannot be started")
+		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, csvInstanceResp{
+		httpapi.JSON(w, http.StatusOK, csvInstanceResp{
 			DefinitionKey: key, RowCount: len(rows), FileName: fileName, Stats: stats,
 		})
 	}

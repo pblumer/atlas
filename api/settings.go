@@ -7,6 +7,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 // defaultRegistrationProcessID is the process the login screen's "Registrieren"
@@ -59,10 +63,10 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, _ *http.Request) {
 	)
 	s.do(func() { t, loadErr = s.settings.getTheme() })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "read theme: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read theme: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, t)
+	httpapi.JSON(w, http.StatusOK, t)
 }
 
 // handleSetTheme stores the org-wide brand accent. Admin-gated: it changes what
@@ -73,29 +77,29 @@ func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
 		Accent string `json:"accent"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	accent, ok := normalizeAccent(p.Accent)
 	if !ok {
-		writeError(w, http.StatusBadRequest, `accent must be a hex colour like "#0b5cff"`)
+		httpapi.Error(w, http.StatusBadRequest, `accent must be a hex colour like "#0b5cff"`)
 		return
 	}
 	t := uiTheme{Accent: accent}
 	var saveErr error
 	s.do(func() { saveErr = s.settings.saveTheme(t) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "save theme: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save theme: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, t)
+	httpapi.JSON(w, http.StatusOK, t)
 }
 
 // handleDeleteTheme clears the org-wide theme, restoring the built-in default.
@@ -107,7 +111,7 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	var clearErr error
 	s.do(func() { clearErr = s.settings.clearTheme() })
 	if clearErr != nil {
-		writeError(w, http.StatusInternalServerError, "clear theme: "+clearErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "clear theme: "+clearErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -152,7 +156,7 @@ func (s *Server) registrationLinkForLocked(pid string, now int64) (string, error
 			return "/public/forms/" + l.Token, nil
 		}
 	}
-	token, err := newPublicToken()
+	token, err := token.New()
 	if err != nil {
 		return "", err
 	}
@@ -207,10 +211,10 @@ func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
 		out = registrationConfig{Enabled: true, ProcessID: pid, URL: url}
 	})
 	if opErr != nil {
-		writeError(w, http.StatusInternalServerError, "read registration: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read registration: "+opErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleSetRegistration configures the self-service registration process and mints
@@ -224,14 +228,14 @@ func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
 		ProcessID string `json:"processId"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	pid := strings.TrimSpace(p.ProcessID)
@@ -257,11 +261,11 @@ func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "save registration: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save registration: "+opErr.Error())
 	case notPublish:
-		writeError(w, http.StatusBadRequest, "process is not deployed with a start form and cannot be published for registration")
+		httpapi.Error(w, http.StatusBadRequest, "process is not deployed with a start form and cannot be published for registration")
 	default:
-		writeJSON(w, http.StatusOK, out)
+		httpapi.JSON(w, http.StatusOK, out)
 	}
 }
 
@@ -276,7 +280,7 @@ func (s *Server) handleDeleteRegistration(w http.ResponseWriter, r *http.Request
 	var saveErr error
 	s.do(func() { saveErr = s.settings.saveRegistration(registrationSetting{ProcessID: ""}) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "disable registration: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "disable registration: "+saveErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

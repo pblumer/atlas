@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
 
 // dmnRefValidationResp reports the deploy-time resolution + validation of one DMN
 // reference: whether its temis model resolved and, if so, whether it compiles.
@@ -39,18 +43,18 @@ func (s *Server) handleValidateDmnRef(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { rec, ok, getErr = s.dmnrefs.Get(id) })
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
 		return
 	case !ok:
-		writeError(w, http.StatusNotFound, "no dmn reference with that id")
+		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
 		return
 	}
 	res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, dmnRefValidationResp{
+	httpapi.JSON(w, http.StatusOK, dmnRefValidationResp{
 		ID:        rec.ID,
 		Name:      rec.Name,
 		ModelRef:  rec.ModelRef,
@@ -91,26 +95,26 @@ func (s *Server) handleValidateProject(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+getErr.Error())
 		return
 	case !ok:
-		writeError(w, http.StatusNotFound, "no project with that id")
+		httpapi.Error(w, http.StatusNotFound, "no project with that id")
 		return
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
 	// Validating a project reads its artifacts, so it needs the viewer role
 	// (ADR-0071).
 	if code, msg := s.checkProjectRole(r, proj, ScopeRoleViewer); code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 	out := projectValidationResp{ID: proj.ID, Name: proj.Name, OK: true, References: []dmnRefValidationResp{}}
 	for _, rec := range refs {
 		res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+			httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
 			return
 		}
 		if !res.Valid {
@@ -127,5 +131,5 @@ func (s *Server) handleValidateProject(w http.ResponseWriter, r *http.Request) {
 			Message:   res.Message,
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }

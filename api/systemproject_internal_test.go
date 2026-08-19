@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // TestEnsureSystemProjectIdempotent asserts the ADR-0122 bootstrap: New() creates
@@ -87,10 +89,10 @@ func TestEnsureSystemProjectStoreError(t *testing.T) {
 // owner-equivalent for admins, while ordinary access rules are unchanged.
 func TestProtectedEffectiveRoleVisibleToAll(t *testing.T) {
 	prot := project{ID: systemProjectID, OwnerID: systemOwnerID, Visibility: VisibilityShared, Protected: true}
-	if r := prot.effectiveRole(&Principal{UserID: "u1"}, true); r != ScopeRoleViewer {
+	if r := prot.effectiveRole(&httpapi.Principal{UserID: "u1"}, true); r != ScopeRoleViewer {
 		t.Fatalf("authed user on protected = %q, want viewer", r)
 	}
-	if r := prot.effectiveRole(&Principal{UserID: "a1", Roles: []string{RoleAdmin}}, true); r != ScopeRoleOwner {
+	if r := prot.effectiveRole(&httpapi.Principal{UserID: "a1", Roles: []string{RoleAdmin}}, true); r != ScopeRoleOwner {
 		t.Fatalf("admin on protected = %q, want owner", r)
 	}
 	if r := prot.effectiveRole(nil, true); r != "" {
@@ -98,7 +100,7 @@ func TestProtectedEffectiveRoleVisibleToAll(t *testing.T) {
 	}
 	// Regression: a normal private project still hides from a stranger.
 	priv := project{ID: "p", OwnerID: "owner1", Visibility: VisibilityPrivate}
-	if r := priv.effectiveRole(&Principal{UserID: "stranger"}, true); r != "" {
+	if r := priv.effectiveRole(&httpapi.Principal{UserID: "stranger"}, true); r != "" {
 		t.Fatalf("stranger on private = %q, want no access", r)
 	}
 }
@@ -120,7 +122,7 @@ func TestProtectedProjectRefusesMutation(t *testing.T) {
 			req = httptest.NewRequest(method, path, nil)
 		}
 		// Inject an admin principal too, so the case doubles as "not even an admin".
-		req = req.WithContext(withPrincipal(req.Context(), &Principal{UserID: "a1", Roles: []string{RoleAdmin}}))
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "a1", Roles: []string{RoleAdmin}}))
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		return rec.Code

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // adminReq builds a request carrying an admin Principal and the given path
@@ -19,7 +21,7 @@ func adminReq(method string, body io.Reader, id, userID string) (*http.Request, 
 	req := httptest.NewRequest(method, "/api/v1/projects/"+id+"/members/"+userID, body)
 	req.SetPathValue("id", id)
 	req.SetPathValue("userId", userID)
-	req = req.WithContext(withPrincipal(req.Context(), &Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}))
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}))
 	return req, httptest.NewRecorder()
 }
 
@@ -124,7 +126,7 @@ func TestUpdateProjectTransferLookupError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/projects/p1", strings.NewReader(`{"ownerId":"usr_dir"}`))
 	req.SetPathValue("id", "p1")
-	req = req.WithContext(withPrincipal(req.Context(), &Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}))
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}))
 	rec := httptest.NewRecorder()
 	srv.handleUpdateProject(rec, req)
 	if rec.Code != http.StatusInternalServerError {

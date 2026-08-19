@@ -5,6 +5,10 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 // maxPublicStartBytes caps a public start submission. A start form's data is
@@ -50,14 +54,14 @@ func toPublicLinkResp(l publicLink) publicLinkResp {
 func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<10))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		ProcessID string `json:"processId"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil || payload.ProcessID == "" {
-		writeError(w, http.StatusBadRequest, "processId is required")
+		httpapi.Error(w, http.StatusBadRequest, "processId is required")
 		return
 	}
 	var (
@@ -95,7 +99,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 		}
-		token, e := newPublicToken()
+		token, e := token.New()
 		if e != nil {
 			opErr = e
 			return
@@ -105,15 +109,15 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "create public link: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create public link: "+opErr.Error())
 	case notDeployed:
-		writeError(w, http.StatusNotFound, "no deployed process with that id")
+		httpapi.Error(w, http.StatusNotFound, "no deployed process with that id")
 	case notExec:
-		writeError(w, http.StatusConflict, "process is not executable and cannot be published")
+		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be published")
 	case noForm:
-		writeError(w, http.StatusBadRequest, "the process has no start form to publish")
+		httpapi.Error(w, http.StatusBadRequest, "the process has no start form to publish")
 	default:
-		writeJSON(w, http.StatusOK, toPublicLinkResp(out))
+		httpapi.JSON(w, http.StatusOK, toPublicLinkResp(out))
 	}
 }
 
@@ -129,10 +133,10 @@ func (s *Server) handleListPublicLinks(w http.ResponseWriter, _ *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list public links: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list public links: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleRevokePublicLink revokes a link by token, killing the public URL. Trusted.
@@ -141,10 +145,10 @@ func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) 
 	var delErr error
 	s.do(func() { delErr = s.publicLinks.Delete(token) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "revoke public link: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "revoke public link: "+delErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"token": token})
 }
 
 // --- public, unauthenticated endpoints (ADR-0029) ---
@@ -156,8 +160,8 @@ func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) 
 // link renders. It is the one read a public visitor may perform, scoped to the
 // token's form. 404 if the token is unknown or its form/process is gone.
 func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(clientIP(r)) {
-		writeError(w, http.StatusTooManyRequests, "too many requests")
+	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 	token := r.PathValue("token")
@@ -189,11 +193,11 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "read form: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "unknown or revoked link")
+		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpapi.JSON(w, http.StatusOK, map[string]any{
 			"processName": procName,
 			"schema":      json.RawMessage(schema),
 		})
@@ -206,19 +210,19 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 // no other process. Rate-limited and payload-capped. 404 if the token is unknown
 // or its process is no longer deployed.
 func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(clientIP(r)) {
-		writeError(w, http.StatusTooManyRequests, "too many requests")
+	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 	token := r.PathValue("token")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxPublicStartBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	vars, err := parseStartVariables(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -248,13 +252,13 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "start: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())
 	case notExec:
-		writeError(w, http.StatusConflict, "process is not executable and cannot be started")
+		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
-		writeError(w, http.StatusNotFound, "unknown or revoked link")
+		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"started": true})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true})
 	}
 }
 
@@ -263,13 +267,13 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 // public JSON endpoints above. The token is validated so a bogus URL 404s rather
 // than serving a shell that then fails.
 func (s *Server) handlePublicFormPage(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(clientIP(r)) {
-		writeError(w, http.StatusTooManyRequests, "too many requests")
+	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 	page, err := webFS.ReadFile("web/public-form.html")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "public page missing")
+		httpapi.Error(w, http.StatusInternalServerError, "public page missing")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

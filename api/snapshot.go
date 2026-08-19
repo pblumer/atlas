@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // A full snapshot (ADR-0109) is the whole-instance backup: unlike the design-time
@@ -210,7 +212,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 	_ = os.RemoveAll(staging)
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "body is not a gzip stream")
+		httpapi.Error(w, http.StatusBadRequest, "body is not a gzip stream")
 		return
 	}
 	defer gz.Close()
@@ -275,7 +277,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 		failRestore(w, staging, http.StatusInternalServerError, "restore failed: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"restored":        restored,
 		"restartRequired": true,
 		"note":            "Full snapshot staged. It is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored snapshot's checkpoint and WAL.",
@@ -285,7 +287,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 // failRestore discards the partial staging and writes an error response.
 func failRestore(w http.ResponseWriter, staging string, status int, msg string) {
 	_ = os.RemoveAll(staging)
-	writeError(w, status, msg)
+	httpapi.Error(w, status, msg)
 }
 
 // stageDest validates a snapshot entry name and resolves it to a path inside the

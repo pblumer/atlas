@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // Deployment targets and promotion (ADR-0129, sending half).
@@ -72,7 +74,7 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -82,22 +84,22 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		CredentialRef string `json:"credentialRef"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "target name is required")
+		httpapi.Error(w, http.StatusBadRequest, "target name is required")
 		return
 	}
 	base, err := validateTargetURL(payload.BaseURL)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	rec := deploymentTarget{
@@ -109,10 +111,10 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 	var saveErr error
 	s.do(func() { saveErr = s.targets.Save(rec) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "create target: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create target: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, targetView{rec})
+	httpapi.JSON(w, http.StatusOK, targetView{rec})
 }
 
 // handleListTargets lists the configured peers. Readable by any authenticated
@@ -131,10 +133,10 @@ func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list targets: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list targets: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleDeleteTarget removes a peer. Idempotent; the applications that were
@@ -146,7 +148,7 @@ func (s *Server) handleDeleteTarget(w http.ResponseWriter, r *http.Request) {
 	var delErr error
 	s.do(func() { delErr = s.targets.Delete(r.PathValue("id")) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete target: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete target: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -157,25 +159,25 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	version64, err := strconv.ParseInt(r.PathValue("version"), 10, 32)
 	if err != nil || version64 <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid release version")
+		httpapi.Error(w, http.StatusBadRequest, "invalid release version")
 		return
 	}
 	version := int32(version64)
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		TargetIDs []string `json:"targetIds"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if len(payload.TargetIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "at least one targetId is required")
+		httpapi.Error(w, http.StatusBadRequest, "at least one targetId is required")
 		return
 	}
 
@@ -183,7 +185,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	// on it — the same gate publishing uses (ADR-0071).
 	proj, code, msg := s.authorizeProject(r, appID, ScopeRoleEditor)
 	if code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 
@@ -239,16 +241,16 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "prepare promotion: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "prepare promotion: "+loadErr.Error())
 		return
 	case noRelease:
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no release v%d for this application", version))
+		httpapi.Error(w, http.StatusNotFound, fmt.Sprintf("no release v%d for this application", version))
 		return
 	case len(badTargets) > 0:
-		writeError(w, http.StatusBadRequest, "unknown target(s): "+strings.Join(badTargets, ", "))
+		httpapi.Error(w, http.StatusBadRequest, "unknown target(s): "+strings.Join(badTargets, ", "))
 		return
 	case len(bundle.Artifacts) == 0:
-		writeError(w, http.StatusConflict, fmt.Sprintf("release v%d carries no deployable artifacts", version))
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("release v%d carries no deployable artifacts", version))
 		return
 	}
 
@@ -256,7 +258,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	// own — a failure here is that target's failure, not the call's.
 	payloadBytes, err := json.Marshal(bundle)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "encode bundle: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "encode bundle: "+err.Error())
 		return
 	}
 	results := make([]promoteResult, 0, len(targets))
@@ -290,7 +292,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, promoteResp{ApplicationID: appID, Version: version, Results: results})
+	httpapi.JSON(w, http.StatusOK, promoteResp{ApplicationID: appID, Version: version, Results: results})
 }
 
 // bundleForRelease assembles what travels for one release.
@@ -419,7 +421,7 @@ type targetStatus struct {
 func (s *Server) handleApplicationTargets(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	if _, code, msg := s.authorizeProject(r, appID, ScopeRoleViewer); code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 
@@ -442,7 +444,7 @@ func (s *Server) handleApplicationTargets(w http.ResponseWriter, r *http.Request
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list targets: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list targets: "+loadErr.Error())
 		return
 	}
 
@@ -460,7 +462,7 @@ func (s *Server) handleApplicationTargets(w http.ResponseWriter, r *http.Request
 		s.fillRemoteStatus(r.Context(), &st, tgt, remoteID, creds[tgt.ID])
 		out = append(out, st)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // fillRemoteStatus asks one peer for its deployments view of an application and

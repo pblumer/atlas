@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/vault"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // handleListSecrets lists secret names and metadata in the vault — never values
@@ -16,7 +18,7 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.vault == nil {
-		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
 	}
 	var (
@@ -25,13 +27,13 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() { metas, loadErr = s.vault.List() })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list secrets: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list secrets: "+loadErr.Error())
 		return
 	}
 	if metas == nil {
 		metas = []vault.Meta{}
 	}
-	writeJSON(w, http.StatusOK, metas)
+	httpapi.JSON(w, http.StatusOK, metas)
 }
 
 // handleSetSecret seals a secret value under the {name} in the path. The plaintext
@@ -42,28 +44,28 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.vault == nil {
-		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
 	}
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "secret name is required")
+		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
 		Value string `json:"value"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if p.Value == "" {
-		writeError(w, http.StatusBadRequest, "secret value is required")
+		httpapi.Error(w, http.StatusBadRequest, "secret value is required")
 		return
 	}
 	var (
@@ -82,14 +84,14 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		saveErr = s.rebuildConnectorRegistries()
 	})
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "set secret: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "set secret: "+saveErr.Error())
 		return
 	}
 	if meta.Name == "" {
-		writeError(w, http.StatusServiceUnavailable, "server unavailable")
+		httpapi.Error(w, http.StatusServiceUnavailable, "server unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, meta)
+	httpapi.JSON(w, http.StatusOK, meta)
 }
 
 // handleDeleteSecret removes a secret from the vault and rebuilds the connector
@@ -100,12 +102,12 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.vault == nil {
-		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
 	}
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "secret name is required")
+		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
 		return
 	}
 	var delErr error
@@ -116,7 +118,7 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		delErr = s.rebuildConnectorRegistries()
 	})
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete secret: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete secret: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

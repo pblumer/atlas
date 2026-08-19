@@ -13,6 +13,8 @@ import (
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // clioReadScope builds the clio scope string granting read on a subject: the exact
@@ -279,13 +281,13 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 	)
 	s.do(func() { recs, loadErr = s.connectors.LoadAll() })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
 		return
 	}
 	if recs == nil {
 		recs = []connector{}
 	}
-	writeJSON(w, http.StatusOK, recs)
+	httpapi.JSON(w, http.StatusOK, recs)
 }
 
 // handleCreateConnector creates a managed connector instance and rebuilds the
@@ -293,12 +295,12 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p createConnectorParams
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	p.Name = strings.TrimSpace(p.Name)
@@ -311,23 +313,23 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
-		writeError(w, http.StatusBadRequest, "connector name is required")
+		httpapi.Error(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
 	kind, ok := lookupManagedConnectorKind(p.Kind)
 	if !ok {
-		writeError(w, http.StatusBadRequest, managedConnectorKindsError())
+		httpapi.Error(w, http.StatusBadRequest, managedConnectorKindsError())
 		return
 	}
 	// The kind's validator applies its own rules and normalizes p (defaulting a mail
 	// provider, clearing mail-only fields for kinds that don't use them).
 	if msg := kind.validateCreate(&p); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
+		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	enabled := true
@@ -364,13 +366,13 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case dupErr:
-		writeError(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
+		httpapi.Error(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
 		return
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	httpapi.JSON(w, http.StatusOK, rec)
 }
 
 // handleUpdateConnector applies a partial change to a managed connector (endpoint,
@@ -379,7 +381,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
@@ -389,7 +391,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		Enabled        *bool   `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	var (
@@ -426,13 +428,13 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "update connector: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update connector: "+saveErr.Error())
 		return
 	case !found:
-		writeError(w, http.StatusNotFound, "no connector with that id")
+		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	httpapi.JSON(w, http.StatusOK, rec)
 }
 
 // handleDeleteConnector removes a managed connector and rebuilds the registry so a
@@ -447,7 +449,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		delErr = s.rebuildConnectorRegistries()
 	})
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -466,13 +468,13 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if s.vault == nil {
-		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
 	}
 	connID := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
@@ -483,13 +485,13 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		ExpiresAt  string `json:"expiresAt"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	adminToken := strings.TrimSpace(p.AdminToken)
 	subject := strings.TrimSpace(p.Subject)
 	if adminToken == "" || subject == "" {
-		writeError(w, http.StatusBadRequest, "adminToken and subject are required")
+		httpapi.Error(w, http.StatusBadRequest, "adminToken and subject are required")
 		return
 	}
 
@@ -501,15 +503,15 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 	)
 	s.do(func() { conn, ok, loadErr = s.connectors.Get(connID) })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
 		return
 	}
 	if !ok || conn.Kind != connectorKindClio {
-		writeError(w, http.StatusBadRequest, "no clio connector with that id")
+		httpapi.Error(w, http.StatusBadRequest, "no clio connector with that id")
 		return
 	}
 	if strings.TrimSpace(conn.Endpoint) == "" {
-		writeError(w, http.StatusBadRequest, "connector has no endpoint")
+		httpapi.Error(w, http.StatusBadRequest, "connector has no endpoint")
 		return
 	}
 
@@ -527,7 +529,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		ExpiresAt: strings.TrimSpace(p.ExpiresAt),
 	})
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "mint clio key: "+err.Error())
+		httpapi.Error(w, http.StatusBadGateway, "mint clio key: "+err.Error())
 		return
 	}
 
@@ -551,10 +553,10 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		saveErr = s.rebuildConnectorRegistries()
 	})
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "store provisioned key: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "store provisioned key: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"credentialsRef": ref,
 		"scope":          scope,
 		"keyName":        keyName,

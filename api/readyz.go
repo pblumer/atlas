@@ -99,31 +99,10 @@ func (s *Server) storeReadable() (err error) {
 	return err
 }
 
-// pingRunLoop runs an empty closure on the run-loop goroutine and reports whether it
-// completed within the deadline. The closure is empty on purpose: the check is that the
-// loop is *reachable*, and anything it did would have to be safe to abandon, since a
-// timed-out closure still runs later with nobody listening.
-//
-// Handing the closure over is what actually blocks — s.tasks is unbuffered, so a
-// successful send means the loop has already taken it — and the deadline covers a
-// stopped loop as well as a wedged one, which is why neither select watches s.quit:
-// notReady has already reported a shutdown by the time this runs, and a shutdown that
-// races it resolves at the deadline like any other unresponsive writer.
+// pingRunLoop reports whether the run loop is reachable within the readiness
+// deadline. The liveness check itself lives on the loop (ADR-0147), which owns
+// the queue it has to hand a closure to; this is the server's thin wrapper over
+// it so the probe reads in the terms of the rest of this file.
 func (s *Server) pingRunLoop(ctx context.Context) bool {
-	done := make(chan struct{})
-	deadline := time.NewTimer(s.readyTimeout)
-	defer deadline.Stop()
-	select {
-	case s.tasks <- func() { close(done) }:
-	case <-ctx.Done(): // the prober hung up; nothing was queued
-		return false
-	case <-deadline.C:
-		return false
-	}
-	select {
-	case <-done:
-		return true
-	case <-deadline.C:
-		return false
-	}
+	return s.runLoop.Ping(ctx, s.readyTimeout)
 }

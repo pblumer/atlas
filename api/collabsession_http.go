@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/collab"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // HTTP surface for live collaborative modeling sessions (ADR-0140). One SSE
@@ -60,7 +62,7 @@ func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bo
 	if rec.ProjectID == "" || !projOK {
 		return true, 0, ""
 	}
-	rank := scopeRank(proj.effectiveRole(principalFrom(r.Context()), s.authEnabled))
+	rank := scopeRank(proj.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled))
 	if rank == 0 {
 		return false, http.StatusNotFound, "no draft with that process id" // hide existence
 	}
@@ -74,11 +76,11 @@ func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bo
 func (s *Server) requireSessionEditor(w http.ResponseWriter, draftID, participantID string) bool {
 	canEdit, ok := s.collab.CanEdit(draftID, participantID)
 	if !ok {
-		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 		return false
 	}
 	if !canEdit {
-		writeError(w, http.StatusForbidden, "viewer access is read-only; an editor role is required to change the model")
+		httpapi.Error(w, http.StatusForbidden, "viewer access is read-only; an editor role is required to change the model")
 		return false
 	}
 	return true
@@ -97,23 +99,23 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 	// draft rather than opening a phantom session.
 	canEdit, status, msg := s.draftSessionAccess(r, id)
 	if status != 0 {
-		writeError(w, status, msg)
+		httpapi.Error(w, status, msg)
 		return
 	}
 
 	flusher, streamable := w.(http.Flusher)
 	if !streamable {
-		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		httpapi.Error(w, http.StatusInternalServerError, "streaming unsupported")
 		return
 	}
 
 	userID, name := "", "anonymous"
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		userID, name = p.UserID, p.Username
 	}
 	// A client may label itself (useful with auth off, where there is no
 	// principal) via ?name=; a resolved principal's name still wins when present.
-	if p := principalFrom(r.Context()); p == nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p == nil {
 		if n := strings.TrimSpace(r.URL.Query().Get("name")); n != "" {
 			name = n
 		}
@@ -171,7 +173,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 	// (ADR-0071); an unreachable or missing draft 404s.
 	canEdit, status, msg := s.draftSessionAccess(r, id)
 	if status != 0 {
-		writeError(w, status, msg)
+		httpapi.Error(w, status, msg)
 		return
 	}
 
@@ -189,7 +191,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 	if name == "" {
 		name = "agent"
 	}
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		userID = p.UserID
 		if p.Username != "" {
 			name = p.Username
@@ -217,12 +219,12 @@ func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if body.ParticipantID == "" {
-		writeError(w, http.StatusBadRequest, "participantId is required")
+		httpapi.Error(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
 	out, ok := s.collab.Poll(id, body.ParticipantID)
 	if !ok {
-		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -242,7 +244,7 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if body.ParticipantID == "" {
-		writeError(w, http.StatusBadRequest, "participantId is required")
+		httpapi.Error(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
 	s.collab.Leave(id, body.ParticipantID)
@@ -255,11 +257,11 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 func decodeSessionBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
 	}
 	if err := json.Unmarshal(body, dst); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return false
 	}
 	return true
@@ -278,14 +280,14 @@ func (s *Server) handleDraftSessionPresence(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if body.ParticipantID == "" {
-		writeError(w, http.StatusBadRequest, "participantId is required")
+		httpapi.Error(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
 	if !s.requireSessionEditor(w, id, body.ParticipantID) {
 		return
 	}
 	if !s.collab.Presence(id, body.ParticipantID, body.Selection) {
-		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -305,13 +307,13 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if body.ParticipantID == "" || body.ElementID == "" {
-		writeError(w, http.StatusBadRequest, "participantId and elementId are required")
+		httpapi.Error(w, http.StatusBadRequest, "participantId and elementId are required")
 		return
 	}
 	// Validate the action before the edit gate so a malformed request is a 400
 	// regardless of who sends it.
 	if body.Action != collab.LockAcquire && body.Action != collab.LockRelease {
-		writeError(w, http.StatusBadRequest, `action must be "acquire" or "release"`)
+		httpapi.Error(w, http.StatusBadRequest, `action must be "acquire" or "release"`)
 		return
 	}
 	if !s.requireSessionEditor(w, id, body.ParticipantID) {
@@ -322,15 +324,15 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		granted, ok := s.collab.AcquireLock(id, body.ParticipantID, body.ElementID)
 		switch {
 		case !ok:
-			writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+			httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 		case !granted:
-			writeError(w, http.StatusConflict, "element is locked by another participant")
+			httpapi.Error(w, http.StatusConflict, "element is locked by another participant")
 		default:
 			w.WriteHeader(http.StatusNoContent)
 		}
 	case collab.LockRelease:
 		if !s.collab.ReleaseLock(id, body.ParticipantID, body.ElementID) {
-			writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+			httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -351,14 +353,14 @@ func (s *Server) handleDraftSessionChange(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if body.ParticipantID == "" || body.ElementID == "" {
-		writeError(w, http.StatusBadRequest, "participantId and elementId are required")
+		httpapi.Error(w, http.StatusBadRequest, "participantId and elementId are required")
 		return
 	}
 	if !s.requireSessionEditor(w, id, body.ParticipantID) {
 		return
 	}
 	if !s.collab.Change(id, body.ParticipantID, body.ElementID, body.XML) {
-		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		httpapi.Error(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
