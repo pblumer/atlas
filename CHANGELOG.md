@@ -55,6 +55,64 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **A readiness probe that means something** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 7): `GET /readyz`, separate from
+  `/healthz` and unauthenticated like it. The audit that opened this slice found the split
+  was not merely missing but wrong — the bundled Helm chart pointed the startup, liveness
+  **and** readiness probes at `/healthz`, which returns an unconditional `ok`, so a pod
+  whose state store could not answer a read, or whose single writer was wedged, said `ok`
+  and kept receiving traffic.
+
+  `/readyz` returns `503` with a one-line reason while the server is shutting down, while
+  startup recovery is incomplete, while a point read of the state store fails, and while
+  the run-loop goroutine does not answer within two seconds. That last check is the one
+  `/healthz` structurally cannot make: a blocked fsync on a hung volume leaves the process
+  alive and answering HTTP while the writer is stuck. It is an empty closure with a
+  deadline — a probe must fail rather than hang alongside what it is probing.
+
+  **`/healthz` is unchanged and stays unconditional**, with a test guarding it from the
+  other side: the only remedy a liveness probe has is a restart, so it must not fail for
+  anything a restart would not fix. A liveness probe that waited for recovery would kill a
+  pod mid-replay, and every restart makes that replay start over.
+
+  Chart (0.2.0): readiness and startup now probe `/readyz`, liveness stays on `/healthz`,
+  and the startup budget goes from 60s to 10m — the server does not open its port until
+  recovery finishes, so the old budget restarted a slow replay into a replay that started
+  over. Draining on shutdown is *not* solved here: the reason exists and fires, but the
+  process stops accepting connections at SIGTERM anyway, so a pre-stop grace period is
+  what would make a readiness-based drain observable.
+
+- **The backlog, the job flow, and what a restart cost** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slices 4–6): three additions that
+  together answer "is anything stuck, is anything moving, and how long was this down?"
+
+  **Open work, durably counted** (slice 4): `atlas_open_jobs`, `atlas_pending_timers` and
+  `atlas_message_subscriptions`, engine-wide merge counters maintained inside
+  `applyToState`, backfilled once at open for stores written before they existed, and
+  recovery-tested — a rebuild from the log alone lands on the numbers the live run
+  produced. The correctness condition is pairing: increment on the event that *creates*
+  the entity, decrement on the one that removes it, and nothing on a re-put. Failing a
+  job re-puts it with a decremented retry count; the job was already open and still is,
+  so the gauge must not move — which would otherwise inflate it on exactly the processes
+  an operator is watching. **Incidents are absent on purpose**: an incident is also
+  removed by the unconditional delete that runs when any element terminates, with no
+  event of its own, so counting them needs an explicit resolution event first — arguably
+  a log-fidelity fix in its own right, since an incident can currently vanish with
+  nothing in the log saying so.
+
+  **Job flow** (slice 5): `atlas_jobs_created_total`, `_completed_total`, `_failed_total`
+  and `_canceled_total`, counted from each batch's own records after it is durable. A
+  gauge alone cannot say whether anything is moving; a counter alone cannot say how big
+  the backlog is. Activations, lease expiries and timeouts are absent rather than zero —
+  the lease-based worker protocol (ADR-0007) does not exist yet, and a permanent zero on
+  a timeout counter would read as "nothing is timing out".
+
+  **What a restart cost** (slice 6): `atlas_recovery_seconds` and
+  `atlas_recovery_replayed_records` — the number ADR-0131's checkpoint cadence exists to
+  shrink, so that "bounded recovery time" stops being a claim with no evidence in
+  production. Records *read*, not events applied, since that is what a checkpoint
+  changes; absent rather than zero before a recovery has happened.
+
 - **How much is running, as a metric** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 3): `/metrics` now reports
   `atlas_active_process_instances` and `atlas_live_element_tokens` — the first questions an

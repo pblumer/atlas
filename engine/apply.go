@@ -203,9 +203,20 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// its new (decremented, worker-reported) retry count. PutJob's activatable-
 			// index write is idempotent and keyed on Retries > 0, so a still-retryable
 			// job stays open while an exhausted one parks off the index (ADR-0042/0061).
-			return tx.PutJob(h.Key, &v.job)
+			if err := tx.PutJob(h.Key, &v.job); err != nil {
+				return err
+			}
+			// Only creation opens a job. A re-put of one already open moves the
+			// engine-wide count by nothing (ADR-0142).
+			if h.Intent == model.IntentJobCreated {
+				return tx.IncOpenJobs()
+			}
+			return nil
 		case model.IntentJobCompleted, model.IntentJobCanceled:
-			return tx.DeleteJob(h.Key, &v.job)
+			if err := tx.DeleteJob(h.Key, &v.job); err != nil {
+				return err
+			}
+			return tx.DecOpenJobs()
 		}
 
 	case model.VTIncident:
@@ -251,20 +262,33 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 	case model.VTTimer:
 		switch h.Intent {
 		case model.IntentTimerCreated:
-			return tx.PutTimer(h.Key, &v.timer)
+			if err := tx.PutTimer(h.Key, &v.timer); err != nil {
+				return err
+			}
+			return tx.IncPendingTimers()
 		case model.IntentTimerTriggered, model.IntentTimerCanceled:
 			// Both remove the timer from the due-date index; they differ only in the
 			// side effect the command handler runs (a trigger may fire; a cancel does
-			// not), which lives outside applyToState (ADR-0051).
-			return tx.DeleteTimer(h.Key, &v.timer)
+			// not), which lives outside applyToState (ADR-0051). Either way the timer
+			// stops pending, so both move the engine-wide count down (ADR-0142).
+			if err := tx.DeleteTimer(h.Key, &v.timer); err != nil {
+				return err
+			}
+			return tx.DecPendingTimers()
 		}
 
 	case model.VTMessageSubscription:
 		switch h.Intent {
 		case model.IntentSubscriptionCreated:
-			return tx.PutMessageSubscription(&v.subscription)
+			if err := tx.PutMessageSubscription(&v.subscription); err != nil {
+				return err
+			}
+			return tx.IncMessageSubscriptions()
 		case model.IntentSubscriptionCorrelated:
-			return tx.DeleteMessageSubscription(&v.subscription)
+			if err := tx.DeleteMessageSubscription(&v.subscription); err != nil {
+				return err
+			}
+			return tx.DecMessageSubscriptions()
 		}
 
 	case model.VTSignal:

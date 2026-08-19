@@ -66,6 +66,13 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill summary counters: %w", err)
 	}
+	// The engine-wide open-job / pending-timer / subscription counters (ADR-0142) are a
+	// later addition again, and a store that already holds open work must not report
+	// zero for it and then drift negative as that work finishes.
+	if err := s.backfillRuntimeTotalsIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
+	}
 	return s, nil
 }
 
@@ -434,6 +441,78 @@ func (s *Store) backfillRuntimeCountersIfNeeded() error {
 		}
 	}
 	if err := b.Set(keyMeta(metaRuntimeCountersV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
+// OpenJobs is how many jobs are currently waiting for a worker, engine-wide, read from
+// the maintained counter rather than by scanning the job family (ADR-0142).
+func (s *Store) OpenJobs() (int64, error) { return s.runtimeTotal(rtOpenJobs) }
+
+// PendingTimers is how many timers are currently waiting to fire, engine-wide.
+func (s *Store) PendingTimers() (int64, error) { return s.runtimeTotal(rtPendingTimers) }
+
+// MessageSubscriptions is how many message subscriptions are currently waiting to
+// correlate, engine-wide.
+func (s *Store) MessageSubscriptions() (int64, error) { return s.runtimeTotal(rtMessageSubscriptions) }
+
+// runtimeTotal reads one engine-wide live-entity counter. An unset counter is zero, not
+// an error: a store that has never opened one of these has none open.
+func (s *Store) runtimeTotal(kind runtimeTotalKind) (int64, error) {
+	raw, ok, err := getCopy(s.db, keyRuntimeTotal(kind))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return decodeCounter(raw), nil
+}
+
+// metaRuntimeTotalsV1 marks that the ADR-0142 engine-wide live-entity counters have
+// been seeded from pre-existing state — a one-time migration, separate from the
+// ADR-0080 and ADR-0083 markers so a store that already ran those still seeds these.
+const metaRuntimeTotalsV1 = "runtime_totals_v1"
+
+// backfillRuntimeTotalsIfNeeded seeds the engine-wide open-job, pending-timer and
+// message-subscription counters from current state the first time a store gains them.
+// Without it a store that already holds work would report zero for everything already
+// open and then drift negative as that work finished — a gauge that is worse than
+// absent, because it looks plausible.
+//
+// It scans each family once and writes the counts plus the marker in a single atomic,
+// synced batch, so a crash mid-migration leaves nothing behind and the next open re-runs
+// cleanly rather than double-counting (the ADR-0080 backfill's shape).
+func (s *Store) backfillRuntimeTotalsIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaRuntimeTotalsV1)); err != nil || ok {
+		return err
+	}
+
+	counts := map[runtimeTotalKind]int64{}
+	for _, fam := range []struct {
+		cf   columnFamily
+		kind runtimeTotalKind
+	}{
+		{cfJob, rtOpenJobs},
+		{cfTimer, rtPendingTimers},
+		{cfMessageSubscription, rtMessageSubscriptions},
+	} {
+		n, err := s.countPrefix([]byte{byte(fam.cf)})
+		if err != nil {
+			return err
+		}
+		counts[fam.kind] = int64(n)
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for kind, n := range counts {
+		if n == 0 {
+			continue // nothing open: leave the counter unset, which already reads as zero
+		}
+		if err := b.Merge(keyRuntimeTotal(kind), encodeCounter(n), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaRuntimeTotalsV1), []byte{1}, nil); err != nil {
 		return err
 	}
 	return b.Commit(pebble.Sync)

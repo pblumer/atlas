@@ -302,8 +302,8 @@ func bearerToken(r *http.Request) (string, bool) {
 // requiresAuth reports whether enforcement gates a path when auth is enabled.
 // Only /api/v1 is gated, minus the endpoints that must work before login: the
 // login call itself, product info (the UI reads it on the login screen), and the
-// OpenAPI document. The static UI and /healthz are never gated so the login
-// screen can load at all.
+// OpenAPI document. The static UI, /healthz and /readyz are never gated so the
+// login screen can load at all and a probe that carries no session still works.
 func requiresAuth(path string) bool {
 	if path != "/api/v1" && !strings.HasPrefix(path, "/api/v1/") {
 		return false

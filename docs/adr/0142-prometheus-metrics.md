@@ -219,15 +219,99 @@ This ADR is **not implemented in one change**. The slices:
    break the rule above rather than bend it. They need their own durable merge counters
    inside `applyToState`, with a backfill for existing stores and recovery tests, which is
    a change to durable state and so its own slice.
-4. Durable maintained counters for jobs, timers, message subscriptions and incidents —
-   merge counters written inside `applyToState`, backfilled for existing stores,
-   recovery-tested — and the gauges over them.
-5. Job protocol counters (activations, completions, failures, retries, timeouts),
-   landing with or after the ADR-0007 work.
-6. Recovery duration and replayed event count, exported once recovery can report them
-   without changing its shape.
-7. Readiness semantics: a readiness probe distinct from liveness that fails while
-   startup recovery is incomplete or a required local store cannot operate.
+4. **Landed (partly)** — **durable counters for open work**: `atlas_open_jobs`,
+   `atlas_pending_timers` and `atlas_message_subscriptions`, engine-wide signed merge
+   counters maintained inside `applyToState` (one key per kind), backfilled once at
+   `Open` for stores written before they existed, and recovery-tested — a rebuild from
+   the log alone lands on the same numbers the live run produced.
+
+   The correctness condition is **pairing**: an increment on the event that creates the
+   entity, a decrement on the event that removes it, and *nothing* on an event that
+   merely re-puts one. Failing a job re-puts it with a decremented retry count and
+   assigning re-puts it with an assignee; the job was already open and still is, so
+   neither may move the count. Counting every put would inflate the gauge on exactly the
+   processes an operator is most likely watching — the ones that are retrying.
+
+   **Incidents are not countable this way**, which is why they are absent. An incident is
+   removed by its own `IncidentResolved` event *and* by the unconditional, idempotent
+   `DeleteIncident` that runs whenever any element terminates — a delete with no event of
+   its own, on the hottest path in the engine, where telling "there was one" from "there
+   was not" would need a read. Counting them needs an explicit resolution event for that
+   path, which changes what the log contains and so belongs in its own change; it is
+   arguably a log-fidelity improvement in its own right, since today an incident can
+   vanish with nothing in the log saying so.
+5. **Landed (partly)** — **job lifecycle counters**: `atlas_jobs_created_total`,
+   `_completed_total`, `_failed_total` and `_canceled_total`, counted from the batch's
+   own records after it is durable and carried on `BatchStats`, so they inherit slice 2's
+   durability ordering and its single call per batch. The count walks records already in
+   cache into locals, so it allocates nothing, and it runs only when metrics are attached.
+
+   Counting them *here* rather than in `applyToState` is the point: `applyToState` runs
+   identically on replay (invariant I4), so a counter incremented there would be
+   double-counted by every recovery.
+
+   Four pre-resolved counters, not one labelled by outcome. The label's values would be a
+   closed enum and so permitted, but resolving a child per batch is what rule 1 forbids,
+   and four fields cost nothing.
+
+   **Activations, lease expiries and timeouts are absent**, not zero: the lease-based
+   worker protocol (ADR-0007, programme F) does not exist yet, so there are no events to
+   count. A permanent zero on a timeout counter reads as "nothing is timing out", which
+   would be true and misleading. They land with that protocol.
+6. **Landed** — **what recovery cost**: `atlas_recovery_seconds` and
+   `atlas_recovery_replayed_records`, from `Processor.LastRecovery()`. This is the number
+   ADR-0131's checkpoint cadence exists to shrink, so without it "bounded recovery time"
+   is a claim with no evidence behind it in production.
+
+   Read at scrape time rather than pushed, and that is what keeps it simple: recovery
+   happens once, at startup, *before* the server that holds the registry exists, so a
+   pushed counter would have nowhere to go. The stats are recorded last in `RecoverFrom`,
+   so a failed recovery leaves nothing claiming success, and they are absent rather than
+   zero on a processor that has not recovered — a zero would read as an instant recovery.
+
+   `Replayed` counts records **read**, not events applied: a record at or below the
+   store's applied position is skipped rather than folded in, and a checkpoint lets
+   recovery skip whole segments without reading them at all. That is precisely the number
+   the cadence changes.
+7. **Landed** — **readiness semantics**: `GET /readyz`, distinct from `/healthz`.
+
+   The audit that opened this slice found the split was not merely missing but *wrong*:
+   the bundled Helm chart pointed the startup, liveness **and** readiness probes at
+   `/healthz`, which returns an unconditional `ok`. Readiness was therefore decorative —
+   a pod whose state store could not answer a read, or whose single writer was wedged,
+   said `ok` and kept receiving traffic.
+
+   The two endpoints answer different questions and stay separate:
+   - `/healthz` — is the process alive. **Unconditional, and it stays that way.** The
+     only remedy a liveness probe has is a restart, so it must not fail for anything a
+     restart would not fix. A liveness probe that waited for recovery would kill a pod
+     mid-replay, and every restart makes that replay start over. `TestHealthzStaysLivenessOnly`
+     guards this from the other side.
+   - `/readyz` — should traffic be routed here. It fails while the server is shutting
+     down (`do` silently drops work once the run loop is gone), while startup recovery is
+     incomplete, while a point read of the state store fails, and while the run-loop
+     goroutine does not answer within two seconds.
+
+   The last check is the one `/healthz` structurally cannot make: a blocked fsync on a
+   hung volume leaves the process alive and answering HTTP while the writer is stuck. It
+   is an **empty closure with a deadline** — empty because a timed-out closure still runs
+   later with nobody listening, and deadlined because a probe must fail rather than hang
+   alongside what it is probing. Cost is one closure per probe interval; nothing touches
+   engine state, and I1/I3 are untouched.
+
+   Two honest limits. The shipped binary opens its listener only *after* recovery
+   returns, so a kubelet never observes the recovery reason — it observes a refused
+   connection, and the chart's startup budget was raised from 60s to 10m so a long replay
+   is waited out rather than restarted into a replay that starts over. The check is still
+   enforced, for anything that mounts the handler itself. And **draining on shutdown is
+   not solved here**: the reason exists and fires, but the process stops accepting
+   connections at SIGTERM anyway, so a pre-stop grace period is what would make a
+   readiness-based drain observable. That is chart and lifecycle work, not a metric.
+
+   `storeReadable` recovers a panic on purpose: Pebble panics rather than returning an
+   error when used after `Close`, and readiness is exactly the endpoint where "the store
+   is gone" should be reported as a 503 with a reason instead of a dropped connection and
+   a stack trace every ten seconds.
 8. Structured log event names and essential context, and only then OpenTelemetry
    traces — after the metric contract has settled, with sampling and export kept off
    the single-writer path.

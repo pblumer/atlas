@@ -40,6 +40,11 @@ type durabilityCollector struct {
 	walBytes         *prometheus.Desc
 	activeInstances  *prometheus.Desc
 	liveTokens       *prometheus.Desc
+	recoverySeconds  *prometheus.Desc
+	recoveryReplayed *prometheus.Desc
+	openJobs         *prometheus.Desc
+	pendingTimers    *prometheus.Desc
+	subscriptions    *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
 }
@@ -65,6 +70,13 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Process instances currently running, summed from the per-definition counters (ADR-0080)."),
 		liveTokens: d("live_element_tokens",
 			"Element instances currently holding a live token, summed from the per-definition-element counters (ADR-0080)."),
+		recoverySeconds: d("recovery_seconds",
+			"How long this process's startup recovery took."),
+		recoveryReplayed: d("recovery_replayed_records",
+			"Records startup recovery read from the log; a checkpoint lets it skip whole segments (ADR-0131)."),
+		openJobs:      d("open_jobs", "Jobs currently waiting for a worker."),
+		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
+		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
 		exporterPosition: d("exporter_position",
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
@@ -84,6 +96,11 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.walBytes
 	ch <- c.activeInstances
 	ch <- c.liveTokens
+	ch <- c.recoverySeconds
+	ch <- c.recoveryReplayed
+	ch <- c.openJobs
+	ch <- c.pendingTimers
+	ch <- c.subscriptions
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -151,6 +168,28 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	if n, err := s.store.TotalLiveTokens(); err == nil {
 		gauge(c.liveTokens, float64(n))
 	}
+	// What the last startup recovery cost (ADR-0142 slice 6). Reported only once it has
+	// happened: a zero on a processor that has not recovered would read as an instant
+	// recovery rather than as no recovery at all.
+	if rec := s.proc.LastRecovery(); rec.Done {
+		gauge(c.recoverySeconds, rec.Seconds)
+		gauge(c.recoveryReplayed, float64(rec.Replayed))
+	}
+
+	// What is currently open and waiting, from the engine-wide counters applyToState
+	// maintains (ADR-0142 slice 4). Incidents are absent on purpose: they are also
+	// removed by the unconditional delete that runs when any element terminates, with no
+	// event of its own to count, so a counter for them would need a read on the engine's
+	// hottest path. See the ADR.
+	if n, err := s.store.OpenJobs(); err == nil {
+		gauge(c.openJobs, float64(n))
+	}
+	if n, err := s.store.PendingTimers(); err == nil {
+		gauge(c.pendingTimers, float64(n))
+	}
+	if n, err := s.store.MessageSubscriptions(); err == nil {
+		gauge(c.subscriptions, float64(n))
+	}
 
 	// Lag is only meaningful with an exporter. A zero on a server that exports nothing
 	// would read exactly like a caught-up one.
@@ -215,6 +254,14 @@ type engineMetrics struct {
 	syncFailures   prometheus.Counter
 	commitFailures prometheus.Counter
 	queueDepth     prometheus.Gauge
+	// Job lifecycle (ADR-0142 slice 5). Four pre-resolved counters rather than one
+	// labelled by outcome: the values would be a closed enum and so allowed, but a
+	// label lookup per batch is exactly what rule 1 forbids, and four fields cost
+	// nothing.
+	jobsCreated   prometheus.Counter
+	jobsCompleted prometheus.Counter
+	jobsFailed    prometheus.Counter
+	jobsCanceled  prometheus.Counter
 }
 
 func newEngineMetrics() *engineMetrics {
@@ -242,6 +289,10 @@ func newEngineMetrics() *engineMetrics {
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
 		syncFailures:   counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
 		commitFailures: counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
+		jobsCreated:    counter("jobs_created_total", "Jobs that became available to a worker."),
+		jobsCompleted:  counter("jobs_completed_total", "Jobs a worker finished successfully."),
+		jobsFailed:     counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
+		jobsCanceled:   counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
 		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metrics.Namespace, Name: "command_queue_depth",
 			Help: "Commands queued for the partition writer after the last batch, including its follow-ups.",
@@ -253,6 +304,7 @@ func (m *engineMetrics) collectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		m.batches, m.commands, m.events, m.batchEvents, m.syncSeconds,
 		m.commitSeconds, m.syncFailures, m.commitFailures, m.queueDepth,
+		m.jobsCreated, m.jobsCompleted, m.jobsFailed, m.jobsCanceled,
 	}
 }
 
@@ -266,6 +318,12 @@ func (m *engineMetrics) BatchCommitted(s engine.BatchStats) {
 	m.batches.Inc()
 	m.commands.Add(float64(s.Commands))
 	m.queueDepth.Set(float64(s.QueueDepth))
+	// Job transitions the batch made durable. Adding zero is free and keeps the branch
+	// count down, so these are unconditional.
+	m.jobsCreated.Add(float64(s.Jobs.Created))
+	m.jobsCompleted.Add(float64(s.Jobs.Completed))
+	m.jobsFailed.Add(float64(s.Jobs.Failed))
+	m.jobsCanceled.Add(float64(s.Jobs.Canceled))
 	if s.Events == 0 {
 		return
 	}

@@ -398,6 +398,12 @@ type Server struct {
 	metricsEnabled bool
 	metrics        *metrics.Registry
 
+	// readyTimeout bounds how long GET /readyz waits for the run-loop goroutine to
+	// answer before it reports the writer as unresponsive (ADR-0142). It exists so a
+	// wedged writer fails the probe instead of hanging it; withReadyTimeout shortens it
+	// for tests.
+	readyTimeout time.Duration
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -668,6 +674,14 @@ func withCheckpointTrigger(ticks <-chan time.Time, done chan struct{}) Option {
 	}
 }
 
+// withReadyTimeout shortens the deadline GET /readyz gives the run loop. Like
+// withCheckpointTrigger it is a test seam rather than an operator knob: a test that
+// wedges the run loop should not have to wait out the production deadline to see the
+// probe give up.
+func withReadyTimeout(d time.Duration) Option {
+	return func(s *Server) { s.readyTimeout = d }
+}
+
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
 // deployment and draft sidecar stores live in its "deployments" and "drafts"
@@ -798,6 +812,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
+		readyTimeout:      readyTimeoutDefault,
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic
@@ -1575,10 +1590,15 @@ func (s *Server) Handler() http.Handler {
 	if s.metricsEnabled {
 		mux.HandleFunc("GET /metrics", s.handleMetrics)
 	}
+	// Liveness: is this process alive. Unconditional on purpose — the only remedy a
+	// liveness probe has is a restart, so it must not fail for anything a restart would
+	// not fix (a long recovery above all). Readiness is the separate question, and it is
+	// answered separately, at /readyz (ADR-0142).
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
+	mux.HandleFunc("GET /readyz", s.handleReadyz)
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
 	// table, the same list openapiDoc describes, so the served surface and its
