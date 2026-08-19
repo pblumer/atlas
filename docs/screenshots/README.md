@@ -49,16 +49,31 @@ dependency, so the simplest route is a throwaway script run from that directory.
    });
    ```
 
-   Two details are worth keeping, because they are what separates a usable shot
-   from a cluttered one:
+   Three details are worth keeping, because they are what separates a usable
+   shot from a cluttered one:
 
-   - **Frame the diagram yourself.** `canvas.zoom('fit-viewport')` centers the
-     model but lets the floating palette cover its left edge. Re-set the viewbox
-     afterwards with a larger left pad (~170px) so the start event stays clear.
-     The Modeler exposes its bpmn-js instance as `window.__atlasModeler`.
+   - **Frame the diagram yourself.** `canvas.zoom('fit-viewport')` fits the model
+     edge to edge with *no* padding: in the Modeler the floating palette then
+     covers the start event, and in the Operations live view the top row of
+     shapes runs straight into the toolbar above the canvas. Leave a margin —
+     in the Modeler by re-setting the viewbox with a larger left pad (~170px),
+     in the live view by zooming out a notch and re-centering.
+   - **In the live view, pan and zoom with real wheel events**, not by writing
+     the `.viewport` transform. The token counters and "N tasks" badges are HTML
+     overlays that diagram-js positions separately, so a hand-written transform
+     moves the shapes and leaves the badges behind, scattered across the canvas.
+     `mouse.wheel(dx, dy)` pans and `Control` + `mouse.wheel` zooms through the
+     real handlers, and the overlays follow. The Modeler exposes its bpmn-js
+     instance as `window.__atlasModeler`; the live view exposes none.
    - **Hide the hover-only context pad** (`.djs-context-pad, .djs-popup
      { display: none }`) when an element is selected — the properties panel
      already shows the selection, and the pad only floats over the model.
+
+Measure the frame rather than eyeballing it: read the content box back from
+`viewport.getBBox()` and the container's rect, and assert the diagram sits
+inside the padding on all four sides. Note that on the live view the bbox
+fluctuates while tokens animate, so converge on it in a loop with a tolerance
+instead of solving for it once.
 
 Keep the viewport height close to the content: a wide, short BPMN diagram in a
 tall window is mostly empty canvas.
