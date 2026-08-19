@@ -1,6 +1,6 @@
 # ADR-0147: Splitting the api Server object, without weakening the single writer
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-08-19: pilot area corrected, and the API-kernel prerequisite added after measuring it)
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 
@@ -105,15 +105,46 @@ The shape:
   startup, shutdown, the background sweepers. It stops being the receiver every
   handler hangs off.
 
-**The pilot is projects/releases/promote**: `projects.go`, `releases.go`,
-`promote.go` and their neighbours are 22 methods (13 handlers), touching stores
-that no other area owns, with 15 `s.do` call sites between them — enough to
-exercise the run-loop seam, the auth guard, the route table and the OpenAPI
-drift test in one slice, and small enough to read.
+**The pilot is process documentation** (`processdocs.go`): 12 methods, 9 of them
+handlers, 9 `s.do` call sites, two stores no other area touches, one startup
+hook and one unauthenticated public route (ADR-0029 share token). It shares
+exactly one field with the rest of the server (`publicRate`).
 
 Whether the remaining areas follow is a decision to take **after** the pilot, on
 the evidence it produces, not now. If the pattern costs more indirection than it
 removes, one converted area is a cheap thing to revert.
+
+### Sequencing — what scoping the pilot revealed
+
+An earlier draft of this ADR named projects/releases/promote as the pilot. That
+was wrong, and measuring it is what showed why: `projects` is read by ten files,
+which makes it one of the *most* entangled areas rather than one of the least.
+Ranking every candidate by how many of its fields no other file touches puts
+marketplace, process documentation and deploy tokens at the top; projects near
+the bottom.
+
+The same measurement turned up a prerequisite the first draft missed. A service
+in its own package cannot reach the package-level helpers its handlers are
+written against, and for process documentation — the *least* entangled real
+candidate — that is still twelve identifiers: `writeJSON` / `writeError`,
+`clientIP`, `principalFrom`, `newPublicToken`, the `deployment` type, and its own
+store. The response helpers alone have **605 call sites across 34 files**.
+
+So the work is three steps, not two:
+
+1. **Give the single-writer boundary a name** — `api/runloop`. Done; it is what
+   makes a service able to hold the invariant without inheriting it.
+2. **Extract the API kernel** — the response helpers, `clientIP`, the principal
+   accessor and the `apiRoute`/`apiOp` types — into a package that both `api` and
+   any future service can import.
+3. **Carve out the first service.**
+
+Step 2 is wide (605 mechanical call sites) and delivers nothing visible on its
+own: its entire payoff is unlocking step 3. That cost is not a reason to abandon
+the direction, but it is a real number that was not visible when this decision
+was first written down, and it belongs here rather than in a surprised commit
+message. It also means step 3 cannot honestly be called cheap to revert once
+step 2 has landed — step 2 is the commitment.
 
 ### Consequences
 
