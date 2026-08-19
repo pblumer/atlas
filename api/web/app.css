@@ -651,6 +651,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 /* History badge: a token that has flowed through but is no longer here. */
 .token-badge.history { background: var(--muted); }
+/* An element whose token is parked behind an incident (ADR-0061) is drawn red over
+   its live-token green, and carries a badge with the reason. Without it a stuck task
+   is pixel-identical to one that is legitimately waiting, which is exactly how a
+   failing process comes to look like a running one (ADR-0149). */
+.djs-element.atlas-incident .djs-visual > :nth-child(1) {
+  stroke: var(--danger) !important; stroke-width: 3px !important;
+}
+.incident-badge {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: var(--danger); color: #fff; border-radius: 999px;
+  height: 20px; padding: 0 9px;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); pointer-events: none;
+}
 /* "Open task" badge on a user-task element that has a waiting job: a one-click jump
    from the diagram to that task's form in the Tasks app. */
 .task-open {
@@ -729,6 +743,22 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
 }
 .legend-swatch.history { border-top: 2px dashed var(--muted); }
+.legend-swatch.incident { border-top-color: var(--danger); }
+
+/* The incident block that leads the live variables panel: what is parked, why, and
+   the resolve. Red-on-red so it reads as a problem at a glance, and never collapses
+   a message — an operator needs the provider's own words to act on them. */
+.vp-incidents {
+  border: 1px solid var(--danger); border-radius: 8px;
+  padding: 8px 10px; margin-bottom: 10px; background: #fdecea;
+}
+.vp-incidents .vp-title { color: var(--danger); }
+.vp-incidents .inc-row + .inc-row { border-top: 1px solid rgba(0,0,0,0.09); margin-top: 8px; padding-top: 8px; }
+.vp-incidents .inc-where { font-size: 12px; }
+.vp-incidents .inc-msg {
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere; margin: 3px 0 6px;
+}
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
@@ -2339,3 +2369,27 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Preview mail outbox (ADR-0149) ---------- */
+/* One delivered-but-never-sent message per row: the summary is the envelope, the
+   open state is the message — text, rendered HTML, and the framed source. */
+.ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }
+.ob-msg:last-child { border-bottom: 0; }
+.ob-msg > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ob-msg > summary::marker { color: var(--muted); }
+.ob-body { padding: 10px 2px 4px; }
+.ob-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
+.ob-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.ob-head b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.ob-pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin: 0; max-height: 340px; overflow: auto;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* The HTML body is composed from process variables, so it is untrusted markup: it is
+   rendered in a sandboxed frame (no scripts, no same-origin) and never inlined into
+   the console's own DOM — the same posture an uploaded SVG gets (ADR-0148). */
+.ob-html {
+  width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 6px;
+  background: #fff;
+}

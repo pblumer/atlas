@@ -29,6 +29,7 @@ import (
 	"context"
 	"fmt"
 	"mime"
+	"net"
 	"net/smtp"
 	"strings"
 )
@@ -166,8 +167,12 @@ func recipients(m Message) []string {
 }
 
 // hostOf returns the host part of a "host:port" endpoint (SMTP PLAIN auth is scoped
-// to the server host). An endpoint without a port is used verbatim.
+// to the server host). SplitHostPort leads so a bracketed IPv6 endpoint yields the
+// address itself rather than "[::1]"; an endpoint without a port is used verbatim.
 func hostOf(endpoint string) string {
+	if h, _, err := net.SplitHostPort(endpoint); err == nil {
+		return h
+	}
 	if i := strings.LastIndex(endpoint, ":"); i >= 0 {
 		return endpoint[:i]
 	}

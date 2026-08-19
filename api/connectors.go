@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,8 +146,9 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 // buildClioClients; a mail connector has no environment base (its provider and
 // credentials are managed only). Provider dispatch (SMTP, Gmail, Microsoft Graph)
 // lives in mail.NewProviderClient; a record whose provider is misconfigured — an
-// unparseable credential bundle, a missing field — is skipped (its tasks park) rather
-// than failing the whole rebuild. The resolved secret is an SMTP password or, for a
+// unparseable credential bundle, a missing field, an endpoint that names no host — is
+// skipped (its tasks park) rather than failing the whole rebuild. The preview provider
+// (ADR-0149) needs no credential at all and is handed the server's outbox instead. The resolved secret is an SMTP password or, for a
 // native provider, the OAuth credential JSON bundle held in the vault (I6).
 func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	clients := map[string]mail.Client{}
@@ -162,15 +164,16 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 		if provider == "" {
 			provider = mail.ProviderSMTP
 		}
-		// SMTP needs a submission endpoint; the native providers default their API base.
-		if provider == mail.ProviderSMTP && strings.TrimSpace(c.Endpoint) == "" {
-			continue
-		}
+		// SMTP needs a submission endpoint and the native providers a credential;
+		// mail.NewProviderClient is the single judge of both, so a record it cannot
+		// build is skipped below rather than pre-screened here.
 		client, err := mail.NewProviderClient(mail.ProviderConfig{
 			Provider: provider,
 			Endpoint: strings.TrimSpace(c.Endpoint),
 			Sender:   strings.TrimSpace(c.Sender),
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Name:     c.Name,
+			Outbox:   s.mailOutbox,
 		})
 		if err != nil {
 			continue // misconfigured provider: its tasks park until it is fixed (ADR-0093)
@@ -395,9 +398,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		rec     connector
-		found   bool
-		saveErr error
+		rec        connector
+		found      bool
+		saveErr    error
+		badRequest string
 	)
 	s.do(func() {
 		var e error
@@ -421,6 +425,12 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
 		}
+		// The updated record has to satisfy what a create would have demanded of it —
+		// an SMTP endpoint that dials, above all — or the change is refused here
+		// instead of parking a token later (ADR-0149).
+		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
+			return
+		}
 		if saveErr = s.connectors.Save(rec); saveErr != nil {
 			return
 		}
@@ -432,6 +442,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
+		return
+	case badRequest != "":
+		httpapi.Error(w, http.StatusBadRequest, badRequest)
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, rec)
@@ -561,4 +574,40 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		"scope":          scope,
 		"keyName":        keyName,
 	})
+}
+
+// handleMailOutbox lists what the preview mail provider has delivered, newest first —
+// the Outbox view in Operations (ADR-0149). An optional ?limit= returns only the
+// newest n; the response's "truncated" says older messages were left behind, by that
+// limit or by the outbox's own capacity.
+//
+// It deliberately does not go through s.do: the outbox is not run-loop state. A mail
+// worker writes it off the loop after fsync and the outbox holds its own lock, so
+// reading it here keeps the single writer free for the engine's own work, and a
+// browser polling the view can never slow a running process down.
+func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
+	limit := 0 // everything the outbox holds — it is capacity-bounded already
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	msgs, truncated := []mail.OutboxMessage{}, false
+	if s.mailOutbox != nil {
+		msgs, truncated = s.mailOutbox.Messages(limit)
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{"messages": msgs, "truncated": truncated})
+}
+
+// handleClearMailOutbox empties the preview outbox. Nothing here was ever sent and
+// nothing survives a restart, so clearing it destroys no record of anything —
+// it is the "start from a clean slate" the next trial run wants.
+func (s *Server) handleClearMailOutbox(w http.ResponseWriter, _ *http.Request) {
+	if s.mailOutbox != nil {
+		s.mailOutbox.Clear()
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

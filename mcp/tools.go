@@ -394,6 +394,51 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_mail_outbox",
+			Description: "List what a mail connector on the \"preview\" provider delivered in-server instead of " +
+				"sending (ADR-0149) — how a scenario checks what a mail task actually produced, with no mail " +
+				"server, no credential, and no real recipient involved. Newest first; each message carries its " +
+				"connector, addressing, subject, bodies, and the framed RFC 5322 source that would have gone " +
+				"out on the wire. Optional 'limit' returns only the newest n. Returns {messages, truncated}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Maximum messages to return, newest first (default: everything the outbox holds).",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/mail/outbox"
+				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if present {
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_clear_mail_outbox",
+			Description: "Empty the preview mail outbox so the next run's messages are the only ones in it — " +
+				"the reset between two scenario runs. Nothing in the outbox was ever delivered to a recipient, " +
+				"so this discards no record of a real send.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				body, err := c.del("/api/v1/mail/outbox")
+				if err != nil {
+					return "", err
+				}
+				// 204 No Content on success: answer with a confirmation rather than "".
+				if len(body) == 0 {
+					return `{"cleared":true}`, nil
+				}
+				return string(body), nil
+			},
+		},
+		{
 			Name:        "atlas_stats",
 			Description: "Get live engine counts: active process instances and active element instances (tokens).",
 			InputSchema: noArgs(),

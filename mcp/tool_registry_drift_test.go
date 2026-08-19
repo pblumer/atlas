@@ -63,6 +63,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_fail_job":                "POST /api/v1/jobs/{key}/fail",
 	"atlas_list_incidents":          "GET /api/v1/incidents",
 	"atlas_resolve_incident":        "POST /api/v1/incidents/{key}/resolve",
+	"atlas_mail_outbox":             "GET /api/v1/mail/outbox",
+	"atlas_clear_mail_outbox":       "DELETE /api/v1/mail/outbox",
 	"atlas_instance_variables":      "GET /api/v1/instances/{key}/variables",
 	"atlas_instance_jobs":           "GET /api/v1/instances/{key}/jobs",
 	"atlas_instance_timeline":       "GET /api/v1/instances/{key}/timeline",
