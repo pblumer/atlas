@@ -547,10 +547,26 @@ export function openDevView(field, opts = {}) {
     modal.style.top = Math.round(Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN)) + "px";
   }
 
+  let geomTimer = null; // pending debounced save, flushed when the view closes
+
+  // saveGeometry records the modal's box — but never a degenerate one. A detached
+  // modal measures 0×0, and storing that would silently disable the whole feature:
+  // the restore path skips a zero-sized geometry, so the window would come back at
+  // the default size forever after.
   function saveGeometry() {
-    if (!modal.classList.contains("placed")) return;
+    if (!modal.classList.contains("placed") || !modal.isConnected) return;
     const r = modal.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
     store(GEOM_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }));
+  }
+
+  // flushGeometry runs a pending save now. Closing must not lose a resize: nobody
+  // waits out a debounce before pressing Escape, and a timer that fires after the
+  // overlay is gone measures nothing.
+  function flushGeometry() {
+    clearTimeout(geomTimer);
+    geomTimer = null;
+    saveGeometry();
   }
 
   // resetLayout returns the modal to the centered default and forgets the stored
@@ -618,7 +634,6 @@ export function openDevView(field, opts = {}) {
   // resize writes inline width/height, which is also how we tell a user's resize
   // from the initial layout — so only the former is remembered.
   if (typeof ResizeObserver === "function") {
-    let geomTimer = null;
     new ResizeObserver(() => {
       if (!modal.style.width) return; // the browser's own first layout, not a resize
       if (!modal.classList.contains("placed")) {
@@ -810,6 +825,7 @@ export function openDevView(field, opts = {}) {
   function close() {
     if (openView !== handle) return;
     openView = null;
+    flushGeometry(); // while the modal is still measurable
     document.removeEventListener("keydown", onKeydown, true);
     window.removeEventListener("resize", onWindowResize);
     try { if (editor) editor.destroy(); } catch { /* already gone */ }

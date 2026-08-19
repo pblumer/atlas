@@ -356,6 +356,43 @@ test("the splitter cannot squeeze either pane away", async ({ page }) => {
   expect(await page.locator(".dev-main").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(100);
 });
 
+// resizeModal drags the native grip in the bottom-right corner by (dx, dy).
+async function resizeModal(page, dx, dy) {
+  const box = await page.locator(".dev-modal").boundingBox();
+  await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width + dx, box.y + box.height + dy, { steps: 8 });
+  await page.mouse.up();
+}
+
+const modalSize = (page) => page.locator(".dev-modal").evaluate((el) => {
+  const r = el.getBoundingClientRect();
+  return { w: Math.round(r.width), h: Math.round(r.height) };
+});
+
+test("a resized window comes back the same size on the next F2", async ({ page }) => {
+  await openFeel(page);
+  const before = await modalSize(page);
+  await resizeModal(page, -220, -150);
+  const resized = await modalSize(page);
+  expect(resized.w).toBeLessThan(before.w - 100);
+
+  // Closed straight away — no pause for a debounce to catch up. Nobody waits before
+  // pressing Escape, so the size has to already be safe.
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await modalSize(page)).toEqual(resized);
+});
+
+test("closing never stores a degenerate geometry", async ({ page }) => {
+  await openFeel(page);
+  await resizeModal(page, -200, -120);
+  await page.keyboard.press("Escape");
+  const stored = JSON.parse(await page.evaluate(() => localStorage.getItem("atlas.devview.geometry")));
+  expect(stored.w).toBeGreaterThan(0);
+  expect(stored.h).toBeGreaterThan(0);
+});
+
 test("the modal is dragged by its header and stays where it was put", async ({ page }) => {
   await openFeel(page);
   const at = () => page.locator(".dev-modal").evaluate((el) => {
