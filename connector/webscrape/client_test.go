@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pblumer/atlas/webscrape"
+	"github.com/pblumer/atlas/connector/webscrape"
 )
 
 const pageHTML = `<html><body>

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pblumer/atlas/temis"
+	"github.com/pblumer/atlas/connector/temis"
 )
 
 // TestRegistry covers name→client binding and the unregistered-name miss.

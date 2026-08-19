@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/remedy"
+	"github.com/pblumer/atlas/connector/remedy"
 )
 
 // arSystemStub is a minimal AR System REST stand-in: it issues a JWT on login, echoes

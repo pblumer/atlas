@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pblumer/atlas/clio"
-	"github.com/pblumer/atlas/mail"
-	"github.com/pblumer/atlas/remedy"
-	"github.com/pblumer/atlas/sharepoint"
-	"github.com/pblumer/atlas/temis"
+	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/temis"
 )
 
 // clioReadScope builds the clio scope string granting read on a subject: the exact

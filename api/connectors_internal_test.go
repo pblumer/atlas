@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/connector/mail"
 )
 
 // TestManagedConnectorKindsRegistry pins the consolidated kind registry that drives

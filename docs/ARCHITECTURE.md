@@ -275,15 +275,35 @@ Because every state transition is an event in an ordered log, the log itself is 
 atlas/
 ├── compiler/      BPMN XML → CompiledProcess (parse, resolve, intern, expr, validate, linearize)
 ├── model/         Record, header, ValueType/Intent, payload encode/decode
-├── engine/        Partition, processor loop, batching, ProcessingContext
-├── behavior/      Per-BPMN-element behaviors (service task, gateways, events, subprocess)
+├── engine/        Partition, processor loop, batching, ProcessingContext, element behaviors
 ├── state/         State store wrapper, transactions, indexes (column families)
 ├── wal/           Write-ahead log: segmented append, group commit, replay
+├── checkpoint/    Recovery checkpoints and WAL compaction (ADR-0131)
 ├── expr/          FEEL expression compilation and evaluation
 ├── job/           Job store, worker subscription, gRPC streaming protocol
-├── timer/         Due-date index scanning and timer triggering
-└── api/           Client-facing command submission and queries
+├── dmn/           DMN registry, resolver, validation, business-rule-task worker
+├── connector/     In-process service-task workers, one package per connector kind
+│   ├── rest/          HTTP REST outbound (ADR-0067)
+│   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
+│   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
+│   ├── remedy/        BMC Remedy AR System (ADR-0106)
+│   ├── webscrape/     Web scraping (ADR-0118)
+│   ├── clio/          clio event store: read, write, query (ADR-0036)
+│   ├── temis/         temis decision service (ADR-0050)
+│   └── script/        Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+├── api/           HTTP API, web UI, command submission and queries
+├── mcp/           MCP server over the HTTP API (ADR-0016)
+├── metrics/       Prometheus metrics (ADR-0142)
+├── opensearch/    OpenSearch event exporter (ADR-0114)
+└── cmd/atlas/     The single binary (ADR-0011)
 ```
+
+Every package under `connector/` implements the same seam: the compiler turns an
+authored service task into a job carrying a reserved `compiler.*JobTypeIndex`, and
+that kind's in-process worker handles it off the processor goroutine, after fsync —
+so a connector call can never violate the hot-path or durability invariants
+(ADR-0007, ADR-0067). Grouping them keeps that shared contract visible and makes
+adding a kind a new sub-package rather than another entry in a flat root.
 
 ---
 

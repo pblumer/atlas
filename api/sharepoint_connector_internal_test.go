@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/sharepoint"
+	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
 // TestSharePointConnectorValidationAndCreate covers the create endpoint's

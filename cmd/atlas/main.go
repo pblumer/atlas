@@ -31,10 +31,10 @@ import (
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/checkpoint"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/opensearch"
-	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )

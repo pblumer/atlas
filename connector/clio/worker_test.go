@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"

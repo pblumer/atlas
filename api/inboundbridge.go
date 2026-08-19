@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )

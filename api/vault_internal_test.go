@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/connector/clio"
 )
 
 func testVaultKey(t *testing.T) []byte {

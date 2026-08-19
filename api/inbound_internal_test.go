@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/connector/clio"
 )
 
 // TestInboundBridgeLive runs the bridge's ticker goroutine (not pollInbound

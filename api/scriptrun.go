@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pblumer/atlas/script"
+	"github.com/pblumer/atlas/connector/script"
 )
 
 // maxScriptBytes caps a script-run request body (source + sample variables).

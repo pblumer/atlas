@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
-	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
