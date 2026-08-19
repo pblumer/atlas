@@ -895,7 +895,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// (compiler.DMNJobTypeIndex). It registers via HandleCompleting because a
 	// decision's completion both writes its result back as a process variable and
 	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0066).
-	s.jobRunner = job.NewRunner(store, proc)
+	// OnLoop is what keeps a worker's outbound call off the single writer: the
+	// runner claims and applies through the loop and runs the handler itself on
+	// whichever goroutine drove it (ADR-0150).
+	s.jobRunner = job.NewRunner(store, proc, job.OnLoop(s.runLoop))
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	// Script-language workers (PowerShell, Python, JavaScript) each register under
 	// their reserved job type and resolve each job's script from the compiled
@@ -1162,7 +1165,11 @@ func (s *Server) sweepRetention(now int64) {
 	for i := range targets {
 		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
 	}
-	_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
+	// The purges are engine commands, so processing them is all this needs — and
+	// unlike Drive it dispatches no worker handler, which is what lets the sweep
+	// stay inside the run-loop turn it already holds (ADR-0150). A failure is
+	// retried next tick.
+	_ = s.proc.RunUntilIdle()
 	// No single age to name: instances in one sweep may have come due under different
 	// per-definition TTLs, or under the server-wide age (ADR-0144).
 	logging.Info(logging.RetentionPurged, "purged finished instances past their history TTL",
@@ -1535,14 +1542,17 @@ func (s *Server) timerScheduler(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
-			// Fire due timers, then drive any jobs they unblocked (e.g. a timer
-			// leading into a business rule task) to completion.
-			s.do(func() {
-				if err := s.proc.TickTimers(); err != nil {
-					return
-				}
-				_ = s.jobRunner.Drive()
-			})
+			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
+			// timer leading into a business rule task) to completion — from here, off
+			// the loop, so a slow worker delays the next tick and nothing else
+			// (ADR-0150). Ticks that fall due while a drive is running are coalesced
+			// by the ticker; timers are "fire at or after due" (ADR-0051).
+			var tickErr error
+			s.do(func() { tickErr = s.proc.TickTimers() })
+			if tickErr != nil {
+				continue
+			}
+			_ = s.jobRunner.Drive()
 		}
 	}
 }

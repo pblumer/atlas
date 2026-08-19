@@ -248,8 +248,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150): a public start link reaches the same workers as any
+	// other start, and an unauthenticated caller must not be able to park the writer.
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())

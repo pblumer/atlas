@@ -684,7 +684,12 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
 	// timer is created and fsynced as part of the deploy, before it is acknowledged.
 	// A no-op for a model with no timer start events.
-	if err := s.jobRunner.Drive(); err != nil {
+	//
+	// Processing the commands is all a deploy needs, and unlike a full Drive it
+	// dispatches no worker handler — which is what lets this stay inside the caller's
+	// run-loop turn, where a deploy has to be (ADR-0150). Jobs that happen to be
+	// activatable are driven by their own request or by the next timer tick.
+	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
 	return deployed, nil, nil
@@ -1516,12 +1521,15 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
 	})
+	// Off the loop (ADR-0150): the instance's first service task may reach a third
+	// party, and the single writer — which serves every other request — must stay
+	// free while it does. The stats are read afterwards, in a turn of their own.
+	if found && !notExec {
+		if runErr = s.jobRunner.Drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -1766,8 +1774,12 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		s.proc.SetVariables(key, scopeKey, actor, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150): new variables can satisfy a waiting condition and
+	// activate a worker task.
+	if found && scanErr == nil && !scopeBad {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
@@ -2340,12 +2352,12 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
 	})
+	// Off the loop (ADR-0150): a correlated message can start an instance whose
+	// first task is a worker task.
+	if runErr = s.jobRunner.Drive(); runErr == nil {
+		s.do(func() { stats, statErr = s.readStats() })
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
@@ -2386,12 +2398,13 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CancelInstance(key)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
 	})
+	// Off the loop (ADR-0150), like every other drive.
+	if found && scanErr == nil {
+		if runErr = s.jobRunner.Drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
@@ -2475,11 +2488,14 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
 	})
+	// Off the loop (ADR-0150): cancelling can activate compensation or boundary-event
+	// work that a worker picks up.
+	if found && opErr == nil {
+		if opErr = s.jobRunner.Drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -2575,11 +2591,13 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 			s.proc.CancelInstance(k)
 		}
 		terminated = len(active)
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
 	})
+	// Off the loop (ADR-0150), like every other drive.
+	if opErr == nil {
+		if opErr = s.jobRunner.Drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
 		return
@@ -2654,11 +2672,14 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
 	})
+	// Off the loop (ADR-0150): cancelling can activate compensation or boundary-event
+	// work that a worker picks up.
+	if found && opErr == nil {
+		if opErr = s.jobRunner.Drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -3008,8 +3029,12 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop, after the command is queued: driving may hand a job to a worker,
+	// and a worker's call must never hold the single writer (ADR-0150).
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
@@ -3063,8 +3088,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CompleteJob(key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150): completing this job can activate the next one, whose
+	// worker may call out.
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
@@ -3105,8 +3134,12 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		found = true
 		jobKey = inc.JobKey
 		s.proc.ResolveIncident(key, retries)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150): the resolved job is retried by this drive, which runs
+	// its worker again.
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
@@ -3195,8 +3228,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CompleteJob(key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150): what the completed task unblocks may be a worker task.
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
@@ -3295,8 +3331,11 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		}
 		found = true
 		s.proc.AssignJob(key, assignee)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop (ADR-0150), like every other drive.
+	if found {
+		runErr = s.jobRunner.Drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "assign task: "+runErr.Error())

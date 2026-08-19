@@ -38,7 +38,9 @@ This document is the compact, checkable reference. The reasoning lives in the li
 
 **How to check:** No mutexes guarding process state; no shared mutable state between partition goroutines; cross-partition effects emitted as messages (durable events delivered to the other partition's queue), never as direct calls. (ADR-0006)
 
-**Common violations:** adding a lock "just to be safe"; reaching into another partition's state store; sharing a mutable cache across partitions.
+**And nothing unbounded runs there.** Owning the state also means being the only goroutine that can serve it, so anything that waits on the outside world — an interpreter, an HTTP call, an SMTP conversation — must not run on the writer: a worker's handler runs on the goroutine that drove it, while only the claim and the completion are dispatched onto the loop. `TestJobsAreNotDrivenOnTheRunLoop` fails the build if a job drive reappears inside a `do` turn. (ADR-0150; the per-call budget of ADR-0149 bounds the same hazard from the other side)
+
+**Common violations:** adding a lock "just to be safe"; reaching into another partition's state store; sharing a mutable cache across partitions; doing I/O inside a `do` closure.
 
 ---
 

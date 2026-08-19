@@ -54,9 +54,10 @@ type pendingSub struct {
 // clients on the run loop (a read), then for each reads new clio events OFF the run
 // loop (the only network call), computes each event's correlation key and payload
 // off the loop, and hands a single publish batch per subscription back onto the run
-// loop. The publish is made durable (Drive → fsync) before the best-effort resume
-// cursor advances; a crash in that window re-reads on restart, where the engine's
-// durable high-water mark dedupes the replay (ADR-0075).
+// loop. The publish is made durable (the drive's fsync) before the best-effort
+// resume cursor advances; a crash in that window re-reads on restart, where the
+// engine's durable high-water mark dedupes the replay (ADR-0075). The drive itself
+// runs off the loop, like every other one (ADR-0150).
 func (s *Server) pollInbound(ctx context.Context) {
 	var subs []pendingSub
 	s.do(func() { subs = s.resolveInboundSubs() })
@@ -93,11 +94,15 @@ func (s *Server) pollInbound(ctx context.Context) {
 			for _, p := range pubs {
 				s.proc.PublishInbound(sourceID, p.seq, name, p.key, p.vars...)
 			}
-			if err := s.jobRunner.Drive(); err != nil {
-				return // leave the cursor un-advanced; re-read next tick (engine dedupes)
-			}
-			s.advanceInboundCursor(subID, lastID)
 		})
+		// Off the loop (ADR-0150): a correlated event can start an instance whose
+		// first task calls out, and this poller must not hold the writer while it
+		// does. On a drive error the cursor is left un-advanced and the batch is
+		// re-read next tick (the engine dedupes by sequence).
+		if err := s.jobRunner.Drive(); err != nil {
+			continue
+		}
+		s.do(func() { s.advanceInboundCursor(subID, lastID) })
 	}
 }
 

@@ -118,12 +118,14 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
 	})
+	// Off the loop (ADR-0150): the CSV import worker itself runs here, on this
+	// request's goroutine, not on the single writer.
+	if found && !notExec {
+		if runErr = s.jobRunner.Drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
