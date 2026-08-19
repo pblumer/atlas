@@ -747,7 +747,7 @@ Not for production use.
 
 - `cmd/atlas serve`: one self-contained binary embedding the engine behind an
   HTTP API and a `go:embed`-ed web UI (Console, Modeler, Tasks, Operations,
-  Insights) — deploy XML, run instances, work user tasks.
+  Panorama) — deploy XML, run instances, work user tasks.
 - Embedded **bpmn-js Modeler** with a hand-written properties/"Implement" panel,
   an embedded **dmn-js** decision-table editor, projects & artifacts, diagram
   drafts, and durable deployments that survive a restart.

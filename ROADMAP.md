@@ -626,7 +626,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
   health, process list/XML, info.
 - ✅ **App shell** (ADR-0012): top bar, app switcher, Atlas app naming
-  (Console, Modeler, Tasks, Operations, Insights), hash router; Console dashboard
+  (Console, Modeler, Tasks, Operations, Panorama), hash router; Console dashboard
   and Modeler home wired to real engine data.
 - ✅ **BPMN editor** (ADR-0013): embedded `bpmn-js` modeler (canvas, palette,
   context pad), a hand-written Details panel, and **Deploy & run** (deploy the

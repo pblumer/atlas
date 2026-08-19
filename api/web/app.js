@@ -256,7 +256,7 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true },
   { id: "operations", name: "Operations", route: "#/operations", on: true },
-  { id: "insights", name: "Insights", route: "#/insights", on: false },
+  { id: "panorama", name: "Panorama", route: "#/panorama", on: false },
 ];
 
 // Secondary (in-app) navigation.
@@ -278,7 +278,7 @@ const TOPNAV = {
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
   ],
-  tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
+  tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], panorama: [],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -4597,7 +4597,7 @@ async function route() {
   if (path.startsWith("#/modeler")) appId = "modeler";
   else if (path.startsWith("#/tasks")) appId = "tasks";
   else if (path.startsWith("#/operations")) appId = "operations";
-  else if (path.startsWith("#/insights")) appId = "insights";
+  else if (path.startsWith("#/panorama")) appId = "panorama";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
