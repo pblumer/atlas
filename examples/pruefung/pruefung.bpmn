@@ -60,10 +60,10 @@
 
     <businessRuleTask id="bewerten" name="Bewerten (DMN)">
       <extensionElements>
-        <calledDecision decisionId="Notenschluessel" resultVariable="bewertung" retries="3"/>
-        <ioMapping>
-          <input source="=punkte" target="punkte"/>
-        </ioMapping>
+        <zeebe:calledDecision decisionId="Notenschluessel" resultVariable="bewertung" retries="3"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=punkte" target="punkte"/>
+        </zeebe:ioMapping>
       </extensionElements>
       <incoming>f_punkte_bewerten</incoming>
       <outgoing>f_bewerten_gw</outgoing>

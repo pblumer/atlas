@@ -55,9 +55,9 @@ Order received
 
 The whole model runs to completion the moment you start an instance, because:
 
-- **Every activity is an inline FEEL script task** (`<script expression="…"
+- **Every activity is an inline FEEL script task** (`<zeebe:script expression="…"
   resultVariable="…"/>`). Atlas evaluates these *inside the engine* — unlike a
-  `serviceTask`, a `<jobScript>`, or a `businessRuleTask`, an inline script needs
+  `serviceTask`, an `<atlas:jobScript>`, or a `businessRuleTask`, an inline script needs
   no external worker, so the token never parks. (A `serviceTask` with no worker
   attached would sit active forever — correct engine behavior, but not what you
   want in a smoke test.)
