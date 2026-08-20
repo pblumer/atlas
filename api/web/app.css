@@ -2416,7 +2416,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   background: #fff;
 }
 
-/* ---------- Secret shape hints (ADR-0152) ---------- */
+/* ---------- Secret shape hints (ADR-0153) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
    string is for: which connector resolves it and what shape that connector needs. */
 .secret-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }

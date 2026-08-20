@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **The Secrets panel says what a value has to be**
-  ([ADR-0152](docs/adr/0152-secret-shape-hints.md)): a vault secret is a name and an
+  ([ADR-0153](docs/adr/0153-secret-shape-hints.md)): a vault secret is a name and an
   opaque string, and because it is write-only nobody can look at a stored value
   afterwards and say what is wrong with it — so the form now says it beforehand. The
   moment a name matches a connector's token reference, the panel names the connector

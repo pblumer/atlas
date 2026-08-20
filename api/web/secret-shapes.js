@@ -1,6 +1,6 @@
 // What the value behind a connector's token reference has to look like — the
 // knowledge the Secrets panel needs to say something useful about a field whose
-// content it can never show (ADR-0152).
+// content it can never show (ADR-0153).
 //
 // It lives in its own module for two reasons: app.js boots the whole console on
 // import and so cannot be exercised in isolation, and this is the part worth
@@ -19,7 +19,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // a vault secret is a name and an opaque string: nothing about the field says whether
 // it wants a password or a JSON credential bundle, and since the value is never read
 // back, a wrong shape is invisible until a task parks behind an incident hours later
-// (ADR-0152). The shapes mirror the Go decoders — connector/mail/oauth.go's
+// (ADR-0153). The shapes mirror the Go decoders — connector/mail/oauth.go's
 // credentialBundle, connector/sharepoint/oauth.go's, and api/connectors.go's
 // remedyCredentials — so a change there is a change here.
 export const SECRET_SHAPES = {

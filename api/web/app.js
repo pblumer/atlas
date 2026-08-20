@@ -960,7 +960,7 @@ async function viewConsoleOrg() {
   }
   // A secret's value is write-only, so the one thing the list can still say about it
   // is what it is *for* — which connector resolves this reference, and therefore what
-  // shape the value has to have. Without that a rotation is done blind (ADR-0152).
+  // shape the value has to have. Without that a rotation is done blind (ADR-0153).
   const secretRow = (c) => {
     const users = (connectors || []).filter((k) => k.credentialsRef === c.name);
     const usedBy = users.length
@@ -2587,7 +2587,7 @@ function wireSecretsManagement(secrets, state, connectors) {
 }
 
 // toggleSetSecret expands (or collapses) an inline panel under a secret's row for
-// rotating its value (ADR-0152). It replaced a one-line window.prompt, which was the
+// rotating its value (ADR-0153). It replaced a one-line window.prompt, which was the
 // wrong instrument for the job in two ways: a JSON credential bundle is several lines
 // that have to be pasted and read back, and a prompt can say nothing about what the
 // value is supposed to be — so the field that most needed an explanation was the one
