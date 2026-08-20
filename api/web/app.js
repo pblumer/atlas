@@ -293,6 +293,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents" },
+    { name: "Workers", route: "#/operations/workers" },
     { name: "Outbox", route: "#/operations/outbox" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
@@ -3652,6 +3653,152 @@ async function viewIncidents() {
 // The HTML body is rendered in a sandboxed, script-less iframe: a mail body is
 // composed from process variables, so it is untrusted markup by the same reasoning
 // that keeps an uploaded SVG out of the DOM (ADR-0148).
+// The Workers view (ADR-0157): who is doing the engine's out-of-process work, and
+// what is waiting for someone to do it.
+//
+// The two tables only mean something read together. A job type's queue depth says
+// how much is waiting; the workers table says whether anyone is taking it. Neither
+// alone distinguishes "busy" from "abandoned", which is the question an operator
+// actually arrives with — so the join is done here rather than left to the eye: a
+// type with work queued, nothing in flight and no worker pulling it is drawn as a
+// problem, and the worker that used to serve it is flagged for having gone quiet.
+async function viewWorkers() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Workers</h1>
+      <span><button class="btn neutral" id="refresh">Refresh</button></span>
+    </div>
+    <p class="muted">Who is doing the engine&rsquo;s work. A job type with a growing queue and no worker
+      against it is the state worth catching here &mdash; counters cover this run of the server, while the
+      queue depths come from durable state.</p>
+    <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
+    <div class="card wk-card" id="wk-workers"></div>`;
+
+  const types = document.getElementById("wk-types");
+  const workers = document.getElementById("wk-workers");
+  let showAllTypes = false;
+
+  // A worker is counted as pulling a type while it holds one in flight, or while it
+  // reported an outcome for it recently enough to still be at work. Anything else is
+  // a type nobody is serving, which is what the red row says.
+  const pullersOf = (list, type) => list.filter((w) => (w.types || {})[type] > 0);
+  const fmtSeen = (ns) => {
+    if (!ns) return "\u2014";
+    const secs = Math.max(0, Math.round((Date.now() - ns / 1e6) / 1000));
+    if (secs < 60) return `${secs}s ago`;
+    if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+    if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
+    return new Date(ns / 1e6).toLocaleString();
+  };
+  // Past this a worker has almost certainly stopped rather than paused: the default
+  // lease is five minutes, so anything beyond it has let its work go back on offer.
+  const STALE_MS = 5 * 60 * 1000;
+  const isStale = (w) => w.lastSeen && Date.now() - w.lastSeen / 1e6 > STALE_MS;
+
+  const servedBy = (row, pullers) => {
+    if (row.servedInProcess) {
+      return `<span class="pill" title="Atlas works this type itself, so no external worker can lease it">in-process</span>`;
+    }
+    // A type nothing is *meant* to serve is not a type nobody *is* serving: a user
+    // task waits for a person and the pull refuses it, so it must never be drawn as
+    // an abandoned queue.
+    if (!row.leasable) {
+      return `<span class="pill vis" title="Not worker work — a user task is claimed by a person">people</span>`;
+    }
+    if (pullers.length) {
+      return `<span class="pill ok"><span class="dot"></span>${pullers.length} worker${pullers.length === 1 ? "" : "s"}</span>`;
+    }
+    return `<span class="pill err"><span class="dot"></span>nobody</span>`;
+  };
+
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/workers");
+    } catch (e) {
+      types.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      workers.innerHTML = "";
+      return;
+    }
+    const allTypes = (data && data.types) || [];
+    const workerRows = (data && data.workers) || [];
+    // An engine knows eighteen built-in job types and a given installation uses two
+    // of them. Listing every idle one buries the types someone actually deployed, so
+    // a quiet built-in stays folded away until asked for; anything with work, an
+    // incident, or a worker on it is never hidden.
+    const busy = (t) => t.parked > 0 || t.inFlight > 0 || t.incidents > 0 || pullersOf(workerRows, t.type).length > 0;
+    const idleBuiltIns = allTypes.filter((t) => t.builtIn && !busy(t));
+    const typeRows = showAllTypes ? allTypes : allTypes.filter((t) => !idleBuiltIns.includes(t));
+    const unserved = typeRows.filter(
+      (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);
+
+    types.innerHTML = `
+      <div class="wk-head">
+        <b>Job types</b>
+        <span class="muted small">${typeRows.length} shown${unserved.length ? ` &middot; ${unserved.length} unserved` : ""}${
+          idleBuiltIns.length ? ` &middot; <a href="#" id="wk-toggle-all">${showAllTypes
+            ? "hide" : "show"} ${idleBuiltIns.length} idle built-in${idleBuiltIns.length === 1 ? "" : "s"}</a>` : ""}</span>
+      </div>
+      ${typeRows.length ? `<table data-dt-key="wk-types">
+        <thead><tr>
+          <th>Type</th><th>Served by</th>
+          <th class="wk-num">Queued</th><th class="wk-num">In flight</th><th class="wk-num">Incidents</th>
+        </tr></thead>
+        <tbody>${typeRows.map((row) => {
+          const pullers = pullersOf(workerRows, row.type);
+          const stuck = unserved.includes(row);
+          return `<tr class="${stuck ? "wk-stuck" : ""}">
+            <td><b>${esc(row.type)}</b>${stuck
+              ? `<span class="wk-why">Work is queued and nothing is pulling this type</span>` : ""}</td>
+            <td>${servedBy(row, pullers)}</td>
+            <td class="wk-num ${stuck ? "wk-count-bad" : ""}">${row.parked}${row.truncated ? "+" : ""}</td>
+            <td class="wk-num ${stuck ? "wk-count-bad" : ""}">${row.servedInProcess ? "&mdash;" : row.inFlight}</td>
+            <td class="wk-num">${row.incidents
+              ? `<a href="#/operations/incidents">${row.incidents}</a>` : `<span class="muted">0</span>`}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
+      <p class="wk-note">An <b>in-process</b> type is worked by Atlas itself and cannot be leased from
+        outside; relocating it to a worker means turning that handler off.</p>`;
+
+    workers.innerHTML = `
+      <div class="wk-head">
+        <b>Workers</b>
+        <span class="muted small">${workerRows.length} seen this run</span>
+      </div>
+      ${workerRows.length ? `<table data-dt-key="wk-workers">
+        <thead><tr>
+          <th>Worker</th><th>Pulls</th>
+          <th class="wk-num">In flight</th><th class="wk-num">Pulled</th>
+          <th class="wk-num">Completed</th><th class="wk-num">Failed</th><th class="wk-num">Last seen</th>
+        </tr></thead>
+        <tbody>${workerRows.map((w) => `<tr class="${isStale(w) ? "wk-stale" : ""}">
+          <td><b>${w.worker ? esc(w.worker) : `<span class="muted">(unnamed)</span>`}</b></td>
+          <td>${Object.keys(w.types || {}).sort()
+            .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
+          <td class="wk-num">${w.leased}</td>
+          <td class="wk-num">${w.pulled}</td>
+          <td class="wk-num">${w.completed}</td>
+          <td class="wk-num ${w.failed ? "wk-count-bad" : "muted"}">${w.failed}</td>
+          <td class="wk-num ${isStale(w) ? "wk-stale-at" : "muted"}">${esc(fmtSeen(w.lastSeen))}</td>
+        </tr>`).join("")}</tbody>
+      </table>` : `<p class="empty">No worker has pulled a job yet. A worker appears here the moment it
+        leases its first job &mdash; point one at <span class="pill-kv">POST /api/v1/jobs/activate</span>
+        and name the job type it serves.</p>`}
+      <p class="wk-note">Counters are since this server started and are not restored on restart.
+        <b>In flight</b> is what a worker holds a lease on right now.</p>`;
+
+    const toggle = document.getElementById("wk-toggle-all");
+    if (toggle) {
+      toggle.onclick = (e) => { e.preventDefault(); showAllTypes = !showAllTypes; load(); };
+    }
+    enhanceViewTables();
+  };
+
+  document.getElementById("refresh").onclick = load;
+  await load();
+}
+
 async function viewMailOutbox() {
   view.innerHTML = `
     <div class="between">
@@ -5210,6 +5357,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/incidents") return await viewIncidents();
+    if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();

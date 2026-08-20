@@ -135,3 +135,16 @@ func (r *Registry) Name(index int32) (string, bool) {
 	name, ok := r.byIndex[index]
 	return name, ok
 }
+
+// All returns every job type the engine knows, reserved and dynamic alike, in
+// index order — the whole table, which is what the Workers view lists so an
+// operator sees the kinds nobody is serving as well as the ones being worked.
+func (r *Registry) All() []Entry {
+	all := make([]Entry, 0, len(r.byIndex))
+	for i := int32(0); i < r.next; i++ {
+		if name, ok := r.byIndex[i]; ok {
+			all = append(all, Entry{Name: name, Index: i})
+		}
+	}
+	return all
+}

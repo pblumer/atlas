@@ -537,6 +537,21 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_workers",
+			Description: "The Workers view — who is doing the engine's out-of-process work, and what is waiting. " +
+				"Returns {types, workers}. Each 'types' row is a job type with its 'parked' queue depth, " +
+				"'inFlight' count (leased to a worker right now), 'incidents', and 'servedInProcess' — true when " +
+				"Atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
+				"is a worker seen since this server started: the 'types' it pulls, how many it holds 'inFlight', " +
+				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. The diagnosis to look for is a " +
+				"type with a growing 'parked' count, zero 'inFlight' and no worker pulling it — work nobody is " +
+				"serving. Worker counters cover this server run only and are not restored on restart.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/workers"))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +
