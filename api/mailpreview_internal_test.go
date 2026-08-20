@@ -125,7 +125,7 @@ func TestPreviewConnectorDeliversIntoTheServerOutbox(t *testing.T) {
 		t.Fatalf("preview create failed")
 	}
 
-	clients, err := srv.buildMailClients()
+	clients, _, err := srv.buildMailClients()
 	if err != nil {
 		t.Fatalf("buildMailClients: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestMisconfiguredMailConnectorIsSkippedNotFatal(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "1", Name: "legacy", Kind: "mail", Provider: "smtp", Endpoint: "mx1.example.ch", Sender: "a@x", Enabled: true, CreatedAt: 1})
 	_ = srv.connectors.Save(connector{ID: "2", Name: "broken", Kind: "mail", Provider: "smtp", Endpoint: "bot@example.com", Sender: "b@x", Enabled: true, CreatedAt: 2})
 
-	clients, err := srv.buildMailClients()
+	clients, _, err := srv.buildMailClients()
 	if err != nil {
 		t.Fatalf("buildMailClients: %v", err)
 	}

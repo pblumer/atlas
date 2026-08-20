@@ -252,6 +252,34 @@ textarea::placeholder {
 .pill.err .dot, .pill.warn .dot { background: currentColor; }
 /* A pill can be the link to what it counts — the incident flag in the Operations
    lists opens the version (or instance) it is about (ADR-0150). */
+/* Deployed, but something in the model will not resolve at runtime (ADR-0155). */
+.deploy-warnings {
+  margin: 8px 0 10px; padding: 8px 10px; border-radius: var(--radius);
+  background: var(--warn-soft); color: var(--warn); font-size: 12.5px; line-height: 1.5;
+}
+.deploy-warnings ul { margin: 5px 0 0; padding-left: 18px; }
+.deploy-warnings li + li { margin-top: 4px; }
+/* The variable editor inside the incident's fix dialog (ADR-0155). */
+.inc-vars-modal { max-width: 620px; width: 92vw; }
+.inc-vars-json {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 180px;
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text);
+}
+.inc-vars-json:focus { outline: none; border-color: var(--accent); }
+/* Who set a variable by hand (ADR-0098/0152): an operator correction, marked apart
+   from the values the process computed itself. */
+.c-actor {
+  font: 600 10px/1.6 system-ui, sans-serif; white-space: nowrap;
+  padding: 0 6px; border-radius: 999px;
+  color: var(--warn); background: var(--warn-soft);
+}
+/* Why a stored connector is not usable, under its status pill (ADR-0155). */
+.conn-problem {
+  margin-top: 3px; max-width: 340px; color: var(--danger);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
+}
 a.pill { text-decoration: none; font-weight: 600; }
 a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */

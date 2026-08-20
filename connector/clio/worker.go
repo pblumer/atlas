@@ -137,7 +137,7 @@ func resolveConnector(store *state.Store, lookup ProcessLookup, reg *Registry, j
 	name := cp.Intern(detail.Connector)
 	client, ok := reg.Client(name)
 	if !ok {
-		return nil, nil, nil, nil, false, fmt.Errorf("clio: no connector registered as %q", name)
+		return nil, nil, nil, nil, false, reg.Unresolved("clio", name)
 	}
 	return cp, detail, client, ei, true, nil
 }

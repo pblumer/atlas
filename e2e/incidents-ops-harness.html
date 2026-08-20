@@ -70,7 +70,12 @@
         },
       ];
       window.__resolved = [];             // {key, retries} per resolve call the views made
+      window.__varWrites = [];            // {instance, variables} per operator override
       window.__incidents = () => incidents;
+
+      // The instance's variables, as the operator override reads and writes them
+      // (ADR-0098). "betrag" is the value a fix would correct before retrying.
+      let instanceVars = { betrag: 42, empfaenger: "" };
 
       const instances = [
         { key: Number(STUCK), processDefKey: DEF, state: "active", createdAt: ns(T), variables: [{ name: "betrag", value: "42", kind: "number" }] },
@@ -84,6 +89,12 @@
         position: i + 1, type, tokenId: "1", variables: [],
       });
       const steps = [step("Start_1", "bpmn:StartEvent", 0), step("Task_pay", "bpmn:ServiceTask", 1)];
+      // The parked step's snapshot carries one value the process computed and one an
+      // operator set by hand — the audit's actor rides along on the timeline (ADR-0098).
+      steps[1].variables = [
+        { name: "betrag", value: "42", kind: "number" },
+        { name: "empfaenger", value: "patrick@blumer.net", kind: "string", actor: "admin" },
+      ];
       const frames = steps.map((s, i) => ({
         position: i + 1, at: s.at,
         tokens: [{ elementId: s.elementId, elementInstanceKey: s.elementInstanceKey, tokenId: "1", state: "active" }],
@@ -97,8 +108,15 @@
             incidents = incidents.filter((i) => i.elementInstanceKey !== m[1]);
             return { elementInstanceKey: m[1] };
           }
+          const v = url.match(/\/instances\/(\w+)\/variables$/);
+          if (v) {
+            window.__varWrites.push({ instance: v[1], variables: body && body.variables });
+            instanceVars = { ...instanceVars, ...(body && body.variables) };
+            return { instanceKey: v[1] };
+          }
           return {};
         }
+        if (/\/instances\/\w+\/variables$/.test(url)) return instanceVars;
         if (url === "/api/v1/processes") {
           return [{ key: DEF, processId: "zahlung", name: "Zahlung", version: 1 }];
         }

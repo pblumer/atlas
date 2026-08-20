@@ -28,7 +28,11 @@
 // (ADR-0141).
 package sharepoint
 
-import "context"
+import (
+	"context"
+
+	"github.com/pblumer/atlas/connector/clientreg"
+)
 
 // ItemRequest is one list-item creation a SharePoint connector task performs. Site
 // and List address the target list (a Graph site id and a list name or id); Fields
@@ -50,35 +54,15 @@ type Client interface {
 	CreateItem(ctx context.Context, req ItemRequest) (any, error)
 }
 
-// Registry resolves a connector name to the [Client] for its SharePoint provider.
-// Connectors are registered at the server from managed configuration (Graph base plus
-// credentials), so a model refers to a connector by name only (ADR-0036/0041). A
-// Registry is read-only once populated and safe for concurrent use by workers.
-type Registry struct {
-	clients map[string]Client
-}
+// Registry resolves a connector name to the [Client] for this kind. Connectors are
+// registered at the server from managed configuration (endpoint plus credentials), so
+// a model refers to a connector by name only (ADR-0036/0041).
+//
+// It is the shared [clientreg.Registry], which also carries *why* a configured
+// connector is missing from it — the difference between "never configured" and
+// "configured and broken", which is what a parked token has to be able to say
+// (ADR-0155).
+type Registry = clientreg.Registry[Client]
 
 // NewRegistry creates an empty connector registry.
-func NewRegistry() *Registry { return &Registry{clients: map[string]Client{}} }
-
-// Register binds a connector name to its client. Registering the same name again
-// replaces the earlier binding (last write wins), so reconfiguration is simple.
-func (r *Registry) Register(name string, c Client) { r.clients[name] = c }
-
-// Client returns the client bound to name, or nil and false if none is registered.
-func (r *Registry) Client(name string) (Client, bool) {
-	c, ok := r.clients[name]
-	return c, ok
-}
-
-// Replace swaps the whole set of registered connectors at once, so a server can
-// rebuild the registry from managed configuration after a change (ADR-0041). The
-// caller must serialize Replace with the workers that read the registry — the Atlas
-// server does both on its run-loop goroutine — so no lock is needed. A nil map clears
-// the registry.
-func (r *Registry) Replace(clients map[string]Client) {
-	if clients == nil {
-		clients = map[string]Client{}
-	}
-	r.clients = clients
-}
+func NewRegistry() *Registry { return clientreg.New[Client]() }

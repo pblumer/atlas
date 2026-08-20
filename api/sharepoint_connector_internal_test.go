@@ -57,7 +57,7 @@ func TestBuildSharePointClients(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "3", Name: "clio", Kind: connectorKindClio, Endpoint: "http://c", Enabled: true, CreatedAt: 3})
 	_ = srv.connectors.Save(connector{ID: "4", Name: "broken", Kind: connectorKindSharePoint, CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 4})
 
-	clients, err := srv.buildSharePointClients()
+	clients, _, err := srv.buildSharePointClients()
 	if err != nil {
 		t.Fatalf("buildSharePointClients: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestBuildSharePointClients(t *testing.T) {
 func TestBuildSharePointClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
-	if _, err := srv.buildSharePointClients(); err == nil {
+	if _, _, err := srv.buildSharePointClients(); err == nil {
 		t.Error("buildSharePointClients with a broken store: want error")
 	}
 }

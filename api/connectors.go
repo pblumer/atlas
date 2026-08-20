@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -96,26 +98,66 @@ func envTemisClients() map[string]temis.Client {
 	return out
 }
 
+// connectorProblem is why a connector an operator *did* configure is missing from
+// its kind's registry. A connector that cannot be built is deliberately left out so
+// its tasks park rather than run wrongly (ADR-0093/0141), but the reason used to be
+// dropped at the point of skipping — leaving a parked token to report "no connector
+// registered as X", which reads as *you never configured it*. Each builder below now
+// records the reason instead, and the registry carries it to the incident (ADR-0155).
+//
+// The strings are read by an operator in an incident message and in the connector
+// list, so they say what to go and fix, not what the code decided.
+const (
+	problemDisabled   = "the connector is disabled"
+	problemNoEndpoint = "no endpoint is configured"
+)
+
+// noteForeignKinds records, for every connector record that ended up as neither a
+// client nor a problem of its own, that it is configured as a *different* kind than
+// the one being built. A mail task pointed at the name of a clio connector is a
+// mistake an operator actually makes, and it is the one case where "no connector
+// registered" is not merely unhelpful but wrong.
+func noteForeignKinds[T any](problems map[string]string, recs []connector, kind string, clients map[string]T) {
+	for _, c := range recs {
+		if _, ok := clients[c.Name]; ok {
+			continue
+		}
+		if _, ok := problems[c.Name]; ok {
+			continue
+		}
+		problems[c.Name] = fmt.Sprintf("it is configured as a %q connector, not %q", c.Kind, kind)
+	}
+}
+
 // buildTemisClients assembles the temis connector clients from the environment
 // (base) plus the enabled managed connector instances (which override by name),
 // resolving each managed instance's token from its credentialsRef. It reads the
 // connector store, so callers run it on the run-loop goroutine (the store's owner).
-func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
+func (s *Server) buildTemisClients() (map[string]temis.Client, map[string]string, error) {
 	clients := envTemisClients()
+	problems := map[string]string{}
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindTemis || strings.TrimSpace(c.Endpoint) == "" {
+		if c.Kind != connectorKindTemis {
 			continue
 		}
-		clients[c.Name] = temis.NewHTTPClient(temis.Connector{
-			Endpoint: strings.TrimSpace(c.Endpoint),
-			Token:    s.resolveConnectorSecret(c.CredentialsRef),
-		})
+		switch {
+		case !c.Enabled:
+			problems[c.Name] = problemDisabled
+		case strings.TrimSpace(c.Endpoint) == "":
+			problems[c.Name] = problemNoEndpoint
+		default:
+			clients[c.Name] = temis.NewHTTPClient(temis.Connector{
+				Endpoint: strings.TrimSpace(c.Endpoint),
+				Token:    s.resolveConnectorSecret(c.CredentialsRef),
+			})
+		}
 	}
-	return clients, nil
+	noteForeignKinds(problems, recs, connectorKindTemis, clients)
+	return clients, problems, nil
 }
 
 // buildClioClients assembles the clio connector clients from the enabled managed
@@ -123,22 +165,31 @@ func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
 // credentialsRef via the vault (ADR-0036/0041). It reads the connector store, so
 // callers run it on the run-loop goroutine (the store's owner). It mirrors
 // buildTemisClients; clio has no environment base (its endpoints are managed only).
-func (s *Server) buildClioClients() (map[string]clio.Client, error) {
+func (s *Server) buildClioClients() (map[string]clio.Client, map[string]string, error) {
 	clients := map[string]clio.Client{}
+	problems := map[string]string{}
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindClio || strings.TrimSpace(c.Endpoint) == "" {
+		if c.Kind != connectorKindClio {
 			continue
 		}
-		clients[c.Name] = clio.NewHTTPClient(clio.Connector{
-			Endpoint: strings.TrimSpace(c.Endpoint),
-			Token:    s.resolveConnectorSecret(c.CredentialsRef),
-		})
+		switch {
+		case !c.Enabled:
+			problems[c.Name] = problemDisabled
+		case strings.TrimSpace(c.Endpoint) == "":
+			problems[c.Name] = problemNoEndpoint
+		default:
+			clients[c.Name] = clio.NewHTTPClient(clio.Connector{
+				Endpoint: strings.TrimSpace(c.Endpoint),
+				Token:    s.resolveConnectorSecret(c.CredentialsRef),
+			})
+		}
 	}
-	return clients, nil
+	noteForeignKinds(problems, recs, connectorKindClio, clients)
+	return clients, problems, nil
 }
 
 // buildMailClients assembles the mail connector clients from the enabled managed
@@ -152,14 +203,19 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 // skipped (its tasks park) rather than failing the whole rebuild. The preview provider
 // (ADR-0150) needs no credential at all and is handed the server's outbox instead. The resolved secret is an SMTP password or, for a
 // native provider, the OAuth credential JSON bundle held in the vault (I6).
-func (s *Server) buildMailClients() (map[string]mail.Client, error) {
+func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, error) {
 	clients := map[string]mail.Client{}
+	problems := map[string]string{}
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindMail {
+		if c.Kind != connectorKindMail {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
 			continue
 		}
 		provider := strings.TrimSpace(c.Provider)
@@ -178,11 +234,16 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 			Outbox:   s.mailOutbox,
 		})
 		if err != nil {
-			continue // misconfigured provider: its tasks park until it is fixed (ADR-0093)
+			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
+			// the incident now says which of the provider's requirements is unmet
+			// instead of claiming the connector does not exist (ADR-0155).
+			problems[c.Name] = err.Error()
+			continue
 		}
 		clients[c.Name] = client
 	}
-	return clients, nil
+	noteForeignKinds(problems, recs, connectorKindMail, clients)
+	return clients, problems, nil
 }
 
 // buildSharePointClients assembles the SharePoint connector clients from the enabled
@@ -194,14 +255,19 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 // is misconfigured — unparseable, a missing field — is skipped (its tasks park)
 // rather than failing the whole rebuild. The resolved secret is the OAuth credential
 // JSON bundle held in the vault (I6), never a value in a model.
-func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) {
+func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[string]string, error) {
 	clients := map[string]sharepoint.Client{}
+	problems := map[string]string{}
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindSharePoint {
+		if c.Kind != connectorKindSharePoint {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
 			continue
 		}
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
@@ -209,11 +275,13 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) 
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 		})
 		if err != nil {
-			continue // misconfigured credential: its tasks park until it is fixed (ADR-0141)
+			problems[c.Name] = err.Error() // its tasks park until it is fixed (ADR-0141)
+			continue
 		}
 		clients[c.Name] = client
 	}
-	return clients, nil
+	noteForeignKinds(problems, recs, connectorKindSharePoint, clients)
+	return clients, problems, nil
 }
 
 // remedyCredentials is the shape of a Remedy connector's credential bundle held in
@@ -233,31 +301,41 @@ type remedyCredentials struct {
 // or not valid JSON, is skipped (its tasks park) rather than failing the whole
 // rebuild. The resolved secret is the {username,password} JSON bundle held in the
 // vault (I6).
-func (s *Server) buildRemedyClients() (map[string]remedy.Client, error) {
+func (s *Server) buildRemedyClients() (map[string]remedy.Client, map[string]string, error) {
 	clients := map[string]remedy.Client{}
+	problems := map[string]string{}
 	recs, err := s.connectors.LoadAll()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindRemedy || strings.TrimSpace(c.Endpoint) == "" {
+		if c.Kind != connectorKindRemedy {
 			continue
 		}
 		raw := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
-		if raw == "" {
-			continue // no credential configured yet: its tasks park until it is
-		}
 		var creds remedyCredentials
-		if err := json.Unmarshal([]byte(raw), &creds); err != nil {
-			continue // a malformed bundle: skip rather than call Remedy wrongly
+		switch {
+		case !c.Enabled:
+			problems[c.Name] = problemDisabled
+		case strings.TrimSpace(c.Endpoint) == "":
+			problems[c.Name] = problemNoEndpoint
+		case raw == "":
+			problems[c.Name] = "no credential is configured (set credentialsRef to a {username,password} bundle in the vault)"
+		default:
+			// A malformed bundle: park rather than call Remedy wrongly.
+			if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+				problems[c.Name] = "the credential is not valid JSON: " + err.Error()
+				continue
+			}
+			clients[c.Name] = remedy.NewHTTPClient(remedy.Connector{
+				BaseURL:  strings.TrimSpace(c.Endpoint),
+				Username: creds.Username,
+				Password: creds.Password,
+			})
 		}
-		clients[c.Name] = remedy.NewHTTPClient(remedy.Connector{
-			BaseURL:  strings.TrimSpace(c.Endpoint),
-			Username: creds.Username,
-			Password: creds.Password,
-		})
 	}
-	return clients, nil
+	noteForeignKinds(problems, recs, connectorKindRemedy, clients)
+	return clients, problems, nil
 }
 
 // rebuildConnectorRegistries rebuilds every managed connector registry from the
@@ -284,15 +362,52 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 		recs    []connector
 		loadErr error
 	)
-	s.do(func() { recs, loadErr = s.connectors.LoadAll() })
+	var views []connectorView
+	// The store read and the registry reads happen in the same closure: the registries
+	// are owned by the run-loop goroutine (rebuild swaps them there), so asking them
+	// anywhere else would race a rebuild (invariant I3).
+	s.do(func() {
+		recs, loadErr = s.connectors.LoadAll()
+		if loadErr != nil {
+			return
+		}
+		views = make([]connectorView, 0, len(recs))
+		for _, c := range recs {
+			views = append(views, connectorView{connector: c, Problem: s.connectorProblem(c.Kind, c.Name)})
+		}
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
 		return
 	}
-	if recs == nil {
-		recs = []connector{}
+	if views == nil {
+		views = []connectorView{}
 	}
-	httpapi.JSON(w, http.StatusOK, recs)
+	httpapi.JSON(w, http.StatusOK, views)
+}
+
+// connectorView is a connector record as the operator UI reads it: the stored record
+// plus what the runtime made of it. Problem is why its client could not be built —
+// empty when the connector is usable — and is derived on read, never stored (ADR-0155).
+type connectorView struct {
+	connector
+	Problem string `json:"problem,omitempty"`
+}
+
+// connectorProblem asks the kind's live registry why this connector is not usable, or
+// returns "" when it is (or when the kind has no registry). The registries are owned
+// by the run-loop goroutine, so callers must be on it (invariant I3).
+func (s *Server) connectorProblem(kind, name string) string {
+	for _, k := range managedConnectorKinds {
+		if k.name != kind || k.problem == nil {
+			continue
+		}
+		if why, ok := k.problem(s, name); ok {
+			return why
+		}
+		return ""
+	}
+	return ""
 }
 
 // handleCreateConnector creates a managed connector instance and rebuilds the
@@ -717,4 +832,66 @@ func connectorTestDetail(provider, endpoint, to string) string {
 	default:
 		return "Credential accepted — the provider issued an access token. No message was sent."
 	}
+}
+
+// connectorWarnings checks a freshly compiled process's connector references against
+// what is actually configured, and returns one sentence per reference that will not
+// resolve. A deploy is not refused for it: a model is routinely deployed before its
+// connectors are provisioned, and to an environment where they are provisioned later —
+// refusing would be wrong, and staying silent is how a model reaches production
+// referring to a connector nobody ever created. So it warns, at the moment somebody is
+// looking, instead of leaving the first token to discover it (ADR-0155).
+//
+// It reads the connector store and the live registries, so it runs on the run-loop
+// goroutine (invariant I3), inside the same closure as the deploy it describes.
+func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
+	refs := cp.ConnectorRefs()
+	if len(refs) == 0 {
+		return nil
+	}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil // the deploy itself succeeded; a warning is best-effort
+	}
+	byName := map[string]connector{}
+	for _, c := range recs {
+		byName[c.Name] = c
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		kind := connectorKindOfJobType(ref.JobType)
+		if kind == "" || seen[kind+"/"+ref.Connector] {
+			continue // a job type no managed kind claims (a local decision, say)
+		}
+		seen[kind+"/"+ref.Connector] = true
+		rec, exists := byName[ref.Connector]
+		switch {
+		case !exists:
+			out = append(out, fmt.Sprintf("%s references the %s connector %q, which is not configured on this server — its tasks will park until it is created",
+				ref.ElementId, kind, ref.Connector))
+		case rec.Kind != kind:
+			out = append(out, fmt.Sprintf("%s references %q as a %s connector, but it is configured as a %q connector",
+				ref.ElementId, ref.Connector, kind, rec.Kind))
+		default:
+			if why := s.connectorProblem(kind, ref.Connector); why != "" {
+				out = append(out, fmt.Sprintf("%s references the %s connector %q, which is configured but not usable: %s",
+					ref.ElementId, kind, ref.Connector, why))
+			}
+		}
+	}
+	return out
+}
+
+// connectorKindOfJobType maps a reserved job-type index back to the managed connector
+// kind whose registry serves it, or "" for a job type no managed kind claims.
+func connectorKindOfJobType(jobType int32) string {
+	for _, k := range managedConnectorKinds {
+		for _, jt := range k.jobTypes {
+			if jt == jobType {
+				return k.name
+			}
+		}
+	}
+	return ""
 }

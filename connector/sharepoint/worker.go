@@ -47,7 +47,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Output
 		name := cp.Intern(detail.Connector)
 		client, ok := reg.Client(name)
 		if !ok {
-			return nil, fmt.Errorf("sharepoint: no connector registered as %q", name)
+			return nil, reg.Unresolved("sharepoint", name)
 		}
 		scope := ei.ProcessInstanceKey
 		// Read the instance's variables once: every site/list/field FEEL value

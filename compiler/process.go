@@ -1218,6 +1218,49 @@ type CallActivityRef struct {
 	Loop bool
 }
 
+// ConnectorRef is one model reference to a server-registered connector: the element
+// carrying it, the reserved job type that says which *kind* of connector it needs, and
+// the name it asks for. A model refers to a connector by name only and never carries
+// an endpoint or a secret (ADR-0036/0041), so nothing inside the model can tell whether
+// that name is configured anywhere — which is exactly why the references have to be
+// enumerable from outside, where the connector store is (ADR-0155).
+type ConnectorRef struct {
+	ElementId string
+	JobType   int32
+	Connector string
+}
+
+// ConnectorRefs returns every connector reference the process makes, in node order.
+// Both shapes are covered: a connector task (mail, REST, SharePoint, …) and a business
+// rule task delegating to a remote decision service, which names its connector the same
+// way. An element that names no connector — a local decision, a REST task with its URL
+// in the model — is not a reference and is left out.
+func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
+	var out []ConnectorRef
+	for i := range p.nodes {
+		var jobType, connector int32 = -1, -1
+		switch p.nodes[i].Type {
+		case TypeConnectorTask:
+			d := p.ConnectorTask(p.nodes[i].Detail)
+			jobType, connector = d.JobType, d.Connector
+		case TypeBusinessRuleTask:
+			d := p.BusinessRuleTask(p.nodes[i].Detail)
+			jobType, connector = d.JobType, d.Connector
+		default:
+			continue
+		}
+		if connector < 0 {
+			continue
+		}
+		out = append(out, ConnectorRef{
+			ElementId: p.ElementBpmnId(int32(i)),
+			JobType:   jobType,
+			Connector: p.Intern(connector),
+		})
+	}
+	return out
+}
+
 // CallActivities returns every call activity in this process, in node order —
 // empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
 // an outbound reference (here the called process id) that the server surfaces so

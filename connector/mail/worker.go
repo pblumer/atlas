@@ -47,7 +47,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 		name := cp.Intern(detail.Connector)
 		client, ok := reg.Client(name)
 		if !ok {
-			return fmt.Errorf("mail: no connector registered as %q", name)
+			return reg.Unresolved("mail", name)
 		}
 		scope := ei.ProcessInstanceKey
 		// Read the instance's variables once: every recipient/subject/body FEEL value
