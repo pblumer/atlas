@@ -174,7 +174,7 @@ func TestRestConnectorWritesResponseToVariable(t *testing.T) {
 		return nil
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return rest.Handler(store, lookup, rc, noSecret, nil) })
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Ada"})
 	if err := runner.Drive(); err != nil {
@@ -219,7 +219,9 @@ func TestRestConnectorGetNoBodyNoResult(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil)
+	})
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "ignored", Kind: model.VarString, Text: "x"})
 	if err := runner.Drive(); err != nil {
@@ -288,7 +290,7 @@ func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 
 	rc := &recordingClient{resp: rest.Response{Status: 200}}
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return rest.Handler(store2, lookup, rc, noSecret, nil) })
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
@@ -311,7 +313,9 @@ func TestRestConnectorClientError(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret, nil)
+	})
 
 	p.CreateInstance(cp.Key)
 	// A handler error does not abort Drive: it is routed into the incident model
@@ -336,7 +340,9 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret, nil)
+	})
 
 	p.CreateInstance(cp.Key)
 	// An unresolvable definition is a handler error, routed into the incident model
@@ -412,7 +418,9 @@ func driveRest(t *testing.T, cp *compiler.CompiledProcess, jobType int32, rc res
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, nil)
+	})
 	p.CreateInstance(cp.Key)
 	return runner.Drive()
 }
@@ -542,7 +550,9 @@ func TestRestConnectorFeelFields(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil)
+	})
 	p.CreateInstance(cp.Key,
 		model.VariableValue{Name: "customerId", Kind: model.VarString, Text: "c-7"},
 		model.VariableValue{Name: "traceId", Kind: model.VarString, Text: "abc"},
@@ -603,7 +613,9 @@ func TestRestConnectorOAuth2(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, tokens))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, tokens)
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -633,7 +645,9 @@ func TestRestConnectorOAuth2NoProvider(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, func(string) string { return "shh" }, nil))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, func(string) string { return "shh" }, nil)
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -660,7 +674,9 @@ func TestRestConnectorOAuth2SecretMissing(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, tokens))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, tokens)
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)

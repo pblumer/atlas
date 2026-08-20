@@ -187,7 +187,10 @@ type Server struct {
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
-	jobWaiters       *jobWaiters
+	jobWaiters *jobWaiters
+	// driveMu serializes job driving, so two callers never claim the same job and
+	// work it twice. See [Server.drive].
+	driveMu          sync.Mutex
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -950,14 +953,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// must be bounded and non-blocking — closing channels, never sending on them.
 	proc.SetJobNotifier(func(jobType int32) { s.jobWaiters.notify(jobType) })
 	s.jobRunner = job.NewRunner(store, proc)
-	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)
+	})
 	// Script-language workers (PowerShell, Python, JavaScript) each register under
 	// their reserved job type and resolve each job's script from the compiled
 	// process via processLookup, exactly like the DMN worker (ADR-0047). They run
 	// arbitrary interpreter code, so only the languages an operator registered with
 	// WithScriptWorker subscribe; the rest park.
 	for jobType, exec := range s.scriptWorkers {
-		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
+		s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(rd, s.processLookup, exec) })
 	}
 	// Managed connector job workers (temis, clio, mail, sharepoint, remedy): one
 	// registry plus job worker(s) per kind, all driven from the managedConnectorKinds
@@ -977,37 +982,45 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// For oauth2 (client-credentials) the worker exchanges the client secret for a
 	// bearer token through the token provider, caching it until it nears expiry
 	// (ADR-0152).
-	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret, rest.NewTokenProvider()))
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(rd, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret, rest.NewTokenProvider())
+	})
 	// A SCIM 2.0 connector task provisions/reads an identity resource against a
 	// model-authored service provider (ADR-0153). Like REST the base URL and resource
 	// live in the model and the authentication secret is a *reference* the worker
 	// resolves at call time (resolveConnectorSecret, ADR-0041); unlike REST it speaks
 	// SCIM (application/scim+json, resource-path URLs, filtered search). One worker
 	// serves every process under the reserved SCIM job type.
-	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, scim.Handler(store, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret))
+	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return scim.Handler(rd, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret)
+	})
 	// A generic LDAP connector task performs a directory operation (search/add/modify/
 	// delete/modify-password) against a model-authored server (ADR-0154). The server URL
 	// and DNs live in the model; the bind password is a *reference* the worker resolves
 	// at call time (resolveConnectorSecret, ADR-0041). One worker serves every process
 	// under the reserved LDAP job type; each job dials, binds, operates, and closes.
-	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, ldap.Handler(store, s.processLookup, ldap.NewDialer(), s.resolveConnectorSecret))
+	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return ldap.Handler(rd, s.processLookup, ldap.NewDialer(), s.resolveConnectorSecret)
+	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvimport.Handler(store, s.processLookup))
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, func(rd state.Reader) job.OutputHandler { return csvimport.Handler(rd, s.processLookup) })
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
 	// writing the extracted values into the task's result variable as a JSON array.
 	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
 	// every process under the reserved web-scrape job type.
-	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
+	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
+	})
 	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
 	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
 	// server drives jobs synchronously); it is gated at runtime to the system project.
 	if s.userProvisioning {
-		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler(s.store))
+		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, func(rd state.Reader) job.Handler { return s.userConnectorHandler(rd) })
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
@@ -1232,7 +1245,9 @@ func (s *Server) sweepRetention(now int64) {
 	for i := range targets {
 		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
 	}
-	_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
+	// Applying the purge commands is the whole of the work: a purge unblocks no
+	// in-process handler. An error is retried on the next tick.
+	_ = s.proc.RunUntilIdle()
 	// No single age to name: instances in one sweep may have come due under different
 	// per-definition TTLs, or under the server-wide age (ADR-0144).
 	logging.Info(logging.RetentionPurged, "purged finished instances past their history TTL",
@@ -1534,6 +1549,60 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 	return nil
 }
 
+// drive runs the engine and its in-process job handlers until nothing is left to
+// do. It is where ADR-0157 step 6 actually lands: the run loop is held only for the
+// processor's own steps — claiming jobs and applying their outcomes — while the
+// handlers, which is where a connector's outbound call happens, run out here on the
+// caller's goroutine.
+//
+// Before this, driving happened inside s.do, so every outbound call held the single
+// writer for its duration. ADR-0155 measured that and ADR-0149 could only bound it
+// with a timeout; now a slow host stalls the request that caused it, not the engine.
+//
+// The caller still waits for quiescence, which is deliberate: every request path and
+// every test would otherwise change meaning. What changed is *who* waits — the
+// caller's goroutine instead of the one goroutine everything else needs.
+//
+// Drivers are serialized. Two concurrent callers must not claim the same job and
+// work it twice, and the second waiting for the first is also what keeps "my
+// request's work is done when it returns" true.
+//
+// Handlers read through a [state.ReadView] taken while the loop is held, so each
+// round sees one coherent state rather than whatever the writer has reached since —
+// the guarantee they used to get for free by running on the writer itself.
+func (s *Server) drive() error {
+	s.driveMu.Lock()
+	defer s.driveMu.Unlock()
+	for {
+		var (
+			jobs []job.Job
+			view *state.ReadView
+			err  error
+		)
+		s.do(func() {
+			if err = s.proc.RunUntilIdle(); err != nil {
+				return
+			}
+			if jobs, err = s.jobRunner.Claim(); err != nil || len(jobs) == 0 {
+				return
+			}
+			view = s.store.ReadView()
+		})
+		if err != nil {
+			return err
+		}
+		if len(jobs) == 0 {
+			return nil
+		}
+		outcomes := s.jobRunner.Work(jobs, view)
+		_ = view.Close()
+		if len(outcomes) == 0 {
+			return nil // nothing this runner serves; the rest is an external worker's
+		}
+		s.do(func() { s.jobRunner.Submit(outcomes) })
+	}
+}
+
 // loadDeployments rebuilds the in-memory deployment registry and re-registers
 // each definition with the processor from the durable store, so a restart
 // restores diagrams, names, versions, and the ability to advance recovered
@@ -1611,14 +1680,15 @@ func (s *Server) timerScheduler(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
-			// Fire due timers, then drive any jobs they unblocked (e.g. a timer
-			// leading into a business rule task) to completion.
-			s.do(func() {
-				if err := s.proc.TickTimers(); err != nil {
-					return
-				}
-				_ = s.jobRunner.Drive()
-			})
+			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
+			// timer leading into a business rule task) OFF it: this tick runs every
+			// second, and before ADR-0157 step 6 it was the path that could hold the
+			// single writer for a connector call nobody had asked for.
+			ticked := false
+			s.do(func() { ticked = s.proc.TickTimers() == nil })
+			if ticked {
+				_ = s.drive()
+			}
 		}
 	}
 }

@@ -159,7 +159,9 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, client sci
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, scim.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, client, secret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return scim.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, client, secret)
+	})
 	p.CreateInstance(cp.Key, vars...)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -326,7 +328,9 @@ func TestScimClientError(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, scim.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return scim.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret)
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -349,7 +353,9 @@ func TestScimNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, scim.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return scim.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret)
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -421,7 +427,7 @@ func TestScimRecoversAcrossRestart(t *testing.T) {
 	}
 	rc := &recordingClient{resp: scim.Response{Status: 201}}
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, scim.Handler(store2, lookup, rc, noSecret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return scim.Handler(store2, lookup, rc, noSecret) })
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}

@@ -805,8 +805,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
 	// timer is created and fsynced as part of the deploy, before it is acknowledged.
-	// A no-op for a model with no timer start events.
-	if err := s.jobRunner.Drive(); err != nil {
+	// A no-op for a model with no timer start events. Applying commands is all this
+	// needs — a deploy starts no instance, so it unblocks no in-process handler and
+	// nothing has to leave the loop.
+	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
 	return deployed, nil, nil
@@ -1807,6 +1809,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		d, ok := s.deployments[key]
 		if !ok {
@@ -1820,12 +1823,15 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -2070,8 +2076,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		s.proc.SetVariables(key, scopeKey, actor, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
@@ -2642,14 +2653,18 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
@@ -2679,6 +2694,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		scanErr = s.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
 			if k == key {
@@ -2690,12 +2706,15 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CancelInstance(key)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
@@ -2756,6 +2775,7 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		opErr     error // any scan / drive / stats failure inside the run loop
 		stats     statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		if _, ok := s.deployments[key]; !ok {
 			return
@@ -2779,11 +2799,13 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -2861,6 +2883,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 		opErr      error
 		stats      statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		active := make([]uint64, 0, len(uniq))
 		for k := range uniq {
@@ -2879,11 +2902,13 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 			s.proc.CancelInstance(k)
 		}
 		terminated = len(active)
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
 		return
@@ -2921,6 +2946,7 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		opErr     error
 		stats     statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		if _, ok := s.deployments[req.ProcessDefKey]; !ok {
 			return
@@ -2958,11 +2984,13 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -3341,8 +3369,13 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 				s.workers.failed(worker, name)
 			}
 		}
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
@@ -3459,8 +3492,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.proc.CompleteJobManually(key, actor, reason, vars...)
 		}
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
@@ -3504,8 +3542,13 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		found = true
 		jobKey = inc.JobKey
 		s.proc.ResolveIncident(key, retries)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
@@ -3671,8 +3714,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CompleteJob(key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
@@ -3771,8 +3819,13 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		}
 		found = true
 		s.proc.AssignJob(key, assignee)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "assign task: "+runErr.Error())
@@ -4148,7 +4201,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			for _, k := range keys {
 				s.proc.ActivateJob(k, body.Worker, int64(lease))
 			}
-			if runErr = s.jobRunner.Drive(); runErr != nil {
+			// Applying the activation is all that is needed here: leasing takes a job
+			// off the activatable index, so it unblocks no in-process handler and there
+			// is nothing to run off the loop.
+			if runErr = s.proc.RunUntilIdle(); runErr != nil {
 				return
 			}
 			for _, k := range keys {
@@ -4299,7 +4355,9 @@ func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.ActivateJob(key, body.Worker, int64(lease))
-		runErr = s.jobRunner.Drive()
+		// As above: a lease unblocks no in-process handler, so applying the command is
+		// the whole of the work and it belongs on the loop.
+		runErr = s.proc.RunUntilIdle()
 		if runErr != nil {
 			return
 		}

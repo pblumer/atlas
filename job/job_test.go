@@ -70,9 +70,11 @@ func TestRunnerDrivesToCompletion(t *testing.T) {
 
 	var got []job.Job
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(j job.Job) error {
-		got = append(got, j)
-		return nil
+	runner.Handle(jobType, func(state.Reader) job.Handler {
+		return func(j job.Job) error {
+			got = append(got, j)
+			return nil
+		}
 	})
 
 	p.CreateInstance(defKey)
@@ -99,7 +101,7 @@ func TestPollOnceDispatchesActivatableJob(t *testing.T) {
 
 	runner := job.NewRunner(store, p)
 	calls := 0
-	runner.Handle(jobType, func(job.Job) error { calls++; return nil })
+	runner.Handle(jobType, func(state.Reader) job.Handler { return func(job.Job) error { calls++; return nil } })
 
 	// Run to the waiting job, then a single poll dispatches it.
 	p.CreateInstance(defKey)
@@ -135,12 +137,14 @@ func TestHandlerRetryThenSucceeds(t *testing.T) {
 	p, store, jobType, defKey := setup(t) // the service task has retries=3
 	runner := job.NewRunner(store, p)
 	calls := 0
-	runner.Handle(jobType, func(job.Job) error {
-		calls++
-		if calls == 1 {
-			return errors.New("transient")
+	runner.Handle(jobType, func(state.Reader) job.Handler {
+		return func(job.Job) error {
+			calls++
+			if calls == 1 {
+				return errors.New("transient")
+			}
+			return nil
 		}
-		return nil
 	})
 
 	p.CreateInstance(defKey)
@@ -172,7 +176,7 @@ func TestHandlerErrorRaisesIncident(t *testing.T) {
 	p, store, jobType, defKey := setup(t) // the service task has retries=3
 
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(job.Job) error { return errors.New("boom") })
+	runner.Handle(jobType, func(state.Reader) job.Handler { return func(job.Job) error { return errors.New("boom") } })
 
 	p.CreateInstance(defKey)
 	if err := runner.Drive(); err != nil {

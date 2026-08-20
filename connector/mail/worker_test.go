@@ -96,7 +96,9 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *mail.
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, mail.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.Handle(jobType, func(rd state.Reader) job.Handler {
+		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 	p.CreateInstance(cp.Key, vars...)
 	return runner.Drive()
 }
@@ -314,7 +316,9 @@ func TestMailConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry()))
+	runner.Handle(jobType, func(rd state.Reader) job.Handler {
+		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry())
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)

@@ -23,7 +23,7 @@ import (
 // decision-evaluation record (ADR-0066) carries inputs and outputs but an empty
 // trace. A job whose connector is not registered leaves the job pending with an
 // error, exactly like any worker failure. sink, if non-nil, observes each result.
-func Handler(store *state.Store, lookup dmn.ProcessLookup, reg *Registry, sink func(dmn.Result)) job.CompletingHandler {
+func Handler(store state.Reader, lookup dmn.ProcessLookup, reg *Registry, sink func(dmn.Result)) job.CompletingHandler {
 	return dmn.DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (dmn.Evaluator, error) {
 		name := cp.Intern(detail.Connector)
 		client, ok := reg.Client(name)

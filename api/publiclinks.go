@@ -248,8 +248,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Off the loop: a started instance may run straight into a connector task, and
+	// that call must not hold the single writer (ADR-0157 step 6).
+	if runErr == nil && found {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())
