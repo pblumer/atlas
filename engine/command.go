@@ -48,6 +48,12 @@ type Command struct {
 	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's
 	// RetryDueDate (invariant I6). 0 means retry immediately (the pre-0111 behavior).
 	RetryBackoff int64
+	// LeaseFor is how long (in nanoseconds) a worker asked to hold a job it is activating
+	// (ADR-0007). It rides only on the non-hot-path IntentJobActivated command; like
+	// RetryBackoff, the handler reads the clock at command time and freezes
+	// now+LeaseFor into the job's LeaseExpiresAt, so a replay lands on the same instant
+	// (invariant I6).
+	LeaseFor int64
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

@@ -84,64 +84,88 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 // instance's variables at call time; otherwise it is a literal used verbatim. what
 // names the field for error messages.
 func restValue(taskID, what, raw string) (RestExpr, error) {
+	return connectorValue(taskID, "rest connector", what, raw)
+}
+
+// connectorValue is the shared literal-or-FEEL toggle for the HTTP-based connectors
+// (REST, SCIM): a value with a leading '=' is a FEEL expression compiled once at
+// deploy time (invariant I5) and evaluated over the instance's variables at call
+// time; otherwise it is a literal used verbatim. kind names the connector for
+// diagnostics ("rest connector"/"scim connector") and what names the field.
+func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
 		return RestExpr{Literal: raw}, nil
 	}
 	text := strings.TrimSpace(trimmed[1:])
 	if text == "" {
-		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q has an empty FEEL expression for %s", taskID, what)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
 	e, err := expr.CompileAuto(text)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q: %s: %w", taskID, what, err)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
 	return RestExpr{Expr: e}, nil
 }
 
 // restAuth reads a REST connector's authentication config from its extension.
-// authType selects the scheme; an unknown scheme is rejected, and a scheme that
-// needs a secret reference must name one (secrets live server-side, ADR-0041, so
-// the model always references rather than carries them).
 func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
-	t := strings.ToLower(strings.TrimSpace(c.AuthType))
+	// oauth2 is REST-only: the client-credentials grant needs a token endpoint and a
+	// client id, and only <atlas:restConnector> carries those attributes (ADR-0152).
+	// Every other scheme is shared with the SCIM connector via connectorAuth.
+	if strings.ToLower(strings.TrimSpace(c.AuthType)) == "oauth2" {
+		return restOAuth2(taskID, c)
+	}
+	return connectorAuth(taskID, "rest connector", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
+}
+
+// restOAuth2 builds a REST connector task's client-credentials config (ADR-0152):
+// the token endpoint and client id are model data; the client secret is a reference
+// (secrets live server-side, ADR-0041). Scope is optional.
+func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	if strings.TrimSpace(c.AuthTokenURL) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
+	}
+	if strings.TrimSpace(c.AuthClientID) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
+	}
+	if strings.TrimSpace(c.AuthSecret) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
+	}
+	return RestAuth{
+		Type:      "oauth2",
+		ClientID:  strings.TrimSpace(c.AuthClientID),
+		SecretRef: strings.TrimSpace(c.AuthSecret),
+		TokenURL:  strings.TrimSpace(c.AuthTokenURL),
+		Scope:     strings.TrimSpace(c.AuthScope),
+	}, nil
+}
+
+// connectorAuth builds an HTTP-based connector task's authentication config from its
+// authType and credential-reference fields, shared by REST and SCIM. authType selects
+// the scheme; an unknown scheme is rejected, and a scheme that needs a secret
+// reference must name one (secrets live server-side, ADR-0041, so the model always
+// references rather than carries them). kind names the connector for diagnostics.
+func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) (RestAuth, error) {
+	t := strings.ToLower(strings.TrimSpace(authType))
 	switch t {
 	case "", "none":
 		return RestAuth{}, nil
 	case "basic", "bearer", "apikey":
-		if strings.TrimSpace(c.AuthSecret) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses %s auth but names no secret reference", taskID, t)
+		if strings.TrimSpace(secret) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses %s auth but names no secret reference", kind, taskID, t)
 		}
-		if t == "apikey" && strings.TrimSpace(c.AuthApiKeyName) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses apiKey auth but names no header", taskID)
+		if t == "apikey" && strings.TrimSpace(apiKeyName) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses apiKey auth but names no header", kind, taskID)
 		}
 		return RestAuth{
 			Type:       t,
-			Username:   strings.TrimSpace(c.AuthUsername),
-			ApiKeyName: strings.TrimSpace(c.AuthApiKeyName),
-			SecretRef:  strings.TrimSpace(c.AuthSecret),
-		}, nil
-	case "oauth2":
-		// Client-credentials grant (ADR-0152): the token endpoint and client id are
-		// model data; the client secret is a reference. Scope is optional.
-		if strings.TrimSpace(c.AuthTokenURL) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
-		}
-		if strings.TrimSpace(c.AuthClientID) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
-		}
-		if strings.TrimSpace(c.AuthSecret) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
-		}
-		return RestAuth{
-			Type:      t,
-			ClientID:  strings.TrimSpace(c.AuthClientID),
-			SecretRef: strings.TrimSpace(c.AuthSecret),
-			TokenURL:  strings.TrimSpace(c.AuthTokenURL),
-			Scope:     strings.TrimSpace(c.AuthScope),
+			Username:   strings.TrimSpace(username),
+			ApiKeyName: strings.TrimSpace(apiKeyName),
+			SecretRef:  strings.TrimSpace(secret),
 		}, nil
 	default:
-		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q has an unsupported auth type %q", taskID, c.AuthType)
+		return RestAuth{}, fmt.Errorf("compiler: %s task %q has an unsupported auth type %q", kind, taskID, authType)
 	}
 }
 
@@ -1769,6 +1793,14 @@ type xmlServiceTask struct {
 	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
 	// absent.
 	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
+	// Scim, when present, marks this service task a SCIM 2.0 connector task
+	// (ADR-0153): it performs a resource operation against a model-authored SCIM
+	// service provider through the job path.
+	Scim *xmlScimConnector `xml:"extensionElements>scimConnector"`
+	// Ldap, when present, marks this service task a generic LDAP connector task
+	// (ADR-0154): it performs a directory operation against a model-authored LDAP
+	// server through the job path.
+	Ldap *xmlLdapConnector `xml:"extensionElements>ldapConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1844,6 +1876,56 @@ type xmlRestConnector struct {
 	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlScimConnector is the <atlas:scimConnector> extension on a service task
+// (ADR-0153). BaseUrl and Resource address the SCIM service provider and resource
+// type ("Users"/"Groups"); Operation selects the SCIM call; ResourceId (get/replace/
+// patch/delete) and Filter (search) carry literal-or-FEEL values; BodyVariable names
+// the process variable holding the create/replace/patch payload (blank → the whole
+// variable scope); ResultVariable receives the JSON response. Auth* name the scheme
+// and a server-side secret reference (never the value, ADR-0041), mirroring
+// xmlRestConnector.
+type xmlScimConnector struct {
+	BaseUrl        string `xml:"baseUrl,attr"`
+	Resource       string `xml:"resource,attr"`
+	Operation      string `xml:"operation,attr"`
+	ResourceId     string `xml:"resourceId,attr"`
+	Filter         string `xml:"filter,attr"`
+	BodyVariable   string `xml:"bodyVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	AuthType       string `xml:"authType,attr"`
+	AuthUsername   string `xml:"authUsername,attr"`
+	AuthApiKeyName string `xml:"authApiKeyName,attr"`
+	AuthSecret     string `xml:"authSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlLdapConnector is the <atlas:ldapConnector> extension on a service task
+// (ADR-0154). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
+// a reference, never a value, ADR-0041); startTLS upgrades a plain connection.
+// operation selects the directory call. dn is the target entry; baseDN/filter/scope
+// address a search; entryVariable names the add/modify attribute object; newPassword
+// is the modify-password value. resultVariable receives a search's entries. url/
+// bindDN/dn/baseDN/filter/newPassword carry literal-or-FEEL values.
+type xmlLdapConnector struct {
+	URL            string `xml:"url,attr"`
+	BindDN         string `xml:"bindDN,attr"`
+	BindSecret     string `xml:"bindSecret,attr"`
+	StartTLS       string `xml:"startTLS,attr"`
+	Operation      string `xml:"operation,attr"`
+	DN             string `xml:"dn,attr"`
+	BaseDN         string `xml:"baseDN,attr"`
+	Filter         string `xml:"filter,attr"`
+	Scope          string `xml:"scope,attr"`
+	EntryVariable  string `xml:"entryVariable,attr"`
+	NewPassword    string `xml:"newPassword,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

@@ -69,6 +69,175 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.WebScrape.Retries },
 		compile: compileWebScrapeConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Scim != nil },
+		retries: func(st xmlServiceTask) string { return st.Scim.Retries },
+		compile: compileScimConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Ldap != nil },
+		retries: func(st xmlServiceTask) string { return st.Ldap.Retries },
+		compile: compileLdapConnectorTask,
+	},
+}
+
+// ldapOps is the set of directory operations an LDAP connector task can author.
+var ldapOps = map[string]bool{"search": true, "add": true, "modify": true, "delete": true, "modify-password": true}
+
+// ldapScopes maps the authored search scope names to their canonical form. An empty
+// scope defaults to "sub" (whole subtree) at compile time.
+var ldapScopes = map[string]bool{"base": true, "one": true, "sub": true}
+
+// compileLdapConnectorTask compiles an <atlas:ldapConnector> task: it performs a
+// directory operation against a model-authored LDAP server via the job path
+// (ADR-0154), not an external service-task worker. The server URL and DNs live in the
+// model; the bind password never does (it is a secret reference, ADR-0041). A search
+// needs a base DN; add/modify/delete/modify-password need a target DN; add/modify take
+// an attribute variable; modify-password needs a new password.
+func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Ldap
+	if strings.TrimSpace(cn.URL) == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q needs a url (ldap://host or ldaps://host)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (search, add, modify, delete, or modify-password)", st.Id)
+	}
+	if !ldapOps[op] {
+		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want search, add, modify, delete, or modify-password)", st.Id, cn.Operation)
+	}
+	scope := strings.ToLower(strings.TrimSpace(cn.Scope))
+	if op == "search" {
+		if strings.TrimSpace(cn.BaseDN) == "" {
+			return 0, fmt.Errorf("compiler: ldap connector task %q operation search needs a baseDN", st.Id)
+		}
+		if scope == "" {
+			scope = "sub"
+		}
+		if !ldapScopes[scope] {
+			return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown scope %q (want base, one, or sub)", st.Id, cn.Scope)
+		}
+	} else {
+		scope = ""
+		if strings.TrimSpace(cn.DN) == "" {
+			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs a dn", st.Id, op)
+		}
+	}
+	switch op {
+	case "add", "modify":
+		if strings.TrimSpace(cn.EntryVariable) == "" {
+			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+		}
+	case "modify-password":
+		if strings.TrimSpace(cn.NewPassword) == "" {
+			return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
+		}
+	}
+	url, err := connectorValue(st.Id, "ldap connector", "url", cn.URL)
+	if err != nil {
+		return 0, err
+	}
+	bindDN, err := connectorValue(st.Id, "ldap connector", "bindDN", cn.BindDN)
+	if err != nil {
+		return 0, err
+	}
+	dn, err := connectorValue(st.Id, "ldap connector", "dn", cn.DN)
+	if err != nil {
+		return 0, err
+	}
+	baseDN, err := connectorValue(st.Id, "ldap connector", "baseDN", cn.BaseDN)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "ldap connector", "filter", cn.Filter)
+	if err != nil {
+		return 0, err
+	}
+	newPassword, err := connectorValue(st.Id, "ldap connector", "newPassword", cn.NewPassword)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddLdapConnectorTask(LdapConfig{
+		URL:         url,
+		BindDN:      bindDN,
+		BindSecret:  strings.TrimSpace(cn.BindSecret),
+		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:          op,
+		DN:          dn,
+		BaseDN:      baseDN,
+		Filter:      filter,
+		Scope:       scope,
+		EntryVar:    strings.TrimSpace(cn.EntryVariable),
+		NewPassword: newPassword,
+		ResultVar:   strings.TrimSpace(cn.ResultVariable),
+		Retries:     retries,
+	}), nil
+}
+
+// scimOps is the set of SCIM 2.0 operations a connector task can author. create/get/
+// replace/patch/delete/search map to the provider's POST/GET/PUT/PATCH/DELETE and a
+// filtered GET (RFC 7644 §3).
+var scimOps = map[string]bool{"create": true, "get": true, "replace": true, "patch": true, "delete": true, "search": true}
+
+// compileScimConnectorTask compiles an <atlas:scimConnector> task: it performs a SCIM
+// 2.0 resource operation against a model-authored service-provider endpoint via the
+// job path (ADR-0153), not an external service-task worker. Like REST the base URL
+// lives in the model and credentials never do; unlike REST it speaks SCIM (resource
+// paths, operations, filtered search). A get/replace/patch/delete needs a resource
+// id; the payload for create/replace/patch is a named body variable or the whole
+// instance scope.
+func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Scim
+	if strings.TrimSpace(cn.BaseUrl) == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs a baseUrl", st.Id)
+	}
+	if strings.TrimSpace(cn.Resource) == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs a resource (e.g. Users)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: scim connector task %q needs an operation (create, get, replace, patch, delete, or search)", st.Id)
+	}
+	if !scimOps[op] {
+		return 0, fmt.Errorf("compiler: scim connector task %q has an unknown operation %q (want create, get, replace, patch, delete, or search)", st.Id, cn.Operation)
+	}
+	if strings.TrimSpace(cn.ResourceId) == "" {
+		switch op {
+		case "get", "replace", "patch", "delete":
+			return 0, fmt.Errorf("compiler: scim connector task %q operation %q needs a resourceId", st.Id, op)
+		}
+	}
+	baseURL, err := connectorValue(st.Id, "scim connector", "baseUrl", cn.BaseUrl)
+	if err != nil {
+		return 0, err
+	}
+	resource, err := connectorValue(st.Id, "scim connector", "resource", cn.Resource)
+	if err != nil {
+		return 0, err
+	}
+	resourceID, err := connectorValue(st.Id, "scim connector", "resourceId", cn.ResourceId)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "scim connector", "filter", cn.Filter)
+	if err != nil {
+		return 0, err
+	}
+	auth, err := connectorAuth(st.Id, "scim connector", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddScimConnectorTask(ScimConfig{
+		BaseURL:    baseURL,
+		Resource:   resource,
+		Op:         op,
+		ResourceID: resourceID,
+		Filter:     filter,
+		BodyVar:    strings.TrimSpace(cn.BodyVariable),
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Auth:       auth,
+		Retries:    retries,
+	}), nil
 }
 
 // firstNonBlank returns the first value that is not empty once trimmed — the

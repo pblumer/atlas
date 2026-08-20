@@ -82,6 +82,45 @@
       ]
     },
     {
+      "name": "ScimConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "baseUrl", "type": "String", "isAttr": true },
+        { "name": "resource", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "resourceId", "type": "String", "isAttr": true },
+        { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "bodyVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "authType", "type": "String", "isAttr": true },
+        { "name": "authUsername", "type": "String", "isAttr": true },
+        { "name": "authApiKeyName", "type": "String", "isAttr": true },
+        { "name": "authSecret", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "LdapConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "url", "type": "String", "isAttr": true },
+        { "name": "bindDN", "type": "String", "isAttr": true },
+        { "name": "bindSecret", "type": "String", "isAttr": true },
+        { "name": "startTLS", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "dn", "type": "String", "isAttr": true },
+        { "name": "baseDN", "type": "String", "isAttr": true },
+        { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "scope", "type": "String", "isAttr": true },
+        { "name": "entryVariable", "type": "String", "isAttr": true },
+        { "name": "newPassword", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "MailConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

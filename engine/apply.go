@@ -198,11 +198,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTJob:
 		switch h.Intent {
-		case model.IntentJobCreated, model.IntentJobAssigned, model.IntentJobFailed:
+		case model.IntentJobCreated, model.IntentJobAssigned, model.IntentJobFailed,
+			model.IntentJobActivated, model.IntentJobTimedOut:
 			// Assigning re-puts the job with its new assignee; failing re-puts it with
-			// its new (decremented, worker-reported) retry count. PutJob's activatable-
-			// index write is idempotent and keyed on Retries > 0, so a still-retryable
-			// job stays open while an exhausted one parks off the index (ADR-0042/0061).
+			// its new (decremented, worker-reported) retry count; activating and timing
+			// out re-put it with its lease taken and released (ADR-0007). PutJob's
+			// activatable-index write is idempotent and keyed on the job having retries
+			// left and nothing holding it, so a still-retryable job stays open while an
+			// exhausted, backing-off or leased one parks off the index (ADR-0042/0061).
 			if err := tx.PutJob(h.Key, &v.job); err != nil {
 				return err
 			}

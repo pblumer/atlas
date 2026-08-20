@@ -243,6 +243,31 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **Job leases: a worker can hold work, and a dead worker's work comes back** (v0.2.0
+  programme F, [ADR-0007](docs/adr/0007-job-worker-protocol.md), amended): activating a job
+  takes it off the activatable index for a bounded time and records who holds it, so two
+  workers pulling the same type are not handed the same job. When the lease elapses the job
+  is offered again — which is what makes a worker crash recoverable with no operator
+  involved. `POST /api/v1/jobs/{key}/activate` grants one (409 while someone else holds it),
+  and the lease survives a restart: it is durable state rebuilt from the log, expiry timer
+  and all.
+
+  The mechanism is the one ADR-0111 already proved for retry backoff — hold the job off the
+  index, arm a timer, let the timer put it back — rather than a second one. Both holds can
+  sit on one job at once (a worker leases it, then fails it with a backoff), so each timer
+  releases **only its own hold** and the job returns when nothing holds it; otherwise a
+  lease expiring mid-backoff would hand out a job the worker asked to defer.
+
+  **Two findings came out of building it, both recorded in the ADR.** The lease is not
+  stored in `JobValue.Deadline` because that field already means the *user task due date* —
+  conflating them took every user task with a due date off the worker-visible index, which
+  is how it was noticed. And the type-keyed pull a worker really wants ("give me the next
+  `send-email` job") is **blocked, not merely unbuilt**: job type indices are interned per
+  compiled process while the activatable index is global, so `send-email` in one process and
+  `charge-card` in another both intern to index 16 and a subscriber would be handed the
+  wrong jobs. That needs a global job-type registry first. Leasing by key is unambiguous and
+  works today.
+
 - **Distributed traces, opt-in** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
   collector — `--trace-endpoint http://collector:4318`, or the standard
