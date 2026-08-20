@@ -111,7 +111,8 @@ func TestWorkersViewCountsCompletions(t *testing.T) {
 		t.Fatalf("pulled %d jobs, want 1", len(pulled.Jobs))
 	}
 	path := fmt.Sprintf("/api/v1/jobs/%d/complete", pulled.Jobs[0].JobKey)
-	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"worker":"mailer-1"}`, "application/json"); code != http.StatusOK {
+	done := fmt.Sprintf(`{"worker":"mailer-1","leaseToken":%d}`, pulled.Jobs[0].LeaseToken)
+	if code, body := serveInternal(t, srv, http.MethodPost, path, done, "application/json"); code != http.StatusOK {
 		t.Fatalf("complete: status=%d body=%s", code, body)
 	}
 
@@ -136,7 +137,7 @@ func TestWorkersViewCountsFailuresAndIncidents(t *testing.T) {
 	}
 	// Retries to zero raises the incident (ADR-0061).
 	path := fmt.Sprintf("/api/v1/jobs/%d/fail", pulled.Jobs[0].JobKey)
-	body := `{"retries":0,"message":"smtp unreachable","worker":"mailer-1"}`
+	body := fmt.Sprintf(`{"retries":0,"message":"smtp unreachable","worker":"mailer-1","leaseToken":%d}`, pulled.Jobs[0].LeaseToken)
 	if code, b := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusOK {
 		t.Fatalf("fail: status=%d body=%s", code, b)
 	}

@@ -700,6 +700,14 @@ func handleJobActivate(c *ProcessingContext) {
 	}
 	job.Assignee = c.cmd.Value.job.Assignee
 	job.LeaseExpiresAt = c.Now() + c.cmd.LeaseFor
+	// Every lease gets its own epoch, and it is the token the worker presents when it
+	// reports the outcome (ADR-0007's fencing item). Assignee alone cannot fence: two
+	// instances of one worker deployment share a name, so a report from a holder whose
+	// lease elapsed would be accepted while the second instance still holds the job.
+	// Incremented here, at command time, and frozen into the event — never recomputed
+	// on replay (I6), or a worker holding a lease across a restart would be fenced out
+	// of its own job.
+	job.LeaseEpoch++
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobActivated, *job)
 	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 		ProcessInstanceKey: job.ProcessInstanceKey,

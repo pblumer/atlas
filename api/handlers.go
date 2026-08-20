@@ -384,10 +384,13 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
-	// Worker names the worker reporting the failure, for attribution in the Workers
-	// view (ADR-0157). Optional and non-authoritative: it changes nothing about how
-	// the failure is handled.
-	Worker string `json:"worker"`
+	// Worker names the worker reporting the failure. With LeaseToken it is the
+	// protocol path (ADR-0007): the report is accepted only from the holder of the
+	// job's current lease, so a stale worker cannot burn a retry — or raise an
+	// incident — on work another worker is now doing. Omitting both leaves the
+	// operator path, which is unfenced by design.
+	Worker     string `json:"worker"`
+	LeaseToken uint64 `json:"leaseToken"`
 	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
 	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
 	RetryBackoff int64 `json:"retryBackoff"`
@@ -3317,8 +3320,9 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		found  bool
-		runErr error
+		found     bool
+		notHolder bool
+		runErr    error
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -3326,10 +3330,13 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		worker := strings.TrimSpace(req.Worker)
+		if worker != "" && !holdsLease(jv, worker, req.LeaseToken) {
+			notHolder = true
+			return
+		}
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
-		// Attribution only: a worker naming itself lets the Workers view show whose
-		// jobs are failing (ADR-0157). It changes nothing about the failure itself.
-		if worker := strings.TrimSpace(req.Worker); worker != "" {
+		if worker != "" {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.failed(worker, name)
 			}
@@ -3341,6 +3348,9 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(strings.TrimSpace(req.Worker))+" does not hold this job's current lease; it may have elapsed and been taken by another worker")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -3390,8 +3400,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// offered — because the audit trail is the whole point of this route: without it a
 	// completed step would carry no explanation of why a person overrode the model.
 	var payload struct {
-		Reason string `json:"reason"`
-		Worker string `json:"worker"`
+		Reason     string `json:"reason"`
+		Worker     string `json:"worker"`
+		LeaseToken uint64 `json:"leaseToken"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -3409,6 +3420,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	worker := strings.TrimSpace(payload.Worker)
 	if worker == "" && reason == "" {
 		httpapi.Error(w, http.StatusBadRequest, "reason is required: completing a job by hand is an operator intervention and is recorded with who did it and why")
+		return
+	}
+	// A name is not a claim the protocol can trust on its own, so a worker completion
+	// carries the token its lease was issued with (ADR-0007).
+	if worker != "" && payload.LeaseToken == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "leaseToken is required when completing as a worker; it is returned by the activation that leased the job")
 		return
 	}
 	// Who is intervening, for the audit trail (ADR-0159/0098): the authenticated
@@ -3431,7 +3448,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if worker != "" {
-			if jv.LeaseExpiresAt == 0 || jv.Assignee != worker {
+			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
 				return
 			}
@@ -3451,7 +3468,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
-			"worker "+strconv.Quote(worker)+" does not hold a lease on this job; lease it first, or complete it as an operator with a reason")
+			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or complete it as an operator with a reason")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -4015,15 +4032,20 @@ const maxJobsPerPull = 100
 // task* — the element instance's scope chain, so an activity-local input mapping
 // shadows the instance value exactly as it does for an in-process worker.
 type pulledJob struct {
-	JobKey             uint64         `json:"jobKey"`
-	Type               string         `json:"type"`
-	ProcessInstanceKey uint64         `json:"processInstanceKey"`
-	ElementInstanceKey uint64         `json:"elementInstanceKey"`
-	ProcessDefKey      uint64         `json:"processDefKey"`
-	ElementID          string         `json:"elementId"`
-	Retries            int32          `json:"retries"`
-	LeaseExpiresAt     int64          `json:"leaseExpiresAt"`
-	Variables          map[string]any `json:"variables"`
+	JobKey             uint64 `json:"jobKey"`
+	Type               string `json:"type"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey"`
+	ElementID          string `json:"elementId"`
+	Retries            int32  `json:"retries"`
+	LeaseExpiresAt     int64  `json:"leaseExpiresAt"`
+	// LeaseToken fences this lease: the worker presents it when it reports the
+	// outcome, and a report carrying a token the job has moved past is refused
+	// (ADR-0007). It is what makes a second instance of the same worker deployment
+	// distinguishable from the first, which the worker id alone cannot do.
+	LeaseToken uint64         `json:"leaseToken"`
+	Variables  map[string]any `json:"variables"`
 }
 
 // handleActivateJobsByType is the type-keyed pull ADR-0007 designed and its
@@ -4143,6 +4165,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// holdsLease reports whether a worker's report may be trusted: the job must be
+// leased right now, to that worker, under the very lease the token names.
+//
+// The token is what the worker id cannot supply. Two instances of one worker
+// deployment share a name, so when the first one's lease elapses and the second
+// takes the job, a late report from the first still presents the right *name*.
+// The epoch moves with every lease, so the stale report names a lease the job has
+// left behind and is refused (ADR-0007's fencing item).
+func holdsLease(jv *model.JobValue, worker string, token uint64) bool {
+	return jv.LeaseExpiresAt != 0 && jv.Assignee == worker && jv.LeaseEpoch == token && token != 0
+}
+
 // pulledJob reads one leased job back out of state, with the element it sits on
 // and the variables visible there. It reads the lease deadline back rather than
 // recomputing it: the engine froze that value from its own clock, and it is what
@@ -4159,6 +4193,7 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 		ElementInstanceKey: jv.ElementInstanceKey,
 		Retries:            jv.Retries,
 		LeaseExpiresAt:     jv.LeaseExpiresAt,
+		LeaseToken:         jv.LeaseEpoch,
 		Variables:          map[string]any{},
 	}
 	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {

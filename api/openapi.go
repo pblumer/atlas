@@ -283,15 +283,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job — as its lease-holding worker (\"worker\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
-			req: jsonBody("Either the holding worker id (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
-				"worker": tString(), "reason": tString(), "variables": tObject(),
+			summary: "Complete a job — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
+			req: jsonBody("Either the holding worker id with the lease token its activation returned (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
+				"worker": tString(), "leaseToken": tInteger(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
 			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
-			req: jsonBody("Retries left and a failure message", schemaObj(map[string]any{
-				"retries": tInteger(), "message": tString(),
+			req: jsonBody("Retries left and a failure message; a worker also presents its id and the lease token its activation returned", schemaObj(map[string]any{
+				"retries": tInteger(), "message": tString(), "worker": tString(), "leaseToken": tInteger(),
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
