@@ -3645,10 +3645,12 @@ async function viewWorkers() {
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
-    <div class="card wk-card" id="wk-workers"></div>`;
+    <div class="card wk-card" id="wk-workers"></div>
+    <div class="card wk-card" id="wk-supervised" hidden></div>`;
 
   const types = document.getElementById("wk-types");
   const workers = document.getElementById("wk-workers");
+  const supervised = document.getElementById("wk-supervised");
   let showAllTypes = false;
 
   // A worker is counted as pulling a type while it holds one in flight, or while it
@@ -3766,6 +3768,54 @@ async function viewWorkers() {
         and name the job type it serves.</p>`}
       <p class="wk-note">Counters are since this server started and are not restored on restart.
         <b>In flight</b> is what a worker holds a lease on right now.</p>`;
+
+    // Supervised workers: the ones Atlas launched itself, and the only ones it can
+    // restart or show logs for. A worker running in someone else's cluster gets the
+    // counters above and nothing more — the view says so rather than offering a
+    // button that would silently do nothing.
+    const sup = (data && data.supervised) || [];
+    if (sup.length) {
+      supervised.hidden = false;
+      supervised.innerHTML = `
+        <div class="wk-head"><b>Supervised by this server</b>
+          <span class="muted small">${sup.length} process${sup.length === 1 ? "" : "es"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Worker</th><th>Serves</th><th>State</th><th class="wk-num">PID</th>
+            <th class="wk-num">Starts</th><th></th></tr></thead>
+          <tbody>${sup.map((c) => `<tr class="${c.state === "failed" ? "wk-stuck" : ""}">
+            <td><b>${esc(c.id)}</b>${c.lastExit
+              ? `<span class="wk-why">${esc(c.lastExit)}</span>` : ""}</td>
+            <td>${(c.kinds || []).map((k) => `<span class="pill-kv">${esc(k)}</span>`).join(" ")}</td>
+            <td><span class="pill ${c.state === "running" ? "ok" : c.state === "failed" ? "err" : "warn"}">
+              <span class="dot"></span>${esc(c.state)}</span></td>
+            <td class="wk-num">${c.pid || "&mdash;"}</td>
+            <td class="wk-num">${c.starts}</td>
+            <td class="row-actions">
+              ${(c.log || []).length ? `<button class="btn neutral sm" data-log="${esc(c.id)}">Log</button>` : ""}
+              <button class="btn neutral sm" data-restart="${esc(c.id)}">&#8635; Restart</button></td>
+          </tr>${(c.log || []).length ? `<tr class="wk-log-row" data-log-for="${esc(c.id)}" hidden>
+            <td colspan="6"><pre class="wk-log">${esc((c.log || []).join("\n"))}</pre></td></tr>` : ""}`).join("")}
+          </tbody></table>`;
+      for (const b of supervised.querySelectorAll("[data-restart]")) {
+        b.onclick = async () => {
+          b.disabled = true;
+          try {
+            await api("POST", `/api/v1/workers/${encodeURIComponent(b.dataset.restart)}/restart`);
+            toast("Restarting " + b.dataset.restart);
+          } catch (e) { toast(e.message, "err"); }
+          setTimeout(load, 400);
+        };
+      }
+      for (const b of supervised.querySelectorAll("[data-log]")) {
+        b.onclick = () => {
+          const row = supervised.querySelector(`[data-log-for="${CSS.escape(b.dataset.log)}"]`);
+          if (row) row.hidden = !row.hidden;
+        };
+      }
+    } else {
+      supervised.hidden = true;
+      supervised.innerHTML = "";
+    }
 
     const toggle = document.getElementById("wk-toggle-all");
     if (toggle) {

@@ -191,3 +191,41 @@ func TestCmdExecSurfacesTheCommandsError(t *testing.T) {
 		t.Errorf("error = %v, want it to carry the command's stderr", err)
 	}
 }
+
+// TestWorkerSurvivesAJobTypeThatIsNotDeployedYet is the failure a supervised worker
+// hits first: it starts with the server, and the process using its job type may not
+// be deployed yet. The engine answers 404 for a type it has never seen — the honest
+// answer, and what makes a typo visible — so the worker must treat it as "not yet"
+// and keep polling rather than exiting.
+func TestWorkerSurvivesAJobTypeThatIsNotDeployedYet(t *testing.T) {
+	ts := liveAtlas(t, `{}`)
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "early", Wait: 50 * time.Millisecond, Retry: 10 * time.Millisecond,
+		Handlers: map[string]worker.Exec{
+			"never-deployed": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) {
+				return nil, nil
+			}),
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+
+	select {
+	case err := <-done:
+		t.Fatalf("the worker exited on an unknown job type instead of waiting for it: %v", err)
+	case <-time.After(400 * time.Millisecond):
+		// Still polling, which is the point.
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v after cancellation, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the worker did not stop when its context was cancelled")
+	}
+}

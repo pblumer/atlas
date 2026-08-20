@@ -228,7 +228,17 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	if types == nil {
 		types = []jobTypeStat{}
 	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"workers": list, "types": types})
+	// Supervised workers are reported separately from the ones seen pulling: an
+	// operator can restart and read the logs of a process Atlas launched, and can do
+	// neither for one running in someone else's cluster. The view says which is
+	// which rather than offering a button that silently does nothing.
+	supervised := []childStatus{}
+	if s.supervisor != nil {
+		supervised = s.supervisor.list()
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{
+		"workers": list, "types": types, "supervised": supervised,
+	})
 }
 
 // incidentsByJobType counts unresolved incidents per job-type index, so a stalled
@@ -310,4 +320,25 @@ func serviceTaskJobTypes(cp *compiler.CompiledProcess) []int32 {
 		}
 	}
 	return out
+}
+
+// handleRestartWorker cycles one supervised worker. It names a worker the operator
+// already configured on the command line — the request cannot introduce one, or
+// name a command — so the whole of its authority is "turn that one off and on".
+//
+// The restart goes through the supervisor's ordinary run loop, so a button press
+// and a crash take the identical path: there is no second way for a worker to come
+// up that could drift from the first.
+func (s *Server) handleRestartWorker(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if s.supervisor == nil {
+		httpapi.Error(w, http.StatusConflict,
+			"this server supervises no workers; a worker running elsewhere is restarted where it runs")
+		return
+	}
+	if err := s.supervisor.restart(id); err != nil {
+		httpapi.Error(w, http.StatusNotFound, err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{"id": id, "restarting": true})
 }

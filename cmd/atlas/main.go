@@ -196,6 +196,8 @@ func runServe(args []string) error {
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
+	supervise := superviseFlag{}
+	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -214,7 +216,7 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -263,7 +265,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -410,6 +412,13 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		}
 		apiOpts = append(apiOpts, api.WithScriptWorker(lang.JobType, ex))
 	}
+	// Workers this server runs itself (ADR-0157 step 7). The configuration comes from
+	// this command line and from nowhere else: the API can restart one of these, and
+	// can neither introduce a worker nor name a command.
+	if len(supervise) > 0 {
+		specs, handles := supervise.build()
+		apiOpts = append(apiOpts, api.WithSupervisedWorkers(selfURL(addr), specs, handles))
+	}
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
 		return err
@@ -489,6 +498,76 @@ func runMCP(args []string) error {
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// superviseFlag collects repeated --supervise id=type=command entries: which worker
+// processes this server should run itself, and what each one works.
+//
+// Repeating an id adds another type to that worker, so one process can serve several
+// queues. The value is parsed here, on the server's own command line, and the parsed
+// result is all the API ever sees — nothing a request carries can reach it.
+type superviseFlag []superviseEntry
+
+type superviseEntry struct {
+	id      string
+	handles []string // "type=command", exactly as atlas worker takes them
+}
+
+func (f superviseFlag) String() string {
+	ids := make([]string, 0, len(f))
+	for _, e := range f {
+		ids = append(ids, e.id)
+	}
+	return strings.Join(ids, ",")
+}
+
+func (f *superviseFlag) Set(v string) error {
+	id, handle, ok := strings.Cut(v, "=")
+	id, handle = strings.TrimSpace(id), strings.TrimSpace(handle)
+	jobType, command, hasCommand := strings.Cut(handle, "=")
+	if !ok || id == "" || !hasCommand || strings.TrimSpace(jobType) == "" || strings.TrimSpace(command) == "" {
+		return fmt.Errorf("want id=type=command, got %q", v)
+	}
+	for i := range *f {
+		if (*f)[i].id == id {
+			(*f)[i].handles = append((*f)[i].handles, handle)
+			return nil
+		}
+	}
+	*f = append(*f, superviseEntry{id: id, handles: []string{handle}})
+	return nil
+}
+
+// build turns the parsed entries into what the server takes: one spec per worker
+// and its handles alongside, in the same order.
+func (f superviseFlag) build() ([]api.SuperviseSpec, [][]string) {
+	specs := make([]api.SuperviseSpec, 0, len(f))
+	handles := make([][]string, 0, len(f))
+	for _, e := range f {
+		kinds := make([]string, 0, len(e.handles))
+		for _, h := range e.handles {
+			jobType, _, _ := strings.Cut(h, "=")
+			kinds = append(kinds, jobType)
+		}
+		specs = append(specs, api.SuperviseSpec{ID: e.id, Kinds: kinds})
+		handles = append(handles, e.handles)
+	}
+	return specs, handles
+}
+
+// selfURL is the address a supervised worker is told to work for. It is this
+// server's own listen address, with a bare port meaning loopback — a child talks to
+// its parent, not out across the network.
+func selfURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://127.0.0.1:8080"
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 // handleFlag collects repeated --handle type=command pairs: what this worker

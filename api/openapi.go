@@ -267,6 +267,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"POST", "/api/v1/workers/{id}/restart", s.handleRestartWorker, apiOp{
+			summary: "Restart a worker process this server supervises (ADR-0157); 409 when it supervises none", tag: "Incidents",
+			resp: jsonBody("The worker that is restarting", tObject())}},
 		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
 			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents",
 			resp: jsonBody("Workers and job-type queues", tObject())}},

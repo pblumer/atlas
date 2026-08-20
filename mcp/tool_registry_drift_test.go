@@ -119,10 +119,11 @@ var mcpOmittedRoutes = map[string]string{
 	// Leasing is the external worker protocol's own surface (ADR-0007), not an agent
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
 	// pointed at, and never needs to hold one against other workers.
-	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
-	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
-	"GET /api/v1/checkpoints":          "admin recovery-checkpoint status, not an agent action",
-	"POST /api/v1/checkpoints":         "admin on-demand checkpoint/compaction, not an agent action",
+	"POST /api/v1/jobs/{key}/activate":  "worker-protocol lease, not an agent action",
+	"POST /api/v1/jobs/activate":        "worker-protocol lease (type-keyed pull), not an agent action",
+	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
+	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
+	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like connectors — an agent reads the resolution via atlas_call_activities but

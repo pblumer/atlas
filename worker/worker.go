@@ -29,11 +29,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
+
+	"github.com/pblumer/atlas/logging"
 )
 
 // Job is one leased job as the engine hands it over.
@@ -79,6 +83,10 @@ type Options struct {
 	Lease time.Duration
 	// Wait is how long a poll may block waiting for work before coming back empty.
 	Wait time.Duration
+	// Retry is how long to wait after a failed poll before trying again. A worker
+	// must not exit because the server was restarting, or because the process using
+	// its job type is not deployed yet — both are ordinary and both resolve.
+	Retry time.Duration
 	// MaxJobs is how many jobs one poll may lease. Keep it to what this worker can
 	// actually run: leased work nobody is running is work nobody else can take either.
 	MaxJobs int
@@ -93,6 +101,7 @@ const (
 	DefaultLease   = 5 * time.Minute
 	DefaultWait    = 30 * time.Second
 	DefaultMaxJobs = 1
+	DefaultRetry   = 5 * time.Second
 )
 
 // Worker leases jobs of the types it handles and reports what happened. Build one
@@ -117,6 +126,9 @@ func New(opts Options) *Worker {
 	if opts.MaxJobs <= 0 {
 		opts.MaxJobs = DefaultMaxJobs
 	}
+	if opts.Retry <= 0 {
+		opts.Retry = DefaultRetry
+	}
 	w := &Worker{opts: opts, http: opts.HTTP}
 	if w.http == nil {
 		// One request may block for a whole poll and is followed by the work itself, so
@@ -136,28 +148,35 @@ func (w *Worker) Run(ctx context.Context) error {
 	if len(w.types) == 0 {
 		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
 	}
-	errs := make(chan error, len(w.types))
+	var wg sync.WaitGroup
 	for _, jobType := range w.types {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for ctx.Err() == nil {
-				if err := w.pollOnce(ctx, jobType); err != nil {
-					if ctx.Err() != nil {
-						break // shutting down; the failure is the cancellation
-					}
-					errs <- err
-					return
+				err := w.pollOnce(ctx, jobType)
+				if err == nil || ctx.Err() != nil {
+					continue
+				}
+				// A failed poll is not a reason to exit. The server may be restarting,
+				// or the process that uses this job type may not be deployed yet — the
+				// engine answers 404 for a type it has never seen, which is the honest
+				// answer and what makes a typo visible, and both resolve on their own.
+				// So it is logged and retried; only cancellation ends the loop. A
+				// supervised worker that exited here would flap against its supervisor
+				// for as long as the deploy took.
+				logging.Warn(logging.WorkerPollFailed, "a job poll failed; retrying",
+					slog.String("worker", w.opts.ID), slog.String("type", jobType),
+					slog.String("error", err.Error()))
+				select {
+				case <-ctx.Done():
+				case <-time.After(w.opts.Retry):
 				}
 			}
-			errs <- nil
 		}()
 	}
-	var first error
-	for range w.types {
-		if err := <-errs; err != nil && first == nil {
-			first = err
-		}
-	}
-	return first
+	wg.Wait()
+	return nil
 }
 
 // RunOnce polls every handled type once and works whatever it is given. It is what

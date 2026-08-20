@@ -190,7 +190,16 @@ type Server struct {
 	jobWaiters *jobWaiters
 	// driveMu serializes job driving, so two callers never claim the same job and
 	// work it twice. See [Server.drive].
-	driveMu          sync.Mutex
+	driveMu sync.Mutex
+	// supervisor runs the worker processes Atlas launches itself (ADR-0157 step 7).
+	// nil unless the operator asked for them on the command line — never from a
+	// request, which is what keeps this from being a spawn endpoint.
+	supervisor *supervisor
+	// SuperviseSpecs, superviseHandles and superviseURL are what to run, read off
+	// the server's own command line and held in the same order.
+	SuperviseSpecs   []SuperviseSpec
+	superviseHandles [][]string
+	superviseURL     string
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -1082,6 +1091,21 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.exporter = exp
 	}
 
+	// Supervised workers, if the operator asked for any on the command line. They
+	// start before traffic is served, and stop with the server: the same `atlas
+	// worker` an operator could run by hand, just launched here (ADR-0157 step 7).
+	if len(s.SuperviseSpecs) > 0 {
+		s.supervisor = newSupervisor(quit)
+		for i, spec := range s.SuperviseSpecs {
+			args := []string{"worker", "--server", s.superviseURL, "--id", spec.ID}
+			for _, h := range s.superviseHandles[i] {
+				args = append(args, "--handle", h)
+			}
+			s.supervisor.add(spec, args)
+		}
+		s.supervisor.start()
+	}
+
 	s.wg.Add(3)
 	go s.loop()
 	go s.timerScheduler(time.Second)
@@ -1547,6 +1571,21 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 		return d.cp
 	}
 	return nil
+}
+
+// WithSupervisedWorkers asks the server to run these workers itself: one child
+// process per entry, restarted while the server lives (ADR-0157 step 7).
+//
+// It is an Option, so it comes from the process's own command line and from
+// nowhere else. Nothing a request carries can add, change or name a supervised
+// worker's command — the API can restart one that is already configured, and can
+// do nothing else to it.
+func WithSupervisedWorkers(serverURL string, specs []SuperviseSpec, handles [][]string) Option {
+	return func(s *Server) {
+		s.superviseURL = serverURL
+		s.SuperviseSpecs = specs
+		s.superviseHandles = handles
+	}
 }
 
 // drive runs the engine and its in-process job handlers until nothing is left to
