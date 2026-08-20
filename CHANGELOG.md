@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **A parked connector task now says what is actually wrong**
-  ([ADR-0155](docs/adr/0155-a-connector-reference-that-explains-itself.md)): a mail task
+  ([ADR-0158](docs/adr/0158-a-connector-reference-that-explains-itself.md)): a mail task
   reported `no connector registered as "Patrick Blumer"` about a connector that was
   configured, enabled and visible in the list. The registry rebuild skips connectors it
   cannot build — correctly, so they never send wrongly — but threw the reason away, so
@@ -27,13 +27,13 @@ _Changed_ / _Removed_ for each version.
   connector row in Organization › Connectors shows it before a token parks at all.
   Behind it, the five identical per-kind registries became one.
 
-- **A deploy warns about connector references that will not resolve** (ADR-0155): a
+- **A deploy warns about connector references that will not resolve** (ADR-0158): a
   model naming a connector that does not exist — or exists as another kind, or cannot
   be built — used to deploy silently and fail at the first instance. The deploy response
   now carries warnings and the Modeler shows them beside the success. It stays a
   warning: deploying a model before its connectors are provisioned is legitimate.
 
-- **An incident can be fixed, not just retried** (ADR-0155): every incident row — live
+- **An incident can be fixed, not just retried** (ADR-0158): every incident row — live
   view, replay, incidents table — gains **✎ Fix variables…**, which opens the instance's
   variables, writes them through the audited operator override (ADR-0098) and optionally
   resolves in the same step. A retry alone repeats whatever failed, and until now the
@@ -52,6 +52,20 @@ _Changed_ / _Removed_ for each version.
   resolution event announces, so a maintained number would drift while a count cannot.
   Resolving from the incidents table updates the badge at once instead of waiting out
   the poll.
+
+- **The Secrets panel says what a value has to be**
+  ([ADR-0155](docs/adr/0155-secret-shape-hints.md)): a vault secret is a name and an
+  opaque string, and because it is write-only nobody can look at a stored value
+  afterwards and say what is wrong with it — so the form now says it beforehand. The
+  moment a name matches a connector's token reference, the panel names the connector
+  that resolves it and the shape it needs, offers an insertable skeleton for the JSON
+  credential bundles, and refuses a value that cannot be one: a bare Google refresh
+  token pasted where the bundle belongs is caught at the field, with the connector
+  named, instead of surfacing later as `invalid character '/' after top-level value`.
+  Each secret's row also says which connectors use it, so a rotation is no longer done
+  blind. Rotation itself moved out of a one-line browser prompt — the wrong instrument
+  for a multi-line bundle, and structurally unable to carry an explanation — into an
+  inline panel with a real text field.
 
 - **A mail task you can run before you own a mail server**
   ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail

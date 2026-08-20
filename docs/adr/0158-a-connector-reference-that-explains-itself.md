@@ -1,4 +1,4 @@
-# ADR-0155: A connector reference that explains itself — and an incident you can actually resolve
+# ADR-0158: A connector reference that explains itself — and an incident you can actually resolve
 
 - **Status:** Accepted
 - **Date:** 2026-08-20

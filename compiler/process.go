@@ -1223,7 +1223,7 @@ type CallActivityRef struct {
 // the name it asks for. A model refers to a connector by name only and never carries
 // an endpoint or a secret (ADR-0036/0041), so nothing inside the model can tell whether
 // that name is configured anywhere — which is exactly why the references have to be
-// enumerable from outside, where the connector store is (ADR-0155).
+// enumerable from outside, where the connector store is (ADR-0158).
 type ConnectorRef struct {
 	ElementId string
 	JobType   int32

@@ -11,6 +11,7 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow } from "./incidents.js";
+import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
 
@@ -1013,13 +1014,23 @@ async function viewConsoleOrg() {
   } catch (e) {
     secretsState = /admin/i.test(e.message) ? "denied" : "unconfigured";
   }
-  const secretRow = (c) => `<tr data-name="${esc(c.name)}">
+  // A secret's value is write-only, so the one thing the list can still say about it
+  // is what it is *for* — which connector resolves this reference, and therefore what
+  // shape the value has to have. Without that a rotation is done blind (ADR-0155).
+  const secretRow = (c) => {
+    const users = (connectors || []).filter((k) => k.credentialsRef === c.name);
+    const usedBy = users.length
+      ? users.map((k) => `<span class="chip">${esc(k.name)}</span> <span class="muted">${esc(k.kind)}${k.provider ? " · " + esc(k.provider) : ""}</span>`).join(", ")
+      : `<span class="muted">not referenced by any connector</span>`;
+    return `<tr data-name="${esc(c.name)}">
       <td><span class="chip">${esc(c.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:3px">used by ${usedBy}</div>
         <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-sact="set">Set value</button>
         <button class="btn ghost danger" data-sact="delete">Delete</button>
       </td></tr>`;
+  };
   const secretsCard = secretsState === "denied"
     ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">Managing secrets requires the admin role.</p></div>`
     : secretsState === "unconfigured"
@@ -1101,7 +1112,7 @@ async function viewConsoleOrg() {
   // Connector management is wired before the (admin-gated) user handlers so it
   // works even when the user roster is denied to a non-admin.
   wireConnectorManagement(connectors);
-  wireSecretsManagement(secrets, secretsState);
+  wireSecretsManagement(secrets, secretsState, connectors);
   wireAppearance();
 
   if (denied) return;
@@ -2554,7 +2565,7 @@ async function toggleInboundSubs(row, connectorId) {
 // have no enable/disable, and are write-only — the value is never read back, so a set
 // is an idempotent PUT and the UI only ever sends values, never displays them. When
 // the vault is denied (non-admin) or unconfigured there is nothing to wire.
-function wireSecretsManagement(secrets, state) {
+function wireSecretsManagement(secrets, state, connectors) {
   if (state !== "ok") return;
   const reload = () => viewConsoleOrg();
   const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
@@ -2564,18 +2575,49 @@ function wireSecretsManagement(secrets, state) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="secret-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk_token" required/></label>
-        <label class="field" style="margin:0"><span>Value</span><input name="value" type="password" placeholder="••••••••" required/></label>
-        <button class="btn" type="submit">Save</button></form>`;
-      slot.querySelector("form").addEventListener("submit", async (e) => {
+      slot.innerHTML = `<form class="secret-form" style="margin:4px 0 14px">
+        <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
+          <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk_token" required/></label>
+          <div id="secret-value-slot">${secretValueFieldHTML(null)}</div>
+          <button class="btn" type="submit">Save</button>
+        </div>
+        <div id="secret-hint-slot"></div>
+        <p class="secret-error" hidden></p></form>`;
+      const form = slot.querySelector("form");
+      const nameIn = form.querySelector('[name="name"]');
+      const valueSlot = form.querySelector("#secret-value-slot");
+      const hintSlot = form.querySelector("#secret-hint-slot");
+      const err = form.querySelector(".secret-error");
+      let shape = null;
+      // The name *is* the binding: the moment it matches a connector's token
+      // reference, the form knows what the value has to be and says so — before it
+      // is typed, rather than after it has failed.
+      const syncShape = () => {
+        const next = secretShapeFor(connectors, nameIn.value.trim());
+        const kindChanged = Boolean(next && next.skeleton) !== Boolean(shape && shape.skeleton);
+        shape = next;
+        hintSlot.innerHTML = nameIn.value.trim() ? secretHintHTML(shape) : "";
+        if (kindChanged) valueSlot.innerHTML = secretValueFieldHTML(shape);
+      };
+      nameIn.addEventListener("input", syncShape);
+      form.addEventListener("click", (e) => {
+        if (!e.target.closest("[data-fill]") || !shape) return;
+        form.querySelector('[name="value"]').value = JSON.stringify(shape.skeleton, null, 2);
+      });
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
+        const name = (f.get("name") || "").trim();
+        const value = f.get("value") || "";
+        const problem = checkSecretValue(secretShapeFor(connectors, name), value);
+        err.hidden = !problem;
+        err.textContent = problem;
+        if (problem) return;
         try {
-          await put((f.get("name") || "").trim(), f.get("value") || "");
+          await put(name, value);
           toast("Secret saved", "ok");
           reload();
-        } catch (err) { toast("Could not save secret: " + err.message, "err"); }
+        } catch (e2) { toast("Could not save secret: " + e2.message, "err"); }
       });
     });
   }
@@ -2588,10 +2630,8 @@ function wireSecretsManagement(secrets, state) {
       if (!name) return;
       try {
         if (btn.dataset.sact === "set") {
-          const value = window.prompt(`New value for "${name}" (stored encrypted; the old value is replaced)`);
-          if (value == null || value === "") return;
-          await put(name, value);
-          toast("Secret updated", "ok");
+          toggleSetSecret(btn.closest("tr"), name, connectors, put, reload);
+          return;
         } else if (btn.dataset.sact === "delete") {
           if (!window.confirm(`Delete secret "${name}"? A connector referencing it will resolve to no token.`)) return;
           await api("DELETE", "/api/v1/secrets/" + encodeURIComponent(name));
@@ -2600,6 +2640,62 @@ function wireSecretsManagement(secrets, state) {
       } catch (err) { toast("Secret update failed: " + err.message, "err"); }
     });
   }
+}
+
+// toggleSetSecret expands (or collapses) an inline panel under a secret's row for
+// rotating its value (ADR-0155). It replaced a one-line window.prompt, which was the
+// wrong instrument for the job in two ways: a JSON credential bundle is several lines
+// that have to be pasted and read back, and a prompt can say nothing about what the
+// value is supposed to be — so the field that most needed an explanation was the one
+// field in the console that could not carry one.
+function toggleSetSecret(row, name, connectors, put, reload) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("secret-set-row")) {
+    existing.remove();
+    return;
+  }
+  const shape = secretShapeFor(connectors, name);
+  const panel = document.createElement("tr");
+  panel.className = "secret-set-row";
+  panel.innerHTML = `<td colspan="2" style="background:var(--surface); padding:12px 18px">
+    <form class="secret-form">
+      ${secretHintHTML(shape)}
+      ${secretValueFieldHTML(shape)}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Replaces the stored value for
+        <span class="chip">${esc(name)}</span>. It is sealed at rest and never shown again.</p>
+      <p class="secret-error" hidden></p>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" type="submit">Save value</button>
+        <button class="btn neutral" type="button" data-cancel>Cancel</button>
+      </div>
+    </form></td>`;
+  row.after(panel);
+  const form = panel.querySelector("form");
+  const err = form.querySelector(".secret-error");
+  form.querySelector("[data-cancel]").addEventListener("click", () => panel.remove());
+  const fill = form.querySelector("[data-fill]");
+  if (fill) {
+    fill.addEventListener("click", () => {
+      form.querySelector('[name="value"]').value = JSON.stringify(shape.skeleton, null, 2);
+    });
+  }
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const value = new FormData(e.target).get("value") || "";
+    const problem = checkSecretValue(shape, value);
+    err.hidden = !problem;
+    err.textContent = problem;
+    if (problem) return;
+    try {
+      await put(name, value);
+      toast("Secret updated", "ok");
+      reload();
+    } catch (e2) {
+      err.hidden = false;
+      err.textContent = e2.message;
+    }
+  });
+  form.querySelector('[name="value"]').focus();
 }
 
 // editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
@@ -3436,7 +3532,7 @@ async function viewIncidents() {
     const incident = current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
     if (!incident) return;
     // Correcting the variables first is the other half of resolving: a retry alone
-    // repeats whatever failed (ADR-0155).
+    // repeats whatever failed (ADR-0158).
     const changed = btn.dataset.fix !== undefined
       ? !!(await fixVariablesFlow({ api, toast, incident }))
       : await resolveIncidentFlow({ api, toast, incident });

@@ -47,12 +47,12 @@ type managedConnectorKind struct {
 	// registry — disabled, missing an endpoint or credential, of another kind — and
 	// false when it is usable or unknown. It is what lets the connector list say a
 	// record is stored but not working, instead of leaving that to be discovered by a
-	// token parking on it (ADR-0155).
+	// token parking on it (ADR-0158).
 	problem func(s *Server, name string) (string, bool)
 	// jobTypes are the reserved compiler job-type indices whose tasks resolve a
 	// connector of this kind. They are what turns a model's connector reference back
 	// into "a connector of kind X is required here", so a deploy can check the name
-	// against the store instead of leaving the mismatch to the first token (ADR-0155).
+	// against the store instead of leaving the mismatch to the first token (ADR-0158).
 	jobTypes []int32
 }
 

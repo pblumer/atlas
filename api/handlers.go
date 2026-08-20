@@ -51,7 +51,7 @@ type deployResp struct {
 	// connector reference naming something that is not configured, or is configured
 	// as another kind, or cannot be built. The deploy succeeds anyway (a model is
 	// routinely deployed before its connectors exist), but the author is told now
-	// rather than by the first token to park (ADR-0155).
+	// rather than by the first token to park (ADR-0158).
 	Warnings []string `json:"warnings,omitempty"`
 }
 

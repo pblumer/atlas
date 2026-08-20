@@ -93,7 +93,7 @@ type Client interface {
 // It is the shared [clientreg.Registry], which also carries *why* a configured
 // connector is missing from it — the difference between "never configured" and
 // "configured and broken", which is what a parked token has to be able to say
-// (ADR-0155).
+// (ADR-0158).
 type Registry = clientreg.Registry[Client]
 
 // NewRegistry creates an empty connector registry.

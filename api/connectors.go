@@ -103,7 +103,7 @@ func envTemisClients() map[string]temis.Client {
 // its tasks park rather than run wrongly (ADR-0093/0141), but the reason used to be
 // dropped at the point of skipping — leaving a parked token to report "no connector
 // registered as X", which reads as *you never configured it*. Each builder below now
-// records the reason instead, and the registry carries it to the incident (ADR-0155).
+// records the reason instead, and the registry carries it to the incident (ADR-0158).
 //
 // The strings are read by an operator in an incident message and in the connector
 // list, so they say what to go and fix, not what the code decided.
@@ -236,7 +236,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
 			// the incident now says which of the provider's requirements is unmet
-			// instead of claiming the connector does not exist (ADR-0155).
+			// instead of claiming the connector does not exist (ADR-0158).
 			problems[c.Name] = err.Error()
 			continue
 		}
@@ -388,7 +388,7 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 
 // connectorView is a connector record as the operator UI reads it: the stored record
 // plus what the runtime made of it. Problem is why its client could not be built —
-// empty when the connector is usable — and is derived on read, never stored (ADR-0155).
+// empty when the connector is usable — and is derived on read, never stored (ADR-0158).
 type connectorView struct {
 	connector
 	Problem string `json:"problem,omitempty"`
@@ -840,7 +840,7 @@ func connectorTestDetail(provider, endpoint, to string) string {
 // connectors are provisioned, and to an environment where they are provisioned later —
 // refusing would be wrong, and staying silent is how a model reaches production
 // referring to a connector nobody ever created. So it warns, at the moment somebody is
-// looking, instead of leaving the first token to discover it (ADR-0155).
+// looking, instead of leaving the first token to discover it (ADR-0158).
 //
 // It reads the connector store and the live registries, so it runs on the run-loop
 // goroutine (invariant I3), inside the same closure as the deploy it describes.
