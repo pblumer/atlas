@@ -57,7 +57,7 @@ func TestListInstanceJobsOverHTTP(t *testing.T) {
 
 	// The discovered key completes the job over HTTP → the instance advances and no
 	// activatable job remains.
-	if code, body = serveInternal(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobs[0].Key), "{}", "application/json"); code != http.StatusOK {
+	if code, body = serveInternal(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobs[0].Key), `{"reason":"test: operator completed the parked job by hand"}`, "application/json"); code != http.StatusOK {
 		t.Fatalf("complete discovered job: status=%d body=%s", code, body)
 	}
 	code, body = serveInternal(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/jobs", instKey), "", "")

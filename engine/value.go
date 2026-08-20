@@ -22,6 +22,7 @@ type inflightValue struct {
 	inbound       model.InboundDeliveryValue
 	variableAudit model.VariableAuditValue
 	compensable   model.CompensableValue
+	operatorAct   model.OperatorActionValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -57,6 +58,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.variableAudit
 	case model.VTCompensable:
 		return &v.compensable
+	case model.VTOperatorAction:
+		return &v.operatorAct
 	}
 	return nil
 }
@@ -129,6 +132,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTCompensable:
 		if v, ok := rec.Value.(*model.CompensableValue); ok {
 			iv.compensable = *v
+		}
+	case model.VTOperatorAction:
+		if v, ok := rec.Value.(*model.OperatorActionValue); ok {
+			iv.operatorAct = *v
 		}
 	}
 	return iv

@@ -94,6 +94,13 @@ const (
 	// compensated or when its scope tears down. Appended last so every prior value type
 	// keeps its numeric value on the log.
 	VTCompensable
+	// VTOperatorAction is one operator intervention on a running instance retained for
+	// audit (ADR-0159): who completed a parked job by hand, on which element, and why.
+	// Like VTVariableAudit it is append-only history keyed under its process instance —
+	// never deleted — so a step a person forced is always distinguishable from one the
+	// engine drove, and the trail rebuilds from the log. Appended last so every prior
+	// value type keeps its numeric value on the log.
+	VTOperatorAction
 )
 
 func (t ValueType) String() string {
@@ -132,6 +139,8 @@ func (t ValueType) String() string {
 		return "VariableAudit"
 	case VTCompensable:
 		return "Compensable"
+	case VTOperatorAction:
+		return "OperatorAction"
 	default:
 		return "ValueType(?)"
 	}
@@ -271,6 +280,14 @@ const (
 	// compensated (the handler was activated), so it is compensated at most once (ADR-0103).
 	// It carries the record's scope and sequence; applyToState deletes that index entry.
 	IntentCompensableConsumed
+
+	// IntentOperatorActed records that an operator intervened on a running instance —
+	// completing a parked job by hand, say (ADR-0159). Like IntentVariableAudited it is a
+	// pure history event emitted alongside the events the intervention produces, freezing
+	// who acted and why into the log so replay rebuilds the identical audit trail without
+	// re-running the command (invariant I6). Appended at the end so every prior intent
+	// keeps its numeric value on the log.
+	IntentOperatorActed
 
 	// IntentPurging is a command-only intent (never persisted as an event), like
 	// IntentTimerStartArm: the retention sweep directs the processor to hard-delete a

@@ -140,7 +140,7 @@ func TestALeasedJobStillCompletes(t *testing.T) {
 		`{"worker":"worker-1"}`); code != http.StatusOK {
 		t.Fatalf("activate = %d body=%s", code, raw)
 	}
-	if code, raw := h.x.do(http.MethodPost, "/api/v1/jobs/"+u64(keys[0])+"/complete", "{}"); code != http.StatusOK {
+	if code, raw := h.x.do(http.MethodPost, "/api/v1/jobs/"+u64(keys[0])+"/complete", `{"reason":"test: operator completed the parked job by hand"}`); code != http.StatusOK {
 		t.Fatalf("complete a leased job = %d body=%s, want 200", code, raw)
 	}
 }
