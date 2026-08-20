@@ -84,6 +84,9 @@ var (
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")
+	// WorkerStarting is the out-of-process job worker announcing what it will serve
+	// and for which server (ADR-0157).
+	WorkerStarting = newEvent("worker.starting")
 )
 
 // Recovery checkpoints and WAL compaction (ADR-0131).

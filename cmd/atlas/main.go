@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,6 +41,7 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 	"github.com/pblumer/atlas/wal"
+	"github.com/pblumer/atlas/worker"
 )
 
 func main() {
@@ -60,6 +62,10 @@ func main() {
 	case "mcp":
 		if err := runMCP(args); err != nil {
 			fatal("atlas mcp", err)
+		}
+	case "worker":
+		if err := runWorker(args); err != nil {
+			fatal("atlas worker", err)
 		}
 	case "version", "-v", "--version":
 		printVersion(os.Stdout)
@@ -108,6 +114,7 @@ func usage() {
 Usage:
   atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
+  atlas worker         [flags]      Work service-task jobs for a running Atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas version                     Print the version and build metadata
@@ -482,6 +489,101 @@ func runMCP(args []string) error {
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// handleFlag collects repeated --handle type=command pairs: what this worker
+// serves, and what to run for each. A repeated flag is the shape that keeps the
+// pairing unambiguous — two parallel lists would let a typo silently line the wrong
+// command up with a type.
+type handleFlag map[string][]string
+
+func (h handleFlag) String() string {
+	types := make([]string, 0, len(h))
+	for t := range h {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	return strings.Join(types, ",")
+}
+
+func (h handleFlag) Set(v string) error {
+	jobType, command, ok := strings.Cut(v, "=")
+	jobType = strings.TrimSpace(jobType)
+	command = strings.TrimSpace(command)
+	if !ok || jobType == "" || command == "" {
+		return fmt.Errorf("want type=command, got %q", v)
+	}
+	parts := strings.Fields(command)
+	if _, dup := h[jobType]; dup {
+		return fmt.Errorf("job type %q is handled twice", jobType)
+	}
+	h[jobType] = parts
+	return nil
+}
+
+// runWorker runs the binary as an out-of-process worker for a running Atlas
+// (ADR-0157 step 5): it leases jobs of the types it was given, runs a command for
+// each, and reports the outcome. The job arrives on the command's stdin as JSON and
+// whatever JSON object the command prints becomes the variables the job completes
+// with; a non-zero exit fails the job, carrying stderr as the message.
+//
+// This is what takes a service task's work off the engine's single writer: the
+// latency of the work is paid by this process, not by every other request.
+func runWorker(args []string) error {
+	fs := flag.NewFlagSet("worker", flag.ExitOnError)
+	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to work for")
+	id := fs.String("id", defaultWorkerID(), "worker id, shown in the Workers view; give each deployment its own")
+	token := fs.String("token", os.Getenv("ATLAS_TOKEN"), "bearer token, when the server requires authentication (or ATLAS_TOKEN)")
+	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
+	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
+	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs one poll may lease; keep it to what this worker can actually run at once")
+	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
+	handles := handleFlag{}
+	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(handles) == 0 {
+		return errors.New("nothing to do: give at least one --handle type=command")
+	}
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+		return err
+	}
+
+	execs := map[string]worker.Exec{}
+	for jobType, argv := range handles {
+		execs[jobType] = worker.CmdExec{Name: argv[0], Args: argv[1:]}
+	}
+	w := worker.New(worker.Options{
+		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
+		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+	})
+
+	logging.Info(logging.WorkerStarting, "working jobs for a running Atlas",
+		slog.String("server", *server), slog.String("id", *id),
+		slog.String("types", handles.String()), slog.Duration("lease", *lease))
+
+	if *once {
+		return w.RunOnce(context.Background())
+	}
+	// Interrupt stops the loop between polls, so a job in flight is finished and
+	// reported rather than abandoned to its lease.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	err := w.Run(ctx)
+	if ctx.Err() != nil {
+		return nil // interrupted, which is an ordinary exit
+	}
+	return err
+}
+
+// defaultWorkerID names the worker after the host it runs on, which is the useful
+// default when several replicas each want their own row in the Workers view.
+func defaultWorkerID() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "atlas-worker"
 }
 
 // runResetPassword sets a local user's password directly against the on-disk user
