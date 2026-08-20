@@ -257,6 +257,7 @@ rather than the engine, and the budget becomes policy instead of a safety net.
 
 ## Links
 
+- extended by [ADR-0156](0156-worker-processes-supervision-and-console.md), which re-decides this record's rejected option 5 once Atlas launches the worker itself, and sequences the follow-ups below
 - protects invariant I3 (single writer) — see [invariants](../architecture/invariants.md)
 - bounds and re-frames [ADR-0149](0149-bounded-connector-call-budget.md) (the call budget; its option 3 is this record's prerequisite)
 - depends on [ADR-0007](0007-job-worker-protocol.md) (the job path, and the pull protocol still owed)
