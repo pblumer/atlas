@@ -12,9 +12,9 @@ import {
 import { enhanceTable } from "./table.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
-  incidentConnectorChip, incidentConnectorAction,
+  incidentConnectorChip,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape } from "./connectordialog.js";
+import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -44,7 +44,15 @@ export async function apiRaw(method, path, body, isXML) {
   const text = await res.text();
   let data = text;
   try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
-  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  if (!res.ok) {
+    // The message is the readable half; the status and the decoded body ride along for
+    // the few callers that need to *act* on the failure rather than report it — a 409
+    // that names what is in the way, say (ADR-0163).
+    const err = new Error((data && data.error) || res.statusText);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
   return { data, headers: res.headers };
 }
 
@@ -639,6 +647,114 @@ function setChrome(appId, route) {
   document.body.classList.toggle("tasks-mode", appId === "tasks");
 }
 
+// ---------- What's New ----------
+// The Console landing page surfaces recent, user-facing features from
+// /whats-new.json, which scripts/whats-new/gen.mjs generates from CHANGELOG.md and a
+// curated bilingual overrides file (see scripts/whats-new/README.md). It is DE/EN
+// with a local toggle, and every layer is collapsible so it stays compact: the whole
+// section is a <details>, only the newest few entries show at first, and each entry
+// is a <details> whose body carries the plain-language summary, an optional
+// step-by-step tutorial, a link to the PR/ADR, and an optional "Try it" deep link.
+const WN_STRINGS = {
+  en: { title: "What's New", latest: "New", tutorial: "Try it out", more: "Show older", less: "Show fewer", empty: "" },
+  de: { title: "Neu in Atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
+};
+// Only these hash-route prefixes are accepted as a "Try it" target, so a bad or
+// hostile route in the data can never point the button somewhere unexpected.
+const WN_ROUTE_OK = /^#\/(console|modeler|operations|tasks)(\/|$)/;
+const WN_INITIAL = 4;
+
+function wnLang() {
+  try {
+    const s = localStorage.getItem("atlas.whatsnew.lang");
+    if (s === "de" || s === "en") return s;
+  } catch { /* ignore */ }
+  return /^de/i.test(navigator.language || "") ? "de" : "en";
+}
+function wnSetLang(l) {
+  try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
+}
+
+// wnText resolves a {en, de} field for the active language, falling back to English.
+const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
+
+async function renderWhatsNew(slot) {
+  if (!slot) return;
+  let doc;
+  try {
+    const res = await fetch("/whats-new.json", { headers: { Accept: "application/json" } });
+    if (!res.ok) return; // no What's New shipped; leave the slot empty and silent
+    doc = await res.json();
+  } catch { return; } // offline or malformed — the landing page works without it
+  const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
+  if (entries.length) paintWhatsNew(slot, entries, wnLang());
+}
+
+function wnEntryHTML(e, lang, t) {
+  const title = esc(wnText(e.title, lang));
+  const when = e.date
+    ? `<span class="wn-date">${esc(e.date)}</span>`
+    : `<span class="wn-date wn-new">${esc(t.latest)}</span>`;
+  const tags = (e.tags || []).map((tag) => `<span class="chip">${esc(tag)}</span>`).join("");
+  const summary = esc(wnText(e.summary, lang));
+
+  let tutorial = "";
+  const steps = e.tutorial && wnText(e.tutorial, lang);
+  if (Array.isArray(steps) && steps.length) {
+    tutorial = `<div class="wn-tutorial"><div class="wn-tut-label">${esc(t.tutorial)}</div>` +
+      `<ol>${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>`;
+  }
+
+  const links = [];
+  if (e.link && /^https?:\/\//.test(e.link.url)) {
+    links.push(`<a class="wn-link" href="${esc(e.link.url)}" target="_blank" rel="noopener">${esc(e.link.label)} <span class="ext" aria-hidden="true">↗</span></a>`);
+  }
+  if (e.try && WN_ROUTE_OK.test(e.try.route || "")) {
+    links.push(`<a class="btn neutral wn-try" href="${esc(e.try.route)}">${esc(wnText(e.try.label, lang))} →</a>`);
+  }
+  const linksHTML = links.length ? `<div class="wn-links">${links.join("")}</div>` : "";
+
+  return `<details class="wn-item">` +
+    `<summary>${when}<span class="wn-item-title">${title}</span>${tags}</summary>` +
+    `<div class="wn-body"><p>${summary}</p>${tutorial}${linksHTML}</div>` +
+    `</details>`;
+}
+
+function paintWhatsNew(slot, entries, lang) {
+  const t = WN_STRINGS[lang] || WN_STRINGS.en;
+  const head = entries.slice(0, WN_INITIAL).map((e) => wnEntryHTML(e, lang, t)).join("");
+  const rest = entries.slice(WN_INITIAL);
+  const restHTML = rest.length
+    ? `<div class="wn-rest" hidden>${rest.map((e) => wnEntryHTML(e, lang, t)).join("")}</div>` +
+      `<button type="button" class="wn-more">${esc(t.more)} (${rest.length})</button>`
+    : "";
+  slot.innerHTML =
+    `<div class="card whats-new"><details class="wn-root" open>` +
+    `<summary class="wn-head"><span class="wn-title">${esc(t.title)}</span>` +
+    `<span class="wn-lang">` +
+    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}">EN</button>` +
+    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}">DE</button>` +
+    `</span></summary>` +
+    `<div class="wn-list">${head}${restHTML}</div>` +
+    `</details></div>`;
+
+  // The language toggle lives inside the <summary>; stop the click from also toggling
+  // the section open/closed, switch language, remember it, and repaint in place.
+  slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const l = b.dataset.lang;
+    wnSetLang(l);
+    paintWhatsNew(slot, entries, l);
+  }));
+  const more = slot.querySelector(".wn-more");
+  if (more) more.addEventListener("click", () => {
+    const r = slot.querySelector(".wn-rest");
+    if (r) r.hidden = false;
+    more.remove();
+  });
+}
+
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
@@ -658,6 +774,7 @@ async function viewConsoleDashboard() {
         <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
       </div>
     </div>
+    <div id="whats-new-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
         <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
@@ -672,6 +789,7 @@ async function viewConsoleDashboard() {
         </div>
       </div>
     </div>`;
+  renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
   try {
     const [procs, stats] = await Promise.all([
       api("GET", "/api/v1/processes"),
@@ -974,7 +1092,8 @@ async function viewConsoleOrg() {
       <td><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
-          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div></td>
+          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div>
+        ${connectorUsageHTML(c.usedBy)}</td>
       <td>${!c.enabled
         ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
         : c.problem
@@ -2502,8 +2621,10 @@ function wireConnectorManagement(connectors) {
           // and provider actually use, and it can check the result before saving.
           if (!(await editConnectorFlow({ api, toast, connector: c }))) return;
         } else if (btn.dataset.cact === "delete") {
-          if (!window.confirm(`Delete connector "${c.name}"?`)) return;
-          await api("DELETE", "/api/v1/connectors/" + encodeURIComponent(id));
+          // The server refuses a delete that would park deployed models' tasks
+          // (ADR-0163), so this asks only about what it can see and lets the refusal
+          // carry the rest — the confirm names the processes instead of a bare count.
+          if (!(await deleteConnectorFlow({ api, connector: c }))) return;
         }
         reload();
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
@@ -3518,6 +3639,24 @@ function overrideCell(r) {
 // current variables (re-raising if it still fails). The list shares the task list's
 // ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
 // order.
+// incidentMenu is the row's non-primary actions, behind the ⋯ menu every other table
+// in the console puts them behind. Resolving is the one action that belongs on the row;
+// correcting the data and reconfiguring the integration are the two ways to make that
+// resolve *work*, and they were three visible buttons until the third one pushed the
+// table past the width of its card (ADR-0163). Behind the menu, a fourth way out costs
+// no width at all.
+function incidentMenu(r, i) {
+  const items = [{ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } }];
+  if (r.connector && r.connectorId) {
+    items.push({ label: "Configure connector…", icon: "⚙", act: "fixconn", data: { row: i } });
+  } else if (r.connector) {
+    // Nothing to open — the model names a connector nobody configured, so the way out
+    // is the Console, where one is created.
+    items.push({ label: "Configure connector ↗", icon: "⚙", href: "#/console/org" });
+  }
+  return items;
+}
+
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
@@ -3572,9 +3711,9 @@ async function viewIncidents() {
           <td>${cause}</td>
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}${incidentConnectorChip(r)}</td>
-          <td style="text-align:right; white-space:nowrap"><button class="btn ghost sm" data-fix="${i}" title="Correct the instance's variables before retrying">✎ Variables…</button>
-            ${incidentConnectorAction(r, { cls: "btn ghost sm" })}
-            <button class="btn sm" data-resolve="${i}">Resolve…</button></td>
+          <td class="row-actions">
+            <button class="btn sm" data-resolve="${i}">Resolve…</button>
+            ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3586,21 +3725,19 @@ async function viewIncidents() {
   // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
   // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-resolve], button[data-fix], button[data-fix-conn]");
+    const btn = e.target.closest("button[data-resolve], .dropdown-menu button[data-act]");
     if (!btn) return;
-    // The connector button carries the incident's own key (it is rendered by the
-    // shared row helper, which knows nothing about this table's row indices); the
-    // other two carry the row index.
-    const incident = btn.dataset.fixConn
-      ? current.find((x) => String(x.elementInstanceKey) === btn.dataset.inc)
-      : current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
+    // Both the row's primary button and its menu items carry the row index; the menu
+    // items say *which* action in data-act.
+    const incident = current[Number(btn.dataset.resolve ?? btn.dataset.row)];
     if (!incident) return;
     // Correcting the variables first is the other half of resolving: a retry alone
     // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
     // way, for when the message is about the integration and not the data (ADR-0160).
-    const changed = btn.dataset.fix !== undefined
+    const act = btn.dataset.act;
+    const changed = act === "fixvars"
       ? !!(await fixVariablesFlow({ api, toast, incident }))
-      : btn.dataset.fixConn
+      : act === "fixconn"
         ? !!(await fixConnectorFlow({ api, toast, incident }))
         : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {

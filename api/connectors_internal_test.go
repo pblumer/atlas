@@ -192,9 +192,21 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 		t.Fatalf("connector list = %s, want risk and no secret", lb)
 	}
 
-	// Delete it.
-	if code, _ := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID, ""); code != http.StatusNoContent {
-		t.Fatalf("delete connector: want 204")
+	// Deleting it is refused while the deployed model still references it: removing
+	// the thing a resolved reference points at parks every one of its tasks, with a
+	// message that reads as if it had never been configured (ADR-0163). The refusal
+	// names the model rather than a count, because that is what an operator decides on.
+	code, db := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID, "")
+	if code != http.StatusConflict {
+		t.Fatalf("delete a referenced connector = %d %s, want 409", code, db)
+	}
+	if !strings.Contains(string(db), `"usedBy"`) || !strings.Contains(string(db), `"decide"`) {
+		t.Fatalf("refusal = %s, want the referencing process and its element", db)
+	}
+
+	// Deleting anyway is the operator's call, made explicitly.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID+"?force=true", ""); code != http.StatusNoContent {
+		t.Fatalf("forced delete: %d %s, want 204", code, b)
 	}
 	if code, _ := x.do(http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":true}`); code != http.StatusNotFound {
 		t.Fatalf("update deleted connector: want 404")
@@ -549,6 +561,18 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 	srv.connectors = stDel
 	if do(http.MethodDelete, "/api/v1/connectors/other", "") != http.StatusInternalServerError {
 		t.Error("delete with a failing registry rebuild: want 500")
+	}
+
+	// Delete read failure: the reference guard reads the record before deleting it
+	// (ADR-0163), so a record that will not decode fails the request rather than
+	// silently skipping the check and deleting anyway.
+	stRead, _ := newConnectorStore(filepath.Join(t.TempDir(), "read"))
+	if err := os.WriteFile(stRead.FileFor("u3"), []byte("{bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv.connectors = stRead
+	if do(http.MethodDelete, "/api/v1/connectors/u3", "") != http.StatusInternalServerError {
+		t.Error("delete whose reference check cannot read the record: want 500")
 	}
 }
 
@@ -913,5 +937,101 @@ func TestElementConnectorRefEdges(t *testing.T) {
 	name, kind, id := srv.incidentConnectorLookup()(nil, 0)
 	if name != "" || kind != "" || id != "" {
 		t.Errorf("lookup on no compiled process = %q/%q/%q, want all empty", name, kind, id)
+	}
+}
+
+// TestConnectorUsageIsVisibleBeforeDeleting covers the reverse of the deploy-time
+// check: the connector list says which deployed models reference each connector, and
+// how many instances are running on them, so an operator can see what a delete would
+// park before attempting it — and a connector nothing references deletes without a
+// fight (ADR-0163).
+func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Central")
+	x.saveDraft(pid, centralDecisionBPMN) // references the temis connector "risk"
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"risk","endpoint":"http://risk.internal"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create referenced connector: %d %s", code, cb)
+	}
+	var referenced connector
+	_ = json.Unmarshal(cb, &referenced)
+
+	code, ob := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"orphan","endpoint":"http://nobody.internal"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create unreferenced connector: %d %s", code, ob)
+	}
+	var orphan connector
+	_ = json.Unmarshal(ob, &orphan)
+
+	// The list carries the usage per connector: the referenced one names the model and
+	// the element, the unreferenced one carries nothing at all.
+	_, lb := x.do(http.MethodGet, "/api/v1/connectors", "")
+	var views []struct {
+		Name   string         `json:"name"`
+		UsedBy []connectorUse `json:"usedBy"`
+	}
+	if err := json.Unmarshal(lb, &views); err != nil {
+		t.Fatalf("connector list: %v (%s)", err, lb)
+	}
+	byName := map[string][]connectorUse{}
+	for _, v := range views {
+		byName[v.Name] = v.UsedBy
+	}
+	uses := byName["risk"]
+	if len(uses) != 1 {
+		t.Fatalf("usedBy for the referenced connector = %+v, want exactly the deployed model", uses)
+	}
+	if len(uses[0].Elements) != 1 || uses[0].Elements[0] != "decide" {
+		t.Errorf("usedBy elements = %v, want the business rule task", uses[0].Elements)
+	}
+	if uses[0].ProcessDefKey == 0 || uses[0].Version == 0 {
+		t.Errorf("usedBy = %+v, want the definition key and version so the UI can link to it", uses[0])
+	}
+	if got := byName["orphan"]; len(got) != 0 {
+		t.Errorf("usedBy for an unreferenced connector = %+v, want nothing", got)
+	}
+
+	// A second deployed model referencing the same connector aggregates onto it, in
+	// definition-key order, so the operator sees every process a delete would park and
+	// not just the first one found.
+	pid2 := x.mkProject("Central again")
+	x.saveDraft(pid2, centralDecisionBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid2+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("second deploy: %d %s", code, b)
+	}
+	_, lb2 := x.do(http.MethodGet, "/api/v1/connectors", "")
+	var views2 []struct {
+		Name   string         `json:"name"`
+		UsedBy []connectorUse `json:"usedBy"`
+	}
+	if err := json.Unmarshal(lb2, &views2); err != nil {
+		t.Fatalf("connector list: %v (%s)", err, lb2)
+	}
+	for _, v := range views2 {
+		if v.Name != "risk" {
+			continue
+		}
+		if len(v.UsedBy) != 2 {
+			t.Fatalf("usedBy after a second deploy = %+v, want both definitions", v.UsedBy)
+		}
+		if v.UsedBy[0].ProcessDefKey >= v.UsedBy[1].ProcessDefKey {
+			t.Errorf("usedBy = %+v, want definition-key order", v.UsedBy)
+		}
+	}
+
+	// Nothing references it, so deleting it is uneventful — the guard must not stand
+	// in the way of the ordinary case.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+orphan.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete an unreferenced connector = %d %s, want 204", code, b)
+	}
+	// The referenced one is refused, and says by what.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+referenced.ID, ""); code != http.StatusConflict {
+		t.Fatalf("delete a referenced connector = %d %s, want 409", code, b)
 	}
 }

@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas table-in-a-card overflow e2e harness</title>
+    <!-- A data table lives in a card, and a card is a fixed-width box. A cell that
+         cannot wrap makes the table's min-content width larger than the card, and a
+         table cannot be laid out narrower than that — so it is drawn *past* the card's
+         right edge, header rule and border stopping short while the cells hang in the
+         page beside it. That is what a third action button did to the Operations
+         incidents table (ADR-0163). The fix is a rule about every card that holds a
+         table, so this harness proves the rule with a deliberately over-wide table
+         rather than with the one table that happened to overflow. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      /* A viewport-independent box, so the assertions do not depend on the window. */
+      #host { width: 520px; margin: 20px; }
+    </style>
+  </head>
+  <body>
+    <div id="host">
+      <div class="card" id="wide" style="padding: 0">
+        <table>
+          <thead><tr><th>Instance</th><th>Message</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="nowrap">281474978841952</td>
+              <td>mail: token endpoint https://oauth2.googleapis.com/token returned HTTP 400</td>
+              <td class="row-actions">
+                <button class="btn sm">Resolve…</button>
+                <button class="btn sm">Fix variables…</button>
+                <button class="btn sm">Configure connector…</button>
+                <button class="btn sm">Complete manually…</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <script>
+      window.__ready = true;
+    </script>
+  </body>
+</html>

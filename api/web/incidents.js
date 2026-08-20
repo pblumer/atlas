@@ -49,16 +49,19 @@ export function incidentConnectorChip(inc) {
 // that will not authenticate is not fixed by correcting the data, by retrying, or by
 // declaring the work done — it is fixed by pointing its connector somewhere else
 // (ADR-0160). When the referenced connector does not exist at all there is nothing to
-// open, so the button becomes the way to the Console, where it can be created. `cls`
-// lets a surface match its own button styling — the diagram-side rows and the
-// incidents table dress theirs differently.
-export function incidentConnectorAction(inc, { cls = "btn neutral sm" } = {}) {
+// open, so the button becomes the way to the Console, where it can be created.
+//
+// This is the diagram-side row only. The Operations incidents table puts the same two
+// non-primary actions behind the ⋯ menu every other table there uses, because a third
+// visible button pushed that table past the width of its card (ADR-0163) — so the two
+// surfaces render the action differently on purpose, over the same fixConnectorFlow.
+function incidentConnectorAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="${cls}" href="#/console/org"
-      title="No connector is configured under this name — add one in Organization &rsaquo; Connectors">&#9881; Configure connector &#8599;</a>`;
+    return `<a class="btn neutral sm" href="#/console/org"
+      title="No connector is configured under this name — add one in Organization &rsaquo; Connectors">&#9881; Configure &#8599;</a>`;
   }
-  return `<button class="${cls}" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+  return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Connector&hellip;</button>`;
 }
 
