@@ -1,0 +1,159 @@
+{
+  "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+
+  "a-parked-connector-task-now-says-what-is-actually-wrong": {
+    "tags": ["Operations", "Connectors"],
+    "summary": {
+      "en": "When a step that calls an external system (a \"connector\", e.g. sending mail) gets stuck, Atlas now tells you the real reason — disabled, misconfigured, or a missing credential — instead of one confusing message.",
+      "de": "Wenn ein Schritt, der ein externes System anspricht (ein „Connector\", z.B. Mailversand), hängen bleibt, nennt Atlas jetzt den echten Grund — deaktiviert, falsch konfiguriert oder fehlende Zugangsdaten — statt einer verwirrenden Sammelmeldung."
+    }
+  },
+
+  "a-deploy-warns-about-connector-references-that-will-not-reso": {
+    "tags": ["Modeler"],
+    "summary": {
+      "en": "Publishing a model that points at a connector which does not exist yet no longer fails silently later — the Modeler shows a warning right next to the success message.",
+      "de": "Ein Modell zu veröffentlichen, das auf einen noch nicht vorhandenen Connector verweist, scheitert nicht mehr stumm erst später — der Modeler zeigt die Warnung direkt neben der Erfolgsmeldung."
+    }
+  },
+
+  "an-incident-can-be-fixed-not-just-retried": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "A stuck instance can now be repaired, not just retried: open the incident, correct the process variables, and resolve it in one step. The change is recorded with your name.",
+      "de": "Eine hängende Instanz lässt sich jetzt reparieren, nicht nur erneut versuchen: Incident öffnen, die Prozessvariablen korrigieren und in einem Schritt auflösen. Die Änderung wird mit Ihrem Namen protokolliert."
+    },
+    "tutorial": {
+      "en": [
+        "Open Operations › Incidents (or the step-by-step replay of the instance).",
+        "On the stuck incident, click ✎ Fix variables…",
+        "Correct the values, tick \"resolve\" if the fix is complete, and save."
+      ],
+      "de": [
+        "Öffnen Sie Betrieb › Incidents (oder das Schritt-für-Schritt-Replay der Instanz).",
+        "Klicken Sie beim hängenden Incident auf ✎ Variablen korrigieren…",
+        "Werte anpassen, „auflösen\" ankreuzen wenn die Korrektur vollständig ist, und speichern."
+      ]
+    },
+    "try": { "label": { "en": "Open Incidents", "de": "Incidents öffnen" }, "route": "#/operations/incidents" }
+  },
+
+  "the-operations-nav-counts-what-is-stuck": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "The Incidents menu entry now carries a red count of how many tokens are stuck, so a problem finds you instead of waiting to be discovered.",
+      "de": "Der Menüpunkt Incidents trägt jetzt eine rote Zahl, wie viele Tokens hängen — so findet ein Problem Sie, statt darauf zu warten, entdeckt zu werden."
+    },
+    "try": { "label": { "en": "Open Operations", "de": "Betrieb öffnen" }, "route": "#/operations" }
+  },
+
+  "the-secrets-panel-says-what-a-value-has-to-be": {
+    "tags": ["Organization", "Secrets"],
+    "summary": {
+      "en": "When you store a secret (like an API token), the form now tells you up front what shape the value should have — because a write-only secret cannot be checked afterwards.",
+      "de": "Wenn Sie ein Geheimnis speichern (z.B. ein API-Token), sagt Ihnen das Formular jetzt vorab, welche Form der Wert haben muss — denn ein nur-schreibbares Geheimnis lässt sich nachträglich nicht prüfen."
+    },
+    "tutorial": {
+      "en": [
+        "Open Console › Organization and go to the Secrets panel.",
+        "Enter a secret name that matches a connector's token reference.",
+        "Read the hint that appears — it names the connector and the expected value."
+      ],
+      "de": [
+        "Öffnen Sie Console › Organisation und gehen Sie zum Bereich Secrets.",
+        "Geben Sie einen Secret-Namen ein, der zur Token-Referenz eines Connectors passt.",
+        "Lesen Sie den erscheinenden Hinweis — er nennt den Connector und den erwarteten Wert."
+      ]
+    },
+    "try": { "label": { "en": "Open Organization", "de": "Organisation öffnen" }, "route": "#/console/org" }
+  },
+
+  "a-mail-task-you-can-run-before-you-own-a-mail-server": {
+    "tags": ["Connectors"],
+    "summary": {
+      "en": "You can try out a mail step without setting up a real mail server first — a built-in preview provider captures the message so you can see what would be sent.",
+      "de": "Sie können einen Mail-Schritt ausprobieren, ohne zuerst einen echten Mailserver einzurichten — ein eingebauter Vorschau-Provider fängt die Nachricht ab, damit Sie sehen, was gesendet würde."
+    },
+    "try": { "label": { "en": "Open the Outbox", "de": "Postausgang öffnen" }, "route": "#/operations/outbox" }
+  },
+
+  "the-live-diagram-says-why-a-token-is-not-moving": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "On the live process diagram, a token that is stuck now carries an overlay explaining why it is not moving — no need to dig through logs.",
+      "de": "Im Live-Prozessdiagramm trägt ein hängendes Token jetzt eine Einblendung, die erklärt, warum es sich nicht bewegt — kein Wühlen in Logs mehr nötig."
+    }
+  },
+
+  "a-connector-can-be-checked-before-it-is-trusted-with-anythin": {
+    "tags": ["Connectors"],
+    "summary": {
+      "en": "Before a connector runs real work, you can test its configuration and see whether it can actually reach the target system.",
+      "de": "Bevor ein Connector echte Arbeit ausführt, können Sie seine Konfiguration testen und sehen, ob er das Zielsystem tatsächlich erreicht."
+    },
+    "tutorial": {
+      "en": [
+        "Open Console › Organization and pick a connector.",
+        "Use its Check / Test action.",
+        "Read the result — a green check, or the exact reason it cannot connect."
+      ],
+      "de": [
+        "Öffnen Sie Console › Organisation und wählen Sie einen Connector.",
+        "Nutzen Sie dessen Prüfen-/Test-Aktion.",
+        "Lesen Sie das Ergebnis — ein grüner Haken oder der genaue Grund, warum keine Verbindung zustande kommt."
+      ]
+    },
+    "try": { "label": { "en": "Open Organization", "de": "Organisation öffnen" }, "route": "#/console/org" }
+  },
+
+  "the-step-by-step-replay-says-why-an-instance-stopped": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "The step-by-step replay of a process instance now shows why it stopped — including who changed a variable by hand — so you can retrace exactly what happened.",
+      "de": "Das Schritt-für-Schritt-Replay einer Prozessinstanz zeigt jetzt, warum sie gestoppt ist — inklusive wer eine Variable von Hand geändert hat — damit Sie genau nachvollziehen können, was passiert ist."
+    }
+  },
+
+  "the-instances-overview-flags-what-is-stuck": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "The Instances overview now flags, per process, how many instances are stuck behind an unresolved incident, so you see where to look first.",
+      "de": "Die Instanzen-Übersicht kennzeichnet jetzt pro Prozess, wie viele Instanzen hinter einem ungelösten Incident hängen — so sehen Sie, wo Sie zuerst hinschauen müssen."
+    },
+    "try": { "label": { "en": "Open Instances", "de": "Instanzen öffnen" }, "route": "#/operations" }
+  },
+
+  "the-incidents-table-s-instance-link-works": {
+    "tags": ["Operations"],
+    "summary": {
+      "en": "The link from the incidents table now opens the right instance, so you land on the process that is actually stuck.",
+      "de": "Der Link aus der Incidents-Tabelle öffnet jetzt die richtige Instanz — Sie landen beim tatsächlich hängenden Prozess."
+    }
+  },
+
+  "import-microsoft-identity-manager-mim-fim-workflows-as-bpmn": {
+    "tags": ["Modeler", "Import"],
+    "summary": {
+      "en": "You can now import Microsoft Identity Manager (MIM/FIM) workflows straight into the Modeler and turn them into editable BPMN — no manual redrawing.",
+      "de": "Sie können jetzt Microsoft-Identity-Manager-Workflows (MIM/FIM) direkt in den Modeler importieren und in bearbeitbares BPMN umwandeln — kein manuelles Nachzeichnen."
+    },
+    "tutorial": {
+      "en": [
+        "Open the Modeler.",
+        "Choose the MIM/FIM import and pick your exported workflow XML.",
+        "Review the generated BPMN, then deploy it like any other model."
+      ],
+      "de": [
+        "Öffnen Sie den Modeler.",
+        "Wählen Sie den MIM/FIM-Import und Ihre exportierte Workflow-XML.",
+        "Prüfen Sie das erzeugte BPMN und deployen Sie es wie jedes andere Modell."
+      ]
+    },
+    "try": { "label": { "en": "Open Modeler", "de": "Modeler öffnen" }, "route": "#/modeler" }
+  },
+
+  "get-api-v1-incidents-can-be-scoped": { "hidden": true },
+  "breaking-http-api-elementid-in-the-incident-list-is-now-the-": { "hidden": true },
+  "the-smtp-client-speaks-over-one-transport-that-a-check-can-s": { "hidden": true },
+  "an-smtp-endpoint-written-without-a-port-is-completed-instead": { "hidden": true }
+}
