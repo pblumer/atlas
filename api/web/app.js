@@ -1377,6 +1377,7 @@ async function viewModelerHome() {
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
+        { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
         { label: "Import source tree…", icon: "🗂", act: "import-source" },
       ])}
     </div>
@@ -1446,6 +1447,7 @@ async function viewModelerHome() {
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
     if (act === "import") importArtifact("", renderProjects);
+    if (act === "import-mim") importMIM("", renderProjects);
     if (act === "import-source") importApplicationSource(renderProjects);
   });
 
@@ -1654,6 +1656,7 @@ async function viewProjectDetail(id) {
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
       { label: "Import file…", icon: "📥", act: "import" },
+      { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
     ];
 
     const projItems = ungrouped ? [] : [
@@ -1722,6 +1725,7 @@ async function viewProjectDetail(id) {
     onMenuAction(root, (act, b) => {
       switch (act) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
+        case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
@@ -2283,6 +2287,66 @@ async function importArtifact(projectId, reload) {
   } catch (e) {
     toast("Import failed: " + e.message, "err");
   }
+}
+
+// importMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow — or an
+// Export-FIMConfig XML that embeds one — into a BPMN draft via POST
+// /api/v1/imports/mim, then shows the per-node conversion report. The import
+// lands as a draft (never a deploy); constructs without a faithful BPMN mapping
+// are preserved in atlas:mimSource and flagged for review in the report.
+async function importMIM(projectId, reload) {
+  const file = await pickFile(".xoml,.xml,application/xml,text/xml");
+  if (!file) return;
+  let text;
+  try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+  const base = file.name.replace(/\.[^.]+$/, "");
+  const path = "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
+    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
+  let res;
+  try { res = await api("POST", path, text, true); }
+  catch (e) { toast("MIM import failed: " + e.message, "err"); return; }
+  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+  toast(`Imported “${res.name || res.processId}” — ${r.native} native, ${r.preserved} preserved, ${r.manualReview} to review`, "ok");
+  if (reload) await reload();
+  showMIMReport(res);
+}
+
+// showMIMReport renders the conversion report as a modal: per-node status badges
+// (native / preserved / manual-review), the node id, the source activity and a
+// reviewer note, plus a shortcut to open the freshly created draft in the Modeler.
+function showMIMReport(res) {
+  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+  const color = (s) => ({ "native": "#1a7f37", "preserved": "#6a737d", "manual-review": "#9a6700" }[s] || "#6a737d");
+  const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
+  const rows = (r.notes || []).map((n) =>
+    `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
+      <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
+        <div style="max-height:52vh; overflow:auto">
+          <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn neutral" data-close>Close</button>
+        <button class="btn" data-open>Open in Modeler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.querySelector("[data-close]").addEventListener("click", close);
+  ov.querySelector("[data-open]").addEventListener("click", () => {
+    close();
+    location.hash = "#/modeler/draft/" + encodeURIComponent(res.processId);
+  });
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
 }
 
 // a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each

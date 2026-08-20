@@ -318,6 +318,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
 
+		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts",
+			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
+			resp: jsonBody("Created draft identity and conversion report", tObject())}},
+
 		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions",
 			resp: eventStreamBody("SSE stream of session frames")}},

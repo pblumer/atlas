@@ -169,7 +169,10 @@ _Changed_ / _Removed_ for each version.
   faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
   extension element and listed, with a `native`/`preserved`/`manual-review`
   status, in a per-node report. Every generated model is checked against the
-  compiler so it always deploys. Library: `mimimport`.
+  compiler so it always deploys. Library: `mimimport`. The Modeler exposes it too
+  — **Create new → Import MIM workflow (XOML)…** uploads a workflow, opens the
+  converted diagram as a draft, and shows the conversion report (status badge and
+  note per node) with a shortcut into the Modeler (`POST /api/v1/imports/mim`).
 
 ## [0.2.0] — 2026-08-19
 
