@@ -101,14 +101,22 @@ func TestADRNumbersAreUniqueAndContiguous(t *testing.T) {
 	adrs := loadADRs(t)
 
 	byNum := make(map[int][]string, len(adrs))
+	free := 0 // the next number nobody holds, for the fix-it line below
 	for _, a := range adrs {
 		byNum[a.num] = append(byNum[a.num], a.name)
+		if a.num >= free {
+			free = a.num + 1
+		}
 	}
 	for num, names := range byNum {
 		if len(names) > 1 {
 			sort.Strings(names)
-			t.Errorf("ADR-%04d is used by %d files: %s — renumber all but one to the next free number",
-				num, len(names), strings.Join(names, ", "))
+			// The number is a decision's identity, so one of them has to move — and
+			// moving it touches the file name, the heading, this index, and every
+			// reference in the tree. Name the command that does all of it rather than
+			// leaving the reader to do it by hand.
+			t.Errorf("ADR-%04d is used by %d files: %s\n\tOne number, one decision — the record that landed later moves:\n\t\tscripts/adr-renumber.sh docs/adr/%s %04d",
+				num, len(names), strings.Join(names, ", "), names[len(names)-1], free)
 		}
 	}
 

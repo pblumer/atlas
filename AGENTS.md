@@ -139,7 +139,15 @@ address a file outside the store. Non-Go trees: [`docs/`](docs/), [`examples/`](
 3. **Check the invariants** above against your plan *before* writing code.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
-6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and update [`docs/adr/README.md`](docs/adr/README.md). Take the next free number — **not** one another branch may already have claimed; `go test ./docs/adr` checks that numbers are unique and that the index matches the directory, and it runs in the normal test sweep.
+6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and add its row to [`docs/adr/README.md`](docs/adr/README.md). Take the next free number — and expect to move it. **A number cannot be reserved:** any branch that merges before yours can take the one you picked, which `go test ./docs/adr` catches in the normal sweep. Renumbering is routine, not a mistake anyone made:
+
+   ```bash
+   git fetch origin main                                        # see which numbers are gone
+   scripts/adr-renumber.sh docs/adr/0153-your-slug.md 0155      # file, heading, index row, every reference
+   git merge origin/main && go test ./docs/adr                  # the merge fills the hole you left
+   ```
+
+   Do it **before** merging the branch that took your number: while the old number still names exactly one record, the script can move every reference to it; afterwards `ADR-0153` could mean either decision, and it will say so and leave them alone. The renumber commit on its own has a hole where your old number was — the record that took it fills the hole when you merge — so make the merge the next commit, since CI checks the branch head, not each commit.
 
 ## Testing conventions
 

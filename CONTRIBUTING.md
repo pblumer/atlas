@@ -58,10 +58,18 @@ CI runs build, test, `-race`, vet, formatting, and the 95% coverage floor. Pleas
 
 If you're making or changing a significant architectural decision:
 
-1. Copy [`docs/adr/template.md`](docs/adr/template.md) to the next number.
+1. Copy [`docs/adr/template.md`](docs/adr/template.md) to the next free number.
 2. Fill in context, drivers, options, and consequences honestly — including the trade-offs you're accepting.
 3. Add it to the table in [`docs/adr/README.md`](docs/adr/README.md).
 4. If it replaces an earlier decision, mark the old ADR *Superseded by ADR-XXXX* (don't delete it).
+
+**On the number.** It is the decision's identity, so no two records may share one — `go test ./docs/adr` enforces that, along with contiguity and the index matching the directory. But a number cannot be reserved either: while your branch is open, someone else's may merge and take it. That is expected on a busy `main`, and the fix is one command rather than a careful sweep through file names, headings, the index and every mention in the tree:
+
+```bash
+scripts/adr-renumber.sh docs/adr/0153-your-slug.md 0155
+```
+
+Run it *before* merging the branch that took your number — until then the old number still names exactly one record, so every reference to it can be moved safely. Afterwards the script will tell you which mentions it cannot decide for you.
 
 ## Reporting bugs and security issues
 
