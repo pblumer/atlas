@@ -57,7 +57,7 @@ type Exec interface {
 //
 // Returning an error leaves the job pending, exactly as for any worker; the runner
 // completes it only on success.
-func Handler(store *state.Store, lookup ProcessLookup, exec Exec) job.OutputHandler {
+func Handler(store state.Reader, lookup ProcessLookup, exec Exec) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -98,7 +98,7 @@ const maxScopeDepth = 64
 // mappings has an empty local scope, so this degenerates to reading the process
 // scope, exactly as before. The chain is walked via each scope's element instance's
 // FlowScopeKey; the process-instance root has no element instance, which ends it.
-func scopeVars(store *state.Store, elementInstanceKey uint64) (map[string]any, error) {
+func scopeVars(store state.Reader, elementInstanceKey uint64) (map[string]any, error) {
 	vars := map[string]any{}
 	scope := elementInstanceKey
 	for depth := 0; depth <= maxScopeDepth; depth++ {

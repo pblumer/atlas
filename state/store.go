@@ -251,7 +251,13 @@ func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
 // consumers such as the in-process DMN worker resolving the decision an
 // activatable business-rule job belongs to.
 func (s *Store) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
-	raw, ok, err := getCopy(s.db, keyElementInstance(key))
+	return decodeElementInstance(getCopy(s.db, keyElementInstance(key)))
+}
+
+// decodeElementInstance turns a raw get into an element instance. It is shared by
+// the live store and a [ReadView], so the two cannot decode the same bytes
+// differently.
+func decodeElementInstance(raw []byte, ok bool, err error) (*model.ElementInstanceValue, bool, error) {
 	if err != nil || !ok {
 		return nil, ok, err
 	}
@@ -944,12 +950,18 @@ func (s *Store) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool, 
 // surface an instance's variables to operators.
 func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
 	return s.scanPrefix(variablePrefix(scope), func(_, raw []byte) error {
-		v, err := model.DecodeValue(model.VTVariable, raw)
-		if err != nil {
-			return err
-		}
-		return fn(v.(*model.VariableValue))
+		return decodeVariable(raw, fn)
 	})
+}
+
+// decodeVariable turns raw variable bytes into a value for fn. Shared with a
+// [ReadView] for the same reason as decodeElementInstance.
+func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
+	v, err := model.DecodeValue(model.VTVariable, raw)
+	if err != nil {
+		return err
+	}
+	return fn(v.(*model.VariableValue))
 }
 
 // VisibleVariablesOfScope calls fn with every variable *visible* at the given
@@ -1043,8 +1055,24 @@ func (s *Store) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {
 	return s.scanRange(prefix, prefixEnd(prefix), fn)
 }
 
+// scanPrefixWith scans one prefix against any pebble reader — the live database or
+// a read view — so both share one iteration path.
+func scanPrefixWith(r iterReader, prefix []byte, fn func(k, v []byte) error) error {
+	return scanRangeWith(r, prefix, prefixEnd(prefix), fn)
+}
+
+// iterReader is the slice of pebble both the database and a snapshot provide.
+type iterReader interface {
+	reader
+	NewIter(o *pebble.IterOptions) (*pebble.Iterator, error)
+}
+
 func (s *Store) scanRange(lo, hi []byte, fn func(k, v []byte) error) error {
-	iter, err := s.db.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	return scanRangeWith(s.db, lo, hi, fn)
+}
+
+func scanRangeWith(r iterReader, lo, hi []byte, fn func(k, v []byte) error) error {
+	iter, err := r.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
 	if err != nil {
 		return err
 	}

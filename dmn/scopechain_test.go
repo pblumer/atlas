@@ -104,7 +104,9 @@ func TestBusinessRuleTaskReadsMultiInstanceScope(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
+	runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler {
+		return dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil)
+	})
 
 	rows := `[{"email":"ada@x.io","group":"users","license":"PRO"},{"email":"bob","group":"ops","license":"NONE"}]`
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "rows", Kind: model.VarJSON, Text: rows})

@@ -5,6 +5,7 @@ import (
 
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // TestRunnerWritesHandlerOutput covers HandleWithOutput end to end: a worker
@@ -15,8 +16,10 @@ func TestRunnerWritesHandlerOutput(t *testing.T) {
 	p, store, jobType, defKey := setup(t)
 
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, func(job.Job) ([]model.VariableValue, error) {
-		return []model.VariableValue{{Name: "answer", Kind: model.VarNumber, Text: "42"}}, nil
+	runner.HandleWithOutput(jobType, func(state.Reader) job.OutputHandler {
+		return func(job.Job) ([]model.VariableValue, error) {
+			return []model.VariableValue{{Name: "answer", Kind: model.VarNumber, Text: "42"}}, nil
+		}
 	})
 
 	p.CreateInstance(defKey)
@@ -54,17 +57,19 @@ func TestRunnerHandleCompleting(t *testing.T) {
 	p, store, jobType, defKey := setup(t)
 
 	runner := job.NewRunner(store, p)
-	runner.HandleCompleting(jobType, func(j job.Job) (job.Completion, error) {
-		return job.Completion{
-			Outputs: []model.VariableValue{{Name: "grade", Kind: model.VarString, Text: "A"}},
-			Decision: &model.DecisionEvaluationValue{
-				DecisionId:         "creditRating",
-				ProcessInstanceKey: j.ProcessInstanceKey,
-				ElementInstanceKey: j.ElementInstanceKey,
-				InputsJSON:         `{"score":710}`,
-				OutputsJSON:        `{"rating":"A"}`,
-			},
-		}, nil
+	runner.HandleCompleting(jobType, func(state.Reader) job.CompletingHandler {
+		return func(j job.Job) (job.Completion, error) {
+			return job.Completion{
+				Outputs: []model.VariableValue{{Name: "grade", Kind: model.VarString, Text: "A"}},
+				Decision: &model.DecisionEvaluationValue{
+					DecisionId:         "creditRating",
+					ProcessInstanceKey: j.ProcessInstanceKey,
+					ElementInstanceKey: j.ElementInstanceKey,
+					InputsJSON:         `{"score":710}`,
+					OutputsJSON:        `{"rating":"A"}`,
+				},
+			}, nil
+		}
 	})
 
 	p.CreateInstance(defKey)

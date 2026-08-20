@@ -119,7 +119,7 @@ func TestTemisConnectorRoutesOnResult(t *testing.T) {
 
 			runner := job.NewRunner(store, p)
 			lookup := func(uint64) *compiler.CompiledProcess { return cp }
-			runner.HandleCompleting(jobType, temis.Handler(store, lookup, reg, nil))
+			runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler { return temis.Handler(store, lookup, reg, nil) })
 
 			p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: tc.amount})
 			if err := runner.Drive(); err != nil {
@@ -149,7 +149,9 @@ func TestTemisConnectorUnregistered(t *testing.T) {
 
 	runner := job.NewRunner(store, p)
 	lookup := func(uint64) *compiler.CompiledProcess { return cp }
-	runner.HandleCompleting(jobType, temis.Handler(store, lookup, temis.NewRegistry(), nil)) // empty registry
+	runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler {
+		return temis.Handler(store, lookup, temis.NewRegistry(), nil)
+	}) // empty registry
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "150"})
 	if err := runner.Drive(); err != nil {

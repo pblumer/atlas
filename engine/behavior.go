@@ -638,6 +638,18 @@ func handleJobFailed(c *ProcessingContext) {
 		return
 	}
 	job.Retries = c.cmd.Value.job.Retries
+	// A worker reporting a failure has given the job back, so its lease is released
+	// here rather than left to elapse. Without this a failed job stayed held for the
+	// rest of its lease — invisible to every worker including the one that just
+	// reported — which with a five-minute default lease turned an immediate retry
+	// into five minutes of dead time per attempt.
+	//
+	// Only the lease is cleared, not Assignee: that field is also a *user task's*
+	// claimant (ADR-0042), and an operator failing a user task's job must not silently
+	// unclaim it. Clearing the lease is what returns the job to the index, and it is
+	// also what stops the reporting worker from reporting twice, since a fenced report
+	// requires a live lease.
+	job.LeaseExpiresAt = 0
 	// A worker-requested retry backoff (ADR-0111): with retries left and a positive delay,
 	// hold the job off the activatable index (RetryDueDate keeps PutJob from indexing it) and
 	// arm a retry timer that re-activates it when the backoff elapses. The due date is read
@@ -700,6 +712,14 @@ func handleJobActivate(c *ProcessingContext) {
 	}
 	job.Assignee = c.cmd.Value.job.Assignee
 	job.LeaseExpiresAt = c.Now() + c.cmd.LeaseFor
+	// Every lease gets its own epoch, and it is the token the worker presents when it
+	// reports the outcome (ADR-0007's fencing item). Assignee alone cannot fence: two
+	// instances of one worker deployment share a name, so a report from a holder whose
+	// lease elapsed would be accepted while the second instance still holds the job.
+	// Incremented here, at command time, and frozen into the event — never recomputed
+	// on replay (I6), or a worker holding a lease across a restart would be fenced out
+	// of its own job.
+	job.LeaseEpoch++
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobActivated, *job)
 	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 		ProcessInstanceKey: job.ProcessInstanceKey,

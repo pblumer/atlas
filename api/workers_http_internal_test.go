@@ -12,14 +12,15 @@ import (
 type workersResp struct {
 	Workers []workerStat `json:"workers"`
 	Types   []struct {
-		Type            string `json:"type"`
-		Index           int32  `json:"index"`
-		ServedInProcess bool   `json:"servedInProcess"`
-		BuiltIn         bool   `json:"builtIn"`
-		Leasable        bool   `json:"leasable"`
-		Parked          int64  `json:"parked"`
-		InFlight        int64  `json:"inFlight"`
-		Incidents       int64  `json:"incidents"`
+		Type            string     `json:"type"`
+		Index           int32      `json:"index"`
+		ServedInProcess bool       `json:"servedInProcess"`
+		BuiltIn         bool       `json:"builtIn"`
+		Leasable        bool       `json:"leasable"`
+		Parked          int64      `json:"parked"`
+		InFlight        int64      `json:"inFlight"`
+		Incidents       int64      `json:"incidents"`
+		Processes       []typeUser `json:"processes"`
 	} `json:"types"`
 }
 
@@ -111,7 +112,8 @@ func TestWorkersViewCountsCompletions(t *testing.T) {
 		t.Fatalf("pulled %d jobs, want 1", len(pulled.Jobs))
 	}
 	path := fmt.Sprintf("/api/v1/jobs/%d/complete", pulled.Jobs[0].JobKey)
-	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"worker":"mailer-1"}`, "application/json"); code != http.StatusOK {
+	done := fmt.Sprintf(`{"worker":"mailer-1","leaseToken":%d}`, pulled.Jobs[0].LeaseToken)
+	if code, body := serveInternal(t, srv, http.MethodPost, path, done, "application/json"); code != http.StatusOK {
 		t.Fatalf("complete: status=%d body=%s", code, body)
 	}
 
@@ -136,7 +138,7 @@ func TestWorkersViewCountsFailuresAndIncidents(t *testing.T) {
 	}
 	// Retries to zero raises the incident (ADR-0061).
 	path := fmt.Sprintf("/api/v1/jobs/%d/fail", pulled.Jobs[0].JobKey)
-	body := `{"retries":0,"message":"smtp unreachable","worker":"mailer-1"}`
+	body := fmt.Sprintf(`{"retries":0,"message":"smtp unreachable","worker":"mailer-1","leaseToken":%d}`, pulled.Jobs[0].LeaseToken)
 	if code, b := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusOK {
 		t.Fatalf("fail: status=%d body=%s", code, b)
 	}
@@ -205,4 +207,67 @@ func TestWorkersViewMarksWhichTypesAWorkerMayLease(t *testing.T) {
 				tc.name, got.builtIn, got.leasable, got.inProcess, tc.builtIn, tc.leasable, tc.inProcess)
 		}
 	}
+}
+
+// TestWorkersViewNamesTheProcessesThatUseAType is what makes a row actionable on a
+// real installation: an engine with fifty job types has fifty "nobody" rows, and
+// none of them says anything until you know which process is waiting on it.
+func TestWorkersViewNamesTheProcessesThatUseAType(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+	orders := deployBPMN(t, h, jobTypeBPMN("orders", "send-email"))
+	newsletter := deployBPMN(t, h, jobTypeBPMN("newsletter", "send-email"))
+	deployBPMN(t, h, jobTypeBPMN("billing", "charge-card"))
+
+	byType := map[string][]typeUser{}
+	for _, row := range workers(t, srv).Types {
+		byType[row.Type] = row.Processes
+	}
+
+	// A type two definitions use names both of them, with the key to link to.
+	sendEmail := byType["send-email"]
+	if len(sendEmail) != 2 {
+		t.Fatalf("send-email is used by %d processes, want 2 (%+v)", len(sendEmail), sendEmail)
+	}
+	got := map[string]uint64{}
+	for _, u := range sendEmail {
+		got[u.ProcessID] = u.ProcessDefKey
+	}
+	if got["orders"] != orders || got["newsletter"] != newsletter {
+		t.Errorf("send-email users = %+v, want orders=%d newsletter=%d", got, orders, newsletter)
+	}
+	if len(byType["charge-card"]) != 1 {
+		t.Errorf("charge-card is used by %d processes, want 1", len(byType["charge-card"]))
+	}
+	// A built-in nothing deployed uses names nobody, rather than every process.
+	if users := byType[compiler.ScimJobType]; len(users) != 0 {
+		t.Errorf("an unused built-in lists %d processes, want none (%+v)", len(users), users)
+	}
+}
+
+// Only the newest version of a definition is listed. An engine keeps every version
+// it ever deployed, and listing all of them turns one useful link into a column of
+// near-identical ones.
+func TestWorkersViewListsOnlyTheNewestVersionOfAProcess(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+	deployBPMN(t, h, jobTypeBPMN("orders", "send-email"))
+	newest := deployBPMN(t, h, jobTypeBPMN("orders", "send-email"))
+
+	for _, row := range workers(t, srv).Types {
+		if row.Type != "send-email" {
+			continue
+		}
+		if len(row.Processes) != 1 {
+			t.Fatalf("two versions of one process listed %d entries, want 1 (%+v)", len(row.Processes), row.Processes)
+		}
+		if row.Processes[0].ProcessDefKey != newest {
+			t.Errorf("listed definition key %d, want the newest %d", row.Processes[0].ProcessDefKey, newest)
+		}
+		if row.Processes[0].Version != 2 {
+			t.Errorf("listed version %d, want 2", row.Processes[0].Version)
+		}
+		return
+	}
+	t.Fatal("no row for send-email")
 }

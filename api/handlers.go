@@ -384,10 +384,13 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
-	// Worker names the worker reporting the failure, for attribution in the Workers
-	// view (ADR-0157). Optional and non-authoritative: it changes nothing about how
-	// the failure is handled.
-	Worker string `json:"worker"`
+	// Worker names the worker reporting the failure. With LeaseToken it is the
+	// protocol path (ADR-0007): the report is accepted only from the holder of the
+	// job's current lease, so a stale worker cannot burn a retry — or raise an
+	// incident — on work another worker is now doing. Omitting both leaves the
+	// operator path, which is unfenced by design.
+	Worker     string `json:"worker"`
+	LeaseToken uint64 `json:"leaseToken"`
 	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
 	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
 	RetryBackoff int64 `json:"retryBackoff"`
@@ -802,8 +805,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
 	// timer is created and fsynced as part of the deploy, before it is acknowledged.
-	// A no-op for a model with no timer start events.
-	if err := s.jobRunner.Drive(); err != nil {
+	// A no-op for a model with no timer start events. Applying commands is all this
+	// needs — a deploy starts no instance, so it unblocks no in-process handler and
+	// nothing has to leave the loop.
+	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
 	return deployed, nil, nil
@@ -1804,6 +1809,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		d, ok := s.deployments[key]
 		if !ok {
@@ -1817,12 +1823,15 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -2067,8 +2076,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		s.proc.SetVariables(key, scopeKey, actor, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
@@ -2639,14 +2653,18 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
@@ -2676,6 +2694,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		scanErr = s.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
 			if k == key {
@@ -2687,12 +2706,15 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CancelInstance(key)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
@@ -2753,6 +2775,7 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		opErr     error // any scan / drive / stats failure inside the run loop
 		stats     statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		if _, ok := s.deployments[key]; !ok {
 			return
@@ -2776,11 +2799,13 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -2858,6 +2883,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 		opErr      error
 		stats      statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		active := make([]uint64, 0, len(uniq))
 		for k := range uniq {
@@ -2876,11 +2902,13 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 			s.proc.CancelInstance(k)
 		}
 		terminated = len(active)
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
 		return
@@ -2918,6 +2946,7 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		opErr     error
 		stats     statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		if _, ok := s.deployments[req.ProcessDefKey]; !ok {
 			return
@@ -2955,11 +2984,13 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if opErr = s.jobRunner.Drive(); opErr != nil {
-			return
-		}
-		stats, opErr = s.readStats()
+		driveNeeded = true
 	})
+	if driveNeeded {
+		if opErr = s.drive(); opErr == nil {
+			s.do(func() { stats, opErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -3317,8 +3348,9 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		found  bool
-		runErr error
+		found     bool
+		notHolder bool
+		runErr    error
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -3326,21 +3358,32 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		worker := strings.TrimSpace(req.Worker)
+		if worker != "" && !holdsLease(jv, worker, req.LeaseToken) {
+			notHolder = true
+			return
+		}
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
-		// Attribution only: a worker naming itself lets the Workers view show whose
-		// jobs are failing (ADR-0157). It changes nothing about the failure itself.
-		if worker := strings.TrimSpace(req.Worker); worker != "" {
+		if worker != "" {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.failed(worker, name)
 			}
 		}
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(strings.TrimSpace(req.Worker))+" does not hold this job's current lease; it may have elapsed and been taken by another worker")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -3390,8 +3433,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// offered — because the audit trail is the whole point of this route: without it a
 	// completed step would carry no explanation of why a person overrode the model.
 	var payload struct {
-		Reason string `json:"reason"`
-		Worker string `json:"worker"`
+		Reason     string `json:"reason"`
+		Worker     string `json:"worker"`
+		LeaseToken uint64 `json:"leaseToken"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -3409,6 +3453,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	worker := strings.TrimSpace(payload.Worker)
 	if worker == "" && reason == "" {
 		httpapi.Error(w, http.StatusBadRequest, "reason is required: completing a job by hand is an operator intervention and is recorded with who did it and why")
+		return
+	}
+	// A name is not a claim the protocol can trust on its own, so a worker completion
+	// carries the token its lease was issued with (ADR-0007).
+	if worker != "" && payload.LeaseToken == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "leaseToken is required when completing as a worker; it is returned by the activation that leased the job")
 		return
 	}
 	// Who is intervening, for the audit trail (ADR-0159/0098): the authenticated
@@ -3431,7 +3481,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if worker != "" {
-			if jv.LeaseExpiresAt == 0 || jv.Assignee != worker {
+			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
 				return
 			}
@@ -3442,8 +3492,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.proc.CompleteJobManually(key, actor, reason, vars...)
 		}
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
@@ -3451,7 +3506,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
-			"worker "+strconv.Quote(worker)+" does not hold a lease on this job; lease it first, or complete it as an operator with a reason")
+			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or complete it as an operator with a reason")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -3487,8 +3542,13 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		found = true
 		jobKey = inc.JobKey
 		s.proc.ResolveIncident(key, retries)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
@@ -3654,8 +3714,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CompleteJob(key, vars...)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
@@ -3754,8 +3819,13 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 		}
 		found = true
 		s.proc.AssignJob(key, assignee)
-		runErr = s.jobRunner.Drive()
 	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a connector's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "assign task: "+runErr.Error())
@@ -4005,6 +4075,13 @@ const maxJobLease = 24 * time.Hour
 // type indices are interned per process, so the global activatable index cannot tell
 // one definition's "send-email" from another's "charge-card" — see ADR-0007. A worker
 // that lists an instance's jobs and leases them by key is unambiguous today.
+// maxJobPollWait bounds how long a type-keyed pull may hold its request open
+// waiting for work. It is well under the proxy and load-balancer idle timeouts a
+// deployment is likely to sit behind, so a poll ends by answering rather than by
+// being cut off — a severed request looks like an error to a worker, and an empty
+// answer does not.
+const maxJobPollWait = 50 * time.Second
+
 // maxJobsPerPull bounds one type-keyed activation. A worker that asks for more is
 // given this many: the cap exists so a single request cannot lease an entire
 // backlog, which would starve every other worker for a whole lease period.
@@ -4015,15 +4092,20 @@ const maxJobsPerPull = 100
 // task* — the element instance's scope chain, so an activity-local input mapping
 // shadows the instance value exactly as it does for an in-process worker.
 type pulledJob struct {
-	JobKey             uint64         `json:"jobKey"`
-	Type               string         `json:"type"`
-	ProcessInstanceKey uint64         `json:"processInstanceKey"`
-	ElementInstanceKey uint64         `json:"elementInstanceKey"`
-	ProcessDefKey      uint64         `json:"processDefKey"`
-	ElementID          string         `json:"elementId"`
-	Retries            int32          `json:"retries"`
-	LeaseExpiresAt     int64          `json:"leaseExpiresAt"`
-	Variables          map[string]any `json:"variables"`
+	JobKey             uint64 `json:"jobKey"`
+	Type               string `json:"type"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey"`
+	ElementID          string `json:"elementId"`
+	Retries            int32  `json:"retries"`
+	LeaseExpiresAt     int64  `json:"leaseExpiresAt"`
+	// LeaseToken fences this lease: the worker presents it when it reports the
+	// outcome, and a report carrying a token the job has moved past is refused
+	// (ADR-0007). It is what makes a second instance of the same worker deployment
+	// distinguishable from the first, which the worker id alone cannot do.
+	LeaseToken uint64         `json:"leaseToken"`
+	Variables  map[string]any `json:"variables"`
 }
 
 // handleActivateJobsByType is the type-keyed pull ADR-0007 designed and its
@@ -4047,6 +4129,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		Worker  string `json:"worker"`
 		LeaseMs int64  `json:"leaseMs"`
 		MaxJobs int    `json:"maxJobs"`
+		// WaitMs long-polls: how long to hold the request open waiting for a job of
+		// this type before answering empty. 0 (or absent) answers immediately.
+		WaitMs int64 `json:"waitMs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -4073,6 +4158,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	if want > maxJobsPerPull {
 		want = maxJobsPerPull
 	}
+	wait := time.Duration(body.WaitMs) * time.Millisecond
+	if wait > maxJobPollWait {
+		wait = maxJobPollWait
+	}
 
 	var (
 		unknown  bool
@@ -4081,46 +4170,80 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		scanErr  error
 		runErr   error
 		reserved bool
+		jobType  int32
 	)
-	s.do(func() {
-		jobType, ok := s.jobTypes.Index(body.Type)
-		if !ok {
-			unknown = true
-			return
-		}
-		if jobType == compiler.UserTaskJobTypeIndex {
-			reserved = true
-			return
-		}
-		if s.jobRunner.Handles(jobType) {
-			inProc = true
-			return
-		}
-		// Collect first, then lease: activating mutates the very index being scanned.
-		var keys []uint64
-		if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
-			if len(keys) < want {
-				keys = append(keys, k)
-			}
-			return nil
-		}); scanErr != nil {
-			return
-		}
-		for _, k := range keys {
-			s.proc.ActivateJob(k, body.Worker, int64(lease))
-		}
-		if runErr = s.jobRunner.Drive(); runErr != nil {
-			return
-		}
-		for _, k := range keys {
-			j, ok := s.pulledJob(k, body.Type)
+	attempt := func() {
+		s.do(func() {
+			var ok bool
+			jobType, ok = s.jobTypes.Index(body.Type)
 			if !ok {
-				continue // completed or re-leased between the scan and here
+				unknown = true
+				return
 			}
-			jobs = append(jobs, j)
+			if jobType == compiler.UserTaskJobTypeIndex {
+				reserved = true
+				return
+			}
+			if s.jobRunner.Handles(jobType) {
+				inProc = true
+				return
+			}
+			// Collect first, then lease: activating mutates the very index being scanned.
+			var keys []uint64
+			if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
+				if len(keys) < want {
+					keys = append(keys, k)
+				}
+				return nil
+			}); scanErr != nil {
+				return
+			}
+			for _, k := range keys {
+				s.proc.ActivateJob(k, body.Worker, int64(lease))
+			}
+			// Applying the activation is all that is needed here: leasing takes a job
+			// off the activatable index, so it unblocks no in-process handler and there
+			// is nothing to run off the loop.
+			if runErr = s.proc.RunUntilIdle(); runErr != nil {
+				return
+			}
+			for _, k := range keys {
+				j, ok := s.pulledJob(k, body.Type)
+				if !ok {
+					continue // completed or re-leased between the scan and here
+				}
+				jobs = append(jobs, j)
+			}
+			s.workers.leased(body.Worker, body.Type, len(jobs))
+		})
+	}
+
+	attempt()
+	// Long-poll: park until the engine says a job of this type is durable, rather
+	// than answering empty and being asked again.
+	//
+	// Two things make this correct. The waiter is registered BEFORE the retry, so a
+	// job created between the failed attempt and the registration still wakes it —
+	// register-then-look, never look-then-register. And the waiting happens out here,
+	// outside s.do: a request holding the run loop while it waits would freeze the
+	// single writer for the whole poll, which is the stall this entire sequence
+	// exists to remove.
+	if wait > 0 && len(jobs) == 0 && !unknown && !inProc && !reserved && scanErr == nil && runErr == nil {
+		woken, cancel := s.jobWaiters.wait(jobType)
+		defer cancel()
+		attempt()
+		if len(jobs) == 0 {
+			timer := time.NewTimer(wait)
+			defer timer.Stop()
+			select {
+			case <-woken:
+				attempt()
+			case <-timer.C:
+			case <-r.Context().Done():
+			case <-s.quit:
+			}
 		}
-		s.workers.leased(body.Worker, body.Type, len(jobs))
-	})
+	}
 	switch {
 	case unknown:
 		httpapi.Error(w, http.StatusNotFound,
@@ -4143,6 +4266,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// holdsLease reports whether a worker's report may be trusted: the job must be
+// leased right now, to that worker, under the very lease the token names.
+//
+// The token is what the worker id cannot supply. Two instances of one worker
+// deployment share a name, so when the first one's lease elapses and the second
+// takes the job, a late report from the first still presents the right *name*.
+// The epoch moves with every lease, so the stale report names a lease the job has
+// left behind and is refused (ADR-0007's fencing item).
+func holdsLease(jv *model.JobValue, worker string, token uint64) bool {
+	return jv.LeaseExpiresAt != 0 && jv.Assignee == worker && jv.LeaseEpoch == token && token != 0
+}
+
 // pulledJob reads one leased job back out of state, with the element it sits on
 // and the variables visible there. It reads the lease deadline back rather than
 // recomputing it: the engine froze that value from its own clock, and it is what
@@ -4159,6 +4294,7 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 		ElementInstanceKey: jv.ElementInstanceKey,
 		Retries:            jv.Retries,
 		LeaseExpiresAt:     jv.LeaseExpiresAt,
+		LeaseToken:         jv.LeaseEpoch,
 		Variables:          map[string]any{},
 	}
 	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
@@ -4219,7 +4355,9 @@ func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.ActivateJob(key, body.Worker, int64(lease))
-		runErr = s.jobRunner.Drive()
+		// As above: a lease unblocks no in-process handler, so applying the command is
+		// the whole of the work and it belongs on the loop.
+		runErr = s.proc.RunUntilIdle()
 		if runErr != nil {
 			return
 		}

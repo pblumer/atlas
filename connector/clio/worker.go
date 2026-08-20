@@ -27,7 +27,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // instance's variables as its body — keyed by the job key so an at-least-once
 // retry de-duplicates (ADR-0036). Returning an error leaves the job pending,
 // exactly as for any worker; the runner completes it only on success.
-func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handler {
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handler {
 	return func(j job.Job) error {
 		cp, detail, client, ei, ok, err := resolveConnector(store, lookup, reg, j)
 		if err != nil || !ok {
@@ -55,7 +55,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 // runs it, otherwise it reads get_state for the task's subject (with the optional
 // reduce spec). Returning an error leaves the job pending (retry, then an incident),
 // exactly as for the write handler.
-func QueryHandler(store *state.Store, lookup ProcessLookup, reg *Registry) job.OutputHandler {
+func QueryHandler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		cp, detail, client, _, ok, err := resolveConnector(store, lookup, reg, j)
 		if err != nil || !ok {
@@ -88,7 +88,7 @@ func QueryHandler(store *state.Store, lookup ProcessLookup, reg *Registry) job.O
 // task's subject events (up to the task's limit) from the connector and writes them
 // back into the task's result variable as a JSON array. Register it for the reserved
 // ClioReadJobType index via HandleWithOutput (ADR-0036).
-func ReadHandler(store *state.Store, lookup ProcessLookup, reg *Registry) job.OutputHandler {
+func ReadHandler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		cp, detail, client, _, ok, err := resolveConnector(store, lookup, reg, j)
 		if err != nil || !ok {
@@ -118,7 +118,7 @@ func ReadHandler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Ou
 // connector-task detail, and resolves the named connector's client. ok is false with
 // a nil error only when the element instance is already gone; any other failure
 // returns an error so the job stays pending.
-func resolveConnector(store *state.Store, lookup ProcessLookup, reg *Registry, j job.Job) (*compiler.CompiledProcess, *compiler.ConnectorTaskDetail, Client, *model.ElementInstanceValue, bool, error) {
+func resolveConnector(store state.Reader, lookup ProcessLookup, reg *Registry, j job.Job) (*compiler.CompiledProcess, *compiler.ConnectorTaskDetail, Client, *model.ElementInstanceValue, bool, error) {
 	ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 	if err != nil {
 		return nil, nil, nil, nil, false, err
@@ -172,7 +172,7 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 // body a connector task sends. Until output mappings exist (Milestone 1) the
 // whole variable scope is the payload, exactly as a message throw publishes its
 // instance's variables (ADR-0035/0036).
-func instanceData(store *state.Store, scope uint64) (map[string]any, error) {
+func instanceData(store state.Reader, scope uint64) (map[string]any, error) {
 	data := map[string]any{}
 	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
 		data[v.Name] = varToAny(v)

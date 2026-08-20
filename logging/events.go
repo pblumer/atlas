@@ -84,6 +84,15 @@ var (
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")
+	// WorkerStarting is the out-of-process job worker announcing what it will serve
+	// and for which server (ADR-0157).
+	WorkerStarting = newEvent("worker.starting")
+	// WorkerPollFailed is a worker reporting that a poll failed and will be retried.
+	WorkerPollFailed = newEvent("worker.poll_failed")
+	// WorkerSupervisorStarted and WorkerSupervisorFailed report the lifecycle of a
+	// worker process Atlas launched itself (ADR-0157 step 7).
+	WorkerSupervisorStarted = newEvent("worker.supervised_started")
+	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
 )
 
 // Recovery checkpoints and WAL compaction (ADR-0131).

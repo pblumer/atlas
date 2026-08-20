@@ -303,3 +303,32 @@ func TestDraftSessionRefusesUnflushableWriter(t *testing.T) {
 		t.Errorf("Content-Type = %q, want the stream never to have been opened", got)
 	}
 }
+
+// newServerWithClock is newServerForErrors with the engine clock injected, for tests
+// that must make time pass (a worker's lease elapsing) without waiting for it.
+func newServerWithClock(t *testing.T, clk engine.Clock) *Server {
+	t.Helper()
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, log, store, clk)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() {
+		srv.Close()
+		_ = store.Close()
+		_ = log.Close()
+	})
+	return srv
+}

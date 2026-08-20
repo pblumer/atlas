@@ -107,6 +107,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		statErr error
 		stats   statsResp
 	)
+	var driveNeeded bool
 	s.do(func() {
 		d, ok := s.deployments[key]
 		if !ok {
@@ -118,12 +119,15 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		driveNeeded = true
 	})
+	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
+	// read-back that follows it are two separate visits to the loop.
+	if driveNeeded {
+		if runErr = s.drive(); runErr == nil {
+			s.do(func() { stats, statErr = s.readStats() })
+		}
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")

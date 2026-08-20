@@ -922,6 +922,10 @@ type CompiledProcess struct {
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
 
+// NodeCount is how many nodes the process compiled to, so a caller outside this
+// package can walk them: node ids are the dense range [0, NodeCount).
+func (p *CompiledProcess) NodeCount() int { return len(p.nodes) }
+
 // IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
 // that may hold a cancel end event and host a cancel boundary (ADR-0108).
 func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }

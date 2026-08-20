@@ -93,11 +93,15 @@ func (s *Server) pollInbound(ctx context.Context) {
 			for _, p := range pubs {
 				s.proc.PublishInbound(sourceID, p.seq, name, p.key, p.vars...)
 			}
-			if err := s.jobRunner.Drive(); err != nil {
-				return // leave the cursor un-advanced; re-read next tick (engine dedupes)
-			}
-			s.advanceInboundCursor(subID, lastID)
 		})
+		// A correlated message can start or advance an instance straight into a
+		// connector task, so the driving happens off the run loop (ADR-0157 step 6).
+		// The cursor only advances once that succeeded; otherwise it is left where it
+		// was and the events are re-read next tick, which the engine dedupes.
+		if err := s.drive(); err != nil {
+			continue
+		}
+		s.do(func() { s.advanceInboundCursor(subID, lastID) })
 	}
 }
 
