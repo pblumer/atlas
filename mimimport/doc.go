@@ -20,6 +20,11 @@
 //
 // The conversion reproduces the workflow's *structure and intent*, not MIM's
 // runtime semantics: the authentication/authorization/action request model, the
-// FEEL bodies of individual activities, and diagram layout are intentionally out
-// of scope for a first pass and are flagged for manual review where relevant.
+// resource operations inside individual activities (their UpdatesTable /
+// QueriesTable bodies), and diagram layout are intentionally out of scope for a
+// first pass and are flagged for manual review where relevant. A per-activity
+// ActivityExecutionCondition is the one guard that *is* made executable: where
+// the WAL expression is translatable it becomes a FEEL condition on an exclusive
+// skip gateway around the activity, and where it is not it is preserved and
+// flagged instead.
 package mimimport

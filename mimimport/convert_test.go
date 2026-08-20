@@ -78,8 +78,8 @@ func TestConvertApprovalWorkflow(t *testing.T) {
 // TestConvertMIMWALSequential guards the extraction of the three information
 // classes a raw MIMWAL SequentialWorkflow carries beyond its bare activity list:
 // the workflow-level identity metadata, the ActivityDisplayName labels, and the
-// per-activity ActivityExecutionCondition gates (as attribute and as property
-// element).
+// per-activity ActivityExecutionCondition gates — now translated to FEEL and
+// wired as exclusive skip gateways (as attribute and as property element).
 func TestConvertMIMWALSequential(t *testing.T) {
 	src, err := os.ReadFile("testdata/mimwal-sequential.xoml")
 	if err != nil {
@@ -99,9 +99,13 @@ func TestConvertMIMWALSequential(t *testing.T) {
 		`Version=2.20.723.0`, // the activity-library assembly/version survived
 		// ActivityDisplayName drives the node label instead of the x:Name handle.
 		`name="Global - Get CoreMIMConfiguration Parameter"`,
-		// Both condition forms are surfaced on the task documentation.
-		`ConvertToBoolean(//WorkflowData/HasStructureResponsibilities)`,
-		`ConvertToBoolean(//Target/PersonType/UseSuffixAccountName)`,
+		// Each execution condition becomes a skip gateway carrying translated FEEL.
+		`<exclusiveGateway`,
+		`ausführen?`,
+		`<conditionExpression>= (HasStructureResponsibilities) or (HasDisableInheritanceResponsibilities)</conditionExpression>`,
+		`<conditionExpression>= (HasResponsibilities) and (PersonTransitionInGracePeriod)</conditionExpression>`,
+		// The property-element condition and the //Target/… path both translate.
+		`<conditionExpression>= (Target.PersonType.UseSuffixAccountName)</conditionExpression>`,
 	}
 	for _, w := range wants {
 		if !strings.Contains(bpmn, w) {
@@ -109,20 +113,54 @@ func TestConvertMIMWALSequential(t *testing.T) {
 		}
 	}
 
+	// The raw WAL syntax must not leak into an executable conditionExpression.
+	if strings.Contains(bpmn, "<conditionExpression>= ConvertToBoolean") {
+		t.Errorf("WAL ConvertToBoolean leaked untranslated into a condition:\n%s", bpmn)
+	}
 	// The generated node must not be labelled by the meaningless x:Name handle.
 	if strings.Contains(bpmn, `name="actionActivity6"`) {
 		t.Errorf("node was labelled by x:Name handle instead of ActivityDisplayName:\n%s", bpmn)
 	}
 
-	// Each of the three execution conditions must be flagged for manual review.
-	conds := 0
+	// All three execution conditions translate, so each is a native skip gateway
+	// and none is left for manual review.
+	translated := 0
 	for _, n := range res.Report.Notes {
-		if strings.HasPrefix(n.Detail, "ActivityExecutionCondition not translated") {
-			conds++
+		if strings.HasPrefix(n.Detail, "ActivityExecutionCondition translated to FEEL") {
+			translated++
 		}
 	}
-	if conds != 3 {
-		t.Errorf("expected 3 ActivityExecutionCondition review notes, got %d\n%s", conds, res.Report.String())
+	if translated != 3 {
+		t.Errorf("expected 3 translated execution conditions, got %d\n%s", translated, res.Report.String())
+	}
+	if res.Report.Count(StatusManualReview) != 0 {
+		t.Errorf("no condition should be left for manual review, got %d\n%s",
+			res.Report.Count(StatusManualReview), res.Report.String())
+	}
+}
+
+// TestExecutionConditionFallback covers a condition the first-pass translator
+// cannot render: the activity stays unguarded (no gateway) and the original is
+// surfaced for manual review rather than emitted as broken FEEL.
+func TestExecutionConditionFallback(t *testing.T) {
+	src := `<SequentialWorkflow>
+	  <UpdateResources ActivityDisplayName="Suffix" ActivityExecutionCondition="IIF(//WorkflowData/X, 1, 0) = 1" />
+	</SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "F")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	bpmn := string(res.BPMN)
+	if strings.Contains(bpmn, "<exclusiveGateway") {
+		t.Errorf("an untranslatable condition must not produce a gateway:\n%s", bpmn)
+	}
+	if !strings.Contains(bpmn, "IIF(//WorkflowData/X, 1, 0) = 1") {
+		t.Errorf("the original condition must be surfaced verbatim:\n%s", bpmn)
+	}
+	if res.Report.Count(StatusManualReview) != 1 {
+		t.Errorf("untranslatable condition should be flagged once, got %d\n%s",
+			res.Report.Count(StatusManualReview), res.Report.String())
 	}
 }
 

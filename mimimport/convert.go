@@ -91,6 +91,11 @@ type Result struct {
 //	Create/Update/Delete/Group/Resource → serviceTask (preserved, type mim-resource)
 //	anything else    → task           (manual-review) with the XOML preserved
 //
+// A leaf carrying a MIMWAL ActivityExecutionCondition is additionally wrapped in
+// an exclusive skip gateway whose "run" flow holds the condition translated to
+// FEEL, so the guard executes; an untranslatable condition leaves the leaf
+// unguarded and is flagged for manual review.
+//
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
 	root, err := parseXOML(r)
@@ -231,8 +236,7 @@ func (b *builder) emit(n xnode) (entry, exit string) {
 	case "conditionedactivitygroup":
 		return b.emitSequence(activityChildren(n))
 	default:
-		id := b.emitLeaf(n)
-		return id, id
+		return b.emitLeaf(n)
 	}
 }
 
@@ -339,20 +343,31 @@ func (b *builder) setDefault(gwID, flowID string) {
 }
 
 // emitLeaf maps a single (non-control-flow) activity to a BPMN task and records
-// its status. The original activity is preserved on every leaf.
+// its status, returning the entry and exit node ids of the produced subgraph.
 //
 // A MIMWAL activity may carry an ActivityExecutionCondition — a gate that, at
-// MIM runtime, decides whether the step runs at all. BPMN has no per-task
-// execution guard, so the condition cannot be translated in a first pass; it is
-// surfaced on the task's documentation and flagged for manual review rather
-// than left buried in the preserved source.
-func (b *builder) emitLeaf(n xnode) string {
+// MIM runtime, decides whether the step runs at all. When that condition can be
+// translated to FEEL, the task is wrapped in an exclusive "skip" gateway that
+// runs it while the condition holds and bypasses it otherwise, so the guard
+// becomes executable BPMN. When the expression is too rich for the first-pass
+// translator, the task is emitted unguarded and the original condition is
+// surfaced on its documentation and flagged for manual review — never dropped.
+func (b *builder) emitLeaf(n xnode) (string, string) {
 	kind, jobType, status, detail := classifyLeaf(n.local())
-	doc := detail
 	cond, hasCond := executionCondition(n)
+	feelCond, translated := "", false
 	if hasCond {
+		feelCond, translated = translateCondition(cond)
+	}
+
+	doc := detail
+	switch {
+	case translated:
+		doc += " · Ausführungsbedingung nach FEEL übersetzt: = " + feelCond
+	case hasCond:
 		doc += " · Ausführungsbedingung (Original, nicht nach FEEL übersetzt): " + cond
 	}
+
 	id := b.addNode(bnode{
 		kind:    kind,
 		name:    n.displayName(),
@@ -362,11 +377,34 @@ func (b *builder) emitLeaf(n xnode) string {
 		doc:     doc,
 	})
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
-	if hasCond {
+
+	switch {
+	case !hasCond:
+		return id, id
+	case !translated:
 		b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: StatusManualReview,
 			Detail: "ActivityExecutionCondition not translated to FEEL: " + cond})
+		return id, id
+	default:
+		return b.wrapConditional(n, id, feelCond)
 	}
-	return id
+}
+
+// wrapConditional surrounds an already-emitted task with an exclusive-gateway
+// skip pattern: the split routes into the task when the FEEL condition holds and
+// straight to the join (its default) otherwise; the task's exit rejoins there.
+// The translated guard rides the "run" flow so MIM's ActivityExecutionCondition
+// executes natively.
+func (b *builder) wrapConditional(n xnode, taskID, feelCond string) (string, string) {
+	split := b.addNode(bnode{kind: "exclusiveGateway", name: n.displayName() + " ausführen?"})
+	join := b.addNode(bnode{kind: "exclusiveGateway", name: ""})
+	b.addFlow(split, taskID, "ja", "= "+feelCond)
+	b.addFlow(taskID, join, "", "")
+	skip := b.addFlow(split, join, "nein", "")
+	b.setDefault(split, skip)
+	b.note(Note{NodeID: split, Activity: n.local(), Kind: "exclusiveGateway", Status: StatusNative,
+		Detail: "ActivityExecutionCondition translated to FEEL: = " + feelCond})
+	return split, join
 }
 
 // executionCondition returns a MIMWAL activity's ActivityExecutionCondition, as
