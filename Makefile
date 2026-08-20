@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        whats-new docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -45,6 +45,12 @@ cover:
 
 # The full gate. A change is "done" when this passes.
 check: build vet fmt-check race cover
+
+# Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
+# and scripts/whats-new/overrides.json. Commit the regenerated JSON. See
+# scripts/whats-new/README.md.
+whats-new:
+	node scripts/whats-new/gen.mjs
 
 tidy:
 	go mod tidy
