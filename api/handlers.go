@@ -379,6 +379,10 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// Worker names the worker reporting the failure, for attribution in the Workers
+	// view (ADR-0157). Optional and non-authoritative: it changes nothing about how
+	// the failure is handled.
+	Worker string `json:"worker"`
 	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
 	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
 	RetryBackoff int64 `json:"retryBackoff"`
@@ -3269,11 +3273,19 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		runErr error
 	)
 	s.do(func() {
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
+		// Attribution only: a worker naming itself lets the Workers view show whose
+		// jobs are failing (ADR-0157). It changes nothing about the failure itself.
+		if worker := strings.TrimSpace(req.Worker); worker != "" {
+			if name, ok := s.jobTypes.Name(jv.JobType); ok {
+				s.workers.failed(worker, name)
+			}
+		}
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -3376,6 +3388,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.proc.CompleteJob(key, vars...)
+			if name, ok := s.jobTypes.Name(jv.JobType); ok {
+				s.workers.completed(worker, name)
+			}
 		} else {
 			s.proc.CompleteJobManually(key, actor, reason, vars...)
 		}
@@ -4056,6 +4071,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			}
 			jobs = append(jobs, j)
 		}
+		s.workers.leased(body.Worker, body.Type, len(jobs))
 	})
 	switch {
 	case unknown:

@@ -267,6 +267,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
+			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents",
+			resp: jsonBody("Workers and job-type queues", tObject())}},
 		{"POST", "/api/v1/jobs/activate", s.handleActivateJobsByType, apiOp{
 			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull (ADR-0007)", tag: "Incidents",
 			req: jsonBody("Job type, worker id, lease and batch size", schemaObj(map[string]any{
