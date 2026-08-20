@@ -3625,3 +3625,90 @@ func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// defaultJobLease is how long a worker holds a job when it does not say (ADR-0007).
+// Five minutes is long enough for ordinary work and short enough that a crashed
+// worker's job is offered again while someone still cares.
+const defaultJobLease = 5 * time.Minute
+
+// maxJobLease bounds what a worker may ask for. A lease is the only thing that gets a
+// job back from a worker that died, so an unbounded one is a job parked forever by a
+// typo.
+const maxJobLease = 24 * time.Hour
+
+// handleActivateJob leases one job to an external worker (ADR-0007). While the lease
+// holds, the job is off the activatable index — no other worker is offered it — and it
+// records who holds it until when. When the lease elapses the job is offered again,
+// which is what makes a worker crash recoverable without an operator.
+//
+// It leases a job the caller *names*. The type-keyed pull an external worker really
+// wants ("give me the next send-email job") is not here yet, and deliberately so: job
+// type indices are interned per process, so the global activatable index cannot tell
+// one definition's "send-email" from another's "charge-card" — see ADR-0007. A worker
+// that lists an instance's jobs and leases them by key is unambiguous today.
+func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var body struct {
+		Worker  string `json:"worker"`
+		LeaseMs int64  `json:"leaseMs"`
+	}
+	// An empty body is a valid activation: an anonymous worker taking the default lease.
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	lease := defaultJobLease
+	if body.LeaseMs > 0 {
+		lease = time.Duration(body.LeaseMs) * time.Millisecond
+	}
+	if lease > maxJobLease {
+		httpapi.Error(w, http.StatusBadRequest,
+			"leaseMs is longer than the "+maxJobLease.String()+" maximum; a lease is what returns a job from a dead worker")
+		return
+	}
+
+	var (
+		found  bool
+		held   bool
+		expiry int64
+		runErr error
+	)
+	s.do(func() {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
+			return
+		}
+		found = true
+		if jv.LeaseExpiresAt != 0 {
+			held = true // another worker holds it; its lease has to elapse first
+			return
+		}
+		s.proc.ActivateJob(key, body.Worker, int64(lease))
+		runErr = s.jobRunner.Drive()
+		if runErr != nil {
+			return
+		}
+		// Read back what was committed rather than recomputing the deadline here: the
+		// handler froze it from the engine's clock, and that is the value the worker has
+		// to trust (invariant I6).
+		if jv, ok, err := s.store.GetJob(key); err == nil && ok {
+			expiry = jv.LeaseExpiresAt
+		}
+	})
+	switch {
+	case runErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "activate job: "+runErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case held:
+		httpapi.Error(w, http.StatusConflict, "another worker holds this job; its lease has not elapsed yet")
+	default:
+		httpapi.JSON(w, http.StatusOK, map[string]any{
+			"jobKey": key, "worker": body.Worker, "leaseExpiresAt": expiry,
+		})
+	}
+}

@@ -266,6 +266,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
+			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents",
+			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
+				"worker": tString(), "leaseMs": tInteger(),
+			})),
+			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
 			summary: "Complete a job by hand (operator counterpart to fail; not the worker protocol)", tag: "Incidents",
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),

@@ -444,6 +444,14 @@ history.
 | `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
 | `/mcp` | Model Context Protocol endpoint — **not authenticated at the transport level** |
 
+An external worker leases a job with `POST /api/v1/jobs/{key}/activate` and reports the
+outcome with `.../complete` or `.../fail` ([ADR-0007](adr/0007-job-worker-protocol.md)).
+A lease holds the job for `leaseMs` (5 minutes by default, 24 hours at most) and takes it
+off the list other workers are offered; when it elapses the job is offered again, so a
+worker that crashes does not park its work forever. Leasing a job someone else holds is a
+`409`. Pulling by job *type* — "give me the next `send-email` job" — is not available yet;
+the ADR records why.
+
 #### Health and readiness
 
 `/healthz` and `/readyz` answer different questions and are not interchangeable.

@@ -141,10 +141,13 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 // positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	// A job is pullable iff it has retries left AND is not currently backing off from a
-	// failure (RetryDueDate == 0): a backing-off job stays stored, off the worker-visible
-	// index, until its retry timer clears RetryDueDate and re-emits it (ADR-0111).
-	if v.Retries > 0 && v.RetryDueDate == 0 {
+	// A job is pullable iff it has retries left AND nothing is holding it. Two holds
+	// exist and compose: a retry backoff after a failure (RetryDueDate, ADR-0111) and a
+	// worker's lease while it works (LeaseExpiresAt, ADR-0007). Each is stored on the job and
+	// released by its own timer, so a job held by both stays off the worker-visible index
+	// until the last hold is gone — which is what keeps a lease expiry from handing out a
+	// job that is still meant to be backing off.
+	if v.Retries > 0 && v.RetryDueDate == 0 && v.LeaseExpiresAt == 0 {
 		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
 			err = e
 		}

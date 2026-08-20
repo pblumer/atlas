@@ -450,6 +450,24 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string, backof
 	})
 }
 
+// ActivateJob enqueues an external worker's claim on a job (ADR-0007): the job is held
+// off the activatable index for leaseFor nanoseconds and recorded as held by worker, so
+// no other worker is offered it while this one works.
+//
+// The lease is a bound, not a lock. When it elapses the job is offered again — that is
+// what makes a worker crash recoverable without an operator — so a worker that outlives
+// its lease may find its work has been handed on. Activating a job that is gone, or one
+// another worker already holds, is a no-op. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) ActivateJob(jobKey uint64, worker string, leaseFor int64) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobActivated,
+		Value:     inflightValue{job: model.JobValue{Assignee: worker}},
+		LeaseFor:  leaseFor,
+	})
+}
+
 // ThrowJobError enqueues a worker's report that its job threw a BPMN error code
 // (ADR-0089) — the "throw BPMN error" verb, a sibling of FailJob. Instead of retrying or
 // raising an incident, the handler cancels the job and propagates the error from the job's

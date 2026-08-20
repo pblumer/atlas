@@ -40,6 +40,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTJob, model.IntentJobFailed):                    handleJobFailed,
 		handlerKey(model.VTJob, model.IntentJobErrorThrown):               handleJobError,
 		handlerKey(model.VTJob, model.IntentJobAssigned):                  handleJobAssigned,
+		handlerKey(model.VTJob, model.IntentJobActivated):                 handleJobActivate,
 		handlerKey(model.VTIncident, model.IntentIncidentResolved):        handleIncidentResolved,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):             handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):              handleTimerStartArm,
@@ -667,6 +668,54 @@ func reactivateJobAfterBackoff(c *ProcessingContext, jobKey uint64) {
 	c.NotifyJobAvailable(job.JobType)
 }
 
+// handleJobActivate leases a job to an external worker (ADR-0007). The job stays stored
+// and stays owned by its element; what changes is that it leaves the activatable index
+// and records who holds it until when, so a second worker pulling the same type is not
+// handed the same work.
+//
+// The deadline is read from the clock here and frozen into the event (invariant I6), and
+// a lease timer is armed to release it. Activating a job that is gone — completed,
+// cancelled, or interrupted by a boundary event while the worker was deciding — is a
+// no-op, as is activating one another worker already holds: the index is what offers a
+// job, and a held job is not on it, so this only happens on a stale or racing command.
+func handleJobActivate(c *ProcessingContext) {
+	job := c.GetJob(c.cmd.Key)
+	if job == nil || job.LeaseExpiresAt != 0 {
+		return
+	}
+	job.Assignee = c.cmd.Value.job.Assignee
+	job.LeaseExpiresAt = c.Now() + c.cmd.LeaseFor
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobActivated, *job)
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: job.ProcessInstanceKey,
+		JobKey:             c.cmd.Key,
+		DueDate:            job.LeaseExpiresAt,
+		JobKind:            model.JobTimerLease,
+	})
+}
+
+// expireJobLease releases a lease whose deadline has passed (ADR-0007): the worker
+// holding the job never reported, so the job is offered again. A job that is gone — the
+// normal case, because a worker that finishes before its deadline leaves the timer behind
+// — is a no-op, and so is one whose lease was already released.
+//
+// It clears *only* the lease. A job can also be held by a retry backoff (ADR-0111), and
+// PutJob returns it to the index only when nothing holds it, so a lease expiring during a
+// backoff releases its own hold and leaves the job waiting out the rest of the backoff.
+// Workers are notified only if the job actually became pullable, for the same reason.
+func expireJobLease(c *ProcessingContext, jobKey uint64) {
+	job := c.GetJob(jobKey)
+	if job == nil || job.LeaseExpiresAt == 0 {
+		return
+	}
+	job.Assignee = ""
+	job.LeaseExpiresAt = 0
+	c.AppendJobEvent(jobKey, model.IntentJobTimedOut, *job)
+	if job.Retries > 0 && job.RetryDueDate == 0 {
+		c.NotifyJobAvailable(job.JobType)
+	}
+}
+
 // handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
 // cancels the job (the token neither retries nor completes) and propagates the error from
 // the job's element to the nearest matching error handler. A matching error boundary on the
@@ -780,9 +829,14 @@ func handleTimerTriggered(c *ProcessingContext) {
 	timer := c.cmd.Value.timer
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
 	if timer.JobKey != 0 {
-		// A retry-backoff timer (ADR-0111): its backoff has elapsed, so re-activate the failed
-		// job rather than firing an element. Checked first — a retry timer carries no element.
-		reactivateJobAfterBackoff(c, timer.JobKey)
+		// A job timer: it releases one of the holds on a job rather than firing an element.
+		// Checked first — a job timer carries no element. Which hold it releases is the
+		// timer's own kind, because a job can carry both at once (see expireJobLease).
+		if timer.JobKind == model.JobTimerLease {
+			expireJobLease(c, timer.JobKey) // a worker's lease elapsed (ADR-0007)
+		} else {
+			reactivateJobAfterBackoff(c, timer.JobKey) // a retry backoff elapsed (ADR-0111)
+		}
 		return
 	}
 	if timer.ProcessInstanceKey == 0 {
