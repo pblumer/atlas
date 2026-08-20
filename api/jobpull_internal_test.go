@@ -383,3 +383,124 @@ func expireLease(t *testing.T, srv *Server, clk *testClock) {
 		}
 	})
 }
+
+// TestLongPollReturnsWhenAJobArrives is the point of long-polling: the request is
+// made against an empty queue and answers when work appears, instead of returning
+// nothing and being asked again.
+func TestLongPollReturnsWhenAJobArrives(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	// Drain the one job the fixture parked, so the queue starts empty.
+	if _, drained := pull(t, srv, `{"type":"send-email","worker":"drain"}`); len(drained.Jobs) != 1 {
+		t.Fatalf("could not drain the initial job")
+	}
+
+	done := make(chan pullResp, 1)
+	go func() {
+		_, got := pull(t, srv, `{"type":"send-email","worker":"w1","waitMs":5000}`)
+		done <- got
+	}()
+	// Wait until the poll is actually parked, then create the work it is waiting for.
+	deadline := time.Now().Add(3 * time.Second)
+	for srv.jobWaiters.count(waitTypeIndex(t, srv, "send-email")) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the long poll never registered a waiter")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+
+	select {
+	case got := <-done:
+		if len(got.Jobs) != 1 {
+			t.Errorf("the long poll returned %d jobs, want the one that arrived", len(got.Jobs))
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the long poll did not return after a job of its type was created")
+	}
+}
+
+// TestLongPollDoesNotHoldTheRunLoop is the constraint the whole sequence exists for.
+// A request that waited inside Loop.Do would freeze the single writer for the length
+// of the poll — every other request, every timer tick, the whole engine. So while a
+// long poll is parked, ordinary work must still be served.
+func TestLongPollDoesNotHoldTheRunLoop(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	if _, drained := pull(t, srv, `{"type":"send-email","worker":"drain"}`); len(drained.Jobs) != 1 {
+		t.Fatalf("could not drain the initial job")
+	}
+
+	parked := make(chan struct{})
+	go func() {
+		defer close(parked)
+		pull(t, srv, `{"type":"send-email","worker":"w1","waitMs":3000}`)
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for srv.jobWaiters.count(waitTypeIndex(t, srv, "send-email")) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the long poll never registered a waiter")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// The engine is still answering while that poll sleeps.
+	served := make(chan int, 1)
+	go func() {
+		code, _ := serveInternal(t, srv, http.MethodGet, "/api/v1/stats", "", "")
+		served <- code
+	}()
+	select {
+	case code := <-served:
+		if code != http.StatusOK {
+			t.Errorf("a request served during a long poll got status %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the run loop was blocked while a long poll waited — the stall this feature must not reintroduce")
+	}
+	<-parked
+}
+
+// A poll that waits and finds nothing answers with an empty list, not an error: an
+// idle queue is the steady state a worker polls through.
+func TestLongPollTimesOutEmpty(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	if _, drained := pull(t, srv, `{"type":"send-email","worker":"drain"}`); len(drained.Jobs) != 1 {
+		t.Fatalf("could not drain the initial job")
+	}
+	start := time.Now()
+	code, got := pull(t, srv, `{"type":"send-email","worker":"w1","waitMs":120}`)
+	if code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", code)
+	}
+	if len(got.Jobs) != 0 {
+		t.Errorf("returned %d jobs from an empty queue", len(got.Jobs))
+	}
+	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
+		t.Errorf("returned after %v, want it to have waited about 120ms", elapsed)
+	}
+}
+
+// A poll that finds work immediately must not wait for it.
+func TestLongPollReturnsImmediatelyWhenWorkIsWaiting(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	start := time.Now()
+	code, got := pull(t, srv, `{"type":"send-email","worker":"w1","waitMs":5000}`)
+	if code != http.StatusOK || len(got.Jobs) != 1 {
+		t.Fatalf("status=%d jobs=%d, want 200 and 1", code, len(got.Jobs))
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("took %v to return work that was already parked", elapsed)
+	}
+}
+
+// waitTypeIndex is the engine-wide index of a job type, which is what the waiter
+// registry is keyed by.
+func waitTypeIndex(t *testing.T, srv *Server, name string) int32 {
+	t.Helper()
+	idx, ok := srv.jobTypes.Index(name)
+	if !ok {
+		t.Fatalf("job type %q is not registered", name)
+	}
+	return idx
+}

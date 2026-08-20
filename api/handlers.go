@@ -4022,6 +4022,13 @@ const maxJobLease = 24 * time.Hour
 // type indices are interned per process, so the global activatable index cannot tell
 // one definition's "send-email" from another's "charge-card" — see ADR-0007. A worker
 // that lists an instance's jobs and leases them by key is unambiguous today.
+// maxJobPollWait bounds how long a type-keyed pull may hold its request open
+// waiting for work. It is well under the proxy and load-balancer idle timeouts a
+// deployment is likely to sit behind, so a poll ends by answering rather than by
+// being cut off — a severed request looks like an error to a worker, and an empty
+// answer does not.
+const maxJobPollWait = 50 * time.Second
+
 // maxJobsPerPull bounds one type-keyed activation. A worker that asks for more is
 // given this many: the cap exists so a single request cannot lease an entire
 // backlog, which would starve every other worker for a whole lease period.
@@ -4069,6 +4076,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		Worker  string `json:"worker"`
 		LeaseMs int64  `json:"leaseMs"`
 		MaxJobs int    `json:"maxJobs"`
+		// WaitMs long-polls: how long to hold the request open waiting for a job of
+		// this type before answering empty. 0 (or absent) answers immediately.
+		WaitMs int64 `json:"waitMs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -4095,6 +4105,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	if want > maxJobsPerPull {
 		want = maxJobsPerPull
 	}
+	wait := time.Duration(body.WaitMs) * time.Millisecond
+	if wait > maxJobPollWait {
+		wait = maxJobPollWait
+	}
 
 	var (
 		unknown  bool
@@ -4103,46 +4117,77 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		scanErr  error
 		runErr   error
 		reserved bool
+		jobType  int32
 	)
-	s.do(func() {
-		jobType, ok := s.jobTypes.Index(body.Type)
-		if !ok {
-			unknown = true
-			return
-		}
-		if jobType == compiler.UserTaskJobTypeIndex {
-			reserved = true
-			return
-		}
-		if s.jobRunner.Handles(jobType) {
-			inProc = true
-			return
-		}
-		// Collect first, then lease: activating mutates the very index being scanned.
-		var keys []uint64
-		if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
-			if len(keys) < want {
-				keys = append(keys, k)
-			}
-			return nil
-		}); scanErr != nil {
-			return
-		}
-		for _, k := range keys {
-			s.proc.ActivateJob(k, body.Worker, int64(lease))
-		}
-		if runErr = s.jobRunner.Drive(); runErr != nil {
-			return
-		}
-		for _, k := range keys {
-			j, ok := s.pulledJob(k, body.Type)
+	attempt := func() {
+		s.do(func() {
+			var ok bool
+			jobType, ok = s.jobTypes.Index(body.Type)
 			if !ok {
-				continue // completed or re-leased between the scan and here
+				unknown = true
+				return
 			}
-			jobs = append(jobs, j)
+			if jobType == compiler.UserTaskJobTypeIndex {
+				reserved = true
+				return
+			}
+			if s.jobRunner.Handles(jobType) {
+				inProc = true
+				return
+			}
+			// Collect first, then lease: activating mutates the very index being scanned.
+			var keys []uint64
+			if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
+				if len(keys) < want {
+					keys = append(keys, k)
+				}
+				return nil
+			}); scanErr != nil {
+				return
+			}
+			for _, k := range keys {
+				s.proc.ActivateJob(k, body.Worker, int64(lease))
+			}
+			if runErr = s.jobRunner.Drive(); runErr != nil {
+				return
+			}
+			for _, k := range keys {
+				j, ok := s.pulledJob(k, body.Type)
+				if !ok {
+					continue // completed or re-leased between the scan and here
+				}
+				jobs = append(jobs, j)
+			}
+			s.workers.leased(body.Worker, body.Type, len(jobs))
+		})
+	}
+
+	attempt()
+	// Long-poll: park until the engine says a job of this type is durable, rather
+	// than answering empty and being asked again.
+	//
+	// Two things make this correct. The waiter is registered BEFORE the retry, so a
+	// job created between the failed attempt and the registration still wakes it —
+	// register-then-look, never look-then-register. And the waiting happens out here,
+	// outside s.do: a request holding the run loop while it waits would freeze the
+	// single writer for the whole poll, which is the stall this entire sequence
+	// exists to remove.
+	if wait > 0 && len(jobs) == 0 && !unknown && !inProc && !reserved && scanErr == nil && runErr == nil {
+		woken, cancel := s.jobWaiters.wait(jobType)
+		defer cancel()
+		attempt()
+		if len(jobs) == 0 {
+			timer := time.NewTimer(wait)
+			defer timer.Stop()
+			select {
+			case <-woken:
+				attempt()
+			case <-timer.C:
+			case <-r.Context().Done():
+			case <-s.quit:
+			}
 		}
-		s.workers.leased(body.Worker, body.Type, len(jobs))
-	})
+	}
 	switch {
 	case unknown:
 		httpapi.Error(w, http.StatusNotFound,

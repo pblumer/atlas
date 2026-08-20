@@ -183,7 +183,11 @@ type Server struct {
 	jobTypes *jobtype.Registry
 	// workers is the Workers view's runtime registry (ADR-0157): who pulled what,
 	// this run. Not durable and not engine state — see api/workers.go.
-	workers          *workerRegistry
+	workers *workerRegistry
+	// jobWaiters parks long-polling workers until a job of their type is durable
+	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
+	// waiting happens off the loop — see api/jobwait.go.
+	jobWaiters       *jobWaiters
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -823,6 +827,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deploys:     ds,
 		jobTypes:    jobTypes,
 		workers:     newWorkerRegistry(nil),
+		jobWaiters:  newJobWaiters(),
 		drafts:      drafts,
 		forms:       forms,
 		publicLinks: publicLinks,
@@ -940,6 +945,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// (compiler.DMNJobTypeIndex). It registers via HandleCompleting because a
 	// decision's completion both writes its result back as a process variable and
 	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0066).
+	// Wake long-polling workers when a job of their type becomes durable. The notifier
+	// fires on the processor's goroutine right after fsync (ADR-0005), so what it calls
+	// must be bounded and non-blocking — closing channels, never sending on them.
+	proc.SetJobNotifier(func(jobType int32) { s.jobWaiters.notify(jobType) })
 	s.jobRunner = job.NewRunner(store, proc)
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	// Script-language workers (PowerShell, Python, JavaScript) each register under
