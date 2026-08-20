@@ -280,6 +280,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Incidents", route: "#/operations/incidents" },
+    { name: "Outbox", route: "#/operations/outbox" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
   ],
@@ -309,7 +310,7 @@ const CONNECTORS = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
@@ -924,6 +925,7 @@ async function viewConsoleOrg() {
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -2230,12 +2232,15 @@ function wireConnectorManagement(connectors) {
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
         <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option></select></label>
-        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
+        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
-        <button class="btn" type="submit">Add</button></form>`;
+        <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+        <button class="btn" type="submit">Add</button>
+        <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
+        <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
+        <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -2254,7 +2259,8 @@ function wireConnectorManagement(connectors) {
         const mail = kindSel.value === "mail";
         const sharepoint = kindSel.value === "sharepoint";
         const remedy = kindSel.value === "remedy";
-        const native = mail && providerSel.value !== "smtp";
+        const preview = mail && providerSel.value === "preview";
+        const native = mail && providerSel.value !== "smtp" && !preview;
         // Kinds that default their API base and authenticate with a vault credential
         // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
         // both a base URL and a credential bundle.
@@ -2262,19 +2268,55 @@ function wireConnectorManagement(connectors) {
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
         // A native mail provider and SharePoint default their API base — no endpoint;
-        // SMTP, temis, clio, and remedy need one.
-        endpointField.style.display = bundle ? "none" : "";
-        endpointIn.required = !bundle;
+        // SMTP, temis, clio, and remedy need one. Preview dials nothing at all, so it
+        // asks for neither a host nor a credential — that is the whole point of it
+        // (ADR-0150), and a field left standing there would read as if it were used.
+        endpointField.style.display = bundle || preview ? "none" : "";
+        endpointIn.required = !bundle && !preview;
         endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
         // A native mail provider, SharePoint, and Remedy all need a vault credential
         // bundle; the other kinds take an optional token reference.
-        credRefIn.required = bundle || remedy;
+        form.querySelector(".credref-field").style.display = preview ? "none" : "";
+        credRefIn.required = (bundle || remedy) && !preview;
         credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
         credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
+        // What this provider needs, said where it is chosen rather than discovered
+        // from a failed send hours later.
+        form.querySelector(".conn-hint").innerHTML = preview
+          ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
+          : (native
+            ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
+            : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>).");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
       sync();
+      // Check what is typed, before it is stored — the moment a wrong host or a dead
+      // credential is cheapest to fix, and the one where somebody is actually looking.
+      const testBtn = form.querySelector("#conn-test");
+      const testOut = form.querySelector(".conn-test-result");
+      testBtn.addEventListener("click", async () => {
+        const f = new FormData(form);
+        testOut.hidden = false;
+        testOut.className = "conn-test-result muted";
+        testOut.textContent = "Checking…";
+        testBtn.disabled = true;
+        try {
+          const res = await api("POST", "/api/v1/connectors/test", {
+            name: (f.get("name") || "unnamed").trim(),
+            kind: (f.get("kind") || "mail").trim(),
+            provider: (f.get("provider") || "smtp").trim(),
+            endpoint: (f.get("endpoint") || "").trim(),
+            sender: (f.get("sender") || "").trim(),
+            credentialsRef: (f.get("credentialsRef") || "").trim(),
+          });
+          testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
+          testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
+        } catch (err) {
+          testOut.className = "conn-test-result err";
+          testOut.textContent = "✕ " + err.message;
+        } finally { testBtn.disabled = false; }
+      });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
@@ -2308,6 +2350,23 @@ function wireConnectorManagement(connectors) {
           return;
         } else if (btn.dataset.cact === "provision") {
           toggleProvisionClio(btn.closest("tr"), id, c.name);
+          return;
+        } else if (btn.dataset.cact === "test") {
+          // Empty recipient = stop at the door (connect, authenticate). A recipient
+          // makes it a real send, which is the only thing that proves delivery.
+          const to = window.prompt(
+            `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
+          if (to == null) return;
+          btn.disabled = true;
+          try {
+            const res = await api("POST", "/api/v1/connectors/test", {
+              name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
+              sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
+            });
+            toast(res.detail || (res.ok ? "Connector works" : "Check failed"), res.ok ? "ok" : "warn");
+          } catch (err) {
+            toast("Check failed: " + err.message, "warn");
+          } finally { btn.disabled = false; }
           return;
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
@@ -2762,7 +2821,7 @@ async function viewInstances() {
   let summary = new Map();
   // Unresolved incidents, bucketed for the two tables below: by definition (the
   // per-process rows) and by instance (the variable-search results). Keys are
-  // stringified so a JSON number and a string key can't miss each other (ADR-0150).
+  // stringified so a JSON number and a string key can't miss each other (ADR-0151).
   let incByDef = new Map();
   let incByInstance = new Map();
   let incTruncated = false;
@@ -2863,7 +2922,7 @@ async function viewInstances() {
         ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
         : "";
       // A running count says nothing about a token being *stuck*: an instance parked
-      // behind an incident is counted as running like any other (ADR-0150).
+      // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
       return `<tr>
         <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
@@ -2984,7 +3043,7 @@ async function viewInstances() {
         ? '<span class="pill ok"><span class="dot"></span>active</span>'
         : `<span class="pill">${esc(r.state)}</span>`;
       // A matched instance that is stuck says so here rather than only once opened —
-      // "active" alone reads as healthy (ADR-0150).
+      // "active" alone reads as healthy (ADR-0151).
       const incN = incByInstance.get(String(r.key)) || 0;
       const incFlag = incN
         ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
@@ -3227,7 +3286,7 @@ function overrideCell(r) {
 // a *job* incident (a service-task job whose retries ran out and parked) and a
 // job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
 // stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
-// diagram and to that instance's replay (ADR-0150), and resolves in place over POST
+// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
 // /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
 // fresh retry budget; a timer incident re-arms the element against the instance's
 // current variables (re-raising if it still fails). The list shares the task list's
@@ -3297,7 +3356,7 @@ async function viewIncidents() {
 
   // One delegated handler for every row's Resolve button (the tbody persists across
   // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
-  // and the POST are the shared incident flow every surface uses (ADR-0150).
+  // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve]");
     if (!btn) return;
@@ -3307,6 +3366,90 @@ async function viewIncidents() {
   });
 
   document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// viewMailOutbox is the Operations "Outbox" view: the messages a mail connector on
+// the *preview* provider delivered in-server instead of sending (ADR-0150).
+//
+// It is what makes preview worth having. A first mail task can be modeled, run and
+// read here before anyone owns a submission host or an OAuth bundle — and what is
+// shown is not a paraphrase of the message but the very bytes the SMTP and Gmail
+// providers would put on the wire, framed by the same code. So the headers, the MIME
+// structure and the encoding are checkable here, which is precisely the part an author
+// cannot verify by re-reading their own model.
+//
+// The HTML body is rendered in a sandboxed, script-less iframe: a mail body is
+// composed from process variables, so it is untrusted markup by the same reasoning
+// that keeps an uploaded SVG out of the DOM (ADR-0148).
+async function viewMailOutbox() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Outbox</h1>
+      <span>
+        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn ghost danger" id="clear">Empty outbox</button>
+      </span>
+    </div>
+    <p class="muted">Messages a mail connector using the <b>preview</b> provider
+    delivered here instead of sending them (ADR-0150) — the zero-configuration way to
+    see what a mail task actually produces, before a real provider exists. The message
+    is framed by the same code that sends over SMTP or the Gmail API, so what you read
+    here is what would go out. Nothing here was ever delivered to a recipient, and the
+    outbox is memory only: it holds the newest messages and empties on restart.</p>
+    <div class="card" id="ob-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("ob-list");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const addrs = (a) => (a || []).join(", ");
+
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/mail/outbox");
+    } catch (e) {
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const msgs = (data && data.messages) || [];
+    if (!msgs.length) {
+      list.innerHTML = `<p class="empty">Nothing here yet. Add a mail connector with the
+        <b>Preview</b> provider under Organization &rsaquo; Connectors, point a mail task at it,
+        and every message it sends lands here.</p>`;
+      return;
+    }
+    list.innerHTML = (data.truncated
+      ? `<p class="muted" style="margin:10px 12px 0">Older messages have been dropped — the outbox keeps the newest ones.</p>`
+      : "") + msgs.map((m) => `<details class="ob-msg">
+        <summary>
+          <b>${esc(m.subject || "(no subject)")}</b>
+          <span class="muted">· to ${esc(addrs(m.to)) || "—"}</span>
+          <span class="muted">· ${esc(fmtNano(m.at))}</span>
+          <span class="pill">${esc(m.connector || "?")}</span>
+        </summary>
+        <div class="ob-body">
+          <div class="ob-head">
+            <div><b>From</b> ${esc(m.from || "—")}</div>
+            <div><b>To</b> ${esc(addrs(m.to)) || "—"}</div>
+            ${m.cc && m.cc.length ? `<div><b>Cc</b> ${esc(addrs(m.cc))}</div>` : ""}
+            ${m.bcc && m.bcc.length ? `<div><b>Bcc</b> ${esc(addrs(m.bcc))} <span class="muted">(never written into a header)</span></div>` : ""}
+            ${m.messageId ? `<div><b>Message-ID</b> <span class="chip">${esc(m.messageId)}</span></div>` : ""}
+          </div>
+          ${m.body ? `<h3>Text</h3><pre class="ob-pre">${esc(m.body)}</pre>` : ""}
+          ${m.html ? `<h3>HTML</h3><iframe class="ob-html" sandbox="" srcdoc="${esc(m.html)}" title="Rendered HTML body"></iframe>` : ""}
+          <h3>Source</h3><pre class="ob-pre">${esc(m.raw || "")}</pre>
+        </div>
+      </details>`).join("");
+  };
+
+  document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("clear").addEventListener("click", async () => {
+    if (!confirm("Empty the preview outbox? Nothing here was ever sent.")) return;
+    try {
+      await api("DELETE", "/api/v1/mail/outbox");
+      toast("Outbox emptied", "ok");
+    } catch (e) { toast(e.message || "Could not empty the outbox", "warn"); }
+    await load();
+  });
   await load();
 }
 
@@ -4796,6 +4939,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/incidents") return await viewIncidents();
+    if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded

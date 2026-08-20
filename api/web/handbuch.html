@@ -1911,7 +1911,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <tbody>
           <tr><td><b>temis</b></td><td data-l="de">DMN-Entscheidungen auswerten.</td><td data-l="en">Evaluate DMN decisions.</td></tr>
           <tr><td><b>HTTP REST</b></td><td data-l="de">Eine REST-API aufrufen, Antwort als Variable speichern.</td><td data-l="en">Call a REST API, store the response as a variable.</td></tr>
-          <tr><td><b>Mail</b></td><td data-l="de">E-Mail versenden (SMTP, Gmail, Microsoft&nbsp;365).</td><td data-l="en">Send email (SMTP, Gmail, Microsoft&nbsp;365).</td></tr>
+          <tr><td><b>Mail</b></td><td data-l="de">E-Mail versenden (SMTP, Gmail, Microsoft&nbsp;365) – oder <b>Vorschau</b>: die Nachricht wird genauso gebaut, landet aber im Postausgang unter <i>Operations &rsaquo; Outbox</i> statt beim Empfänger. So lässt sich ein Mail-Task ohne Mailserver und ohne Zugangsdaten ausprobieren.</td><td data-l="en">Send email (SMTP, Gmail, Microsoft&nbsp;365) – or <b>preview</b>: the message is framed exactly the same way but lands in the outbox under <i>Operations &rsaquo; Outbox</i> instead of reaching a recipient, so a mail task can be tried with no mail server and no credentials.</td></tr>
           <tr><td><b>SharePoint</b></td><td data-l="de">Listeneintrag in SharePoint anlegen (Graph API).</td><td data-l="en">Create a list item in SharePoint (Graph API).</td></tr>
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>clio</b></td><td data-l="de">Ereignisse in den Event-Store schreiben/lesen.</td><td data-l="en">Write/read events to the event store.</td></tr>
@@ -2031,7 +2031,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene
-          Element ist auch in der <b>Live-Ansicht</b> und im <b>Replay</b> rot markiert und mit
+          Element ist in der <b>Live-Ansicht</b> und im <b>Replay</b> rot markiert und mit
           <code>⚠</code> beschriftet, die Meldung steht neben dem Diagramm, und <b>Auflösen</b> ist genau dort
           ein Klick. In der Live-Ansicht zeigt „All instances“ alle steckengebliebenen Instanzen einer Version auf
           einmal, und die <a href="/#/operations">Instances</a>-Liste hat eine Spalte
@@ -2039,7 +2039,7 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <li data-l="en"><b><a href="/#/operations/incidents">Incidents</a></b> – when a token can't proceed (job
           failed, expression error, missing variable), an <b>incident</b> is raised. You fix the cause and resolve
           it – the instance resumes. You don't have to go to the list for that: the stuck element is marked red and
-          badged <code>⚠</code> in the <b>live view</b> and the <b>replay</b> too, the message sits
+          badged <code>⚠</code> in the <b>live view</b> and in the <b>replay</b>, the message sits
           beside the diagram, and <b>Resolve</b> is one click right there. In the live view, "All instances" shows
           every stuck instance of a version at once, and the <a href="/#/operations">Instances</a>
           list has an <b>Incidents</b> column that opens the affected version.</li>

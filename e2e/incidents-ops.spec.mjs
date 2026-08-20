@@ -1,7 +1,9 @@
-// End-to-end coverage for incidents on the diagram (ADR-0150): the Operations live
-// view and the single-instance replay must show a *stuck* token as stuck — marked on
-// the element, listed beside the diagram, and resolvable without leaving the view.
-// Driven through the real vendored bpmn-js and the real editor.js mounts.
+// End-to-end coverage for incidents on the operator's surfaces: the live view
+// (ADR-0150) and, on the same data and with the same block and action, the
+// step-by-step replay and the Instances lists (ADR-0151). All of them must show a
+// *stuck* token as stuck — marked on the element, listed beside the diagram, and
+// resolvable without leaving the view. Driven through the real vendored bpmn-js and
+// the real editor.js mounts.
 import { test, expect } from "@playwright/test";
 
 const open = async (page) => {
@@ -12,16 +14,6 @@ const open = async (page) => {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
 };
 
-// resolveVia clicks a Resolve button, grants `retries` in the dialog, and confirms.
-const resolveVia = async (page, button, retries) => {
-  await button.click();
-  const modal = page.locator(".modal-ov");
-  await expect(modal).toBeVisible();
-  await modal.locator("#inc-retries").fill(String(retries));
-  await modal.locator("[data-inc-go]").click();
-  await expect(modal).toHaveCount(0);
-};
-
 test.describe("live view", () => {
   test("marks the stuck element, counts the incidents, and lists them", async ({ page }) => {
     await open(page);
@@ -29,8 +21,7 @@ test.describe("live view", () => {
 
     // The element the tokens are parked on is outlined and badged — the token markers
     // alone said nothing about the instances being blocked.
-    const stuck = page.locator('#canvas g[data-element-id="Task_pay"]');
-    await expect(stuck).toHaveClass(/atlas-incident/);
+    await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).toHaveClass(/atlas-incident/);
     const badge = page.locator(".incident-badge");
     await expect(badge).toHaveText(/2 incidents/);
     await expect(badge).toHaveAttribute("title", /payment gateway refused: 503/);
@@ -38,48 +29,32 @@ test.describe("live view", () => {
     await expect(page.locator('#canvas g[data-element-id="Start_1"]')).not.toHaveClass(/atlas-incident/);
 
     // The toolbar answers "is anything in this version stuck?" without a click.
-    await expect(page.locator("#inc-pill")).toBeVisible();
-    await expect(page.locator("#inc-count")).toHaveText("2");
+    await expect(page.locator("#incident-pill")).toBeVisible();
+    await expect(page.locator("#incident-count")).toHaveText("2");
 
-    // Both instances' incidents are listed, each linking to that instance's replay.
-    const cards = page.locator("#var-panel .inc-card");
-    await expect(cards).toHaveCount(2);
-    await expect(cards.first()).toContainText("Zahlung auslösen"); // the element's label, not its id
-    await expect(cards.first()).toContainText("payment gateway refused: 503");
-    await expect(cards.first().locator(".inc-inst")).toHaveAttribute(
-      "href", `#/operations/i/${await page.evaluate(() => window.__STUCK)}`);
-    // …and each instance row in the overview carries its own count.
-    await expect(page.locator("#var-panel .inc-chip")).toHaveCount(2);
-    expect(page.__errors).toEqual([]);
-  });
-
-  test("the badge narrows the panel to that element, and back", async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => window.__mountLive());
-    await expect(page.locator("#var-panel .inc-card")).toHaveCount(2);
-
-    await page.locator(".incident-badge").click();
-    await expect(page.locator("#var-panel .vp-inc-head")).toContainText("Zahlung auslösen");
-    // Both incidents sit on the same element, so narrowing keeps both — and offers
-    // the way back to everything in view.
-    await expect(page.locator("#var-panel .inc-back")).toBeVisible();
-    await page.locator("#var-panel .inc-back").click();
-    await expect(page.locator("#var-panel .vp-inc-head")).toContainText("2 incidents");
+    // Both instances' incidents lead the variables panel, each naming its instance.
+    const rows = page.locator("#var-panel .vp-incidents .inc-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText("Task_pay");
+    await expect(rows.first()).toContainText("instance 900001");
+    await expect(rows.first()).toContainText("payment gateway refused: 503");
     expect(page.__errors).toEqual([]);
   });
 
   test("resolves an incident in place, and the diagram catches up", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__mountLive());
-    await expect(page.locator("#var-panel .inc-card")).toHaveCount(2);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(2);
 
-    await resolveVia(page, page.locator("#var-panel .inc-card [data-resolve-inc]").first(), 3);
+    await page.locator("#var-panel .inc-row [data-resolve]").first().click();
 
-    // The retry budget the operator typed reached the API…
-    expect(await page.evaluate(() => window.__resolved)).toEqual([{ key: "1001", retries: 3 }]);
+    // Beside a diagram the resolve is one click for one attempt — no dialog.
+    await expect
+      .poll(() => page.evaluate(() => window.__resolved))
+      .toEqual([{ key: "1001", retries: 1 }]);
     // …and the view re-polled: one incident left, on the same element.
-    await expect(page.locator("#var-panel .inc-card")).toHaveCount(1);
-    await expect(page.locator("#inc-count")).toHaveText("1");
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    await expect(page.locator("#incident-count")).toHaveText("1");
     // A single incident on the element drops the count from the badge.
     await expect(page.locator(".incident-badge")).toHaveText("⚠ incident");
     expect(page.__errors).toEqual([]);
@@ -89,11 +64,9 @@ test.describe("live view", () => {
     await open(page);
     await page.evaluate(() => window.__mountLive(window.__STUCK));
 
-    await expect(page.locator("#inc-count")).toHaveText("1");
-    await expect(page.locator("#var-panel .inc-card")).toHaveCount(1);
-    // Scoped to one instance the card drops the instance link — the panel is already
-    // about that instance.
-    await expect(page.locator("#var-panel .inc-card .inc-inst")).toHaveCount(0);
+    await expect(page.locator("#incident-count")).toHaveText("1");
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    await expect(page.locator("#var-panel .inc-row")).toContainText("instance 900001");
     expect(page.__errors).toEqual([]);
   });
 });
@@ -110,30 +83,43 @@ test.describe("instance replay", () => {
     // The history row for the parked element instance is flagged, the earlier one isn't.
     await expect(page.locator('#history-list .ops-hrow[data-eik="1001"]')).toHaveClass(/inc/);
     await expect(page.locator('#history-list .ops-hrow[data-eik="1000"]')).not.toHaveClass(/inc/);
-    // And the element keeps its incident outline wherever the playhead sits.
+    // The element carries the same ⚠ badge the live view draws…
+    await expect(page.locator(".incident-badge")).toHaveText(/incident/);
+    // …and keeps its incident outline wherever the playhead sits.
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).toHaveClass(/atlas-incident/);
     await page.locator("#step-back").click();
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).toHaveClass(/atlas-incident/);
 
-    // Clicking the badge selects the stuck element and opens its Details panel.
-    await page.locator(".incident-badge").click();
+    // With nothing selected the panel already reaches the instance's incidents.
     const details = page.locator("#tab-details");
-    await expect(details.locator(".ops-inc")).toContainText("This element is stuck");
-    await expect(details.locator(".inc-card-msg")).toHaveText("payment gateway refused: 503");
+    await expect(details.locator(".vp-incidents .inc-row")).toContainText("Zahlung auslösen");
+    await expect(details.locator(".inc-msg")).toHaveText("payment gateway refused: 503");
+    // Scoped to one instance, the row does not repeat the instance key.
+    await expect(details.locator(".inc-where")).not.toContainText("instance");
 
-    await resolveVia(page, details.locator("[data-resolve-inc]"), 1);
-    expect(await page.evaluate(() => window.__resolved)).toEqual([{ key: "1001", retries: 1 }]);
+    await details.locator("[data-resolve]").click();
+    await expect
+      .poll(() => page.evaluate(() => window.__resolved))
+      .toEqual([{ key: "1001", retries: 1 }]);
     await expect(page.locator("#m-inc-wrap")).toBeHidden();
     await expect(page.locator(".incident-badge")).toHaveCount(0);
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).not.toHaveClass(/atlas-incident/);
+    await expect(page.locator('#history-list .ops-hrow[data-eik="1001"]')).not.toHaveClass(/inc/);
     expect(page.__errors).toEqual([]);
   });
 
-  test("with nothing selected the panel still reaches the instance's incidents", async ({ page }) => {
+  test("selecting the stuck element shows its own incident", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__mountReplay());
-    await expect(page.locator("#tab-details .ops-inc")).toContainText("1 incident");
-    await expect(page.locator("#tab-details .inc-card-name")).toHaveText("Zahlung auslösen");
+    await expect(page.locator("#history-list .ops-hrow").first()).toBeVisible();
+
+    // The step before it is clean: selecting it shows no incident block at all.
+    await page.locator('#history-list .ops-hrow[data-eik="1000"]').click();
+    await expect(page.locator("#tab-details")).toContainText("Start_1");
+    await expect(page.locator("#tab-details .vp-incidents")).toHaveCount(0);
+
+    await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
+    await expect(page.locator("#tab-details .vp-incidents .inc-row")).toHaveCount(1);
     expect(page.__errors).toEqual([]);
   });
 });

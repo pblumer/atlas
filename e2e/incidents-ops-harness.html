@@ -4,9 +4,11 @@
     <meta charset="utf-8" />
     <title>Atlas incidents-on-the-diagram e2e harness</title>
     <!-- Drives the *real* api/web/editor.js live view and instance replay against a mock
-         `api` that holds two unresolved incidents (ADR-0150). Both views should mark the
-         stuck element, list the fault, and resolve it in place — the resolve POST is
-         served here, so a resolved incident really does disappear on the next poll. -->
+         `api` that holds two unresolved incidents. Both read them off the runtime overlay
+         (ADR-0150 puts them there; ADR-0151 gives the replay the same surface), so both
+         should mark the stuck element, list the fault, and resolve it in place — the
+         resolve POST is served here, so a resolved incident really does disappear on the
+         next poll. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -103,17 +105,19 @@
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?process=")) return instances;
         if (url === "/api/v1/tasks") return [];
-        if (url.startsWith("/api/v1/incidents")) {
-          const inst = new URL(url, location.origin).searchParams.get("instance");
-          return { incidents: inst ? incidents.filter((i) => i.processInstanceKey === inst) : incidents };
-        }
         if (url.includes("/runtime")) {
-          const one = /instance=/.test(url);
+          // The overlay carries the incidents (ADR-0150): scoped to one instance when the
+          // caller asks for one, which is how the live view isolates a selection and how
+          // the replay gets exactly its own.
+          const inst = new URL(url, location.origin).searchParams.get("instance");
+          const inView = inst ? incidents.filter((i) => i.processInstanceKey === inst) : incidents;
           return {
-            instances: one ? 1 : 2, tokens: one ? 1 : 2,
+            instances: inst ? 1 : 2, tokens: inst ? 1 : 2,
+            incidents: inView,
+            incidentsTruncated: false,
             elements: [
-              { elementId: "Start_1", type: "bpmn:StartEvent", tokens: 0, visits: one ? 1 : 2 },
-              { elementId: "Task_pay", type: "bpmn:ServiceTask", tokens: one ? 1 : 2, visits: one ? 1 : 2 },
+              { elementId: "Start_1", type: "bpmn:StartEvent", tokens: 0, visits: inst ? 1 : 2, incidents: 0 },
+              { elementId: "Task_pay", type: "bpmn:ServiceTask", tokens: inst ? 1 : 2, visits: inst ? 1 : 2, incidents: inView.length },
             ],
           };
         }

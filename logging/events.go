@@ -130,6 +130,12 @@ var (
 	UserProvisioningUserDisabled = newEvent("user_provisioning.user_disabled")
 )
 
+// Distributed traces (ADR-0142 slice 8b).
+var (
+	TracingEnabled        = newEvent("tracing.enabled")
+	TracingShutdownFailed = newEvent("tracing.shutdown_failed")
+)
+
 // Everything else the running server reports about itself.
 var (
 	ScriptWorkerEnabled      = newEvent("script_worker.enabled")

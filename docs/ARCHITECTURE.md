@@ -265,7 +265,7 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 
 When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
 
-An incident is surfaced where the operator already is ([ADR-0150](adr/0150-incidents-on-the-diagram.md)): besides the Operations incidents list, the live view and the step-by-step replay mark the stuck element on the diagram, show the failure beside it, and resolve it in place. The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
+An incident is surfaced where the operator already is: the live diagram marks the stuck element, badges it with the failure message and resolves it in place ([ADR-0150](adr/0150-preview-mail-provider-and-visible-incidents.md)), and the step-by-step replay, the Instances list and the variable search say so too ([ADR-0151](adr/0151-incidents-beyond-the-live-diagram.md)). The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the runtime overlay or the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
 
 ## Observability
 

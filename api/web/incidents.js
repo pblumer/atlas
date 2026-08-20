@@ -1,13 +1,13 @@
-// Incident presentation, shared by every operator surface that shows one
-// (ADR-0150). An incident is the same fact wherever it appears — the Operations
-// incidents table, the live view's diagram and side panel, the replay's Details
-// panel — so the pill, the card, and above all the *resolve* interaction live here
-// rather than being re-invented (and drifting) three times.
+// The incident interaction, in one place (ADR-0151). An incident is the same fact
+// wherever an operator meets it — the Operations incidents table, the live view's
+// side panel, the replay's Details tab — so the row, the pill, and the two resolve
+// actions live here rather than being re-implemented (and drifting) per surface.
 //
-// The one behaviour worth stating: resolving asks for the retry budget the
-// re-activated job gets. A timer incident has no job and re-arms against the
-// instance's current variables, so the count is meaningless for it — the dialog
-// says so instead of pretending otherwise.
+// Two resolve actions, deliberately: beside a diagram the operator has just read the
+// message and wants the job to try again, so it is one click with a single attempt
+// (ADR-0150); in the incidents table they are triaging a list and may want a bigger
+// budget, so it asks — which also gives room to say that a timer incident re-arms and
+// ignores the count, something window.prompt had nowhere to put.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -29,28 +29,50 @@ export function incidentPill(inc) {
 // event) as a local timestamp.
 export const fmtRaised = (ns) => (ns ? new Date(ns / 1e6).toLocaleString() : "—");
 
-// incidentCardHTML is one incident as a block: what stalled, why, and the two
-// actions an operator wants — resolve it, or open the instance it belongs to.
-// `label` is the element's diagram label (the caller has the rendered diagram and
-// knows it better than the API does); `instance` adds the instance key and its
-// replay link, which the live view's "all instances" scope needs and a
-// single-instance panel does not.
-export function incidentCardHTML(inc, { label = "", instance = false } = {}) {
-  const name = label || inc.elementId || `element ${inc.elementInstanceKey}`;
-  const where = instance
-    ? `<a class="inc-inst" href="#/operations/i/${inc.processInstanceKey}" title="Replay this instance step by step">&#9654; ${esc(String(inc.processInstanceKey))}</a>`
+// incidentRowHTML is one incident beside a diagram: where it is parked, why, and the
+// one action that resumes it. `label` names the element (a caller holding the
+// rendered diagram knows its label; the raw id is the fallback), and `showInstance`
+// adds the instance it belongs to — which the live view's all-instances scope needs
+// and a single-instance panel does not.
+export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
+  const where = showInstance
+    ? `<span class="muted">· instance ${esc(String(inc.processInstanceKey))}</span>`
     : "";
-  return `<div class="inc-card">
-    <div class="inc-card-head">
-      <span class="inc-card-name" title="${esc(inc.elementId || "")}">${esc(name)}</span>
-      ${incidentPill(inc)}${where}
-    </div>
-    <div class="inc-card-msg">${esc(inc.message || "No message recorded.")}</div>
-    <div class="inc-card-foot">
-      <span class="inc-card-when" title="When the incident was raised">${esc(fmtRaised(inc.raisedAt))}</span>
-      <button class="btn sm" type="button" data-resolve-inc="${inc.elementInstanceKey}">Resolve&hellip;</button>
-    </div>
-  </div>`;
+  return `<div class="inc-row">
+      <div class="inc-where"><b>${esc(label || inc.elementId || "")}</b>
+        ${where}
+        ${inc.raisedAt ? `<span class="muted">· ${esc(fmtRaised(inc.raisedAt))}</span>` : ""}</div>
+      <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
+      <div class="inc-actions"><button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
+        title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button></div>
+    </div>`;
+}
+
+// incidentPanelHTML wraps those rows in the block that leads the live view's
+// variables panel and the replay's Details tab: a count, a way to the full list, and
+// every incident in view.
+export function incidentPanelHTML(list, { truncated = false, rows = "" } = {}) {
+  if (!list.length) return "";
+  return `<div class="vp-incidents">
+    <div class="vp-head"><span class="vp-title">&#9888; ${list.length}${truncated ? "+" : ""} incident${list.length === 1 ? "" : "s"}</span>
+      <span class="vp-actions"><a class="replay-link" href="#/operations/incidents" title="Every unresolved incident on this server">All incidents &#8599;</a></span></div>
+    ${rows}</div>`;
+}
+
+// resolveIncidentQuick is the diagram-side action behind every "↻ Resolve & retry":
+// clear the incident and re-activate its job with a fresh single attempt. One attempt
+// is the right default from here — the operator has just read the message and fixed
+// (or is testing) the cause, and a failure parks the token again with the new reason
+// rather than burning a budget on the old one. Resolves true when it worked.
+export async function resolveIncidentQuick({ api, toast, key }) {
+  try {
+    await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: 1 });
+    toast("Incident resolved — retrying the job", "ok");
+    return true;
+  } catch (e) {
+    toast("Resolve failed: " + (e && e.message ? e.message : e), "err");
+    return false;
+  }
 }
 
 // askResolveRetries opens the resolve dialog and resolves to the retry budget the
@@ -99,7 +121,7 @@ function askResolveRetries(inc) {
   });
 }
 
-// resolveIncidentFlow is the whole operator action behind every "Resolve…" button:
+// resolveIncidentFlow is the triage action behind the incidents table's "Resolve…":
 // ask for the budget, POST it, report the outcome. Resolves true when the incident
 // was resolved (so the caller can refresh), false when it was cancelled or failed.
 export async function resolveIncidentFlow({ api, toast, incident }) {

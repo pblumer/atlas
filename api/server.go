@@ -63,6 +63,7 @@ import (
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/tracing"
 
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
@@ -267,6 +268,14 @@ type Server struct {
 	// loop, so it needs no lock.
 	mailRegistry *mail.Registry
 
+	// mailOutbox is where the preview mail provider delivers (ADR-0150) — the
+	// zero-configuration provider a first mail task uses before anyone has a
+	// submission host or an OAuth bundle. It is created once and outlives every
+	// registry rebuild, holds its own lock (a mail worker writes it off the run loop
+	// while an HTTP read serves the Outbox view), and is deliberately not durable:
+	// nothing here was ever sent, so nothing survives a restart.
+	mailOutbox *mail.Outbox
+
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
 	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth
@@ -398,6 +407,13 @@ type Server struct {
 	// construction — a duplicate registration then fails the boot, not a scrape.
 	metricsEnabled bool
 	metrics        *metrics.Registry
+
+	// traceRoutes wraps every /api/v1 route in a server span (ADR-0142). Opt-in and off
+	// by default: with no collector configured there is nothing to send spans to, and an
+	// operator who has not asked for tracing should not pay a wrapper per request.
+	// Probes, the metrics scrape and the static UI are never traced — they run forever
+	// on a timer and would bury the traces someone is actually looking for.
+	traceRoutes bool
 
 	// readyTimeout bounds how long GET /readyz waits for the run-loop goroutine to
 	// answer before it reports the writer as unresponsive (ADR-0142). It exists so a
@@ -646,6 +662,16 @@ func WithCheckpointRetention(keep int) Option {
 // this is for an operator who does not want the surface open at all.
 func WithoutMetrics() Option {
 	return func(s *Server) { s.metricsEnabled = false }
+}
+
+// WithTracing wraps every /api/v1 route in an OpenTelemetry server span (ADR-0142). The
+// command passes it when a collector endpoint is configured; without it the routes are
+// registered bare, so tracing costs exactly nothing when nobody asked for it.
+//
+// The engine is deliberately not traced — see the tracing package for why, and for the
+// test that keeps it that way.
+func WithTracing() Option {
+	return func(s *Server) { s.traceRoutes = true }
 }
 
 // WithWALCompaction deletes the WAL segments a recovery checkpoint and every consumer
@@ -1621,7 +1647,14 @@ func (s *Server) Handler() http.Handler {
 	// table, the same list openapiDoc describes, so the served surface and its
 	// OpenAPI spec cannot drift (ADR-0043).
 	for _, r := range s.apiRoutes() {
-		mux.HandleFunc(r.method+" "+r.pattern, r.handler)
+		route := r.method + " " + r.pattern
+		if s.traceRoutes {
+			// The span is named for the *pattern*, which is fixed by this table, so the
+			// set of span names is bounded by the code rather than by traffic (ADR-0142).
+			mux.Handle(route, tracing.Handler(route, r.handler))
+			continue
+		}
+		mux.HandleFunc(route, r.handler)
 	}
 
 	// The OpenAPI document and the Scalar API explorer are gated behind --docs:

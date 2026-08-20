@@ -95,18 +95,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   toolbar — publishing a numbered version with the model's prose and a real PDF, the
   history reading newest first, and the per-version public link being minted and revoked.
   Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
-- **`incidents-ops.spec.mjs`** (ADR-0150): **incidents on the diagram** — the Operations
-  **live view** outlines and badges the element two parked tokens sit on, counts them in its
-  toolbar, lists both instances' incidents beside the diagram (each linking to that instance's
-  replay), narrows to one element when the badge is clicked, and resolves in place; a single
-  selected instance sees only its own. The **instance replay** flags the stuck history row,
-  keeps the element outlined wherever the playhead sits, and resolves from the Details panel.
-  Drives the real `mountLive` and `mountInstanceReplay` against a mock `api` that actually
-  serves the resolve POST, so a resolved incident really does disappear on the next poll.
-  The **Instances overview** tests in the same file drive the real app shell against a
-  routed mock instead: the per-process Incidents column links to the version holding them
-  (not the latest), a capped incident page says its counts are a lower bound, and a
-  variable-search hit that is parked is flagged apart from an equally "active" one.
+- **`incidents-ops.spec.mjs`** (ADR-0150 / ADR-0151): **incidents where the operator is**
+  — the **live view** outlines and badges the element two parked tokens sit on, counts them
+  in its toolbar, leads its variables panel with both instances' incidents, and resolves one
+  in place (one click, one attempt); a single selected instance sees only its own. The
+  **instance replay** flags the stuck history row, badges the element, keeps it outlined
+  wherever the playhead sits, scopes the Details panel to the selected element instance, and
+  resolves from there. Both drive the real `mountLive` / `mountInstanceReplay` against a mock
+  `api` whose runtime overlay carries the incidents and which actually serves the resolve
+  POST, so a resolved incident really does disappear on the next poll. The **Instances
+  overview** tests in the same file drive the real app shell against a routed mock instead:
+  the per-process Incidents column links to the version holding them (not the latest), a
+  capped incident page says its counts are a lower bound, and a variable-search hit that is
+  parked is flagged apart from an equally "active" one.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

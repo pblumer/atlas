@@ -351,11 +351,54 @@ This ADR is **not implemented in one change**. The slices:
    Built on `log/slog`, which is to say on nothing: no dependency is added (ADR-0010).
    The engine still does not log at all, so the single writer is untouched (I1, I3).
 
-   **Not done here: OpenTelemetry traces.** They are the other half of this slice and
-   wait for their own change, as this ADR always ordered it — after the metric contract
-   settled, with sampling and export kept off the single-writer path. A `--log-level`
-   flag is also absent: nothing emits below Info yet, so it would be a knob over an empty
-   set.
+   **Not done here: OpenTelemetry traces.** They landed separately, below. A
+   `--log-level` flag is also absent: nothing emits below Info yet, so it would be a knob
+   over an empty set.
+9. **Landed** — **distributed traces**, opt-in behind `--trace-endpoint`. Metrics say
+   *that* a request was slow; a trace says *where* the time went, and — once a caller
+   propagates its context — across which services.
+
+   **The engine is not traced, and a test enforces it.** A span costs an allocation, a
+   clock read and a lock; on the HTTP surface that is nothing next to the request, and on
+   the batch loop it would be all three per batch on the goroutine that owns the
+   partition. That is exactly what I1 and I3 exist to prevent, so `TestTheWriterIsNeverInstrumented`
+   fails if `engine`, `state`, `wal`, `model`, `compiler` or `checkpoint` ever imports a
+   tracing package. Instrumenting the engine is the obvious next thing anyone would reach
+   for when a trace stops at the API boundary; it needs an ADR and a benchmark, not an
+   import.
+
+   **Span names are bounded by the code, not by traffic** — the same rule the metric
+   labels are under. A span is named for the route *pattern*
+   (`GET /api/v1/instances/{key}`), which the route table fixes, never the URL that
+   matched it. The attributes are method, route and status; the raw target and query
+   string are not recorded, so a key cannot ride along into a backend's index. Probes and
+   the metrics scrape are not traced at all: they run forever on a timer and would bury
+   the spans someone is looking for.
+
+   **The exporter is written here, and that is the dependency decision.** Taking the
+   official OTLP exporter means taking protobuf and — even in its HTTP form — gRPC: 66
+   gRPC packages and about 13MB of binary, for a service that speaks no gRPC anywhere
+   else. ADR-0010 asks for few dependencies, and this ADR already declined the OTel
+   *metrics* SDK on those grounds. OTLP over HTTP has a documented JSON encoding, so
+   Atlas takes the API and SDK — span model, sampling, batching, W3C propagation, all the
+   parts that are spec-bound and subtle — and writes the serializer, which is a schema.
+   Measured: **+1.7MB of binary and five modules, no protobuf, no gRPC.**
+
+   Two details of that encoding are easy to get wrong and are pinned by tests: trace and
+   span ids are **hex**, not the base64 proto3 JSON would use for `bytes`, and 64-bit
+   integers are **strings**, because a JSON number is a float64 in most parsers and
+   nanosecond timestamps do not survive that.
+
+   Three deliberate limits. A **4xx is not an error** — it is the caller being told no,
+   and recording it as a server failure makes a healthy server's error rate meaningless.
+   A **caller that already sampled is always honored**, whatever the ratio says, because
+   a half-recorded distributed trace is worse than none. And a **collector that is down
+   cannot take the server with it**: export runs on the SDK's own goroutine after the
+   response, so an observability outage stays one.
+
+   **Not done here: spans below the HTTP boundary.** A trace currently ends at the API
+   handler, which answers "which endpoint was slow" but not "which part of the work".
+   Anything deeper has to reckon with the single writer first — see the rule above.
 
 ## Links
 

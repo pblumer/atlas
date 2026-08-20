@@ -471,15 +471,16 @@ Making processes wait, react, and time out.
   rather than silently ceasing to recur; and a **timer start** event's constant FEEL
   schedule that can't resolve is now a deploy-time validation error
   (`timer.start-schedule`) instead of a start timer that silently never arms. **The
-  operator UI is now on the diagram** ([ADR-0150](docs/adr/0150-incidents-on-the-diagram.md)):
-  besides the Operations incidents table, the live view and the step-by-step replay
-  outline the stuck element in red, badge it `⚠ incident`, list the fault beside the
-  variables — the live view's "All instances" scope covering a whole version at once —
-  and **resolve it in place**, the same one-click affordance a waiting user task already
-  had. The Instances overview flags affected processes (and stuck variable-search hits)
-  so "is anything stuck at all?" is answered before opening anything. The incident list carries the facts that needs (`processDefKey`, `processId`, the
-  BPMN `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new
-  is written into the durable record.
+  operator surface is now wherever the operator already is**: the live diagram marks a
+  parked element red, badges it with the failure's own message and resolves it beside
+  the diagram ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)),
+  and the **replay**, the **Instances list** and the variable search say it too
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)) — the replay keeping
+  the stuck element outlined at every position of the playhead and flagging its history
+  row, the overview linking to the *version* that holds the incidents. `GET /incidents`
+  carries the diagram context that needs (`processDefKey`, `processId`, the BPMN
+  `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new is
+  written into the durable record.
 
 ## Milestone 3 — Structure ✅
 
