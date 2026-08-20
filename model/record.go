@@ -379,6 +379,8 @@ func (i Intent) String() string {
 		return "VariableModify"
 	case IntentVariableAudited:
 		return "VariableAudited"
+	case IntentOperatorActed:
+		return "OperatorActed"
 	case IntentCompensableRecorded:
 		return "CompensableRecorded"
 	case IntentCompensableConsumed:
