@@ -35,6 +35,12 @@ const jobWorkerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // fencing token, the completion — rather than a stub of it.
 func liveAtlas(t *testing.T, vars string) *httptest.Server {
 	t.Helper()
+	return liveAtlasWith(t, jobWorkerBPMN, vars)
+}
+
+// liveAtlasWith is liveAtlas over a given model and server options.
+func liveAtlasWith(t *testing.T, model, vars string, opts ...api.Option) *httptest.Server {
+	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
@@ -48,7 +54,7 @@ func liveAtlas(t *testing.T, vars string) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir)
+	srv, err := api.New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
@@ -59,7 +65,7 @@ func liveAtlas(t *testing.T, vars string) *httptest.Server {
 		_ = store.Close()
 		_ = log.Close()
 	})
-	post(t, ts, "/api/v1/deployments", jobWorkerBPMN, "application/xml")
+	post(t, ts, "/api/v1/deployments", model, "application/xml")
 	post(t, ts, "/api/v1/processes/1/instances", `{"variables":`+vars+`}`, "application/json")
 	return ts
 }
@@ -229,3 +235,66 @@ func TestWorkerSurvivesAJobTypeThatIsNotDeployedYet(t *testing.T) {
 		t.Fatal("the worker did not stop when its context was cancelled")
 	}
 }
+
+// TestWorkerRunsAnOffloadedCsvConnector is ADR-0165's first slice end to end: a
+// connector kind the engine no longer serves, worked by an external process. The
+// engine resolved the task — found its detail in the compiled process and read the
+// source text up the scope chain — and the worker did the parsing, which needs
+// nothing but the values it was handed. No credential is involved, which is exactly
+// why this kind goes first: the mechanism is proved before any secret rides on it.
+func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
+	ts := liveAtlasWith(t, csvConnectorModel, `{"upload":"name,amount\nAda,12\nGrace,7\n"}`,
+		api.WithOffloadedConnectorKinds([]string{"csv"}))
+
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "csv-1", Handlers: worker.BuiltinConnectors("csv"),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the connector job was not completed", running)
+	}
+	vars := instanceVariables(t, ts)
+	rows, ok := vars["orders"]
+	if !ok {
+		t.Fatalf("the result variable was not written; variables = %v", vars)
+	}
+	list, ok := rows.([]any)
+	if !ok || len(list) != 2 {
+		t.Fatalf("orders = %v, want the two parsed rows", rows)
+	}
+	if first, _ := list[0].(map[string]any); first["name"] != "Ada" {
+		t.Errorf("first row = %v, want Ada", list[0])
+	}
+	if vars["rowCount"] != float64(2) {
+		t.Errorf("rowCount = %v, want 2", vars["rowCount"])
+	}
+}
+
+// A worker asked for a connector kind it does not implement is a configuration
+// error, not a process that leases work it cannot do.
+func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
+	if got := worker.BuiltinConnectors("no-such-kind"); len(got) != 0 {
+		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got))
+	}
+}
+
+const csvConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="import" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:csvConnector source="upload" resultVariable="orders" hasHeader="true"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`

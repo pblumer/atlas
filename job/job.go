@@ -141,6 +141,16 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 	r.factories[jobType] = build
 }
 
+// Unhandle removes the in-process worker for a job type, so its jobs park for an
+// external one instead (ADR-0165).
+//
+// It exists as a removal rather than a condition at each registration site because
+// the registrations are spread across the server — a managed connector kind
+// registers through its own descriptor, the script languages through their loop,
+// the rest inline — and a switch that has to be remembered at ten places is a switch
+// that will be missed at one.
+func (r *Runner) Unhandle(jobType int32) { delete(r.factories, jobType) }
+
 // Handles reports whether an in-process worker is registered for a job type.
 //
 // It is what keeps one job from being worked twice: an external worker leasing by

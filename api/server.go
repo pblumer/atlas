@@ -1034,6 +1034,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.userProvisioning {
 		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, func(rd state.Reader) job.Handler { return s.userConnectorHandler(rd) })
 	}
+	// Kinds the operator moved to a worker lose their in-process handler here, after
+	// every registration path has run (ADR-0165).
+	if err := s.applyOffloadedKinds(); err != nil {
+		return nil, err
+	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

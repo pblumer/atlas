@@ -634,17 +634,26 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0165)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if len(handles) == 0 {
-		return errors.New("nothing to do: give at least one --handle type=command")
+	kinds := splitList(*connectors)
+	builtin := worker.BuiltinConnectors(kinds...)
+	if len(builtin) != len(kinds) {
+		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv), got %q", *connectors)
+	}
+	if len(handles) == 0 && len(builtin) == 0 {
+		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")
 	}
 	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
 		return err
 	}
 
 	execs := map[string]worker.Exec{}
+	for jobType, exec := range builtin {
+		execs[jobType] = exec
+	}
 	for jobType, argv := range handles {
 		execs[jobType] = worker.CmdExec{Name: argv[0], Args: argv[1:]}
 	}
@@ -655,7 +664,7 @@ func runWorker(args []string) error {
 
 	logging.Info(logging.WorkerStarting, "working jobs for a running Atlas",
 		slog.String("server", *server), slog.String("id", *id),
-		slog.String("types", handles.String()), slog.Duration("lease", *lease))
+		slog.String("types", strings.Join(sortedKeys(execs), ",")), slog.Duration("lease", *lease))
 
 	if *once {
 		return w.RunOnce(context.Background())
@@ -669,6 +678,16 @@ func runWorker(args []string) error {
 		return nil // interrupted, which is an ordinary exit
 	}
 	return err
+}
+
+// sortedKeys is the handled job types in a stable order, for the startup line.
+func sortedKeys(m map[string]worker.Exec) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // defaultWorkerID names the worker after the host it runs on, which is the useful

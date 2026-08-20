@@ -15,6 +15,7 @@ import (
 
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -4106,6 +4107,10 @@ type pulledJob struct {
 	// distinguishable from the first, which the worker id alone cannot do.
 	LeaseToken uint64         `json:"leaseToken"`
 	Variables  map[string]any `json:"variables"`
+	// Connector is a connector task resolved into plain values, present only for a
+	// job whose kind Atlas no longer serves itself (ADR-0165). Absent for a plain
+	// job-worker task, where there is nothing authored to resolve.
+	Connector *connectorPayload `json:"connector,omitempty"`
 }
 
 // handleActivateJobsByType is the type-keyed pull ADR-0007 designed and its
@@ -4266,6 +4271,49 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// connectorPayload is a connector task resolved into plain values: everything the
+// worker needs to do the work, and nothing that only the engine can understand.
+type connectorPayload struct {
+	Kind   string         `json:"kind"`
+	Fields map[string]any `json:"fields"`
+}
+
+// resolveConnectorTask turns a leased connector job into the payload a worker can
+// act on, or nil when there is nothing to resolve.
+//
+// This is the split ADR-0165 draws. Finding a task's detail in the compiled process
+// and evaluating it against the instance's variables is engine work by necessity —
+// FEEL is compiled at deploy (ADR-0008/0015), and a worker has neither the compiled
+// process nor the scope chain. So the engine resolves, and only the *values* travel;
+// the worker holds the endpoint and the credential and makes the call.
+//
+// Resolution happens at lease time rather than at call time, so a variable changed
+// in between is not seen. That is the same instant the in-process handler already
+// read, moved earlier by the length of one lease.
+//
+// Runs on the run-loop goroutine, which is where the store and the deployment
+// registry are readable.
+func (s *Server) resolveConnectorTask(jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
+	node := cp.Node(ei.ElementId)
+	if node.Type != compiler.TypeConnectorTask {
+		return nil // a plain job-worker task: nothing authored to resolve
+	}
+	switch jv.JobType {
+	case compiler.CsvImportJobTypeIndex:
+		j, err := csvimport.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			// The worker will fail the job with a message of its own; refusing to lease
+			// here would park the token with nothing said about why.
+			return nil
+		}
+		return &connectorPayload{Kind: "csv", Fields: map[string]any{
+			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
+			"columns": j.Columns, "resultVariable": j.Result,
+		}}
+	}
+	return nil
+}
+
 // holdsLease reports whether a worker's report may be trusted: the job must be
 // leased right now, to that worker, under the very lease the token names.
 //
@@ -4301,6 +4349,7 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 		j.ProcessDefKey = ei.ProcessDefKey
 		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
 			j.ElementID = d.cp.ElementBpmnId(ei.ElementId)
+			j.Connector = s.resolveConnectorTask(jv, ei, d.cp)
 		}
 	}
 	// The task's own scope chain, so an input mapping shadows the instance value.

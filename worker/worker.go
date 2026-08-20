@@ -51,6 +51,17 @@ type Job struct {
 	Retries            int32          `json:"retries"`
 	LeaseToken         uint64         `json:"leaseToken"`
 	Variables          map[string]any `json:"variables"`
+	// Connector is a connector task the engine resolved into plain values, present
+	// only for a kind the server no longer serves itself (ADR-0165). Nil for a plain
+	// job-worker task, whose work is the customer's own command.
+	Connector *ConnectorPayload `json:"connector,omitempty"`
+}
+
+// ConnectorPayload is a resolved connector task: what to do, with no engine concepts
+// in it.
+type ConnectorPayload struct {
+	Kind   string         `json:"kind"`
+	Fields map[string]any `json:"fields"`
 }
 
 // Exec does one job's work and returns the variables it completed with, or an error

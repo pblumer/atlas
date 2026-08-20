@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,16 +15,20 @@ import (
 // pullResp is the shape POST /api/v1/jobs/activate answers with.
 type pullResp struct {
 	Jobs []struct {
-		JobKey             uint64         `json:"jobKey"`
-		Type               string         `json:"type"`
-		ProcessInstanceKey uint64         `json:"processInstanceKey"`
-		ElementInstanceKey uint64         `json:"elementInstanceKey"`
-		ProcessDefKey      uint64         `json:"processDefKey"`
-		ElementID          string         `json:"elementId"`
-		Retries            int32          `json:"retries"`
-		LeaseToken         uint64         `json:"leaseToken"`
-		LeaseExpiresAt     int64          `json:"leaseExpiresAt"`
-		Variables          map[string]any `json:"variables"`
+		JobKey             uint64 `json:"jobKey"`
+		Type               string `json:"type"`
+		ProcessInstanceKey uint64 `json:"processInstanceKey"`
+		ElementInstanceKey uint64 `json:"elementInstanceKey"`
+		ProcessDefKey      uint64 `json:"processDefKey"`
+		ElementID          string `json:"elementId"`
+		Retries            int32  `json:"retries"`
+		LeaseToken         uint64 `json:"leaseToken"`
+		Connector          *struct {
+			Kind   string         `json:"kind"`
+			Fields map[string]any `json:"fields"`
+		} `json:"connector"`
+		LeaseExpiresAt int64          `json:"leaseExpiresAt"`
+		Variables      map[string]any `json:"variables"`
 	} `json:"jobs"`
 }
 
@@ -504,3 +509,67 @@ func waitTypeIndex(t *testing.T, srv *Server, name string) int32 {
 	}
 	return idx
 }
+
+// TestALeasedConnectorJobCarriesItsResolvedDetail is the mechanism ADR-0165 rests
+// on. A worker has neither the compiled process nor the instance's scope chain, so
+// it cannot find a connector task's configuration or evaluate it. The engine does
+// that — it is the only one who can — and only the *result* travels: plain values a
+// worker can act on with no engine concepts in them.
+func TestALeasedConnectorJobCarriesItsResolvedDetail(t *testing.T) {
+	srv := newServerWithOptions(t, WithOffloadedConnectorKinds([]string{"csv"}))
+	h := srv.Handler()
+	defKey := deployBPMN(t, h, csvConnectorBPMN)
+	startInstance(t, h, defKey, `{"upload":"name,amount\nAda,12\n"}`)
+
+	code, got := pull(t, srv, fmt.Sprintf(`{"type":%q,"worker":"csv-1"}`, compiler.CsvImportJobType))
+	if code != http.StatusOK {
+		t.Fatalf("pull: status=%d", code)
+	}
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want 1", len(got.Jobs))
+	}
+	conn := got.Jobs[0].Connector
+	if conn == nil {
+		t.Fatal("the leased connector job carried no resolved detail, so a worker could not act on it")
+	}
+	if conn.Kind != "csv" {
+		t.Errorf("kind = %q, want %q", conn.Kind, "csv")
+	}
+	// The source text was read up the scope chain by the engine and travels as a value.
+	if src, _ := conn.Fields["source"].(string); !strings.Contains(src, "Ada,12") {
+		t.Errorf("fields = %v, want the source text the engine resolved", conn.Fields)
+	}
+	if conn.Fields["resultVariable"] != "orders" {
+		t.Errorf("resultVariable = %v, want orders", conn.Fields["resultVariable"])
+	}
+}
+
+// A plain job-worker task carries no connector detail: there is nothing to resolve,
+// and an empty object would invite a worker to look for one.
+func TestALeasedPlainJobCarriesNoConnectorDetail(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	_, got := pull(t, srv, `{"type":"send-email","worker":"w1"}`)
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want 1", len(got.Jobs))
+	}
+	if got.Jobs[0].Connector != nil {
+		t.Errorf("a plain job-worker task carried a connector detail: %+v", got.Jobs[0].Connector)
+	}
+}
+
+// csvConnectorBPMN is a process whose service task is a CSV-to-JSON connector.
+const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="import" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:csvConnector source="upload" resultVariable="orders" hasHeader="true"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`

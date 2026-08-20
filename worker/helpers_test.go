@@ -94,3 +94,26 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+// instanceVariables reads the first instance's variables, so a test can assert what
+// a worker actually wrote back.
+func instanceVariables(t *testing.T, ts *httptest.Server) map[string]any {
+	t.Helper()
+	var insts []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(get(t, ts, "/api/v1/instances?state=all"), &insts); err != nil || len(insts) == 0 {
+		// A finished instance is not in the running list; fall back to history.
+		if err := json.Unmarshal(get(t, ts, "/api/v1/instances"), &insts); err != nil {
+			t.Fatalf("decode instances: %v", err)
+		}
+	}
+	if len(insts) == 0 {
+		t.Fatal("no instances")
+	}
+	var vars map[string]any
+	if err := json.Unmarshal(get(t, ts, "/api/v1/instances/"+itoa(insts[0].Key)+"/variables"), &vars); err != nil {
+		t.Fatalf("decode variables: %v", err)
+	}
+	return vars
+}

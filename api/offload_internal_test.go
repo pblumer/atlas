@@ -64,16 +64,13 @@ func TestOffloadingAnUnknownKindFails(t *testing.T) {
 // Every kind can be named, so the flag cannot be a partial list that quietly omits
 // one and leaves it running in the engine.
 func TestEveryManagedKindCanBeOffloaded(t *testing.T) {
-	names := make([]string, 0, len(managedConnectorKinds))
-	for _, k := range managedConnectorKinds {
-		names = append(names, k.name)
-	}
+	names := offloadableKindNames()
 	srv := newServerWithOptions(t, WithOffloadedConnectorKinds(names))
 	srv.do(func() {
-		for _, k := range managedConnectorKinds {
-			for _, jt := range k.jobTypes {
+		for name, types := range offloadableKinds {
+			for _, jt := range types {
 				if srv.jobRunner.Handles(jt) {
-					t.Errorf("%s still has an in-process handler after every kind was offloaded", k.name)
+					t.Errorf("%s still has an in-process handler after every kind was offloaded", name)
 				}
 			}
 		}

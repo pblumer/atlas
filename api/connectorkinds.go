@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -236,51 +237,72 @@ var managedConnectorKinds = []managedConnectorKind{
 // is. It runs on the run-loop goroutine (the connector store's owner), after
 // s.jobRunner and s.connectors are set.
 func (s *Server) setupManagedConnectors(store *state.Store) error {
-	offloaded, err := s.offloadedKindSet()
-	if err != nil {
-		return err
-	}
 	for _, k := range managedConnectorKinds {
 		k.newRegistry(s)
 		if err := k.rebuild(s); err != nil {
 			return err
-		}
-		// A kind the operator moved to a worker gets its registry built — the Console
-		// still lists and validates its connectors — but no in-process handler, so its
-		// jobs park for whoever leases them (ADR-0165).
-		if offloaded[k.name] {
-			continue
 		}
 		k.registerHandlers(s, store)
 	}
 	return nil
 }
 
-// offloadedKindSet validates the configured kind names and returns them as a set.
+// offloadableKinds maps an operator-facing kind name to the reserved job types its
+// in-process handler serves. It is the vocabulary of --offload-connectors, and it
+// deliberately spans more than the *managed* kinds: a kind is offloadable if Atlas
+// runs it itself, whether or not it also has a server-side registry. CSV import is
+// the clearest example — it has no registry precisely because it needs no credential
+// (ADR-0165), and it is the first kind meant to move.
+//
+// The user task is absent on purpose: it waits for a person, and the pull refuses it
+// for that reason rather than because a handler serves it.
+var offloadableKinds = map[string][]int32{
+	connectorKindTemis:      {compiler.TemisDecisionJobTypeIndex},
+	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
+	connectorKindMail:       {compiler.MailJobTypeIndex},
+	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
+	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
+	"csv":                   {compiler.CsvImportJobTypeIndex},
+	"rest":                  {compiler.RestJobTypeIndex},
+	"scim":                  {compiler.ScimJobTypeIndex},
+	"ldap":                  {compiler.LdapJobTypeIndex},
+	"webscrape":             {compiler.WebScrapeJobTypeIndex},
+	"dmn":                   {compiler.DMNJobTypeIndex},
+	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
+}
+
+// applyOffloadedKinds removes the in-process handlers for the kinds an operator
+// moved to a worker, after every registration path has run. Doing it as a removal
+// rather than a condition at each site is what makes it impossible to miss one.
+//
 // An unknown name is an error rather than a no-op: an operator who misspells one
-// would otherwise believe a kind was relocated while it kept running in the engine.
-func (s *Server) offloadedKindSet() (map[string]bool, error) {
-	out := make(map[string]bool, len(s.offloadedKinds))
+// would otherwise believe they had relocated a kind while it kept running in the
+// engine, which is the single outcome this exists to prevent.
+func (s *Server) applyOffloadedKinds() error {
 	for _, name := range s.offloadedKinds {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		if _, ok := lookupManagedConnectorKind(name); !ok {
-			return nil, fmt.Errorf("api: cannot offload connector kind %q: no such kind (have %s)",
-				name, strings.Join(managedConnectorKindNames(), ", "))
+		types, ok := offloadableKinds[name]
+		if !ok {
+			return fmt.Errorf("api: cannot offload connector kind %q: no such kind (have %s)",
+				name, strings.Join(offloadableKindNames(), ", "))
 		}
-		out[name] = true
+		for _, jt := range types {
+			s.jobRunner.Unhandle(jt)
+		}
 	}
-	return out, nil
+	return nil
 }
 
-// managedConnectorKindNames lists every kind that can be named, for the error above.
-func managedConnectorKindNames() []string {
-	names := make([]string, 0, len(managedConnectorKinds))
-	for _, k := range managedConnectorKinds {
-		names = append(names, k.name)
+// offloadableKindNames lists every kind that can be named, for the error above.
+func offloadableKindNames() []string {
+	names := make([]string, 0, len(offloadableKinds))
+	for name := range offloadableKinds {
+		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
