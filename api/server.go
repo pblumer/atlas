@@ -48,6 +48,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -955,6 +956,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// SCIM (application/scim+json, resource-path URLs, filtered search). One worker
 	// serves every process under the reserved SCIM job type.
 	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, scim.Handler(store, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret))
+	// A generic LDAP connector task performs a directory operation (search/add/modify/
+	// delete/modify-password) against a model-authored server (ADR-0153). The server URL
+	// and DNs live in the model; the bind password is a *reference* the worker resolves
+	// at call time (resolveConnectorSecret, ADR-0041). One worker serves every process
+	// under the reserved LDAP job type; each job dials, binds, operates, and closes.
+	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, ldap.Handler(store, s.processLookup, ldap.NewDialer(), s.resolveConnectorSecret))
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
 	// records is ingested and validated on the engine with the file arriving through a

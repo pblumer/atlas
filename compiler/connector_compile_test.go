@@ -26,6 +26,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Remedy: &xmlRemedyConnector{}},
 		{WebScrape: &xmlWebScrapeConnector{}},
 		{Scim: &xmlScimConnector{}},
+		{Ldap: &xmlLdapConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))
