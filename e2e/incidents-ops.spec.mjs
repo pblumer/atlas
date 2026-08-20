@@ -156,15 +156,29 @@ const bootOverview = async (page, { truncated = false } = {}) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
+  // Mutable, so a resolve really removes one and both the table and the nav badge
+  // (which reads the count off /stats) have to agree afterwards.
+  let incidents = OVERVIEW.incidents.slice();
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (route.request().method() === "POST") {
+      const m = path.match(/\/incidents\/(\w+)\/resolve$/);
+      if (m) {
+        incidents = incidents.filter((i) => i.elementInstanceKey !== m[1]);
+        return route.fulfill({ json: { elementInstanceKey: m[1] } });
+      }
+      return route.fulfill({ json: {} });
+    }
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path === "/api/v1/processes") return route.fulfill({ json: OVERVIEW.processes });
     if (path === "/api/v1/instances/summary") return route.fulfill({ json: OVERVIEW.summary });
+    if (path === "/api/v1/stats") {
+      return route.fulfill({ json: { activeProcessInstances: 6, activeElementInstances: 6, unresolvedIncidents: incidents.length } });
+    }
     if (path === "/api/v1/incidents") {
       return route.fulfill({
-        json: { incidents: OVERVIEW.incidents },
+        json: { incidents },
         headers: truncated ? { "X-Incidents-Truncated": "true" } : {},
       });
     }
@@ -216,5 +230,71 @@ test.describe("instances overview", () => {
     await expect(stuck).toHaveAttribute("href", "#/operations/i/900001");
     await expect(results.filter({ hasText: "900009" }).locator("a.pill.err")).toHaveCount(0);
     expect(page.__errors).toEqual([]);
+  });
+});
+
+// The nav badge is the only incident surface that finds the operator rather than
+// waiting to be visited, so it has to be right without a view being opened, and it
+// has to survive the chrome being rebuilt on every navigation (ADR-0151 follow-up).
+const navBadge = (page) => page.locator('#topnav .nav-badge[data-badge="incidents"]');
+
+test.describe("operations nav", () => {
+  test("counts the parked tokens on the Incidents entry", async ({ page }) => {
+    await bootOverview(page);
+
+    await expect(navBadge(page)).toHaveText("3");
+    await expect(navBadge(page)).toBeVisible();
+    await expect(navBadge(page)).toHaveAttribute("title", /3 tokens are parked/);
+    // Only that entry carries one.
+    await expect(page.locator("#topnav .nav-badge")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("survives navigating between Operations views", async ({ page }) => {
+    await bootOverview(page);
+    await expect(navBadge(page)).toHaveText("3");
+
+    // setChrome rewrites the whole nav on every route, so the count has to be
+    // re-applied rather than assumed to still be in the DOM.
+    await page.evaluate(() => { location.hash = "#/operations/decisions"; });
+    await expect(page.locator("#view h1").first()).toHaveText("Decisions");
+    await expect(navBadge(page)).toHaveText("3");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("drops as soon as an incident is resolved, without waiting for the poll", async ({ page }) => {
+    await bootOverview(page);
+    await expect(navBadge(page)).toHaveText("3");
+
+    await page.evaluate(() => { location.hash = "#/operations/incidents"; });
+    await expect(page.locator("#view h1").first()).toHaveText("Incidents");
+    await page.locator("#rows button[data-resolve]").first().click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect(navBadge(page)).toHaveText("2");
+    await expect(page.locator("#rows tr")).toHaveCount(2);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("says nothing when nothing is stuck", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/api/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+      if (path === "/api/v1/stats") {
+        return route.fulfill({ json: { activeProcessInstances: 2, activeElementInstances: 2, unresolvedIncidents: 0 } });
+      }
+      if (path === "/api/v1/incidents") return route.fulfill({ json: { incidents: [] } });
+      return route.fulfill({ json: [] });
+    });
+    await page.goto("/index.html");
+    await page.evaluate(() => { location.hash = "#/operations"; });
+    await expect(page.locator("#view h1").first()).toHaveText("Instances");
+
+    await expect(navBadge(page)).toBeHidden();
+    expect(errors).toEqual([]);
   });
 });

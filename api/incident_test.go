@@ -285,3 +285,61 @@ func TestIncidentListFilters(t *testing.T) {
 		}
 	}
 }
+
+// statsIncidents reads the unresolved-incident count off the live-counts endpoint —
+// the number the Operations nav badges (ADR-0151 follow-up).
+func statsIncidents(t *testing.T, ts *httptest.Server) int {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/stats", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("stats: status=%d body=%s", code, body)
+	}
+	var resp struct {
+		UnresolvedIncidents int `json:"unresolvedIncidents"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode stats: %v (%s)", err, body)
+	}
+	return resp.UnresolvedIncidents
+}
+
+// TestStatsCountsUnresolvedIncidents pins the count the shell polls for its nav
+// badge: zero on a healthy server, one per parked token, and back to zero once the
+// incident is resolved. It is read from state rather than from a maintained counter
+// on purpose — an incident can also disappear with the element instance it sits on
+// (a cancel or an interrupting boundary), which no resolution event announces.
+func TestStatsCountsUnresolvedIncidents(t *testing.T) {
+	ts := newTestServer(t)
+	if got := statsIncidents(t, ts); got != 0 {
+		t.Fatalf("fresh server reports %d unresolved incidents, want 0", got)
+	}
+
+	defKey := deployTaskProcess(t, ts, "approval")
+	parkTask(t, ts, defKey)
+	parkTask(t, ts, defKey)
+	if got := statsIncidents(t, ts); got != 2 {
+		t.Fatalf("after parking two tokens: %d unresolved incidents, want 2", got)
+	}
+
+	inc := listIncidents(t, ts)
+	if len(inc) != 2 {
+		t.Fatalf("expected 2 incidents to resolve, got %d", len(inc))
+	}
+	if code, body := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/incidents/%d/resolve", inc[0].ElementInstanceKey), `{}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("resolve: status=%d body=%s", code, body)
+	}
+	if got := statsIncidents(t, ts); got != 1 {
+		t.Errorf("after resolving one: %d unresolved incidents, want 1", got)
+	}
+
+	// An incident dropped with its element instance (cancelling the instance) is gone
+	// from the count too — the case a maintained counter would miss.
+	if code, body := doReq(t, ts, http.MethodDelete,
+		fmt.Sprintf("/api/v1/instances/%d", inc[1].ProcessInstanceKey), "", ""); code != http.StatusOK {
+		t.Fatalf("cancel instance: status=%d body=%s", code, body)
+	}
+	if got := statsIncidents(t, ts); got != 0 {
+		t.Errorf("after cancelling the other instance: %d unresolved incidents, want 0", got)
+	}
+}

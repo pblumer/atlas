@@ -279,7 +279,7 @@ const TOPNAV = {
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
-    { name: "Incidents", route: "#/operations/incidents" },
+    { name: "Incidents", route: "#/operations/incidents", badge: "incidents" },
     { name: "Outbox", route: "#/operations/outbox" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
@@ -567,13 +567,62 @@ function initHelpMenu(docsEnabled) {
   setHelpContext(helpRoutePath); // fill the contextual entry for the current view
 }
 
+// ---------- Operations nav incident badge ----------
+// A stuck token is now marked on the live diagram, in the replay and in the lists
+// (ADR-0150/0151) — but each of those only says so once you are already looking at
+// it. The nav badge is the one that finds *you*: while the Operations app is open,
+// the shell polls the live counts and puts the number of parked tokens on the
+// Incidents entry, so "something is stuck" arrives without a view being opened.
+// It polls only in Operations (nowhere else shows the entry) and stops on the way
+// out, so no other app pays for it.
+const INCIDENT_BADGE_INTERVAL = 5000;
+let incidentCount = 0;
+let incidentBadgeTimer = null;
+
+// paintIncidentBadge writes the current count into whatever badge slot the chrome
+// has right now. setChrome rebuilds the nav on every navigation, so the value is
+// re-applied rather than assumed to survive.
+function paintIncidentBadge() {
+  const slot = document.querySelector('#topnav .nav-badge[data-badge="incidents"]');
+  if (!slot) return;
+  slot.hidden = incidentCount === 0;
+  // A four-digit pill would push the nav around; past 999 the exact number does not
+  // change what an operator does next.
+  slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
+  slot.title = incidentCount === 1
+    ? "1 token is parked behind an unresolved incident"
+    : `${incidentCount} tokens are parked behind unresolved incidents`;
+}
+
+// refreshIncidentBadge re-reads the count. The incidents table calls it straight
+// after a resolve, so the nav agrees at once instead of waiting out the interval.
+async function refreshIncidentBadge() {
+  let stats;
+  try { stats = await api("GET", "/api/v1/stats"); }
+  catch { return; } // transient; the badge keeps its last value
+  incidentCount = (stats && stats.unresolvedIncidents) || 0;
+  paintIncidentBadge();
+}
+
+function syncIncidentBadge(appId) {
+  if (appId !== "operations") {
+    if (incidentBadgeTimer) { clearInterval(incidentBadgeTimer); incidentBadgeTimer = null; }
+    return;
+  }
+  paintIncidentBadge(); // the freshly rendered nav starts from what we already know
+  refreshIncidentBadge();
+  if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
+}
+
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).map((t) =>
-    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}</a>`
+    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
+    (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
+  syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
@@ -3362,7 +3411,10 @@ async function viewIncidents() {
     if (!btn) return;
     const incident = current[Number(btn.dataset.resolve)];
     if (!incident) return;
-    if (await resolveIncidentFlow({ api, toast, incident })) await load();
+    if (await resolveIncidentFlow({ api, toast, incident })) {
+      await load();
+      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+    }
   });
 
   document.getElementById("refresh").addEventListener("click", load);
@@ -4899,6 +4951,7 @@ async function route() {
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "Atlas";
     document.getElementById("topnav").innerHTML = "";
+    syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     updateAccount();
     return viewLogin();
   }

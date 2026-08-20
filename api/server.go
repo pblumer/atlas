@@ -1701,5 +1701,9 @@ func (s *Server) readStats() (statsResp, error) {
 	if err != nil {
 		return statsResp{}, err
 	}
-	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei}, nil
+	inc, err := s.store.IncidentCount()
+	if err != nil {
+		return statsResp{}, err
+	}
+	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
 }
