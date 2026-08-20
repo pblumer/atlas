@@ -127,3 +127,18 @@ func TestEveryInProcessHandlerIsOffloadable(t *testing.T) {
 		}
 	})
 }
+
+// A blank entry is skipped rather than refused. `--offload-connectors csv,,rest` and
+// a trailing comma are what an operator's shell history produces; failing startup on
+// one would be strictness with no safety in it — unlike a *misspelled* kind, a blank
+// cannot be mistaken for a relocation that happened.
+func TestOffloadingIgnoresBlankEntries(t *testing.T) {
+	srv := newServerWithOptions(t, WithOffloadedConnectorKinds([]string{"csv", "", "  ", "rest"}))
+	srv.do(func() {
+		for _, jt := range []int32{compiler.CsvImportJobTypeIndex, compiler.RestJobTypeIndex} {
+			if srv.jobRunner.Handles(jt) {
+				t.Errorf("job type %d still has an in-process handler; the blank entries broke the list", jt)
+			}
+		}
+	})
+}

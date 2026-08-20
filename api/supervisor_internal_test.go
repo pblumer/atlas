@@ -1,6 +1,8 @@
 package api
 
 import (
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -147,4 +149,55 @@ func TestRestartDuringBackoffTriesAgainImmediately(t *testing.T) {
 	waitFor(t, "another attempt without waiting out the backoff", func() bool {
 		return sup.list()[0].Starts > before
 	})
+}
+
+// A supervised worker whose command cannot start is reported as failed, with the
+// reason, rather than quietly missing from the view. This is the first thing an
+// operator hits after a typo in --supervise, and the Workers view is where they
+// will look for it.
+func TestAChildThatCannotStartIsReportedWithItsReason(t *testing.T) {
+	quit := make(chan struct{})
+	defer close(quit)
+	sup := newSupervisor(quit)
+	sup.exe = filepath.Join(t.TempDir(), "no-such-binary")
+	sup.backoff = time.Millisecond
+	sup.add(SuperviseSpec{ID: "typo-1", Kinds: []string{"send-email"}}, []string{"worker"})
+	sup.start()
+
+	waitFor(t, "the failure to be reported", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].State == "failed" && list[0].LastExit != ""
+	})
+	got := sup.list()[0]
+	if !strings.Contains(got.LastExit, "no-such-binary") {
+		t.Errorf("lastExit = %q, want it to name the command that could not start", got.LastExit)
+	}
+	// It keeps trying rather than giving up: the binary may appear, and an operator
+	// who fixes the path should not also have to restart the server.
+	waitFor(t, "the supervisor to try again", func() bool { return sup.list()[0].Starts > 1 })
+}
+
+// A worker that exits zero is still a failure from the supervisor's side: `atlas
+// worker` runs until it is stopped, so a clean exit means it stopped working and
+// nobody asked it to. Saying "exited without an error" is more useful than an empty
+// reason, which reads as "no problem".
+func TestAChildThatExitsCleanlyIsStillAFailure(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh on this machine")
+	}
+	quit := make(chan struct{})
+	defer close(quit)
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = time.Millisecond
+	sup.add(SuperviseSpec{ID: "quitter-1"}, []string{"-c", "exit 0"})
+	sup.start()
+
+	waitFor(t, "the clean exit to be reported as a failure", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].State == "failed" && list[0].LastExit != ""
+	})
+	if got := sup.list()[0].LastExit; !strings.Contains(got, "should not do") {
+		t.Errorf("lastExit = %q, want it to say a worker should not exit on its own", got)
+	}
 }

@@ -128,10 +128,7 @@ func New(opts Options) *Worker {
 	if opts.Lease <= 0 {
 		opts.Lease = DefaultLease
 	}
-	if opts.Wait < 0 {
-		opts.Wait = 0
-	}
-	if opts.Wait == 0 {
+	if opts.Wait <= 0 {
 		opts.Wait = DefaultWait
 	}
 	if opts.MaxJobs <= 0 {

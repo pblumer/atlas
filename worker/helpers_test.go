@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func post(t *testing.T, ts *httptest.Server, path, body, contentType string) []byte {
@@ -116,4 +117,37 @@ func instanceVariables(t *testing.T, ts *httptest.Server) map[string]any {
 		t.Fatalf("decode variables: %v", err)
 	}
 	return vars
+}
+
+// waitFor polls until cond holds, so a test never depends on a sleep being long
+// enough. A worker's rounds are driven by goroutines and the operating system's
+// scheduling of child processes.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// openIncidents counts the unresolved incidents on the server — what an operator
+// sees once a job's retries have run out.
+func openIncidents(t *testing.T, ts *httptest.Server) int {
+	t.Helper()
+	var incidents []struct {
+		Resolved bool `json:"resolved"`
+	}
+	if err := json.Unmarshal(get(t, ts, "/api/v1/incidents"), &incidents); err != nil {
+		t.Fatalf("decode incidents: %v", err)
+	}
+	n := 0
+	for _, in := range incidents {
+		if !in.Resolved {
+			n++
+		}
+	}
+	return n
 }
