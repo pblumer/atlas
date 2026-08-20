@@ -448,7 +448,7 @@ Making processes wait, react, and time out.
   `flowNodeRef` naming no flow node or a node claimed by two lanes. **Layer B** (a lane referencing
   an Atlas group as a compile-time `candidateGroups` default) and **Layer C** (instance-level access
   control) are designed in the ADR and deferred to their own PRs.
-- 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
+- ✅ **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
   re-activates the job with fresh retries (raise / resolve / resume). Keyed by
@@ -470,8 +470,17 @@ Making processes wait, react, and time out.
   FEEL cadence stops resolving mid-cycle raises the same job-less incident and parks
   rather than silently ceasing to recur; and a **timer start** event's constant FEEL
   schedule that can't resolve is now a deploy-time validation error
-  (`timer.start-schedule`) instead of a start timer that silently never arms. An
-  operator UI for incidents is the last piece still to come.
+  (`timer.start-schedule`) instead of a start timer that silently never arms. **The
+  operator surface is now wherever the operator already is**: the live diagram marks a
+  parked element red, badges it with the failure's own message and resolves it beside
+  the diagram ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)),
+  and the **replay**, the **Instances list** and the variable search say it too
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)) — the replay keeping
+  the stuck element outlined at every position of the playhead and flagging its history
+  row, the overview linking to the *version* that holds the incidents. `GET /incidents`
+  carries the diagram context that needs (`processDefKey`, `processId`, the BPMN
+  `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new is
+  written into the durable record.
 
 ## Milestone 3 — Structure ✅
 

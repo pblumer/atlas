@@ -46,6 +46,47 @@ _Changed_ / _Removed_ for each version.
   token and an endpoint that could not dial — are now answered in a second, at the form,
   by the person who typed them.
 
+- **The step-by-step replay says why an instance stopped**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)): ADR-0150 put a parked
+  token on the *live* diagram; the replay — the view whose whole purpose is
+  reconstructing what an instance did — still drew the stuck element like any other. It
+  now keeps that element outlined at **every** position of the playhead (an incident is a
+  fact about now, not about the frame being replayed), flags its row in the Instance
+  History, counts incidents beside the instance state, and resolves from the Details
+  panel with the same one-click **Resolve & retry** the live view offers. It costs no new
+  endpoint: the incidents ride the per-instance runtime overlay the replay already polls.
+
+- **The Instances overview flags what is stuck** (ADR-0151): a per-process **Incidents**
+  column that links to the *version* actually holding them — not the latest, which is the
+  wrong diagram whenever the fault sits on an older one — and a flag on any
+  variable-search hit that is parked. A stuck instance is counted as *running* like any
+  other, so "3 running" read as healthy while one of the three had not moved in a week.
+  Counts come from the incident list, not from the per-definition summary, which stays
+  O(1) per definition (ADR-0083); a page-capped count says so instead of quietly
+  undercounting.
+
+- **`GET /api/v1/incidents` can be scoped** (ADR-0151): `?instance=` for one process
+  instance, `?process=` for one deployed definition — also on the `atlas_list_incidents`
+  MCP tool. A client that wants one instance's incidents no longer pulls every incident
+  on the server and hopes its own survive the 5000-row page cap.
+
+### Changed
+
+- **Breaking (HTTP API): `elementId` in the incident list is now the BPMN diagram id**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)). The list previously
+  returned the *compiled-graph* element index under that name, which no view can draw
+  with and which contradicts every other endpoint, where `elementId` is the diagram id.
+  The integer survives under its own name, `elementIndex`. The list also gained
+  `processDefKey`, `processId` and `type` (`"job"` or `"timer"`), all resolved on read —
+  the durable `IncidentValue` is unchanged, so `applyToState` and replay are untouched.
+
+- **The incidents table's instance link works** (ADR-0151). It fed a *process instance*
+  key to the live view's *definition* route, so the link never landed on the instance it
+  named; it now opens that instance on its version's live diagram, with a replay link
+  beside it. Its resolve prompt became a dialog with room to say that a timer incident
+  re-arms and ignores the retry count.
+
+
 ### Fixed
 
 - **The SMTP client speaks over one transport that a check can share** (ADR-0150,

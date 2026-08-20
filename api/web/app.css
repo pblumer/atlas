@@ -224,6 +224,10 @@ textarea::placeholder {
 .pill.warn { background: #fdf3e2; color: #b26b00; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
 .pill.err .dot, .pill.warn .dot { background: currentColor; }
+/* A pill can be the link to what it counts — the incident flag in the Operations
+   lists opens the version (or instance) it is about (ADR-0150). */
+a.pill { text-decoration: none; font-weight: 600; }
+a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
 
 /* Tables */
@@ -759,6 +763,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere; margin: 3px 0 6px;
 }
+/* The replay's Details tab renders the very same block (ADR-0151) — one incident
+   vocabulary across both diagrams — so it needs no rules of its own. */
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
@@ -877,6 +883,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .task-link.inline {
   display: inline-flex; padding: 2px 7px; font-size: 12px; gap: 4px;
   margin-right: 6px; vertical-align: middle;
+}
+/* The resolve dialog (the Incidents table, where the operator picks a retry budget)
+   quotes the failure that raised the incident. */
+.inc-modal-msg {
+  margin: 0 0 10px; padding: 7px 9px; border-radius: var(--radius);
+  background: var(--danger-soft); color: var(--danger);
+  font: 12px/1.5 ui-monospace, monospace; word-break: break-word;
 }
 .var-panel .vp-table { width: 100%; }
 .var-panel .vp-table td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -1066,6 +1079,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-hrow.root { font-size: 13px; }
 .ops-hrow .ops-hicon { width: 16px; text-align: center; color: var(--ok); }
 .ops-hrow .ops-hicon.live { color: var(--accent); }
+.ops-hrow .ops-hicon.inc { color: var(--danger); }
+.ops-hrow.inc .ops-hname { color: var(--danger); font-weight: 600; }
 .ops-hrow .ops-hicon.proc { color: var(--muted); }
 .ops-hrow:not(.root):not(.done) .ops-hname { color: var(--text); }
 .ops-hname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

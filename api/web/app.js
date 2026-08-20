@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { incidentPill, fmtRaised, resolveIncidentFlow } from "./incidents.js";
 
 const view = document.getElementById("view");
 
@@ -2784,8 +2785,9 @@ async function viewInstances() {
     <p class="muted">One row per deployed process. Open a process to pick a version, then
     watch all of its instances at once (every token on the diagram) or select a single
     instance to isolate it — with its variables shown below the diagram. Each instance
-    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. Start
-    the demo to park a token on a waiting task.</p>
+    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. A
+    process with a stuck token is flagged in the <b>Incidents</b> column, which opens the
+    version holding it. Start the demo to park a token on a waiting task.</p>
     <div class="ops-toolbar">
       <span class="ops-search">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
@@ -2806,24 +2808,83 @@ async function viewInstances() {
     </form>
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
+    <div id="ops-inc-note"></div>
     <div class="card" id="proc-card" style="padding:0">
       <table data-dt-key="instances">
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
   const tbody = document.getElementById("rows");
 
   let allGroups = [];
   let summary = new Map();
+  // Unresolved incidents, bucketed for the two tables below: by definition (the
+  // per-process rows) and by instance (the variable-search results). Keys are
+  // stringified so a JSON number and a string key can't miss each other (ADR-0151).
+  let incByDef = new Map();
+  let incByInstance = new Map();
+  let incTruncated = false;
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
+
+  // loadIncidents pulls the server's unresolved incidents once per refresh. This
+  // overview is server-wide, so it is the unscoped list — capped like the Incidents
+  // page, and a capped page is said out loud rather than quietly undercounting. It is
+  // deliberately a separate read: the summary endpoint is O(1) per definition by
+  // design (ADR-0083) and must not grow a scan.
+  const loadIncidents = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
+      const rows = (data && data.incidents) || [];
+      incTruncated = headers.get("X-Incidents-Truncated") === "true";
+      incByDef = new Map();
+      incByInstance = new Map();
+      for (const r of rows) {
+        if (r.processDefKey) {
+          const d = String(r.processDefKey);
+          incByDef.set(d, (incByDef.get(d) || 0) + 1);
+        }
+        const i = String(r.processInstanceKey);
+        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      }
+    } catch { /* best-effort: the lists still render, just without the flags */ }
+    const note = document.getElementById("ops-inc-note");
+    if (note) {
+      note.innerHTML = incTruncated
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More incidents than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
+        : "";
+    }
+  };
+
+  // incidentCell renders one process row's Incidents cell: the total over every
+  // version, linking to the version that actually holds them. Linking to the latest
+  // version instead would land the operator on an empty diagram whenever the fault
+  // sits on an older one — the case where this flag matters most.
+  const incidentCell = (g) => {
+    let total = 0, top = 0, topVersion = null, versionsWith = 0;
+    for (const v of g.versions) {
+      const n = incByDef.get(String(v.key)) || 0;
+      if (!n) continue;
+      total += n;
+      versionsWith++;
+      if (n > top) { top = n; topVersion = v; }
+    }
+    if (!total) return { total: 0, html: '<span class="muted">0</span>' };
+    const title = versionsWith > 1
+      ? `${total} unresolved incidents across ${versionsWith} versions — opens v${topVersion.version}, which holds ${top}; the version picker reaches the rest`
+      : `${total} unresolved incident${total === 1 ? "" : "s"} on v${topVersion.version} — open its live view, where the diagram marks every stuck token`;
+    return {
+      total,
+      html: `<a class="pill err" href="#/operations/p/${topVersion.key}" title="${esc(title)}">&#9888; ${total}</a>`,
+    };
+  };
 
   // renderRows draws the process rows, narrowed by the top filter box (name or process
   // id). Column sorting and per-column filtering are handled by the shared table
   // enhancer over the rendered rows, so this only builds the rows and their sort keys.
   function renderRows() {
     if (!allGroups.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
         <a href="#/modeler">Modeler</a>.</td></tr>`;
       return;
@@ -2833,7 +2894,7 @@ async function viewInstances() {
       ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
       : allGroups;
     if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
     tbody.innerHTML = filtered.map((g) => {
@@ -2860,10 +2921,14 @@ async function viewInstances() {
       const termAll = s.running
         ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
         : "";
+      // A running count says nothing about a token being *stuck*: an instance parked
+      // behind an incident is counted as running like any other (ADR-0151).
+      const inc = incidentCell(g);
       return `<tr>
         <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
         <td data-sort="${g.versions.length}">${versions}</td>
         <td data-sort="${s.running || 0}">${running}</td>
+        <td data-sort="${inc.total}">${inc.html}</td>
         <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
         <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
         <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
@@ -2904,12 +2969,13 @@ async function viewInstances() {
       const [procs, rows] = await Promise.all([
         api("GET", "/api/v1/processes"),
         api("GET", "/api/v1/instances/summary"),
+        loadIncidents(),
       ]);
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
       renderRows();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -2956,6 +3022,10 @@ async function viewInstances() {
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
     let rows;
     try {
+      // Refresh the incident buckets with the search: these rows are individual
+      // instances, and a stale flag on the surface an operator debugs from is worse
+      // than the extra read.
+      await loadIncidents();
       rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
@@ -2972,13 +3042,19 @@ async function viewInstances() {
       const state = r.state === "active"
         ? '<span class="pill ok"><span class="dot"></span>active</span>'
         : `<span class="pill">${esc(r.state)}</span>`;
+      // A matched instance that is stuck says so here rather than only once opened —
+      // "active" alone reads as healthy (ADR-0151).
+      const incN = incByInstance.get(String(r.key)) || 0;
+      const incFlag = incN
+        ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
+        : "";
       const hits = (r.variables || []).map((v) =>
         `<div class="var-hit"><b>${esc(v.name)}</b> = ${highlight(v.value, needle)} <span class="var-kind">${esc(v.kind)}</span></div>`
       ).join("");
       return `<tr>
         <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
         <td>v${r.version}</td>
-        <td>${state}</td>
+        <td>${state}${incFlag}</td>
         <td class="muted" data-sort="${r.completedAt || r.createdAt || 0}">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
         <td>${hits}</td>
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
@@ -3209,12 +3285,13 @@ function overrideCell(r) {
 // this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
 // a *job* incident (a service-task job whose retries ran out and parked) and a
 // job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the live instance and
-// resolves in place over POST /incidents/{elementInstanceKey}/resolve: a job incident
-// re-activates its job with a fresh retry budget; a timer incident re-arms the element
-// against the instance's current variables (re-raising if it still fails). The list
-// shares the task list's ceiling and flags a capped page the same way (X-Incidents-
-// Truncated), newest scan order.
+// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
+// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
+// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
+// fresh retry budget; a timer incident re-arms the element against the instance's
+// current variables (re-raising if it still fails). The list shares the task list's
+// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
+// order.
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
@@ -3237,12 +3314,13 @@ async function viewIncidents() {
     </div>`;
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // raisedAt is ns
+  let current = []; // the rendered page, so a Resolve click has the whole incident
 
   const load = async () => {
     try {
       const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
       const rows = (data && data.incidents) || [];
+      current = rows;
       note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
         ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
         : "";
@@ -3250,21 +3328,25 @@ async function viewIncidents() {
         tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r) => {
-        const inst = `<a href="#/operations/p/${r.processInstanceKey}">${r.processInstanceKey}</a>`;
-        // The element instance key (the resolve key) is the row's identity; the compiled
-        // element index rides along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Compiled element index #${r.elementId}">${r.elementInstanceKey}</span>`;
-        const cause = r.jobKey
-          ? `<span class="pill err"><span class="dot"></span>job</span> <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>`
-          : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+      tbody.innerHTML = rows.map((r, i) => {
+        // The instance opens on the live diagram of its own version, with the token
+        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+        const inst = r.processDefKey
+          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+        // The element is named by its diagram id — what the modeler and the diagram
+        // call it; the element instance key (the resolve key) and the compiled index
+        // ride along as a title for anyone cross-referencing the graph.
+        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
         return `<tr>
           <td>${inst}</td>
           <td>${el}</td>
           <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${fmtNano(r.raisedAt)}</td>
+          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}</td>
-          <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
+          <td style="text-align:right"><button class="btn sm" data-resolve="${i}">Resolve…</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3273,24 +3355,14 @@ async function viewIncidents() {
   };
 
   // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). Resolving
-  // prompts for the retry budget the re-activated job gets (default 1); a timer
-  // incident re-arms and ignores the count.
+  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
+  // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve]");
     if (!btn) return;
-    const key = btn.dataset.resolve;
-    const v = prompt("Resume with how many retries? (a timer incident re-arms and ignores this)", "1");
-    if (v === null) return;
-    const n = parseInt(v, 10);
-    if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive number of retries", "warn"); return; }
-    try {
-      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: n });
-      toast("Incident resolved", "ok");
-    } catch (err) {
-      toast(err.message || "Resolve failed", "warn");
-    }
-    await load();
+    const incident = current[Number(btn.dataset.resolve)];
+    if (!incident) return;
+    if (await resolveIncidentFlow({ api, toast, incident })) await load();
   });
 
   document.getElementById("refresh").addEventListener("click", load);

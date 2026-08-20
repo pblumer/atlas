@@ -348,13 +348,29 @@ type resolveIncidentReq struct {
 	Retries int32 `json:"retries"`
 }
 
+// incidentView is one unresolved incident as the operator surfaces read it. Besides
+// the resolve key (ElementInstanceKey) it carries the diagram context the Operations
+// live view and the single-instance replay need to draw the incident *on the element
+// it stalls* and link it back: the definition it belongs to and the BPMN id of the
+// stuck element. Both are resolved on read from the instance and its compiled
+// process — the durable IncidentValue keeps holding only the compiled element index
+// (I6: nothing here is written back into an event) — ADR-0151.
 type incidentView struct {
 	ElementInstanceKey uint64 `json:"elementInstanceKey"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
+	ProcessID          string `json:"processId,omitempty"`
 	JobKey             uint64 `json:"jobKey"`
-	ElementId          int32  `json:"elementId"`
-	RaisedAt           int64  `json:"raisedAt"`
-	Message            string `json:"message"`
+	// ElementID is the BPMN diagram id of the stuck element (the id every other view
+	// calls `elementId`), empty when the instance outlived its deployment.
+	// ElementIndex is the compiled-graph index the incident actually stores.
+	ElementID    string `json:"elementId,omitempty"`
+	ElementIndex int32  `json:"elementIndex"`
+	// Type is what parked: "job" (a service-task job whose retries ran out) or
+	// "timer" (a job-less timer whose FEEL schedule stopped resolving, ADR-0064/0111).
+	Type     string `json:"type"`
+	RaisedAt int64  `json:"raisedAt"`
+	Message  string `json:"message"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -3217,8 +3233,21 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// incidentType names what an incident parked, the distinction the operator views
+// label: a job incident holds a service-task job whose retries ran out; a job-less
+// incident is a timer whose FEEL schedule stopped resolving (ADR-0064/0111).
+func incidentType(v *model.IncidentValue) string {
+	if v.JobKey != 0 {
+		return "job"
+	}
+	return "timer"
+}
+
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0061).
+// view (ADR-0061). Optionally scoped to one process instance (?instance=) or one
+// deployed definition (?process=): the replay badges a single instance's incidents
+// and the live view a whole version's, and neither should have to pull the server's
+// entire — page-capped — incident list to find its own (ADR-0151).
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
@@ -3231,23 +3260,82 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			limit = maxTaskListMax
 		}
 	}
+	var instanceFilter, processFilter uint64
+	for _, f := range []struct {
+		name string
+		dst  *uint64
+	}{{"instance", &instanceFilter}, {"process", &processFilter}} {
+		q := strings.TrimSpace(r.URL.Query().Get(f.name))
+		if q == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid "+f.name+" (want a key)")
+			return
+		}
+		*f.dst = n
+	}
 	list := []incidentView{}
 	truncated := false
 	var scanErr error
 	s.do(func() {
+		// One instance is looked up once however many of its elements are stuck, and
+		// a flood of incidents is usually a flood on few instances.
+		type instanceCtx struct {
+			defKey    uint64
+			processID string
+			cp        *compiler.CompiledProcess
+		}
+		resolved := map[uint64]instanceCtx{}
+		lookup := func(piKey uint64) (instanceCtx, error) {
+			if ctx, ok := resolved[piKey]; ok {
+				return ctx, nil
+			}
+			var ctx instanceCtx
+			pi, ok, err := s.store.ProcessInstance(piKey)
+			if err != nil {
+				return ctx, err
+			}
+			if ok {
+				ctx.defKey = pi.ProcessDefKey
+				if d, ok := s.deployments[pi.ProcessDefKey]; ok {
+					ctx.processID, ctx.cp = d.ProcessID, d.cp
+				}
+			}
+			resolved[piKey] = ctx
+			return ctx, nil
+		}
 		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
+				return nil
+			}
+			ctx, err := lookup(v.ProcessInstanceKey)
+			if err != nil {
+				return err
+			}
+			if processFilter != 0 && ctx.defKey != processFilter {
+				return nil
+			}
 			if len(list) >= limit {
 				truncated = true
 				return errListTruncated // page full: bound the response even under a flood of failures
 			}
-			list = append(list, incidentView{
+			view := incidentView{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
+				ProcessDefKey:      ctx.defKey,
+				ProcessID:          ctx.processID,
 				JobKey:             v.JobKey,
-				ElementId:          v.ElementId,
+				ElementIndex:       v.ElementId,
+				Type:               incidentType(v),
 				RaisedAt:           v.RaisedAt,
 				Message:            v.Message,
-			})
+			}
+			if ctx.cp != nil {
+				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+			}
+			list = append(list, view)
 			return nil
 		})
 		scanErr = unlessTruncated(err)
