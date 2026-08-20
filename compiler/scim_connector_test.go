@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:scimConnector> extension is a SCIM 2.0 connector
-// task (ADR-0152): it performs a resource operation against the model-authored SCIM
+// task (ADR-0153): it performs a resource operation against the model-authored SCIM
 // service provider via the job path rather than delegating to an external
 // service-task worker.
 const scimConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>

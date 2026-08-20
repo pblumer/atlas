@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:ldapConnector> extension is a generic LDAP
-// connector task (ADR-0153): it performs a directory operation against a
+// connector task (ADR-0154): it performs a directory operation against a
 // model-authored server via the job path rather than an external service-task worker.
 const ldapConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

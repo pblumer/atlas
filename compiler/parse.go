@@ -110,7 +110,35 @@ func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 
 // restAuth reads a REST connector's authentication config from its extension.
 func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	// oauth2 is REST-only: the client-credentials grant needs a token endpoint and a
+	// client id, and only <atlas:restConnector> carries those attributes (ADR-0152).
+	// Every other scheme is shared with the SCIM connector via connectorAuth.
+	if strings.ToLower(strings.TrimSpace(c.AuthType)) == "oauth2" {
+		return restOAuth2(taskID, c)
+	}
 	return connectorAuth(taskID, "rest connector", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
+}
+
+// restOAuth2 builds a REST connector task's client-credentials config (ADR-0152):
+// the token endpoint and client id are model data; the client secret is a reference
+// (secrets live server-side, ADR-0041). Scope is optional.
+func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	if strings.TrimSpace(c.AuthTokenURL) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
+	}
+	if strings.TrimSpace(c.AuthClientID) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
+	}
+	if strings.TrimSpace(c.AuthSecret) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
+	}
+	return RestAuth{
+		Type:      "oauth2",
+		ClientID:  strings.TrimSpace(c.AuthClientID),
+		SecretRef: strings.TrimSpace(c.AuthSecret),
+		TokenURL:  strings.TrimSpace(c.AuthTokenURL),
+		Scope:     strings.TrimSpace(c.AuthScope),
+	}, nil
 }
 
 // connectorAuth builds an HTTP-based connector task's authentication config from its
@@ -1744,8 +1772,19 @@ type xmlServiceTask struct {
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
 	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
-	// absent.
+	// absent. Read it through sharePointConn, not directly — the Modeler writes the
+	// tag with a capital P (see SharePointCamel).
 	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
+	// SharePointCamel is the same extension under the spelling the Modeler produces.
+	// bpmn-js derives an element's tag from its moddle type by lowercasing only the
+	// first letter, so the type SharePointConnector serializes as
+	// <atlas:sharePointConnector> — while hand-authored models (and every compiler
+	// test) use the all-lowercase <atlas:sharepointConnector>. Go's XML matching is
+	// case-sensitive, so a task authored in the Modeler was silently ignored: its
+	// configuration sat in the XML and the task compiled as an unconfigured service
+	// task. Accepting both spellings keeps hand-authored and Modeler-authored models
+	// working; sharePointConn normalizes them.
+	SharePointCamel *xmlSharePointConnector `xml:"extensionElements>sharePointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
 	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
@@ -1755,11 +1794,11 @@ type xmlServiceTask struct {
 	// absent.
 	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
 	// Scim, when present, marks this service task a SCIM 2.0 connector task
-	// (ADR-0152): it performs a resource operation against a model-authored SCIM
+	// (ADR-0153): it performs a resource operation against a model-authored SCIM
 	// service provider through the job path.
 	Scim *xmlScimConnector `xml:"extensionElements>scimConnector"`
 	// Ldap, when present, marks this service task a generic LDAP connector task
-	// (ADR-0153): it performs a directory operation against a model-authored LDAP
+	// (ADR-0154): it performs a directory operation against a model-authored LDAP
 	// server through the job path.
 	Ldap *xmlLdapConnector `xml:"extensionElements>ldapConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
@@ -1771,6 +1810,16 @@ type xmlServiceTask struct {
 	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+}
+
+// sharePointConn returns the task's SharePoint connector extension under either
+// spelling (see SharePointCamel), or nil when the task carries none. Every reader
+// must go through it so both hand-authored and Modeler-authored models compile.
+func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
+	if st.SharePoint != nil {
+		return st.SharePoint
+	}
+	return st.SharePointCamel
 }
 
 // xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to
@@ -1809,9 +1858,11 @@ type xmlClioConnector struct {
 // url is the full request URL, authored in the model; resultVariable, if set, is
 // the process variable the JSON response is written back into. Header and
 // QueryParam child elements add request headers and query parameters. The auth*
-// attributes describe authentication: authType is "basic"/"bearer"/"apiKey";
-// authUsername (basic) and authApiKeyName (the apiKey header name) are model data;
-// authSecret names a server-side secret (ADR-0041) — never the secret value.
+// attributes describe authentication: authType is "basic"/"bearer"/"apiKey"/
+// "oauth2"; authUsername (basic) and authApiKeyName (the apiKey header name) are
+// model data; authSecret names a server-side secret (ADR-0041) — never the secret
+// value. For oauth2 (client-credentials, ADR-0152) authTokenUrl/authClientId/
+// authScope are model data and authSecret is the client secret reference.
 type xmlRestConnector struct {
 	Method         string      `xml:"method,attr"`
 	Url            string      `xml:"url,attr"`
@@ -1820,6 +1871,9 @@ type xmlRestConnector struct {
 	AuthUsername   string      `xml:"authUsername,attr"`
 	AuthApiKeyName string      `xml:"authApiKeyName,attr"`
 	AuthSecret     string      `xml:"authSecret,attr"`
+	AuthTokenURL   string      `xml:"authTokenUrl,attr"`
+	AuthClientID   string      `xml:"authClientId,attr"`
+	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
@@ -1828,7 +1882,7 @@ type xmlRestConnector struct {
 }
 
 // xmlScimConnector is the <atlas:scimConnector> extension on a service task
-// (ADR-0152). BaseUrl and Resource address the SCIM service provider and resource
+// (ADR-0153). BaseUrl and Resource address the SCIM service provider and resource
 // type ("Users"/"Groups"); Operation selects the SCIM call; ResourceId (get/replace/
 // patch/delete) and Filter (search) carry literal-or-FEEL values; BodyVariable names
 // the process variable holding the create/replace/patch payload (blank → the whole
@@ -1853,7 +1907,7 @@ type xmlScimConnector struct {
 }
 
 // xmlLdapConnector is the <atlas:ldapConnector> extension on a service task
-// (ADR-0153). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
+// (ADR-0154). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
 // a reference, never a value, ADR-0041); startTLS upgrades a plain connection.
 // operation selects the directory call. dn is the target entry; baseDN/filter/scope
 // address a search; entryVariable names the add/modify attribute object; newPassword

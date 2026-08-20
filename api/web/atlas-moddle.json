@@ -164,6 +164,20 @@
       ]
     },
     {
+      "name": "UserConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "username", "type": "String", "isAttr": true },
+        { "name": "email", "type": "String", "isAttr": true },
+        { "name": "displayName", "type": "String", "isAttr": true },
+        { "name": "roles", "type": "String", "isAttr": true },
+        { "name": "password", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "MockupConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

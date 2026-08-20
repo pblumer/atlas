@@ -1,7 +1,7 @@
 // Package ldap integrates a generic LDAP directory as a service-task connector: a
 // BPMN LDAP connector task performs a directory operation — search an entry, add /
 // modify / delete an entry, or set an entry's password — against a model-authored
-// server through the job path (ADR-0153), the same seam the rest and scim packages
+// server through the job path (ADR-0154), the same seam the rest and scim packages
 // use for HTTP (ADR-0067/0151). It inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
 //

@@ -359,35 +359,46 @@ func TestAuthHeader(t *testing.T) {
 }
 
 func TestApplyAuth(t *testing.T) {
+	ctx := context.Background()
 	// No auth encoded → no change, nil map stays nil.
-	if h, err := applyAuth(nil, "", noResolver); err != nil || h != nil {
+	if h, err := applyAuth(ctx, nil, "", noResolver, nil); err != nil || h != nil {
 		t.Errorf("applyAuth(none) = %v,%v, want nil,nil", h, err)
 	}
 	// Bad JSON → error.
-	if _, err := applyAuth(nil, "{bad", noResolver); err == nil {
+	if _, err := applyAuth(ctx, nil, "{bad", noResolver, nil); err == nil {
 		t.Error("applyAuth(bad json): err = nil, want error")
 	}
 	// Empty type → no-op.
-	if h, err := applyAuth(nil, `{"type":""}`, noResolver); err != nil || h != nil {
+	if h, err := applyAuth(ctx, nil, `{"type":""}`, noResolver, nil); err != nil || h != nil {
 		t.Errorf("applyAuth(empty type) = %v,%v, want nil,nil", h, err)
 	}
 	// Missing secret → error.
-	if _, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, noResolver); err == nil {
+	if _, err := applyAuth(ctx, nil, `{"type":"bearer","secretRef":"X"}`, noResolver, nil); err == nil {
 		t.Error("applyAuth(missing secret): err = nil, want error")
 	}
 	// Resolves and allocates a header map even when none was passed.
-	h, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	h, err := applyAuth(ctx, nil, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" }, nil)
 	if err != nil || h["Authorization"] != "Bearer tok" {
 		t.Errorf("applyAuth(bearer) = %v,%v, want Authorization header", h, err)
 	}
 	// An explicit model header of the same name is not clobbered.
-	h2, err := applyAuth(map[string]string{"Authorization": "keep"}, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	h2, err := applyAuth(ctx, map[string]string{"Authorization": "keep"}, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" }, nil)
 	if err != nil || h2["Authorization"] != "keep" {
 		t.Errorf("applyAuth over an existing header = %v, want it preserved", h2)
 	}
 }
 
 func noResolver(string) string { return "" }
+
+// TestResolveSecret covers the nil-resolver and trimming behaviour.
+func TestResolveSecret(t *testing.T) {
+	if got := resolveSecret(nil, "X"); got != "" {
+		t.Errorf("resolveSecret(nil) = %q, want empty", got)
+	}
+	if got := resolveSecret(func(string) string { return "  tok  " }, "X"); got != "tok" {
+		t.Errorf("resolveSecret(trim) = %q, want tok", got)
+	}
+}
 
 // compilerAuth is a small ctor to keep the auth-header cases readable.
 func compilerAuth(typ, user, apiKeyName string) compiler.RestAuth {

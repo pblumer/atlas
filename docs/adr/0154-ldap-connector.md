@@ -1,4 +1,4 @@
-# ADR-0153: Generic LDAP connector
+# ADR-0154: Generic LDAP connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-20
@@ -8,7 +8,7 @@
 
 Identity provisioning processes must read from and write to directory servers —
 Active Directory, OpenLDAP, 389 Directory Server, Oracle Directory — which almost all
-speak **LDAP**, not HTTP. The REST and SCIM connectors (ADR-0067/0151) cover
+speak **LDAP**, not HTTP. The REST and SCIM connectors (ADR-0067/0153) cover
 HTTP/JSON APIs, but a joiner/mover/leaver process cannot create an account in AD,
 reset a password, or search a directory through them. LDAP is a connection-oriented
 binary protocol (ASN.1/BER over TCP, optionally TLS), so it needs a genuinely
@@ -100,7 +100,7 @@ Concretely:
 ## Links
 
 - relates to ADR-0067 (service-task connector catalog / REST connector)
-- relates to ADR-0151 (SCIM connector) — the HTTP sibling for identity provisioning
+- relates to ADR-0153 (SCIM connector) — the HTTP sibling for identity provisioning
 - relates to ADR-0041 (connector management and secret store)
 - relates to ADR-0149 (bounded connector call budget) — the dial/operation timeout
 - relates to ADR-0007 (job protocol durability)

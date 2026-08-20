@@ -523,7 +523,7 @@ type ConnectorTaskDetail struct {
 	UserDisplayName RestExpr
 	UserRoles       RestExpr
 	UserPassword    RestExpr
-	// SCIM connector fields (JobType == ScimJobType, ADR-0152). ScimBaseURL is the
+	// SCIM connector fields (JobType == ScimJobType, ADR-0153). ScimBaseURL is the
 	// service provider's SCIM v2 base endpoint and ScimResource the resource-type path
 	// segment ("Users"/"Groups") — each a literal-or-FEEL value evaluated over the
 	// instance's variables at call time. ScimOp is the interned operation
@@ -540,7 +540,7 @@ type ConnectorTaskDetail struct {
 	ScimResourceID RestExpr
 	ScimFilter     RestExpr
 	ScimBody       int32
-	// LDAP connector fields (JobType == LdapJobType, ADR-0153). LdapURL is the server
+	// LDAP connector fields (JobType == LdapJobType, ADR-0154). LdapURL is the server
 	// (ldap://host:389 or ldaps://host:636) and LdapBindDN the bind identity — each a
 	// literal-or-FEEL value evaluated over the instance's variables at call time.
 	// LdapBindSecret is the interned name of the server-side secret holding the bind

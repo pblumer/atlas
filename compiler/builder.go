@@ -216,14 +216,14 @@ const TemisDecisionJobTypeIndex int32 = 3
 // resource type — and names a server-side secret for authentication (ADR-0041); the
 // in-process SCIM connector worker subscribes to it to perform the resource
 // operation off the hot path and write the response back, the same way the REST
-// worker subscribes to RestJobType (ADR-0152).
+// worker subscribes to RestJobType (ADR-0153).
 const ScimJobType = "io.atlas.scim"
 
 // ScimJobTypeIndex is the interned index ScimJobType is guaranteed to occupy in
 // every compiled process: NewBuilder reserves it seventeenth (after the sixteen job
 // types above), so it is always 16. This lets a single in-process SCIM worker
 // subscribe by one global index across every deployed process, the same way the REST
-// worker uses RestJobTypeIndex (ADR-0152).
+// worker uses RestJobTypeIndex (ADR-0153).
 const ScimJobTypeIndex int32 = 16
 
 // LdapJobType is the reserved job type a generic LDAP connector task carries. Like
@@ -231,14 +231,14 @@ const ScimJobTypeIndex int32 = 16
 // URL, bind DN, and target/base DN — and names a server-side secret for the bind
 // password (ADR-0041); the in-process LDAP connector worker subscribes to it to
 // perform the directory operation (search/add/modify/delete/modify-password) off the
-// hot path (ADR-0153).
+// hot path (ADR-0154).
 const LdapJobType = "io.atlas.ldap"
 
 // LdapJobTypeIndex is the interned index LdapJobType is guaranteed to occupy in
 // every compiled process: NewBuilder reserves it eighteenth (after the seventeen job
 // types above), so it is always 17. This lets a single in-process LDAP worker
 // subscribe by one global index across every deployed process, the same way the SCIM
-// worker uses ScimJobTypeIndex (ADR-0153).
+// worker uses ScimJobTypeIndex (ADR-0154).
 const LdapJobTypeIndex int32 = 17
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
@@ -784,15 +784,25 @@ func (b *Builder) AddClioReadTask(connector, subject, resultVar string, limit, r
 }
 
 // RestAuth is a REST connector task's authentication config. Type is "", "basic",
-// "bearer", or "apiKey". Username (basic) and ApiKeyName (the apiKey header name)
-// are model data. SecretRef names a server-side secret (ADR-0041) — the basic
-// password, bearer token, or api-key value — resolved at runtime; the secret value
-// itself is never authored in the model or stored here.
+// "bearer", "apiKey", or "oauth2". Username (basic), ApiKeyName (the apiKey header
+// name), ClientID/TokenURL/Scope (oauth2 client-credentials) are model data.
+// SecretRef names a server-side secret (ADR-0041) — the basic password, bearer
+// token, api-key value, or oauth2 client secret — resolved at runtime; the secret
+// value itself is never authored in the model or stored here.
+//
+// For Type "oauth2" the worker performs a client-credentials grant (ADR-0152):
+// TokenURL is the token endpoint, ClientID the client identifier, SecretRef the
+// client secret reference, and Scope the optional space-delimited scopes; the
+// fetched access token is attached as a Bearer credential and cached until it
+// nears expiry.
 type RestAuth struct {
 	Type       string `json:"type,omitempty"`
 	Username   string `json:"username,omitempty"`
 	ApiKeyName string `json:"apiKeyName,omitempty"`
 	SecretRef  string `json:"secretRef,omitempty"`
+	TokenURL   string `json:"tokenUrl,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
+	Scope      string `json:"scope,omitempty"`
 }
 
 // RestConfig is the deploy-time configuration of an HTTP-REST connector task
@@ -847,7 +857,7 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 }
 
 // ScimConfig is the deploy-time configuration of a SCIM 2.0 connector task
-// (ADR-0152). BaseURL and Resource address the service provider and resource type
+// (ADR-0153). BaseURL and Resource address the service provider and resource type
 // ("Users"/"Groups"); Op is the operation ("create"|"get"|"replace"|"patch"|
 // "delete"|"search"); ResourceID (get/replace/patch/delete) and Filter (search)
 // carry literal-or-FEEL values (the parser compiles the FEEL ones); BodyVar names the
@@ -871,7 +881,7 @@ type ScimConfig struct {
 // reserved ScimJobType so the in-process SCIM worker picks it up, evaluates any FEEL
 // base-url/resource/id/filter values over the instance's variables, performs the
 // resource operation against the provider, writes the JSON response into ResultVar
-// (empty = discard), and completes the job (ADR-0152). The base URL and resource live
+// (empty = discard), and completes the job (ADR-0153). The base URL and resource live
 // in the model; credentials never do (Auth references a server-side secret,
 // ADR-0041).
 func (b *Builder) AddScimConnectorTask(cfg ScimConfig) int32 {
@@ -898,7 +908,7 @@ func (b *Builder) AddScimConnectorTask(cfg ScimConfig) int32 {
 }
 
 // LdapConfig is the deploy-time configuration of a generic LDAP connector task
-// (ADR-0153). URL is the server (ldap://host:389 or ldaps://host:636) and BindDN the
+// (ADR-0154). URL is the server (ldap://host:389 or ldaps://host:636) and BindDN the
 // bind identity — literal-or-FEEL values; BindSecret names the server-side secret for
 // the bind password (empty → an anonymous bind); StartTLS upgrades a plain ldap://
 // connection with STARTTLS. Op is the operation
@@ -927,7 +937,7 @@ type LdapConfig struct {
 // reserved LdapJobType so the in-process LDAP worker picks it up, evaluates any FEEL
 // url/dn/filter values over the instance's variables, binds and performs the
 // directory operation, writes a search's entries into ResultVar, and completes the
-// job (ADR-0153). The server and DNs live in the model; the bind password never does
+// job (ADR-0154). The server and DNs live in the model; the bind password never does
 // (BindSecret references a server-side secret, ADR-0041).
 func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 	detail := int32(len(b.connectorTasks))

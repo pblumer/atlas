@@ -1,4 +1,4 @@
-# ADR-0152: SCIM 2.0 provisioning connector
+# ADR-0153: SCIM 2.0 provisioning connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-19

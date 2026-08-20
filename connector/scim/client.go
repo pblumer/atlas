@@ -1,7 +1,7 @@
 // Package scim integrates a SCIM 2.0 service provider as a service-task connector
 // (RFC 7643/7644): a BPMN SCIM connector task performs a resource operation —
 // create, get, replace, patch, delete, or search a User/Group — against a
-// model-authored provider endpoint through the job path (ADR-0152), the same seam
+// model-authored provider endpoint through the job path (ADR-0153), the same seam
 // the rest package uses for a generic HTTP call (ADR-0067). It inherits the job
 // protocol's durability and non-blocking properties (ADR-0007):
 //

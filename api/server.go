@@ -948,16 +948,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// task's result variable. The endpoint and headers live in the model; a request's
 	// authentication secret is a *reference* the worker resolves at call time from the
 	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
-	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret))
+	// For oauth2 (client-credentials) the worker exchanges the client secret for a
+	// bearer token through the token provider, caching it until it nears expiry
+	// (ADR-0152).
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret, rest.NewTokenProvider()))
 	// A SCIM 2.0 connector task provisions/reads an identity resource against a
-	// model-authored service provider (ADR-0152). Like REST the base URL and resource
+	// model-authored service provider (ADR-0153). Like REST the base URL and resource
 	// live in the model and the authentication secret is a *reference* the worker
 	// resolves at call time (resolveConnectorSecret, ADR-0041); unlike REST it speaks
 	// SCIM (application/scim+json, resource-path URLs, filtered search). One worker
 	// serves every process under the reserved SCIM job type.
 	s.jobRunner.HandleWithOutput(compiler.ScimJobTypeIndex, scim.Handler(store, s.processLookup, scim.NewHTTPClient(), s.resolveConnectorSecret))
 	// A generic LDAP connector task performs a directory operation (search/add/modify/
-	// delete/modify-password) against a model-authored server (ADR-0153). The server URL
+	// delete/modify-password) against a model-authored server (ADR-0154). The server URL
 	// and DNs live in the model; the bind password is a *reference* the worker resolves
 	// at call time (resolveConnectorSecret, ADR-0041). One worker serves every process
 	// under the reserved LDAP job type; each job dials, binds, operates, and closes.

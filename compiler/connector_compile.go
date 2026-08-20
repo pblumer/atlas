@@ -55,8 +55,8 @@ var connectorCompilers = []connectorCompiler{
 		compile: compileUserConnectorTask,
 	},
 	{
-		present: func(st xmlServiceTask) bool { return st.SharePoint != nil },
-		retries: func(st xmlServiceTask) string { return st.SharePoint.Retries },
+		present: func(st xmlServiceTask) bool { return st.sharePointConn() != nil },
+		retries: func(st xmlServiceTask) string { return st.sharePointConn().Retries },
 		compile: compileSharePointConnectorTask,
 	},
 	{
@@ -90,7 +90,7 @@ var ldapScopes = map[string]bool{"base": true, "one": true, "sub": true}
 
 // compileLdapConnectorTask compiles an <atlas:ldapConnector> task: it performs a
 // directory operation against a model-authored LDAP server via the job path
-// (ADR-0153), not an external service-task worker. The server URL and DNs live in the
+// (ADR-0154), not an external service-task worker. The server URL and DNs live in the
 // model; the bind password never does (it is a secret reference, ADR-0041). A search
 // needs a base DN; add/modify/delete/modify-password need a target DN; add/modify take
 // an attribute variable; modify-password needs a new password.
@@ -181,7 +181,7 @@ var scimOps = map[string]bool{"create": true, "get": true, "replace": true, "pat
 
 // compileScimConnectorTask compiles an <atlas:scimConnector> task: it performs a SCIM
 // 2.0 resource operation against a model-authored service-provider endpoint via the
-// job path (ADR-0152), not an external service-task worker. Like REST the base URL
+// job path (ADR-0153), not an external service-task worker. Like REST the base URL
 // lives in the model and credentials never do; unlike REST it speaks SCIM (resource
 // paths, operations, filtered search). A get/replace/patch/delete needs a resource
 // id; the payload for create/replace/patch is a named body variable or the whole
@@ -476,7 +476,7 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // (Graph base, OAuth credential) is resolved server-side by connector name, like mail;
 // only the target (site, list, item fields) lives in the model.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-	cn := st.SharePoint
+	cn := st.sharePointConn()
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
 	}
