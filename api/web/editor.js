@@ -2135,6 +2135,58 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "ad", name: "Active Directory Connector", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
+    // A person mark on an azure tile reads "directory account" at a glance — AD's
+    // people-and-groups focus, distinct from the generic LDAP tree.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fb0"/><circle cx="8" cy="6" r="2.1" fill="#fff"/><path d="M3.9 12.4c0-2.3 1.9-3.6 4.1-3.6s4.1 1.3 4.1 3.6z" fill="#fff"/></svg>`,
+    ext: "atlas:AdConnector",
+    fields: [
+      { group: "Directory server" },
+      { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldaps://host:636 — a password set requires an encrypted channel. May be a FEEL expression (fx)." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      {
+        key: "bindSecret", label: "Bind password reference", placeholder: "AD_BIND",
+        hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
+      },
+      {
+        key: "startTLS", label: "STARTTLS", type: "select",
+        options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
+        hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-user", l: "Create user" },
+          { v: "set-password", l: "Set password (unicodePwd)" },
+          { v: "enable", l: "Enable account" },
+          { v: "disable", l: "Disable account" },
+          { v: "add-group-member", l: "Add group member" },
+          { v: "remove-group-member", l: "Remove group member" },
+        ],
+      },
+      {
+        key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
+        hint: "The user entry for create/password/enable/disable, or the group entry for a membership change. May be a FEEL expression (fx).",
+      },
+      {
+        key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
+        showIf: (v) => v.operation === "create-user",
+        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName, objectClass).",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
+        showIf: (v) => v.operation === "set-password",
+        hint: "Usually a FEEL reference to a variable, so no password is written into the model. Set over LDAPS/STARTTLS (unicodePwd).",
+      },
+      {
+        key: "memberDN", label: "Member DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
+        hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
+      },
+    ],
+  },
+  {
     id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading
