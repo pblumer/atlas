@@ -252,10 +252,13 @@ func (s *Server) setupManagedConnectors(store *state.Store) error {
 // deliberately spans more than the *managed* kinds: a kind is offloadable if Atlas
 // runs it itself, whether or not it also has a server-side registry. CSV import is
 // the clearest example — it has no registry precisely because it needs no credential
-// (ADR-0165), and it is the first kind meant to move.
+// (ADR-0166), and it is the first kind meant to move.
 //
 // The user task is absent on purpose: it waits for a person, and the pull refuses it
-// for that reason rather than because a handler serves it.
+// for that reason rather than because a handler serves it. Every *other* in-process
+// handler must appear here, and TestEveryInProcessHandlerIsOffloadable fails when one
+// does not: a connector Atlas can run but an operator cannot move is a kind that can
+// only ever run on the loop, which is the thing ADR-0164 rules out.
 var offloadableKinds = map[string][]int32{
 	connectorKindTemis:      {compiler.TemisDecisionJobTypeIndex},
 	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
@@ -266,6 +269,7 @@ var offloadableKinds = map[string][]int32{
 	"rest":                  {compiler.RestJobTypeIndex},
 	"scim":                  {compiler.ScimJobTypeIndex},
 	"ldap":                  {compiler.LdapJobTypeIndex},
+	"soap":                  {compiler.SoapJobTypeIndex},
 	"webscrape":             {compiler.WebScrapeJobTypeIndex},
 	"dmn":                   {compiler.DMNJobTypeIndex},
 	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},

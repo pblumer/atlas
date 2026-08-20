@@ -91,7 +91,7 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 // the same two steps a worker takes — [Resolve] the task into plain values, then
 // [Run] them — so the in-process path and an out-of-process one cannot disagree
 // about defaults, validation, or what a headerless file's column list means
-// (ADR-0165).
+// (ADR-0166).
 func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) ([]model.VariableValue, error) {
 	j, err := Resolve(store, cp, detail, elementInstanceKey)
 	if err != nil {

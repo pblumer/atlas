@@ -121,6 +121,24 @@
       ]
     },
     {
+      "name": "SoapConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "endpoint", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "soapAction", "type": "String", "isAttr": true },
+        { "name": "body", "type": "String", "isAttr": true },
+        { "name": "soapVersion", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "authType", "type": "String", "isAttr": true },
+        { "name": "authUsername", "type": "String", "isAttr": true },
+        { "name": "authApiKeyName", "type": "String", "isAttr": true },
+        { "name": "authSecret", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "MailConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

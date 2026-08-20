@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
-// TestOffloadedKindIsLeasableByAWorker is the prerequisite ADR-0165 exposed: a
+// TestOffloadedKindIsLeasableByAWorker is the prerequisite ADR-0166 exposed: a
 // connector kind cannot move to a worker while an in-process handler serves it,
 // because the pull refuses such a type — that refusal is what keeps work from being
 // done twice. Turning the handler off is therefore the operative act of relocating
@@ -73,6 +73,57 @@ func TestEveryManagedKindCanBeOffloaded(t *testing.T) {
 					t.Errorf("%s still has an in-process handler after every kind was offloaded", name)
 				}
 			}
+		}
+	})
+}
+
+// TestEveryInProcessHandlerIsOffloadable is the guard the SOAP connector needed and
+// did not have. TestEveryManagedKindCanBeOffloaded above walks offloadableKinds and
+// checks each listed kind goes away, so it says nothing at all about a job type the
+// map never mentions: a connector added with a handler but no entry passes it
+// silently, and the kind is then one an operator can neither name nor relocate.
+//
+// This walks the other direction — from the handlers a booted server actually
+// registered back to the map — so the omission fails here instead.
+func TestEveryInProcessHandlerIsOffloadable(t *testing.T) {
+	// Every optional registration path on, so the script and user-provisioning
+	// handlers are present too and not silently skipped.
+	srv := newServerWithOptions(t,
+		WithUserProvisioning(),
+		WithScriptWorker(compiler.PwshJobTypeIndex, nil),
+		WithScriptWorker(compiler.PythonJobTypeIndex, nil),
+		WithScriptWorker(compiler.JsJobTypeIndex, nil),
+	)
+
+	named := map[int32]string{}
+	for name, types := range offloadableKinds {
+		for _, jt := range types {
+			named[jt] = name
+		}
+	}
+	// The user-provisioning connector is deliberately absent from the map: it mutates
+	// the run-loop-owned user store directly (ADR-0123), so there is nothing for a
+	// worker to hold and no endpoint for it to reach. Every other handler must be
+	// namable.
+	engineOnly := map[int32]string{
+		compiler.UserConnectorJobTypeIndex: "mutates the run-loop-owned user store, so it has no out-of-process form",
+	}
+
+	reserved := compiler.ReservedJobTypes()
+	srv.do(func() {
+		for i, name := range reserved {
+			jt := int32(i)
+			if !srv.jobRunner.Handles(jt) {
+				continue
+			}
+			if _, ok := named[jt]; ok {
+				continue
+			}
+			if why, ok := engineOnly[jt]; ok {
+				t.Logf("%s runs in the engine on purpose: %s", name, why)
+				continue
+			}
+			t.Errorf("%s has an in-process handler but no --offload-connectors kind names it, so an operator cannot move it to a worker (ADR-0164). Add it to offloadableKinds.", name)
 		}
 	})
 }

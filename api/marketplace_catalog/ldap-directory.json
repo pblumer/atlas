@@ -1,0 +1,32 @@
+{
+  "id": "atlas.ldap-directory",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "LDAP Directory",
+  "author": "Atlas core",
+  "description": "Search a directory or add, modify, delete or set the password of an entry over LDAP (Active Directory, OpenLDAP, 389-DS). The server URL and DNs are authored in the model; a search's entries map to a result variable. The bind password stays on the server, referenced by name.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "LDAP Directory",
+    "id": "atlas.ldap-directory",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Operation", "type": "Dropdown", "value": "search", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [ { "name": "Search", "value": "search" }, { "name": "Add", "value": "add" }, { "name": "Modify", "value": "modify" }, { "name": "Delete", "value": "delete" }, { "name": "Set password", "value": "modify-password" } ] },
+      { "label": "Server URL", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:url" } },
+      { "label": "Bind DN", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:bindDN" } },
+      { "label": "Bind credential reference", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:bindSecret" } },
+      { "label": "StartTLS", "type": "Dropdown", "value": "false", "binding": { "type": "property", "name": "atlas:startTLS" },
+        "choices": [ { "name": "No", "value": "false" }, { "name": "Yes", "value": "true" } ] },
+      { "label": "Base DN (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:baseDN" } },
+      { "label": "Scope (search)", "type": "Dropdown", "value": "sub", "binding": { "type": "property", "name": "atlas:scope" },
+        "choices": [ { "name": "Subtree", "value": "sub" }, { "name": "One level", "value": "one" }, { "name": "Base object", "value": "base" } ] },
+      { "label": "Filter (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:filter" } },
+      { "label": "Target DN (add/modify/delete/set password)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:dn" } },
+      { "label": "Entry variable (add/modify)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:entryVariable" } },
+      { "label": "New password (set password)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:newPassword" } },
+      { "label": "Result variable (search)", "type": "String", "value": "ldapEntries", "binding": { "type": "property", "name": "atlas:resultVariable" } }
+    ]
+  }
+}

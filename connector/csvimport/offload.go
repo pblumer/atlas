@@ -10,7 +10,7 @@ import (
 
 // A CSV-import task resolved into plain values, and the pure function that runs one.
 //
-// This is the split ADR-0165 draws, proved here first because CSV import involves no
+// This is the split ADR-0166 draws, proved here first because CSV import involves no
 // credential at all: **the engine decides what to do, the worker does it.** Finding
 // the task's detail in the compiled process and reading the source text up the
 // task's scope chain is engine work — a worker has neither the compiled process nor

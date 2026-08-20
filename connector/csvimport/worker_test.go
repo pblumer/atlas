@@ -210,7 +210,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 		// No header row and no authored columns leaves the parser nothing to name
 		// the fields with.
 		// A detail with no columns and no header row is caught before the parser now, and
-		// named in the model's terms rather than the parser's (ADR-0165).
+		// named in the model's terms rather than the parser's (ADR-0166).
 		{"headerless with no columns", withText("ada@x.io,users\n"), &compiler.ConnectorTaskDetail{}, "must name its columns"},
 	}
 	for _, tc := range errCases {

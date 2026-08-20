@@ -8,7 +8,7 @@ import (
 )
 
 // A resolved CSV job is what a worker receives: plain values, no engine concepts.
-// This is the mechanism ADR-0165 rests on — the engine finds the task detail and
+// This is the mechanism ADR-0166 rests on — the engine finds the task detail and
 // evaluates it, and only the result travels — proved first on a kind where no
 // credential is involved, so the security decision does not ride on it.
 func TestRunParsesAResolvedJob(t *testing.T) {
