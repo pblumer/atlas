@@ -8,7 +8,6 @@ import (
 // box is a node's rectangle on the diagram plane, in BPMN DI coordinates.
 type box struct{ x, y, w, h int }
 
-func (b box) cx() int { return b.x + b.w/2 }
 func (b box) cy() int { return b.y + b.h/2 }
 
 // nodeSize returns the conventional BPMN shape size for a node kind.

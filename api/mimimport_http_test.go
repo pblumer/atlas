@@ -81,3 +81,11 @@ func TestImportMIMRejectsUnknownProject(t *testing.T) {
 		t.Fatalf("unknown project status=%d, want 400", code)
 	}
 }
+
+func TestImportMIMRejectsNonXOML(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/imports/mim", "this is not xml <<<", "application/xml")
+	if code != http.StatusBadRequest {
+		t.Fatalf("non-XOML status=%d body=%s, want 400", code, body)
+	}
+}
