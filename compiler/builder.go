@@ -242,6 +242,21 @@ const LdapJobType = "io.atlas.ldap"
 // worker uses ScimJobTypeIndex (ADR-0154).
 const LdapJobTypeIndex int32 = 17
 
+// SoapJobType is the reserved job type a SOAP / Web Services (WSDL) connector task
+// carries. Like the REST/SCIM connectors it authors its endpoint in the model — the
+// web-service URL, the operation, and the request body — and names a server-side
+// secret for any authentication credential (ADR-0041); the in-process SOAP connector
+// worker subscribes to it to wrap the body in a SOAP envelope, invoke the operation,
+// and parse the response off the hot path (ADR-0165).
+const SoapJobType = "io.atlas.soap"
+
+// SoapJobTypeIndex is the interned index SoapJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it nineteenth (after the eighteen job types
+// above), so it is always 18. This lets a single in-process SOAP worker subscribe by
+// one global index across every deployed process, the same way the LDAP worker uses
+// LdapJobTypeIndex (ADR-0165).
+const SoapJobTypeIndex int32 = 18
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -267,6 +282,7 @@ var reservedJobTypes = []string{
 	UserConnectorJobType, // 15
 	ScimJobType,          // 16
 	LdapJobType,          // 17
+	SoapJobType,          // 18
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -991,6 +1007,53 @@ func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 		LdapScope:       b.intern(cfg.Scope),
 		LdapEntryVar:    b.intern(cfg.EntryVar),
 		LdapNewPassword: cfg.NewPassword,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SoapConfig is the deploy-time configuration of a SOAP / Web Services (WSDL)
+// connector task (ADR-0165). Endpoint is the service URL (from the WSDL's
+// soap:address) and Op the operation name; Action overrides the SOAPAction header
+// (empty → Op); Body is the XML payload placed inside the SOAP envelope's Body
+// (literal-or-FEEL, so a request can interpolate the instance's variables); Version is
+// the SOAP protocol version ("1.1" or "1.2"); Auth references a server-side secret;
+// ResultVar receives the parsed response body (empty → discard it).
+type SoapConfig struct {
+	Endpoint  RestExpr
+	Op        string
+	Action    RestExpr
+	Body      RestExpr
+	Version   string
+	ResultVar string
+	Auth      RestAuth
+	Retries   int32
+}
+
+// AddSoapConnectorTask adds a SOAP / Web Services connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved SoapJobType so the in-process SOAP worker picks it up, evaluates
+// any FEEL endpoint/action/body values over the instance's variables, wraps the body in
+// a SOAP envelope, invokes the operation, parses the response into ResultVar (empty =
+// discard), and completes the job (ADR-0165). The endpoint and body live in the model;
+// credentials never do (Auth references a server-side secret, ADR-0041).
+func (b *Builder) AddSoapConnectorTask(cfg SoapConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(SoapJobType),
+		Connector:    -1, // SOAP carries its endpoint in the model, not a registry name
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // the SOAP operation, not an HTTP method, is authored
+		ResultVar:    b.intern(cfg.ResultVar),
+		Auth:         b.internAuth(cfg.Auth),
+		Retries:      cfg.Retries,
+		SoapEndpoint: cfg.Endpoint,
+		SoapOp:       b.intern(cfg.Op),
+		SoapAction:   cfg.Action,
+		SoapBody:     cfg.Body,
+		SoapVersion:  b.intern(cfg.Version),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

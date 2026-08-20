@@ -55,6 +55,7 @@ import (
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
+	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
@@ -1010,6 +1011,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// under the reserved LDAP job type; each job dials, binds, operates, and closes.
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return ldap.Handler(rd, s.processLookup, ldap.NewDialer(), s.resolveConnectorSecret)
+	})
+	// A SOAP / Web Services (WSDL) connector task invokes an operation against a
+	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or
+	// provisioning accounts (outbound). Like REST the endpoint and body live in the model
+	// and any authentication secret is a *reference* the worker resolves at call time
+	// (resolveConnectorSecret, ADR-0041); the worker wraps the body in a SOAP envelope,
+	// carries the SOAPAction, and turns a SOAP fault into the job-failure message. One
+	// worker serves every process under the reserved SOAP job type.
+	s.jobRunner.HandleWithOutput(compiler.SoapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return soap.Handler(rd, s.processLookup, soap.NewHTTPClient(), s.resolveConnectorSecret)
 	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of

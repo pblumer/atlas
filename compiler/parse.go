@@ -1801,6 +1801,10 @@ type xmlServiceTask struct {
 	// (ADR-0154): it performs a directory operation against a model-authored LDAP
 	// server through the job path.
 	Ldap *xmlLdapConnector `xml:"extensionElements>ldapConnector"`
+	// Soap, when present, marks this service task a SOAP / Web Services (WSDL) connector
+	// task (ADR-0165): it invokes a SOAP operation against a model-authored web-service
+	// endpoint through the job path.
+	Soap *xmlSoapConnector `xml:"extensionElements>soapConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1896,6 +1900,30 @@ type xmlScimConnector struct {
 	ResourceId     string `xml:"resourceId,attr"`
 	Filter         string `xml:"filter,attr"`
 	BodyVariable   string `xml:"bodyVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	AuthType       string `xml:"authType,attr"`
+	AuthUsername   string `xml:"authUsername,attr"`
+	AuthApiKeyName string `xml:"authApiKeyName,attr"`
+	AuthSecret     string `xml:"authSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSoapConnector is the <atlas:soapConnector> extension on a service task
+// (ADR-0165). endpoint is the web-service URL (from the WSDL's soap:address) and
+// operation the operation name; soapAction overrides the SOAPAction header (blank →
+// operation); body is the XML payload placed inside the SOAP envelope's Body;
+// soapVersion is the protocol version ("1.1"/"1.2", blank → 1.1); resultVariable
+// receives the parsed response. Auth* name the scheme and a server-side secret
+// reference (never the value, ADR-0041), mirroring xmlRestConnector. endpoint/
+// soapAction/body carry literal-or-FEEL values.
+type xmlSoapConnector struct {
+	Endpoint       string `xml:"endpoint,attr"`
+	Operation      string `xml:"operation,attr"`
+	Action         string `xml:"soapAction,attr"`
+	Body           string `xml:"body,attr"`
+	Version        string `xml:"soapVersion,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	AuthType       string `xml:"authType,attr"`
 	AuthUsername   string `xml:"authUsername,attr"`

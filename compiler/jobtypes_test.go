@@ -31,6 +31,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		UserConnectorJobType: UserConnectorJobTypeIndex,
 		ScimJobType:          ScimJobTypeIndex,
 		LdapJobType:          LdapJobTypeIndex,
+		SoapJobType:          SoapJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()
