@@ -2795,7 +2795,7 @@ async function viewInstances() {
       </span>
       <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
-        <button class="btn neutral" type="submit">Open replay</button>
+        <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
       </form>
     </div>
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
@@ -2825,7 +2825,13 @@ async function viewInstances() {
   let incByDef = new Map();
   let incByInstance = new Map();
   let incTruncated = false;
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
+  // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
+  // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
+  const fmtNano = (ns) => ns
+    ? new Date(ns / 1e6).toLocaleString(undefined, {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+    : "—";
 
   // loadIncidents pulls the server's unresolved incidents once per refresh. This
   // overview is server-wide, so it is the unscoped list — capped like the Incidents
@@ -2909,18 +2915,29 @@ async function viewInstances() {
       const inactiveBadge = g.latest.active === false
         ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
         : "";
+      // Compact and non-wrapping: the latest version reads at a glance, the count of
+      // older ones is a small badge (the full phrasing lives in the tooltip), so the
+      // cell can't break mid-phrase in a narrow column.
       const versions = (g.versions.length === 1
         ? `v${g.latest.version}`
-        : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
+        : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
       const running = s.running
         ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
         : '<span class="muted">0</span>';
       const collab = g.latest.collaborationKey
         ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
         : "";
-      const termAll = s.running
-        ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
-        : "";
+      // Row actions: one primary Open plus an overflow menu, so every row is the same
+      // height and the destructive bulk-terminate doesn't shout from each row (it is
+      // one click deeper, the same ⋯ pattern the Modeler's rows use).
+      const openHref = `#/operations/p/${g.latest.key}`;
+      const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+      if (s.running) {
+        menuItems.push(
+          { sep: true },
+          { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
+        );
+      }
       // A running count says nothing about a token being *stuck*: an instance parked
       // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
@@ -2930,8 +2947,8 @@ async function viewInstances() {
         <td data-sort="${s.running || 0}">${running}</td>
         <td data-sort="${inc.total}">${inc.html}</td>
         <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
       </tr>`;
     }).join("");
   }
@@ -2939,14 +2956,14 @@ async function viewInstances() {
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
   // deployed version in bounded batches (the server caps per call, reports remaining).
-  tbody.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-term-proc]");
-    if (!b) return;
-    const g = allGroups.find((x) => x.processId === b.dataset.termProc);
-    const s = summary.get(b.dataset.termProc) || { running: 0 };
+  // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
+  onMenuAction(tbody, async (act, b) => {
+    if (act !== "term") return;
+    const proc = b.dataset.proc;
+    const g = allGroups.find((x) => x.processId === proc);
+    const s = summary.get(proc) || { running: 0 };
     if (!g || !s.running) return;
     if (!(await confirmTerminateAll(g.latest.name || g.processId, s.running))) return;
-    b.disabled = true;
     try {
       let total = 0;
       for (const v of g.versions) {
@@ -2960,7 +2977,6 @@ async function viewInstances() {
       await load();
     } catch (err) {
       toast("terminate failed: " + err.message, "err");
-      b.disabled = false;
     }
   });
 
