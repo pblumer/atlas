@@ -196,6 +196,7 @@ func runServe(args []string) error {
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
+	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for an external worker instead (ADR-0165). An unknown kind is refused at startup rather than ignored")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
@@ -216,7 +217,7 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload))
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -265,7 +266,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds []string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -412,6 +413,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		}
 		apiOpts = append(apiOpts, api.WithScriptWorker(lang.JobType, ex))
 	}
+	if len(offloadKinds) > 0 {
+		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
+	}
 	// Workers this server runs itself (ADR-0157 step 7). The configuration comes from
 	// this command line and from nowhere else: the API can restart one of these, and
 	// can neither introduce a worker nor name a command.
@@ -498,6 +502,17 @@ func runMCP(args []string) error {
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// splitList parses a comma-separated flag into trimmed, non-empty entries.
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // superviseFlag collects repeated --supervise id=type=command entries: which worker

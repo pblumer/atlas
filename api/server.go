@@ -200,6 +200,9 @@ type Server struct {
 	SuperviseSpecs   []SuperviseSpec
 	superviseHandles [][]string
 	superviseURL     string
+	// offloadedKinds are the managed connector kinds this server does not serve
+	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
+	offloadedKinds   []string
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -1571,6 +1574,23 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 		return d.cp
 	}
 	return nil
+}
+
+// WithOffloadedConnectorKinds names the managed connector kinds this server must
+// NOT serve itself, so their jobs park for an external worker instead
+// (ADR-0165/0164).
+//
+// This is the operative act of relocating a kind. The type-keyed pull refuses a job
+// type an in-process handler is registered for — that refusal is what keeps one job
+// from being worked twice — so a kind stays in the engine until its handler is
+// turned off here. What is left is exactly what an unconfigured connector already
+// does: the job parks on the activatable index until something takes it.
+//
+// An unknown name is refused at startup rather than ignored. An operator who
+// misspells a kind would otherwise believe they had relocated it while it kept
+// running in the engine, which is the one outcome this flag exists to prevent.
+func WithOffloadedConnectorKinds(kinds []string) Option {
+	return func(s *Server) { s.offloadedKinds = kinds }
 }
 
 // WithSupervisedWorkers asks the server to run these workers itself: one child

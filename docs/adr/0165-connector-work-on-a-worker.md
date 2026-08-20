@@ -1,6 +1,6 @@
 # ADR-0165: Moving a connector onto a worker — where the task detail travels, and where the credential lives
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -69,51 +69,68 @@ detail does.
 
 ## Decision outcome
 
-**Open.** This record exists to put the question, not to settle it by default, and
-the work it gates should not start until it is answered — the two answers produce
-materially different systems.
+Chosen: **option 2 — the worker owns its connector configuration**, reached through
+option 3's first slice.
 
-The recommendation, for what it is worth: **option 3 first, then option 2.**
+**The split.** The engine decides *what* to send; the worker knows *where* to send
+it and with what credential.
 
-Option 3 is the honest first slice regardless of how the credential question lands.
-It builds and proves exactly one mechanism — the task detail travelling on the job —
-on kinds where nothing secret is involved, so the mechanism is settled and reviewed
-before the security decision rides on it. CSV import is the clearest case: it is
-pure computation over a variable, needs no network and no credential, and is
-currently the only connector kind that can block the engine for reasons that have
-nothing to do with anyone else's host.
+That line falls in a place that was already half-drawn. A connector handler's first
+half is engine work and has to stay engine work: finding the task's detail in the
+compiled process and evaluating its FEEL values against the instance's variables.
+FEEL is compiled at deploy (ADR-0008/0015) and a worker has neither the compiled
+process nor the variables' scope chain. So the engine **resolves the detail into
+plain values** and those travel with the leased job — not the expressions, which
+would make every worker carry a FEEL engine and a copy of the compiled process.
 
-Option 2 is where this should land, because a credential that lives where it is used
-crosses no boundary at all, and because the worker's whole reason for existing is
-that it sits where the integration is. It costs an operator story — connector
-configuration would move from the Console to the worker's own configuration — and
-that is the part worth arguing about.
+The handler's second half — hold the endpoint and the credential, make the call — is
+what moves. The worker is configured for a connector *name*; the model names that
+name and nothing else, exactly as it does today (ADR-0041: a model never carries a
+secret). What changes is which process holds the value behind the name.
 
-Option 1 is the smaller change and the worse posture: the engine would hand
-credentials to processes over the network, on a channel whose authentication is
-currently a bearer token, and every worker becomes a place a credential can be read
-from. It is defensible only if the workers are always the engine's own supervised
-children on the same host — which is exactly the deployment that needs this least.
+**Why this way.** A credential that lives where it is used crosses no boundary at
+all. A worker exists precisely because it sits where the integration is — in the
+customer's network, next to the mail relay or the ERP — and that is also where the
+people who own that integration are. Moving the value there removes the engine from
+the set of things worth attacking for someone else's credentials, and it removes the
+network hop that option 1 would have added to every lease.
 
-Option 4 is the null answer and would make ADR-0164's rule apply to a minority of
-service tasks, leaving the majority permanently in the engine — the state that
-record decided against.
+**What it costs, and what recovers it.** Connector configuration leaves the Console
+for the kinds that move. That is a real loss and it needs an answer rather than a
+shrug: a worker should report the connector names it is configured for when it
+announces itself, so the Workers view can show which names are served, by whom, and
+which are configured nowhere — the same "who is doing this work" question that view
+already answers for job types. Configuring a *supervised* worker stays a matter of
+the server's own command line, so the single-node install keeps its one-command
+story.
+
+**Sequenced through option 3.** The first slice is a kind with no credential at all,
+so the mechanism — a resolved detail travelling on the job — is built and reviewed
+before any security decision rides on it. Then one credential-bearing kind end to
+end, then the rest. A kind that has not moved keeps its in-process handler and its
+deprecation notice.
+
+**A prerequisite this exposes.** The type-keyed pull refuses a job type an
+in-process worker is registered for, which is what keeps work from being done twice.
+So a kind cannot move until its in-process handler can be turned off — ADR-0157's
+per-kind switch, listed there as a follow-up and never built. It comes first.
 
 ### Consequences
 
-- **Positive (of deciding at all):** ADR-0164 stops being aspirational for the
-  kinds most operators actually use. Whichever way it lands, the mechanism from
-  option 3 is needed and can be built now.
-- **Negative / trade-offs accepted:** option 2 moves connector configuration out of
-  the Console, which is a real loss of a good operator experience and needs its own
-  answer (a worker that reports its configured connectors to the Workers view would
-  recover most of it). Option 1 would need the worker channel hardened well beyond a
-  bearer token before it could be considered.
-- **Follow-ups / risks to watch:** whichever is chosen, the detail-on-the-job
-  encoding is shared work; the FEEL values in a connector detail are compiled
-  expressions today and would have to travel in a form a worker can evaluate, which
-  is its own question and may argue for evaluating them engine-side and sending
-  values rather than expressions.
+- **Positive:** ADR-0164 stops being aspirational for the kinds most operators use.
+  Integration credentials leave the engine, so a compromised engine no longer yields
+  them. The engine keeps FEEL and the compiled process — the things only it can have
+  — and the worker gets a payload it can act on with no engine concepts in it.
+- **Negative / trade-offs accepted:** connector configuration leaves the Console for
+  every kind that moves, and an operator now configures two things unless the worker
+  is supervised. A resolved payload is larger on the wire than a reference would be.
+  And the resolution happens at lease time rather than at call time, so a variable
+  changed in between is not seen — the same instant the in-process handler already
+  read, moved earlier by the length of one lease.
+- **Follow-ups / risks to watch:** the per-kind in-process switch, which everything
+  else waits on; a worker reporting its configured connector names so the Workers
+  view can show which are served and which are configured nowhere; and the order the
+  kinds move in, cheapest and least secret first.
 
 ## Pros and cons of the options
 

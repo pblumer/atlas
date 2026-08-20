@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -235,14 +236,52 @@ var managedConnectorKinds = []managedConnectorKind{
 // is. It runs on the run-loop goroutine (the connector store's owner), after
 // s.jobRunner and s.connectors are set.
 func (s *Server) setupManagedConnectors(store *state.Store) error {
+	offloaded, err := s.offloadedKindSet()
+	if err != nil {
+		return err
+	}
 	for _, k := range managedConnectorKinds {
 		k.newRegistry(s)
 		if err := k.rebuild(s); err != nil {
 			return err
 		}
+		// A kind the operator moved to a worker gets its registry built — the Console
+		// still lists and validates its connectors — but no in-process handler, so its
+		// jobs park for whoever leases them (ADR-0165).
+		if offloaded[k.name] {
+			continue
+		}
 		k.registerHandlers(s, store)
 	}
 	return nil
+}
+
+// offloadedKindSet validates the configured kind names and returns them as a set.
+// An unknown name is an error rather than a no-op: an operator who misspells one
+// would otherwise believe a kind was relocated while it kept running in the engine.
+func (s *Server) offloadedKindSet() (map[string]bool, error) {
+	out := make(map[string]bool, len(s.offloadedKinds))
+	for _, name := range s.offloadedKinds {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := lookupManagedConnectorKind(name); !ok {
+			return nil, fmt.Errorf("api: cannot offload connector kind %q: no such kind (have %s)",
+				name, strings.Join(managedConnectorKindNames(), ", "))
+		}
+		out[name] = true
+	}
+	return out, nil
+}
+
+// managedConnectorKindNames lists every kind that can be named, for the error above.
+func managedConnectorKindNames() []string {
+	names := make([]string, 0, len(managedConnectorKinds))
+	for _, k := range managedConnectorKinds {
+		names = append(names, k.name)
+	}
+	return names
 }
 
 // lookupManagedConnectorKind returns the descriptor for a kind name, or false if the
