@@ -1998,7 +1998,7 @@ const SERVICE_TASK_KINDS = [
     ext: "atlas:ClioConnector",
     fields: [
       { group: "clio connector" },
-      { key: "connector", label: "Connector", placeholder: "orders-clio", hint: "Names a server-registered clio connector (its endpoint and token live on the server, never in the model)." },
+      { key: "connector", label: "Connector", datalist: "clio", placeholder: "orders-clio", hint: "Names a server-registered clio connector (its endpoint and token live on the server, never in the model)." },
       {
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [{ v: "write", l: "Send event (write-events)" }, { v: "query", l: "Query state (get_state / run_query)" }, { v: "read", l: "Read events (read-events)" }],
@@ -2024,7 +2024,7 @@ const SERVICE_TASK_KINDS = [
     ext: "atlas:MailConnector",
     fields: [
       { group: "Mail provider" },
-      { key: "connector", label: "Connector", placeholder: "office365", hint: "Names a server-registered mail provider (its host, credentials, and default sender live on the server, never in the model)." },
+      { key: "connector", label: "Connector", datalist: "mail", placeholder: "office365", hint: "Names a server-registered mail provider (its host, credentials, and default sender live on the server, never in the model)." },
       { group: "Message" },
       { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
       { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
@@ -2165,6 +2165,20 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
+// fillConnectorDatalist populates a <datalist> with the names of the server-registered
+// connectors of one kind ("mail" | "clio" | "temis"), so a connector field offers the
+// configured names as a dropdown. It is a helper, not a constraint: env-configured
+// connectors need not be listed and the field stays free text, so a fetch failure just
+// leaves it empty.
+function fillConnectorDatalist(api, dl, kind) {
+  if (!api || !dl) return;
+  api("GET", "/api/v1/connectors").then((list) => {
+    dl.innerHTML = (list || [])
+      .filter((c) => c && c.enabled && c.kind === kind && (c.name || "").trim())
+      .map((c) => `<option value="${esc(c.name)}"></option>`).join("");
+  }).catch(() => { /* no suggestions; the field stays free text */ });
+}
+
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
@@ -2219,6 +2233,12 @@ function stKindFieldsHTML(cur, ext) {
       // fx toggle can host the FEEL editor in place at that size.
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+    } else if (f.datalist) {
+      // A combobox: a free-text field that also offers the server-registered connectors
+      // of this kind as a dropdown (populated after render, see the field wiring).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
+        <datalist id="dl-st-${f.key}"></datalist></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
@@ -4015,7 +4035,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
               </select></label>`;
           if (mode === "connector") {
             html += `<label class="field"><span>Connector</span>
-              <input type="text" id="f-connector" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/></label>`;
+              <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
+              <datalist id="dl-connector"></datalist></label>`;
           }
           const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
           const bindingField = mode === "local" ? `
@@ -4564,6 +4585,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
       });
+      // A connector field offers the server's registered connectors of its kind.
+      if (f.datalist) fillConnectorDatalist(api, body.querySelector("#dl-st-" + f.key), f.datalist);
     }
     // Value-or-expression (fx) support: an fx field can hold a literal or a FEEL
     // expression (stored '=' prefixed, exactly what the compiler keys on). The
@@ -4660,6 +4683,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fconnector.addEventListener("change", () => savePreservingPanel(() => {
         upsertExt(modeler, element, "atlas:TemisConnector", { connector: (fconnector.value || "").trim() });
       }));
+      fillConnectorDatalist(api, body.querySelector("#dl-connector"), "temis");
     }
 
     // Decision picker: populate from the DMN references' decisions and, on pick,
