@@ -2393,6 +2393,31 @@ function stKindFieldsHTML(cur, ext) {
   return fields;
 }
 
+// stKindHeadingHTML renders the heading above the chosen kind's fields.
+//
+// When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
+// the kind name is only a *caption* for them, not a group of its own: rendering it as an
+// <h3> made groupifyPanel build a collapsible group whose body is empty — a chevron that
+// toggles nothing, which reads as broken. Render a plain, non-interactive caption then
+// (data-standalone-group keeps it a sibling instead of being folded into the Type group),
+// and keep a real <h3> only for a kind whose fields live directly under it (Job worker),
+// where the heading does have content to collapse.
+function stKindHeadingHTML(cur) {
+  const fields = cur.fields || [];
+  // Fields listed before the kind's first group have no group of their own (the Job
+  // worker's Job type, say), so the kind name must stay a real, non-empty group header
+  // for them — otherwise they would float outside every group. Note withRetries appends
+  // a Failure handling group to every job-running kind, so "has any group" is always
+  // true here; only what precedes the first one decides.
+  const firstGroup = fields.findIndex((f) => f.group);
+  const leading = firstGroup === -1 ? fields.length : firstGroup;
+  if (leading > 0) return `<h3>${esc(cur.name)}</h3>`;
+  return `<div class="pgroup-caption" data-standalone-group="1">
+    ${cur.glyph ? `<span class="pgroup-caption-icon">${cur.glyph}</span>` : ""}
+    <span>${esc(cur.name)}</span>
+  </div>`;
+}
+
 // serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
 // both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
 function serviceTaskKindHTML(bo) {
@@ -2401,7 +2426,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    <h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -2443,7 +2468,7 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + `<h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
+  return picker + stKindHeadingHTML(cur) + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
