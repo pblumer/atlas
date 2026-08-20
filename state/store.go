@@ -267,6 +267,18 @@ func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})
 }
 
+// IncidentCount returns how many unresolved incidents exist — how many tokens are
+// parked waiting for an operator (ADR-0061). Counted from state by walking the
+// incident family's keys, not from a maintained counter: an incident leaves state
+// two ways, resolved by an operator *and* dropped with the element instance it sits
+// on (an instance cancel or an interrupting boundary event, which announce no
+// resolution), so a maintained number would drift while a scan cannot. The family
+// holds one key per stuck token, which is the population an operator is expected to
+// keep near zero.
+func (s *Store) IncidentCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfIncident)})
+}
+
 // DefInstanceCount returns how many instances of one definition are live, read
 // from the maintained per-definition counter in O(1) rather than scanning every
 // instance (ADR-0080).

@@ -280,7 +280,7 @@ const TOPNAV = {
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
-    { name: "Incidents", route: "#/operations/incidents" },
+    { name: "Incidents", route: "#/operations/incidents", badge: "incidents" },
     { name: "Outbox", route: "#/operations/outbox" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
@@ -568,13 +568,62 @@ function initHelpMenu(docsEnabled) {
   setHelpContext(helpRoutePath); // fill the contextual entry for the current view
 }
 
+// ---------- Operations nav incident badge ----------
+// A stuck token is now marked on the live diagram, in the replay and in the lists
+// (ADR-0150/0151) — but each of those only says so once you are already looking at
+// it. The nav badge is the one that finds *you*: while the Operations app is open,
+// the shell polls the live counts and puts the number of parked tokens on the
+// Incidents entry, so "something is stuck" arrives without a view being opened.
+// It polls only in Operations (nowhere else shows the entry) and stops on the way
+// out, so no other app pays for it.
+const INCIDENT_BADGE_INTERVAL = 5000;
+let incidentCount = 0;
+let incidentBadgeTimer = null;
+
+// paintIncidentBadge writes the current count into whatever badge slot the chrome
+// has right now. setChrome rebuilds the nav on every navigation, so the value is
+// re-applied rather than assumed to survive.
+function paintIncidentBadge() {
+  const slot = document.querySelector('#topnav .nav-badge[data-badge="incidents"]');
+  if (!slot) return;
+  slot.hidden = incidentCount === 0;
+  // A four-digit pill would push the nav around; past 999 the exact number does not
+  // change what an operator does next.
+  slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
+  slot.title = incidentCount === 1
+    ? "1 token is parked behind an unresolved incident"
+    : `${incidentCount} tokens are parked behind unresolved incidents`;
+}
+
+// refreshIncidentBadge re-reads the count. The incidents table calls it straight
+// after a resolve, so the nav agrees at once instead of waiting out the interval.
+async function refreshIncidentBadge() {
+  let stats;
+  try { stats = await api("GET", "/api/v1/stats"); }
+  catch { return; } // transient; the badge keeps its last value
+  incidentCount = (stats && stats.unresolvedIncidents) || 0;
+  paintIncidentBadge();
+}
+
+function syncIncidentBadge(appId) {
+  if (appId !== "operations") {
+    if (incidentBadgeTimer) { clearInterval(incidentBadgeTimer); incidentBadgeTimer = null; }
+    return;
+  }
+  paintIncidentBadge(); // the freshly rendered nav starts from what we already know
+  refreshIncidentBadge();
+  if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
+}
+
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).map((t) =>
-    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}</a>`
+    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
+    (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
+  syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
@@ -2891,7 +2940,7 @@ async function viewInstances() {
       </span>
       <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
-        <button class="btn neutral" type="submit">Open replay</button>
+        <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
       </form>
     </div>
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
@@ -2921,7 +2970,13 @@ async function viewInstances() {
   let incByDef = new Map();
   let incByInstance = new Map();
   let incTruncated = false;
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
+  // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
+  // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
+  const fmtNano = (ns) => ns
+    ? new Date(ns / 1e6).toLocaleString(undefined, {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+    : "—";
 
   // loadIncidents pulls the server's unresolved incidents once per refresh. This
   // overview is server-wide, so it is the unscoped list — capped like the Incidents
@@ -3005,18 +3060,29 @@ async function viewInstances() {
       const inactiveBadge = g.latest.active === false
         ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
         : "";
+      // Compact and non-wrapping: the latest version reads at a glance, the count of
+      // older ones is a small badge (the full phrasing lives in the tooltip), so the
+      // cell can't break mid-phrase in a narrow column.
       const versions = (g.versions.length === 1
         ? `v${g.latest.version}`
-        : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
+        : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
       const running = s.running
         ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
         : '<span class="muted">0</span>';
       const collab = g.latest.collaborationKey
         ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
         : "";
-      const termAll = s.running
-        ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
-        : "";
+      // Row actions: one primary Open plus an overflow menu, so every row is the same
+      // height and the destructive bulk-terminate doesn't shout from each row (it is
+      // one click deeper, the same ⋯ pattern the Modeler's rows use).
+      const openHref = `#/operations/p/${g.latest.key}`;
+      const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+      if (s.running) {
+        menuItems.push(
+          { sep: true },
+          { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
+        );
+      }
       // A running count says nothing about a token being *stuck*: an instance parked
       // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
@@ -3026,8 +3092,8 @@ async function viewInstances() {
         <td data-sort="${s.running || 0}">${running}</td>
         <td data-sort="${inc.total}">${inc.html}</td>
         <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
       </tr>`;
     }).join("");
   }
@@ -3035,14 +3101,14 @@ async function viewInstances() {
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
   // deployed version in bounded batches (the server caps per call, reports remaining).
-  tbody.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-term-proc]");
-    if (!b) return;
-    const g = allGroups.find((x) => x.processId === b.dataset.termProc);
-    const s = summary.get(b.dataset.termProc) || { running: 0 };
+  // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
+  onMenuAction(tbody, async (act, b) => {
+    if (act !== "term") return;
+    const proc = b.dataset.proc;
+    const g = allGroups.find((x) => x.processId === proc);
+    const s = summary.get(proc) || { running: 0 };
     if (!g || !s.running) return;
     if (!(await confirmTerminateAll(g.latest.name || g.processId, s.running))) return;
-    b.disabled = true;
     try {
       let total = 0;
       for (const v of g.versions) {
@@ -3056,7 +3122,6 @@ async function viewInstances() {
       await load();
     } catch (err) {
       toast("terminate failed: " + err.message, "err");
-      b.disabled = false;
     }
   });
 
@@ -3458,7 +3523,10 @@ async function viewIncidents() {
     if (!btn) return;
     const incident = current[Number(btn.dataset.resolve)];
     if (!incident) return;
-    if (await resolveIncidentFlow({ api, toast, incident })) await load();
+    if (await resolveIncidentFlow({ api, toast, incident })) {
+      await load();
+      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+    }
   });
 
   document.getElementById("refresh").addEventListener("click", load);
@@ -4995,6 +5063,7 @@ async function route() {
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "Atlas";
     document.getElementById("topnav").innerHTML = "";
+    syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     updateAccount();
     return viewLogin();
   }

@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Operations nav counts what is stuck**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md) follow-up): the
+  **Incidents** entry carries a red count of the tokens parked behind an unresolved
+  incident, polled by the shell while Operations is open. Every other incident surface
+  says "this is stuck" only once you are already looking at it; this one finds you. It
+  reads a new `unresolvedIncidents` field on `GET /api/v1/stats`, counted from state
+  rather than from a maintained counter — an incident also leaves state *with* the
+  element instance it sits on (an instance cancel, an interrupting boundary), which no
+  resolution event announces, so a maintained number would drift while a count cannot.
+  Resolving from the incidents table updates the badge at once instead of waiting out
+  the poll.
+
 - **The Secrets panel says what a value has to be**
   ([ADR-0153](docs/adr/0153-secret-shape-hints.md)): a vault secret is a name and an
   opaque string, and because it is write-only nobody can look at a stored value
@@ -121,6 +133,16 @@ _Changed_ / _Removed_ for each version.
   never reached the create validator at all), and when the client is built, so a
   connector already stored in the old shape starts working instead of parking one token
   per attempt behind `dial tcp: missing port in address`.
+- **Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN**: the new
+  `atlas import-mim` command converts a MIM/FIM XOML workflow — or an
+  `Export-FIMConfig` XML that embeds one — into deployable BPMN 2.0. Control flow
+  (Sequence, IfElse, Parallel, While) maps to native flow nodes and gateways, and
+  leaf activities map by intent (Approval → user task, Notification → service
+  task, and so on). The translation is loss-aware: any construct without a
+  faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
+  extension element and listed, with a `native`/`preserved`/`manual-review`
+  status, in a per-node report. Every generated model is checked against the
+  compiler so it always deploys. Library: `mimimport`.
 
 ## [0.2.0] — 2026-08-19
 

@@ -174,7 +174,7 @@ func TestRestConnectorWritesResponseToVariable(t *testing.T) {
 		return nil
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc, noSecret, nil))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Ada"})
 	if err := runner.Drive(); err != nil {
@@ -219,7 +219,7 @@ func TestRestConnectorGetNoBodyNoResult(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "ignored", Kind: model.VarString, Text: "x"})
 	if err := runner.Drive(); err != nil {
@@ -288,7 +288,7 @@ func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 
 	rc := &recordingClient{resp: rest.Response{Status: 200}}
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc, noSecret, nil))
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestRestConnectorClientError(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret, nil))
 
 	p.CreateInstance(cp.Key)
 	// A handler error does not abort Drive: it is routed into the incident model
@@ -336,7 +336,7 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret, nil))
 
 	p.CreateInstance(cp.Key)
 	// An unresolvable definition is a handler error, routed into the incident model
@@ -353,7 +353,7 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 // element instance has already completed: it is a no-op, not an error.
 func TestRestHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
-	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret)
+	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret, nil)
 	out, err := h(job.Job{ElementInstanceKey: 424242})
 	if err != nil || out != nil {
 		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil,nil", out, err)
@@ -412,7 +412,7 @@ func driveRest(t *testing.T, cp *compiler.CompiledProcess, jobType int32, rc res
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, nil))
 	p.CreateInstance(cp.Key)
 	return runner.Drive()
 }
@@ -542,7 +542,7 @@ func TestRestConnectorFeelFields(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil))
 	p.CreateInstance(cp.Key,
 		model.VariableValue{Name: "customerId", Kind: model.VarString, Text: "c-7"},
 		model.VariableValue{Name: "traceId", Kind: model.VarString, Text: "abc"},
@@ -563,5 +563,115 @@ func TestRestConnectorFeelFields(t *testing.T) {
 	}
 	if req.Query["page"] != "2" {
 		t.Errorf("page = %q, want the evaluated number 2", req.Query["page"])
+	}
+}
+
+// stubTokens is a token provider that returns a canned token and records the config
+// it was asked for, so an oauth2 test asserts the worker passed the model's client
+// id/scope/token-url and the resolved client secret.
+type stubTokens struct {
+	token string
+	err   error
+	calls int
+	last  rest.OAuthConfig
+}
+
+func (s *stubTokens) Token(_ context.Context, cfg rest.OAuthConfig) (string, error) {
+	s.calls++
+	s.last = cfg
+	return s.token, s.err
+}
+
+// TestRestConnectorOAuth2 proves an oauth2 task resolves the client secret from a
+// reference, exchanges it for a token through the provider (passing the model's
+// token-url/client-id/scope), and attaches the token as a Bearer header.
+func TestRestConnectorOAuth2(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "oauth2", TokenURL: "https://issuer.example.com/token", ClientID: "cid", SecretRef: "CS", Scope: "read"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	tokens := &stubTokens{token: "AT-123"}
+	secret := func(ref string) string {
+		if ref == "CS" {
+			return "shh"
+		}
+		return ""
+	}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret, tokens))
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if tokens.calls != 1 {
+		t.Fatalf("token fetches = %d, want 1", tokens.calls)
+	}
+	if tokens.last.TokenURL != "https://issuer.example.com/token" || tokens.last.ClientID != "cid" ||
+		tokens.last.ClientSecret != "shh" || tokens.last.Scope != "read" {
+		t.Errorf("token config = %+v, want the model values with the resolved secret", tokens.last)
+	}
+	if len(rc.requests) != 1 || rc.requests[0].Headers["Authorization"] != "Bearer AT-123" {
+		t.Errorf("Authorization = %q, want the fetched bearer token", rc.requests[0].Headers["Authorization"])
+	}
+}
+
+// TestRestConnectorOAuth2NoProvider proves an oauth2 task with no token provider
+// configured fails the job (incident) rather than calling the API unauthenticated.
+func TestRestConnectorOAuth2NoProvider(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "oauth2", TokenURL: "https://issuer.example.com/token", ClientID: "cid", SecretRef: "CS"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, func(string) string { return "shh" }, nil))
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 0 {
+		t.Errorf("requests = %d, want 0 (no provider → unauthenticated call refused)", len(rc.requests))
+	}
+	if pi := mustActiveProcs(t, store); pi != 1 {
+		t.Errorf("active instances = %d, want 1 (job parked on incident)", pi)
+	}
+}
+
+// TestRestConnectorOAuth2SecretMissing proves an oauth2 task whose client secret is
+// unresolvable fails the job before any token fetch or API call.
+func TestRestConnectorOAuth2SecretMissing(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "oauth2", TokenURL: "https://issuer.example.com/token", ClientID: "cid", SecretRef: "MISSING"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	tokens := &stubTokens{token: "unused"}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, tokens))
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if tokens.calls != 0 {
+		t.Errorf("token fetches = %d, want 0 (secret missing → no fetch)", tokens.calls)
+	}
+	if len(rc.requests) != 0 {
+		t.Errorf("requests = %d, want 0", len(rc.requests))
+	}
+	if pi := mustActiveProcs(t, store); pi != 1 {
+		t.Errorf("active instances = %d, want 1 (job parked on incident)", pi)
 	}
 }

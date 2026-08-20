@@ -1,0 +1,18 @@
+<ns0:SequentialWorkflow x:Name="Workflow" x:Class="MimWorkflow"
+    xmlns:ns0="clr-namespace:Microsoft.ResourceManagement.Workflow.Activities;Assembly=Microsoft.ResourceManagement"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ns0:FunctionEvaluatorActivity x:Name="BuildName" Description="Anzeigenamen berechnen"
+      FunctionExpression="//WorkflowData[&quot;FirstName&quot;] + &quot; &quot; + //WorkflowData[&quot;LastName&quot;]" />
+  <ns0:IfElseActivity x:Name="ApprovalNeeded" Description="Genehmigung erforderlich?">
+    <ns0:IfElseBranchActivity x:Name="NeedsApproval" Description="Manager-Genehmigung">
+      <Condition>//WorkflowData["Department"] = "Finance"</Condition>
+      <ns0:ApprovalActivity x:Name="ManagerApproval" Description="Manager genehmigt" Duration="7.00:00:00" />
+    </ns0:IfElseBranchActivity>
+    <ns0:IfElseBranchActivity x:Name="AutoApprove" Description="Automatisch">
+      <ns0:NotificationActivity x:Name="NotifyRequestor" Description="Antragsteller benachrichtigen" />
+    </ns0:IfElseBranchActivity>
+  </ns0:IfElseActivity>
+  <ns0:PowerShellActivity x:Name="RunProvisioning" Description="Bereitstellungsskript ausführen"
+      ScriptText="New-Mailbox -Name $displayName" />
+  <ns0:UpdateResourceActivity x:Name="WriteBack" Description="Zielattribute setzen" />
+</ns0:SequentialWorkflow>

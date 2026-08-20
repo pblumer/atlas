@@ -41,7 +41,7 @@ type SecretResolver func(ref string) string
 // as that variable to be written back into the instance on completion. Returning an
 // error fails the job (retry, then an incident, ADR-0061); the runner completes it
 // only on success.
-func Handler(store *state.Store, lookup ProcessLookup, client Client, secret SecretResolver) job.OutputHandler {
+func Handler(store *state.Store, lookup ProcessLookup, client Client, secret SecretResolver, tokens TokenProvider) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -67,7 +67,7 @@ func Handler(store *state.Store, lookup ProcessLookup, client Client, secret Sec
 			return nil, fmt.Errorf("rest: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
 		url := resolveValue(detail.Url, scope, scopeVars)
-		headers, err := applyAuth(resolveKVs(detail.Headers, scope, scopeVars), cp.Intern(detail.Auth), secret)
+		headers, err := applyAuth(context.Background(), resolveKVs(detail.Headers, scope, scopeVars), cp.Intern(detail.Auth), secret, tokens)
 		if err != nil {
 			return nil, err
 		}
@@ -184,11 +184,12 @@ func toExprKind(k model.VarKind) expr.ValueKind {
 }
 
 // applyAuth resolves a REST task's authentication and adds the resulting header to
-// headers. It resolves the secret *reference* to a value through secret (ADR-0041)
-// and refuses to proceed when a configured scheme's secret is missing — a
-// misconfigured credential fails the job (incident) rather than silently calling
-// the API unauthenticated. A no-auth task is a no-op.
-func applyAuth(headers map[string]string, encoded string, secret SecretResolver) (map[string]string, error) {
+// headers. It turns the model's secret *reference* into a credential at call time
+// (ADR-0041) and refuses to proceed when a configured scheme's credential is missing
+// — a misconfigured credential fails the job (incident) rather than silently calling
+// the API unauthenticated. For oauth2 it obtains a bearer token through the token
+// provider (a live client-credentials fetch, ADR-0152). A no-auth task is a no-op.
+func applyAuth(ctx context.Context, headers map[string]string, encoded string, secret SecretResolver, tokens TokenProvider) (map[string]string, error) {
 	if encoded == "" {
 		return headers, nil
 	}
@@ -199,14 +200,10 @@ func applyAuth(headers map[string]string, encoded string, secret SecretResolver)
 	if a.Type == "" {
 		return headers, nil
 	}
-	value := ""
-	if secret != nil {
-		value = strings.TrimSpace(secret(a.SecretRef))
+	name, headerValue, err := authCredential(ctx, a, secret, tokens)
+	if err != nil {
+		return headers, err
 	}
-	if value == "" {
-		return headers, fmt.Errorf("rest: auth secret %q for %s auth is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", a.SecretRef, a.Type)
-	}
-	name, headerValue := authHeader(a, value)
 	if name == "" {
 		return headers, fmt.Errorf("rest: unsupported auth type %q", a.Type)
 	}
@@ -219,9 +216,48 @@ func applyAuth(headers map[string]string, encoded string, secret SecretResolver)
 	return headers, nil
 }
 
+// authCredential turns an auth config into the header name and value to send. The
+// static schemes (basic/bearer/apiKey) resolve a secret value; oauth2 resolves the
+// client secret and then exchanges it for a bearer token through the token provider
+// (ADR-0152). A missing credential or an unavailable provider is an error so the job
+// fails rather than calling the API unauthenticated; an unknown scheme yields an
+// empty name (the caller reports it).
+func authCredential(ctx context.Context, a compiler.RestAuth, secret SecretResolver, tokens TokenProvider) (name, value string, err error) {
+	if a.Type == "oauth2" {
+		clientSecret := resolveSecret(secret, a.SecretRef)
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("rest: oauth2 client secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", a.SecretRef)
+		}
+		if tokens == nil {
+			return "", "", fmt.Errorf("rest: oauth2 auth for token endpoint %q has no token provider configured", a.TokenURL)
+		}
+		token, err := tokens.Token(ctx, OAuthConfig{TokenURL: a.TokenURL, ClientID: a.ClientID, ClientSecret: clientSecret, Scope: a.Scope})
+		if err != nil {
+			return "", "", err
+		}
+		return "Authorization", "Bearer " + token, nil
+	}
+	v := resolveSecret(secret, a.SecretRef)
+	if v == "" {
+		return "", "", fmt.Errorf("rest: auth secret %q for %s auth is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", a.SecretRef, a.Type)
+	}
+	name, value = authHeader(a, v)
+	return name, value, nil
+}
+
+// resolveSecret turns a secret reference into its value through the resolver,
+// trimming surrounding whitespace; a nil resolver or unknown reference yields "".
+func resolveSecret(secret SecretResolver, ref string) string {
+	if secret == nil {
+		return ""
+	}
+	return strings.TrimSpace(secret(ref))
+}
+
 // authHeader builds the header name and value for a resolved credential: HTTP Basic
 // (base64 of user:secret), a Bearer token, or a named api-key header. An unknown
-// scheme yields an empty name.
+// scheme yields an empty name. (oauth2 is handled in authCredential, which produces
+// a Bearer token before this point.)
 func authHeader(a compiler.RestAuth, secret string) (name, value string) {
 	switch a.Type {
 	case "basic":

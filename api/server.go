@@ -946,7 +946,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// task's result variable. The endpoint and headers live in the model; a request's
 	// authentication secret is a *reference* the worker resolves at call time from the
 	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
-	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret))
+	// For oauth2 (client-credentials) the worker exchanges the client secret for a
+	// bearer token through the token provider, caching it until it nears expiry
+	// (ADR-0152).
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret, rest.NewTokenProvider()))
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
 	// records is ingested and validated on the engine with the file arriving through a
@@ -1701,5 +1704,9 @@ func (s *Server) readStats() (statsResp, error) {
 	if err != nil {
 		return statsResp{}, err
 	}
-	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei}, nil
+	inc, err := s.store.IncidentCount()
+	if err != nil {
+		return statsResp{}, err
+	}
+	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
 }
