@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Process instance migration: the API and the MCP tools**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): a running instance can be
+  moved to another version of its process over HTTP.
+  `POST /instances/{key}/migrate/plan` answers **what a migration would do and writes
+  nothing** — the derived element mapping and every reason it would be refused — because
+  the mapping comes from two graphs an operator cannot diff by eye and "which of my
+  tokens would be stranded" is the question they actually have.
+  `POST /instances/{key}/migrate` does it, and when the mapping does not hold it refuses
+  with **409 carrying that same plan**, so a rejection is as informative as a dry run.
+  `POST /processes/{key}/migrate-instances` is the batch form: each instance is its own
+  command and its own event, so a refusal on one does not roll back the rest, and the
+  response names every instance it left behind and why.
+  Elements are paired by **BPMN element id** — the identity a modeler controls and the
+  one stable across an ordinary edit — with per-element overrides for ids that moved;
+  the ids are resolved to compiled indices before anything reaches the log. A reason is
+  required and recorded as an operator action, as for a manual completion. Admin-only
+  when auth is on. The same three operations are exposed as `atlas_migration_plan`,
+  `atlas_migrate_instance` and `atlas_migrate_instances`.
+
 - **Process instance migration: the engine half**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): a running instance can now
   be rebound from one deployed version of its process to another without being

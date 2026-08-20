@@ -250,6 +250,24 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decisions/{id}/evaluations", s.handleDecisionEvaluations, apiOp{
 			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions",
 			resp: jsonBody("Decision evaluations", tArray())}},
+		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
+			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances",
+			req: jsonBody("Target version and optional element-id overrides", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "mapping": tArray(),
+			}, "targetProcessDefKey")),
+			resp: jsonBody("Migration plan", tObject())}},
+		{"POST", "/api/v1/instances/{key}/migrate", s.handleMigrateInstance, apiOp{
+			summary: "Rebind a running instance to another version of its process, preserving its variables, jobs and history; refused with 409 and the same plan when the mapping does not hold. A reason is required and recorded as an operator action (admin-only when auth is on, ADR-0162)", tag: "Instances",
+			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
+			}, "targetProcessDefKey", "reason")),
+			resp: jsonBody("Migration result", tObject())}},
+		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
+			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances",
+			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
+			}, "targetProcessDefKey", "reason")),
+			resp: jsonBody("Bulk migration result", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{

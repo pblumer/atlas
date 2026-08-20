@@ -6,6 +6,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -208,5 +209,128 @@ func TestMigrationElementOfProjectsWhatTheValidatorReads(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("MigrationElementOf = %+v, want %+v", got, want)
+	}
+}
+
+// TestValidateMigrationRefusesABrokenRaceGroup covers the event-based gateway rule: the
+// first armed catch to fire cancels the others by their shared gateway key (ADR-0110),
+// so a member mapped without its gateway would leave losers nothing can cancel.
+func TestValidateMigrationRefusesABrokenRaceGroup(t *testing.T) {
+	v1, v2 := simpleVersions(t)
+	live := []engine.MigrationElement{
+		{Key: 40, ElementId: 0, BpmnElementType: uint8(compiler.TypeStartEvent)},
+		{Key: 41, ElementId: 1, EventGatewayKey: 40, BpmnElementType: uint8(compiler.TypeServiceTask)},
+	}
+	// The catch is mapped; the gateway that arms it is not. The gateway reports its own
+	// unmapped token too, so the assertion is about the *second* problem — the one this
+	// rule exists for.
+	problems := engine.ValidateMigration(v1, v2, live, map[int32]int32{1: 2})
+	if len(problems) != 2 {
+		t.Fatalf("problems = %+v, want one for the unmapped gateway and one for the broken group", problems)
+	}
+	if !strings.Contains(problems[1].Reason, "race group") {
+		t.Errorf("reason = %q, want it to name the race group", problems[1].Reason)
+	}
+}
+
+// TestValidateMigrationRefusesAnUnmappedParentOrHost covers the two "the thing I hang
+// off is not coming with me" arms — a scope and a boundary host — which are distinct
+// from the scope/attachment *changing*, and are what an operator hits when they map one
+// element by hand and forget its container.
+func TestValidateMigrationRefusesAnUnmappedParentOrHost(t *testing.T) {
+	v1, v2 := simpleVersions(t)
+
+	// Parent scope present as a live element instance, but absent from the mapping.
+	scoped := []engine.MigrationElement{
+		{Key: 50, ElementId: 1, BpmnElementType: uint8(compiler.TypeServiceTask)},
+		{Key: 51, ElementId: 2, FlowScopeKey: 50, BpmnElementType: uint8(compiler.TypeEndEvent)},
+	}
+	problems := engine.ValidateMigration(v1, v2, scoped, map[int32]int32{2: 3})
+	if len(problems) != 2 {
+		t.Fatalf("problems = %+v, want one for the unmapped scope and one for the scope itself", problems)
+	}
+	if !strings.Contains(problems[1].Reason, "sits inside") {
+		t.Errorf("reason = %q, want it to name the unmapped container", problems[1].Reason)
+	}
+
+	// Boundary host present, but absent from the mapping.
+	attached := []engine.MigrationElement{
+		{Key: 60, ElementId: 1, BpmnElementType: uint8(compiler.TypeServiceTask)},
+		{Key: 61, ElementId: 2, AttachedToKey: 60, BpmnElementType: uint8(compiler.TypeBoundaryEvent)},
+	}
+	problems = engine.ValidateMigration(v1, v2, attached, map[int32]int32{2: 3})
+	if len(problems) != 2 || !strings.Contains(problems[1].Reason, "is attached to") {
+		t.Fatalf("problems = %+v, want one naming the unmapped host", problems)
+	}
+}
+
+// TestValidateMigrationRefusesAMultiInstanceChange covers the ADR-0077 rule from both
+// sides: a token running as a multi-instance activity cannot land on a plain one, and a
+// plain activity cannot become multi-instance under a live token either — the scope's
+// child counts are keyed on which it is.
+func TestValidateMigrationRefusesAMultiInstanceChange(t *testing.T) {
+	build := func(key uint64, version int32, multi bool) (*compiler.CompiledProcess, int32) {
+		b := compiler.NewBuilder(key, "mi", version)
+		s := b.AddStartEvent()
+		task := b.AddServiceTask(jobName, 3)
+		if multi {
+			coll, err := expr.CompileAuto("items")
+			if err != nil {
+				t.Fatalf("CompileAuto: %v", err)
+			}
+			b.SetMultiInstance(task, false, "item", "", coll, nil, nil, nil)
+		}
+		b.Connect(s, task)
+		cp, err := b.Build()
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		return cp, task
+	}
+	multi, multiTask := build(501, 1, true)
+	plain, plainTask := build(502, 2, false)
+
+	// An iteration of a multi-instance activity, mapped onto a plain one.
+	iterating := []engine.MigrationElement{
+		{Key: 70, ElementId: multiTask, MultiInstance: 2, BpmnElementType: uint8(compiler.TypeServiceTask)},
+	}
+	only(t, engine.ValidateMigration(multi, plain, iterating, map[int32]int32{0: 0, multiTask: plainTask}),
+		"multi-instance activity but maps to")
+
+	// And the shape change on its own, with no token running as an iteration: still a
+	// refusal, because the target's scope accounting differs.
+	single := []engine.MigrationElement{
+		{Key: 71, ElementId: plainTask, BpmnElementType: uint8(compiler.TypeServiceTask)},
+	}
+	only(t, engine.ValidateMigration(plain, multi, single, map[int32]int32{0: 0, plainTask: multiTask}),
+		"changes between a multi-instance and a plain activity")
+}
+
+// TestValidateMigrationAcceptsABoundaryThatStaysAttached is the positive half of the
+// attachment rule — without it, the loop that searches the host's boundary list is only
+// ever exercised failing, and a bug that never found a match would pass unnoticed.
+func TestValidateMigrationAcceptsABoundaryThatStaysAttached(t *testing.T) {
+	build := func(key uint64, version int32) (*compiler.CompiledProcess, int32, int32) {
+		b := compiler.NewBuilder(key, "bnd", version)
+		s := b.AddStartEvent()
+		host := b.AddServiceTask(jobName, 3)
+		bnd := b.AddBoundaryTimerEvent(host, true, 1000)
+		b.Connect(s, host)
+		cp, err := b.Build()
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		return cp, host, bnd
+	}
+	v1, host1, bnd1 := build(601, 1)
+	v2, host2, bnd2 := build(602, 2)
+
+	live := []engine.MigrationElement{
+		{Key: 80, ElementId: host1, BpmnElementType: uint8(compiler.TypeServiceTask)},
+		{Key: 81, ElementId: bnd1, AttachedToKey: 80, BpmnElementType: uint8(compiler.TypeBoundaryEvent)},
+	}
+	mapping := map[int32]int32{0: 0, host1: host2, bnd1: bnd2}
+	if p := engine.ValidateMigration(v1, v2, live, mapping); len(p) != 0 {
+		t.Fatalf("a boundary event that stays on its host was refused: %+v", p)
 	}
 }
