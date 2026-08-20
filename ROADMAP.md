@@ -590,6 +590,17 @@ What it takes to run this for real.
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
+- 🔲 **Instance migration**: move running instances from one deployed version to the
+  next. A deployment is immutable and `applyToState` must replay identically live and
+  on recovery (ADR-0019, I4/I6), so a model fix reaches instances that are already
+  running only by cancelling and restarting them today — which
+  [ADR-0160](docs/adr/0160-fix-the-connector-from-the-incident.md) names as the missing
+  piece behind "adjust this service task and try again": the *connector* behind a task
+  is operator-managed runtime state and is now editable from the incident, but what the
+  model says is not. Needs a durable migration event carrying an element mapping from
+  the old version's compiled graph to the new one, validation that refuses a mapping
+  that would strand a token, and recovery tests proving replay stays deterministic
+  across it. Its own ADR first.
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 
 ## Milestone 5 — Scale-out 🔲

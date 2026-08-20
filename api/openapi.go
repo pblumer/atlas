@@ -542,7 +542,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
 			summary: "Create a managed connector instance", tag: "Connectors", req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
 		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Update a managed connector instance (endpoint, provider, sender, credential reference, enabled), re-validated as a create would be (ADR-0160)", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
 

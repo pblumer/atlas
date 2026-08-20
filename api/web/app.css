@@ -305,6 +305,23 @@ textarea::placeholder {
   margin-top: 3px; max-width: 340px; color: var(--danger);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
 }
+/* The connector a parked task resolves through, named on the incident itself
+   (ADR-0160). An operator reading "no connector registered as X" has to know which
+   integration X is before they can go and fix it, and the incident is where they are
+   standing. Amber when the model references a name nobody configured. */
+.inc-conn { margin: 4px 0 6px; }
+.inc-conn .pill { font-weight: 600; }
+/* The shared connector dialog (ADR-0160): the same form whether it is opened from
+   Organization › Connectors or from the incident a misconfigured connector parked. */
+.conn-modal { max-width: 640px; width: 92vw; }
+.conn-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.conn-fields .field { margin: 0; }
+.conn-modal .conn-problem {
+  max-width: none; margin: 0 0 10px; padding: 7px 9px;
+  border-radius: var(--radius); background: var(--danger-soft);
+}
+.conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
+.conn-enabled input { width: auto; margin: 0; }
 a.pill { text-decoration: none; font-weight: 600; }
 a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */

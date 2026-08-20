@@ -10,7 +10,11 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
-import { incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow } from "./incidents.js";
+import {
+  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
+  incidentConnectorChip, incidentConnectorAction,
+} from "./incidents.js";
+import { editConnectorFlow, connectorShape } from "./connectordialog.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -2386,38 +2390,27 @@ function wireConnectorManagement(connectors) {
       const credRefIn = form.querySelector('[name="credentialsRef"]');
       const credRefLabel = form.querySelector(".credref-label");
       const endpointField = form.querySelector(".endpoint-field");
+      // Which fields a kind and provider actually use is one description, shared with
+      // the edit dialog (ADR-0160) so a rule changed in one place cannot leave the
+      // other asking for a credential nobody needs — or worse, not asking for one
+      // that is required. A native mail provider and SharePoint default their API base
+      // and authenticate with a vault bundle; SMTP, temis, clio and remedy dial an
+      // endpoint; preview dials nothing at all, which is the whole point of it
+      // (ADR-0150), so a field left standing there would read as if it were used.
       const sync = () => {
-        const mail = kindSel.value === "mail";
-        const sharepoint = kindSel.value === "sharepoint";
-        const remedy = kindSel.value === "remedy";
-        const preview = mail && providerSel.value === "preview";
-        const native = mail && providerSel.value !== "smtp" && !preview;
-        // Kinds that default their API base and authenticate with a vault credential
-        // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
-        // both a base URL and a credential bundle.
-        const bundle = native || sharepoint;
-        form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
-        senderIn.required = mail;
-        // A native mail provider and SharePoint default their API base — no endpoint;
-        // SMTP, temis, clio, and remedy need one. Preview dials nothing at all, so it
-        // asks for neither a host nor a credential — that is the whole point of it
-        // (ADR-0150), and a field left standing there would read as if it were used.
-        endpointField.style.display = bundle || preview ? "none" : "";
-        endpointIn.required = !bundle && !preview;
-        endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
-        // A native mail provider, SharePoint, and Remedy all need a vault credential
-        // bundle; the other kinds take an optional token reference.
-        form.querySelector(".credref-field").style.display = preview ? "none" : "";
-        credRefIn.required = (bundle || remedy) && !preview;
-        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
-        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
+        const sh = connectorShape(kindSel.value, providerSel.value);
+        form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        senderIn.required = sh.sender;
+        endpointField.style.display = sh.endpoint ? "" : "none";
+        endpointIn.required = sh.endpoint;
+        endpointIn.placeholder = sh.endpointPlaceholder;
+        form.querySelector(".credref-field").style.display = sh.credRef === "none" ? "none" : "";
+        credRefIn.required = sh.credRef === "required";
+        credRefIn.placeholder = sh.credRefPlaceholder;
+        credRefLabel.textContent = sh.credRefLabel;
         // What this provider needs, said where it is chosen rather than discovered
         // from a failed send hours later.
-        form.querySelector(".conn-hint").innerHTML = preview
-          ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
-          : (native
-            ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
-            : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>).");
+        form.querySelector(".conn-hint").innerHTML = sh.hint;
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
@@ -2502,11 +2495,11 @@ function wireConnectorManagement(connectors) {
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
         } else if (btn.dataset.cact === "edit") {
-          const endpoint = window.prompt("Endpoint URL", c.endpoint);
-          if (endpoint == null) return;
-          const credentialsRef = window.prompt("Token reference (resolved from ATLAS_CONNECTOR_<REF>_TOKEN; blank for none)", c.credentialsRef || "");
-          if (credentialsRef == null) return;
-          await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { endpoint: endpoint.trim(), credentialsRef: credentialsRef.trim() });
+          // The same dialog an operator reaches from an incident (ADR-0160) — which is
+          // where most connector edits start, and why it is worth more than the two
+          // window.prompts that used to stand here: it knows which fields this kind
+          // and provider actually use, and it can check the result before saving.
+          if (!(await editConnectorFlow({ api, toast, connector: c }))) return;
         } else if (btn.dataset.cact === "delete") {
           if (!window.confirm(`Delete connector "${c.name}"?`)) return;
           await api("DELETE", "/api/v1/connectors/" + encodeURIComponent(id));
@@ -3577,8 +3570,9 @@ async function viewIncidents() {
           <td>${el}</td>
           <td>${cause}</td>
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-          <td>${esc(r.message || "—")}</td>
+          <td>${esc(r.message || "—")}${incidentConnectorChip(r)}</td>
           <td style="text-align:right; white-space:nowrap"><button class="btn ghost sm" data-fix="${i}" title="Correct the instance's variables before retrying">✎ Variables…</button>
+            ${incidentConnectorAction(r, { cls: "btn ghost sm" })}
             <button class="btn sm" data-resolve="${i}">Resolve…</button></td>
         </tr>`;
       }).join("");
@@ -3591,15 +3585,23 @@ async function viewIncidents() {
   // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
   // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-resolve], button[data-fix]");
+    const btn = e.target.closest("button[data-resolve], button[data-fix], button[data-fix-conn]");
     if (!btn) return;
-    const incident = current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
+    // The connector button carries the incident's own key (it is rendered by the
+    // shared row helper, which knows nothing about this table's row indices); the
+    // other two carry the row index.
+    const incident = btn.dataset.fixConn
+      ? current.find((x) => String(x.elementInstanceKey) === btn.dataset.inc)
+      : current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
     if (!incident) return;
     // Correcting the variables first is the other half of resolving: a retry alone
-    // repeats whatever failed (ADR-0158).
+    // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
+    // way, for when the message is about the integration and not the data (ADR-0160).
     const changed = btn.dataset.fix !== undefined
       ? !!(await fixVariablesFlow({ api, toast, incident }))
-      : await resolveIncidentFlow({ api, toast, incident });
+      : btn.dataset.fixConn
+        ? !!(await fixConnectorFlow({ api, toast, incident }))
+        : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree

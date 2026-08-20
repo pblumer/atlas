@@ -63,6 +63,9 @@ type incidentRow struct {
 	Type               string `json:"type"`
 	RaisedAt           int64  `json:"raisedAt"`
 	Message            string `json:"message"`
+	Connector          string `json:"connector"`
+	ConnectorKind      string `json:"connectorKind"`
+	ConnectorID        string `json:"connectorId"`
 }
 
 func listIncidents(t *testing.T, ts *httptest.Server) []incidentRow {
@@ -341,5 +344,75 @@ func TestStatsCountsUnresolvedIncidents(t *testing.T) {
 	}
 	if got := statsIncidents(t, ts); got != 0 {
 		t.Errorf("after cancelling the other instance: %d unresolved incidents, want 0", got)
+	}
+}
+
+// TestIncidentCarriesItsConnector: an incident on a connector task is usually a
+// connector problem, and the fix is a field on the connector rather than anything
+// about the instance. The incident therefore names it — and says whether a record
+// exists under that name — so the operator gets there in one click instead of
+// reading the name out of the failure message (ADR-0160).
+func TestIncidentCarriesItsConnector(t *testing.T) {
+	ts := newTestServer(t)
+
+	const mailBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+  <process id="notify" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="send">
+      <extensionElements><atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="send"/>
+    <sequenceFlow id="f2" sourceRef="send" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", mailBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key      uint64   `json:"key"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	// The connector is not configured, so the deploy already says so (ADR-0158).
+	if len(deploy.Warnings) != 1 || !strings.Contains(deploy.Warnings[0], "Patrick Blumer") {
+		t.Errorf("deploy warnings = %v, want one naming the connector", deploy.Warnings)
+	}
+
+	// Starting it parks the mail task behind an incident: no connector to send with.
+	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+	inc := listIncidents(t, ts)
+	if len(inc) != 1 {
+		t.Fatalf("incidents = %+v, want the parked mail task", inc)
+	}
+	if inc[0].Connector != "Patrick Blumer" {
+		t.Errorf("connector = %q, want the name the model asks for", inc[0].Connector)
+	}
+	if inc[0].ConnectorKind != "mail" {
+		t.Errorf("connectorKind = %q, want %q", inc[0].ConnectorKind, "mail")
+	}
+	if inc[0].ConnectorID != "" {
+		t.Errorf("connectorId = %q, want empty — nothing is configured under that name", inc[0].ConnectorID)
+	}
+
+	// Configure it, and the incident points at the record to open.
+	created := `{"name":"Patrick Blumer","kind":"mail","provider":"smtp","endpoint":"mx.example.ch:587","sender":"a@b.ch"}`
+	if code, body = doReq(t, ts, http.MethodPost, "/api/v1/connectors", created, "application/json"); code != http.StatusOK {
+		t.Fatalf("create connector: status=%d body=%s", code, body)
+	}
+	var rec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &rec); err != nil || rec.ID == "" {
+		t.Fatalf("decode connector: %v (%s)", err, body)
+	}
+	if got := listIncidents(t, ts); len(got) != 1 || got[0].ConnectorID != rec.ID {
+		t.Errorf("connectorId = %q, want the configured record %q", got[0].ConnectorID, rec.ID)
 	}
 }
