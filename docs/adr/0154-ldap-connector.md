@@ -66,13 +66,17 @@ Concretely:
   the RFC 3062 Password Modify extended operation.
 - go-ldap is confined to `client.go` behind a `Dialer`/`Conn` interface; the worker
   and the request-building/response-mapping helpers are unit-tested with a fake
-  dialer, and the network methods are exercised by integration.
+  dialer. The network methods themselves are covered against a minimal in-process
+  LDAP server (`testdirectory_test.go`) that speaks the six operations the connector
+  issues, so the adapter is tested on a real socket without a live directory. That
+  server answers `asn1-ber` packets directly, which promotes asn1-ber from an
+  indirect dependency to a direct (test-only) one; no new module enters `go.sum`.
 
 ### Consequences
 
 - **Positive:** provisioning processes can manage directory accounts natively; the
   bind password stays a reference; the call is bounded; the connector is testable
-  without a live server for everything except the thin network methods.
+  without a live server, the network methods included.
 - **Negative / trade-offs accepted:** three new dependencies enter go.sum (go-ldap and
   its asn1-ber and go-ntlmssp transitives); a connection is dialt/bound per job (no
   pooling yet); **delta/paged** search (per the wishlist) is not implemented; modify is

@@ -6,8 +6,8 @@ import (
 )
 
 // TestGoDialerDialError covers the real dialer's connect-failure path: an unreachable
-// server yields an error (the remaining bind/search/modify paths need a live
-// directory and are exercised by integration, not unit tests).
+// server yields an error. The bind, search and write paths are covered against the
+// in-process directory in goconn_test.go.
 func TestGoDialerDialError(t *testing.T) {
 	if _, err := NewDialer().Dial("ldap://127.0.0.1:1", "cn=admin", "pw", false); err == nil {
 		t.Fatal("Dial to an unreachable server: err = nil, want error")
