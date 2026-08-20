@@ -139,8 +139,8 @@ function askResolveRetries(inc) {
             <input id="inc-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-inc-cancel>Cancel</button>
-          <button class="btn" data-inc-go>Resolve</button>
+          <button class="btn neutral" data-inc-cancel title="Close without resolving the incident">Cancel</button>
+          <button class="btn" data-inc-go title="Clear the incident and retry the job with the granted retries">Resolve</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -238,9 +238,9 @@ function askVariables(inc, current) {
           <p class="err" id="inc-vars-err" style="margin:6px 0 0"></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-vars-cancel>Cancel</button>
-          <button class="btn neutral" data-vars-save>Save only</button>
-          <button class="btn" data-vars-go>Save &amp; retry</button>
+          <button class="btn neutral" data-vars-cancel title="Close without changing the variables">Cancel</button>
+          <button class="btn neutral" data-vars-save title="Save the corrected variables without retrying">Save only</button>
+          <button class="btn" data-vars-go title="Save the variables and retry the job">Save &amp; retry</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -329,8 +329,8 @@ function askCompletion(inc) {
           <p class="err" id="inc-done-err" style="margin:6px 0 0"></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-done-cancel>Cancel</button>
-          <button class="btn" data-done-go>Complete task</button>
+          <button class="btn neutral" data-done-cancel title="Close without completing the task">Cancel</button>
+          <button class="btn" data-done-go title="Finish the task by hand and let the process continue">Complete task</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
