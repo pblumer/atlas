@@ -27,6 +27,8 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/andybalholm/cascadia"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Request is one scrape a web-scraping connector task performs. URL is the full,
@@ -53,10 +55,13 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a web-scraping HTTP client backed by http.DefaultClient. A
-// configurable timeout is a follow-up (ADR-0118).
+// NewHTTPClient builds a web-scraping HTTP client bounded by the shared
+// connector call budget (nettimeout.Default). The worker runs on the run-loop
+// goroutine, so an unbounded call would let a hung site stall the whole engine;
+// see the nettimeout package doc. A per-connector configurable timeout is a
+// follow-up (ADR-0118).
 func NewHTTPClient() *HTTPClient {
-	return &HTTPClient{http: http.DefaultClient}
+	return &HTTPClient{http: nettimeout.HTTPClient()}
 }
 
 // Scrape GETs r.URL, parses the response as HTML, and extracts the matches of

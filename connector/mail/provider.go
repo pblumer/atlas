@@ -3,13 +3,16 @@ package mail
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Provider identifiers for a managed mail connector. SMTP (the default) reaches any
 // submission server; Gmail and Microsoft are the native provider APIs (ADR-0079/0081).
+// [ProviderPreview], declared beside its outbox, is the fourth: it frames a message
+// like the others and delivers it in-server instead of sending it (ADR-0150).
 const (
 	ProviderSMTP      = "smtp"
 	ProviderGmail     = "gmail"
@@ -29,11 +32,16 @@ const (
 // resolved Secret — an SMTP password, or (for a native provider) the OAuth credential
 // JSON bundle held in the vault under the connector's credentialsRef (ADR-0093). The
 // secret lives only here at build time, never in a model or an event (I6).
+//
+// Name and Outbox serve the preview provider (ADR-0150), which delivers into the
+// server's outbox under the connector's own name; every other provider ignores them.
 type ProviderConfig struct {
 	Provider string
 	Endpoint string
 	Sender   string
 	Secret   string
+	Name     string
+	Outbox   *Outbox
 }
 
 // NewProviderClient builds the mail client for a managed connector, dispatching on its
@@ -44,12 +52,24 @@ type ProviderConfig struct {
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
 	switch strings.ToLower(strings.TrimSpace(cfg.Provider)) {
 	case "", ProviderSMTP:
+		// Normalized here, not only where a connector is saved: a record written
+		// before the endpoint was checked at all (or through a partial update) would
+		// otherwise keep failing deep in the send, one parked token at a time.
+		endpoint, err := NormalizeSMTPEndpoint(cfg.Endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("mail: %w", err)
+		}
 		return NewSMTPClient(Connector{
-			Endpoint: cfg.Endpoint,
+			Endpoint: endpoint,
 			Username: cfg.Sender,
 			Password: cfg.Secret,
 			From:     cfg.Sender,
 		}), nil
+	case ProviderPreview:
+		if cfg.Outbox == nil {
+			return nil, fmt.Errorf("mail: preview connector %q has no outbox", cfg.Name)
+		}
+		return NewPreviewClient(cfg.Outbox, cfg.Name, cfg.Sender), nil
 	case ProviderGmail:
 		tokens, err := oauthTokenSource(ProviderGmail, cfg)
 		if err != nil {
@@ -63,7 +83,7 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 		}
 		return NewGraphClient(tokens, cfg.Endpoint, cfg.Sender), nil
 	default:
-		return nil, fmt.Errorf("mail: unknown provider %q (want %q, %q, or %q)", cfg.Provider, ProviderSMTP, ProviderGmail, ProviderMicrosoft)
+		return nil, fmt.Errorf("mail: unknown provider %q (want %q, %q, %q, or %q)", cfg.Provider, ProviderSMTP, ProviderGmail, ProviderMicrosoft, ProviderPreview)
 	}
 }
 
@@ -79,7 +99,7 @@ func oauthTokenSource(provider string, cfg ProviderConfig) (TokenSource, error) 
 		return nil, fmt.Errorf("mail: %s credential is not valid JSON: %w", provider, err)
 	}
 	applyProviderDefaults(provider, &b, cfg.Sender)
-	return newTokenSource(b, http.DefaultClient, nil)
+	return newTokenSource(b, nettimeout.HTTPClient(), nil)
 }
 
 // applyProviderDefaults fills a credential bundle's token URL, scope, and (for a Gmail

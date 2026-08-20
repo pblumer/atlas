@@ -31,6 +31,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Event is one event a connector task appends to clio. IdempotencyKey is
@@ -164,7 +166,7 @@ func MintKey(ctx context.Context, endpoint, adminToken string, req KeyRequest) (
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+adminToken)
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := nettimeout.HTTPClient().Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("clio: mint key: %w", err)
 	}
@@ -196,7 +198,7 @@ type HTTPClient struct {
 
 // NewHTTPClient builds a clio HTTP client for a configured connector.
 func NewHTTPClient(conn Connector) *HTTPClient {
-	return &HTTPClient{conn: conn, http: http.DefaultClient}
+	return &HTTPClient{conn: conn, http: nettimeout.HTTPClient()}
 }
 
 func (c *HTTPClient) WriteEvent(ctx context.Context, e Event) error {

@@ -171,6 +171,39 @@ func TestParseRestConnectorHeadersQueryAuth(t *testing.T) {
 	}
 }
 
+// An oauth2 (client-credentials) auth compiles to a JSON object carrying the token
+// endpoint, client id, and scope as model data plus the client secret *reference*
+// (ADR-0152) — never the secret value.
+func TestParseRestConnectorOAuth2(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST" url="https://api.example.com/users"
+                             authType="oauth2" authTokenUrl="https://issuer.example.com/token"
+                             authClientId="cid" authScope="read write" authSecret="CLIENT_SECRET"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	d := cp.ConnectorTask(cp.Node(task).Detail)
+	got := cp.Intern(d.Auth)
+	want := `{"type":"oauth2","secretRef":"CLIENT_SECRET","tokenUrl":"https://issuer.example.com/token","clientId":"cid","scope":"read write"}`
+	if got != want {
+		t.Errorf("auth = %q, want the oauth2 config referencing the client secret\n want %q", got, want)
+	}
+}
+
 // Auth needs a secret reference; a duplicate header and an unknown scheme are
 // modeling errors that fail the compile.
 func TestParseRestConnectorAuthAndHeaderErrors(t *testing.T) {
@@ -187,9 +220,12 @@ func TestParseRestConnectorAuthAndHeaderErrors(t *testing.T) {
 </bpmn:definitions>`
 	}
 	cases := map[string]string{
-		"bearer without secret": `<atlas:restConnector method="GET" url="https://x" authType="bearer"/>`,
-		"apiKey without header": `<atlas:restConnector method="GET" url="https://x" authType="apiKey" authSecret="K"/>`,
-		"unknown scheme":        `<atlas:restConnector method="GET" url="https://x" authType="oauth2" authSecret="K"/>`,
+		"bearer without secret":   `<atlas:restConnector method="GET" url="https://x" authType="bearer"/>`,
+		"apiKey without header":   `<atlas:restConnector method="GET" url="https://x" authType="apiKey" authSecret="K"/>`,
+		"unknown scheme":          `<atlas:restConnector method="GET" url="https://x" authType="digest" authSecret="K"/>`,
+		"oauth2 without tokenUrl": `<atlas:restConnector method="GET" url="https://x" authType="oauth2" authClientId="cid" authSecret="K"/>`,
+		"oauth2 without clientId": `<atlas:restConnector method="GET" url="https://x" authType="oauth2" authTokenUrl="https://i/token" authSecret="K"/>`,
+		"oauth2 without secret":   `<atlas:restConnector method="GET" url="https://x" authType="oauth2" authTokenUrl="https://i/token" authClientId="cid"/>`,
 		"duplicate header": `<atlas:restConnector method="GET" url="https://x">
 			<atlas:httpHeader name="Accept" value="a"/><atlas:httpHeader name="Accept" value="b"/></atlas:restConnector>`,
 	}

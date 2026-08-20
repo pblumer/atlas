@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { incidentPill, fmtRaised, resolveIncidentFlow } from "./incidents.js";
 
 const view = document.getElementById("view");
 
@@ -279,6 +280,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Incidents", route: "#/operations/incidents" },
+    { name: "Outbox", route: "#/operations/outbox" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
   ],
@@ -308,7 +310,7 @@ const CONNECTORS = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
@@ -923,6 +925,7 @@ async function viewConsoleOrg() {
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -2229,12 +2232,15 @@ function wireConnectorManagement(connectors) {
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
         <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option></select></label>
-        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
+        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
-        <button class="btn" type="submit">Add</button></form>`;
+        <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+        <button class="btn" type="submit">Add</button>
+        <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
+        <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
+        <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -2253,7 +2259,8 @@ function wireConnectorManagement(connectors) {
         const mail = kindSel.value === "mail";
         const sharepoint = kindSel.value === "sharepoint";
         const remedy = kindSel.value === "remedy";
-        const native = mail && providerSel.value !== "smtp";
+        const preview = mail && providerSel.value === "preview";
+        const native = mail && providerSel.value !== "smtp" && !preview;
         // Kinds that default their API base and authenticate with a vault credential
         // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
         // both a base URL and a credential bundle.
@@ -2261,19 +2268,55 @@ function wireConnectorManagement(connectors) {
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
         // A native mail provider and SharePoint default their API base — no endpoint;
-        // SMTP, temis, clio, and remedy need one.
-        endpointField.style.display = bundle ? "none" : "";
-        endpointIn.required = !bundle;
+        // SMTP, temis, clio, and remedy need one. Preview dials nothing at all, so it
+        // asks for neither a host nor a credential — that is the whole point of it
+        // (ADR-0150), and a field left standing there would read as if it were used.
+        endpointField.style.display = bundle || preview ? "none" : "";
+        endpointIn.required = !bundle && !preview;
         endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
         // A native mail provider, SharePoint, and Remedy all need a vault credential
         // bundle; the other kinds take an optional token reference.
-        credRefIn.required = bundle || remedy;
+        form.querySelector(".credref-field").style.display = preview ? "none" : "";
+        credRefIn.required = (bundle || remedy) && !preview;
         credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
         credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
+        // What this provider needs, said where it is chosen rather than discovered
+        // from a failed send hours later.
+        form.querySelector(".conn-hint").innerHTML = preview
+          ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
+          : (native
+            ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
+            : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>).");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
       sync();
+      // Check what is typed, before it is stored — the moment a wrong host or a dead
+      // credential is cheapest to fix, and the one where somebody is actually looking.
+      const testBtn = form.querySelector("#conn-test");
+      const testOut = form.querySelector(".conn-test-result");
+      testBtn.addEventListener("click", async () => {
+        const f = new FormData(form);
+        testOut.hidden = false;
+        testOut.className = "conn-test-result muted";
+        testOut.textContent = "Checking…";
+        testBtn.disabled = true;
+        try {
+          const res = await api("POST", "/api/v1/connectors/test", {
+            name: (f.get("name") || "unnamed").trim(),
+            kind: (f.get("kind") || "mail").trim(),
+            provider: (f.get("provider") || "smtp").trim(),
+            endpoint: (f.get("endpoint") || "").trim(),
+            sender: (f.get("sender") || "").trim(),
+            credentialsRef: (f.get("credentialsRef") || "").trim(),
+          });
+          testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
+          testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
+        } catch (err) {
+          testOut.className = "conn-test-result err";
+          testOut.textContent = "✕ " + err.message;
+        } finally { testBtn.disabled = false; }
+      });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
@@ -2307,6 +2350,23 @@ function wireConnectorManagement(connectors) {
           return;
         } else if (btn.dataset.cact === "provision") {
           toggleProvisionClio(btn.closest("tr"), id, c.name);
+          return;
+        } else if (btn.dataset.cact === "test") {
+          // Empty recipient = stop at the door (connect, authenticate). A recipient
+          // makes it a real send, which is the only thing that proves delivery.
+          const to = window.prompt(
+            `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
+          if (to == null) return;
+          btn.disabled = true;
+          try {
+            const res = await api("POST", "/api/v1/connectors/test", {
+              name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
+              sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
+            });
+            toast(res.detail || (res.ok ? "Connector works" : "Check failed"), res.ok ? "ok" : "warn");
+          } catch (err) {
+            toast("Check failed: " + err.message, "warn");
+          } finally { btn.disabled = false; }
           return;
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
@@ -2725,8 +2785,9 @@ async function viewInstances() {
     <p class="muted">One row per deployed process. Open a process to pick a version, then
     watch all of its instances at once (every token on the diagram) or select a single
     instance to isolate it — with its variables shown below the diagram. Each instance
-    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. Start
-    the demo to park a token on a waiting task.</p>
+    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. A
+    process with a stuck token is flagged in the <b>Incidents</b> column, which opens the
+    version holding it. Start the demo to park a token on a waiting task.</p>
     <div class="ops-toolbar">
       <span class="ops-search">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
@@ -2734,7 +2795,7 @@ async function viewInstances() {
       </span>
       <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
-        <button class="btn neutral" type="submit">Open replay</button>
+        <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
       </form>
     </div>
     <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
@@ -2747,24 +2808,89 @@ async function viewInstances() {
     </form>
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
+    <div id="ops-inc-note"></div>
     <div class="card" id="proc-card" style="padding:0">
       <table data-dt-key="instances">
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Incidents</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
   const tbody = document.getElementById("rows");
 
   let allGroups = [];
   let summary = new Map();
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
+  // Unresolved incidents, bucketed for the two tables below: by definition (the
+  // per-process rows) and by instance (the variable-search results). Keys are
+  // stringified so a JSON number and a string key can't miss each other (ADR-0151).
+  let incByDef = new Map();
+  let incByInstance = new Map();
+  let incTruncated = false;
+  // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
+  // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
+  const fmtNano = (ns) => ns
+    ? new Date(ns / 1e6).toLocaleString(undefined, {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+    : "—";
+
+  // loadIncidents pulls the server's unresolved incidents once per refresh. This
+  // overview is server-wide, so it is the unscoped list — capped like the Incidents
+  // page, and a capped page is said out loud rather than quietly undercounting. It is
+  // deliberately a separate read: the summary endpoint is O(1) per definition by
+  // design (ADR-0083) and must not grow a scan.
+  const loadIncidents = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
+      const rows = (data && data.incidents) || [];
+      incTruncated = headers.get("X-Incidents-Truncated") === "true";
+      incByDef = new Map();
+      incByInstance = new Map();
+      for (const r of rows) {
+        if (r.processDefKey) {
+          const d = String(r.processDefKey);
+          incByDef.set(d, (incByDef.get(d) || 0) + 1);
+        }
+        const i = String(r.processInstanceKey);
+        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      }
+    } catch { /* best-effort: the lists still render, just without the flags */ }
+    const note = document.getElementById("ops-inc-note");
+    if (note) {
+      note.innerHTML = incTruncated
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More incidents than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
+        : "";
+    }
+  };
+
+  // incidentCell renders one process row's Incidents cell: the total over every
+  // version, linking to the version that actually holds them. Linking to the latest
+  // version instead would land the operator on an empty diagram whenever the fault
+  // sits on an older one — the case where this flag matters most.
+  const incidentCell = (g) => {
+    let total = 0, top = 0, topVersion = null, versionsWith = 0;
+    for (const v of g.versions) {
+      const n = incByDef.get(String(v.key)) || 0;
+      if (!n) continue;
+      total += n;
+      versionsWith++;
+      if (n > top) { top = n; topVersion = v; }
+    }
+    if (!total) return { total: 0, html: '<span class="muted">0</span>' };
+    const title = versionsWith > 1
+      ? `${total} unresolved incidents across ${versionsWith} versions — opens v${topVersion.version}, which holds ${top}; the version picker reaches the rest`
+      : `${total} unresolved incident${total === 1 ? "" : "s"} on v${topVersion.version} — open its live view, where the diagram marks every stuck token`;
+    return {
+      total,
+      html: `<a class="pill err" href="#/operations/p/${topVersion.key}" title="${esc(title)}">&#9888; ${total}</a>`,
+    };
+  };
 
   // renderRows draws the process rows, narrowed by the top filter box (name or process
   // id). Column sorting and per-column filtering are handled by the shared table
   // enhancer over the rendered rows, so this only builds the rows and their sort keys.
   function renderRows() {
     if (!allGroups.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
         <a href="#/modeler">Modeler</a>.</td></tr>`;
       return;
@@ -2774,7 +2900,7 @@ async function viewInstances() {
       ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
       : allGroups;
     if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
     tbody.innerHTML = filtered.map((g) => {
@@ -2789,25 +2915,40 @@ async function viewInstances() {
       const inactiveBadge = g.latest.active === false
         ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
         : "";
+      // Compact and non-wrapping: the latest version reads at a glance, the count of
+      // older ones is a small badge (the full phrasing lives in the tooltip), so the
+      // cell can't break mid-phrase in a narrow column.
       const versions = (g.versions.length === 1
         ? `v${g.latest.version}`
-        : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
+        : `v${g.latest.version} <span class="ver-count" title="${g.versions.length} versions deployed · latest v${g.latest.version}">${g.versions.length}</span>`) + tag;
       const running = s.running
         ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
         : '<span class="muted">0</span>';
       const collab = g.latest.collaborationKey
         ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
         : "";
-      const termAll = s.running
-        ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
-        : "";
+      // Row actions: one primary Open plus an overflow menu, so every row is the same
+      // height and the destructive bulk-terminate doesn't shout from each row (it is
+      // one click deeper, the same ⋯ pattern the Modeler's rows use).
+      const openHref = `#/operations/p/${g.latest.key}`;
+      const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+      if (s.running) {
+        menuItems.push(
+          { sep: true },
+          { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
+        );
+      }
+      // A running count says nothing about a token being *stuck*: an instance parked
+      // behind an incident is counted as running like any other (ADR-0151).
+      const inc = incidentCell(g);
       return `<tr>
         <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
         <td data-sort="${g.versions.length}">${versions}</td>
         <td data-sort="${s.running || 0}">${running}</td>
+        <td data-sort="${inc.total}">${inc.html}</td>
         <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td class="muted nowrap" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
       </tr>`;
     }).join("");
   }
@@ -2815,14 +2956,14 @@ async function viewInstances() {
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
   // deployed version in bounded batches (the server caps per call, reports remaining).
-  tbody.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-term-proc]");
-    if (!b) return;
-    const g = allGroups.find((x) => x.processId === b.dataset.termProc);
-    const s = summary.get(b.dataset.termProc) || { running: 0 };
+  // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
+  onMenuAction(tbody, async (act, b) => {
+    if (act !== "term") return;
+    const proc = b.dataset.proc;
+    const g = allGroups.find((x) => x.processId === proc);
+    const s = summary.get(proc) || { running: 0 };
     if (!g || !s.running) return;
     if (!(await confirmTerminateAll(g.latest.name || g.processId, s.running))) return;
-    b.disabled = true;
     try {
       let total = 0;
       for (const v of g.versions) {
@@ -2836,7 +2977,6 @@ async function viewInstances() {
       await load();
     } catch (err) {
       toast("terminate failed: " + err.message, "err");
-      b.disabled = false;
     }
   });
 
@@ -2845,12 +2985,13 @@ async function viewInstances() {
       const [procs, rows] = await Promise.all([
         api("GET", "/api/v1/processes"),
         api("GET", "/api/v1/instances/summary"),
+        loadIncidents(),
       ]);
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
       renderRows();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -2897,6 +3038,10 @@ async function viewInstances() {
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
     let rows;
     try {
+      // Refresh the incident buckets with the search: these rows are individual
+      // instances, and a stale flag on the surface an operator debugs from is worse
+      // than the extra read.
+      await loadIncidents();
       rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
@@ -2913,13 +3058,19 @@ async function viewInstances() {
       const state = r.state === "active"
         ? '<span class="pill ok"><span class="dot"></span>active</span>'
         : `<span class="pill">${esc(r.state)}</span>`;
+      // A matched instance that is stuck says so here rather than only once opened —
+      // "active" alone reads as healthy (ADR-0151).
+      const incN = incByInstance.get(String(r.key)) || 0;
+      const incFlag = incN
+        ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
+        : "";
       const hits = (r.variables || []).map((v) =>
         `<div class="var-hit"><b>${esc(v.name)}</b> = ${highlight(v.value, needle)} <span class="var-kind">${esc(v.kind)}</span></div>`
       ).join("");
       return `<tr>
         <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
         <td>v${r.version}</td>
-        <td>${state}</td>
+        <td>${state}${incFlag}</td>
         <td class="muted" data-sort="${r.completedAt || r.createdAt || 0}">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
         <td>${hits}</td>
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
@@ -3150,12 +3301,13 @@ function overrideCell(r) {
 // this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
 // a *job* incident (a service-task job whose retries ran out and parked) and a
 // job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the live instance and
-// resolves in place over POST /incidents/{elementInstanceKey}/resolve: a job incident
-// re-activates its job with a fresh retry budget; a timer incident re-arms the element
-// against the instance's current variables (re-raising if it still fails). The list
-// shares the task list's ceiling and flags a capped page the same way (X-Incidents-
-// Truncated), newest scan order.
+// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
+// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
+// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
+// fresh retry budget; a timer incident re-arms the element against the instance's
+// current variables (re-raising if it still fails). The list shares the task list's
+// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
+// order.
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
@@ -3178,12 +3330,13 @@ async function viewIncidents() {
     </div>`;
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // raisedAt is ns
+  let current = []; // the rendered page, so a Resolve click has the whole incident
 
   const load = async () => {
     try {
       const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
       const rows = (data && data.incidents) || [];
+      current = rows;
       note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
         ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
         : "";
@@ -3191,21 +3344,25 @@ async function viewIncidents() {
         tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r) => {
-        const inst = `<a href="#/operations/p/${r.processInstanceKey}">${r.processInstanceKey}</a>`;
-        // The element instance key (the resolve key) is the row's identity; the compiled
-        // element index rides along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Compiled element index #${r.elementId}">${r.elementInstanceKey}</span>`;
-        const cause = r.jobKey
-          ? `<span class="pill err"><span class="dot"></span>job</span> <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>`
-          : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+      tbody.innerHTML = rows.map((r, i) => {
+        // The instance opens on the live diagram of its own version, with the token
+        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+        const inst = r.processDefKey
+          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+        // The element is named by its diagram id — what the modeler and the diagram
+        // call it; the element instance key (the resolve key) and the compiled index
+        // ride along as a title for anyone cross-referencing the graph.
+        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
         return `<tr>
           <td>${inst}</td>
           <td>${el}</td>
           <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${fmtNano(r.raisedAt)}</td>
+          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}</td>
-          <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
+          <td style="text-align:right"><button class="btn sm" data-resolve="${i}">Resolve…</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3214,27 +3371,101 @@ async function viewIncidents() {
   };
 
   // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). Resolving
-  // prompts for the retry budget the re-activated job gets (default 1); a timer
-  // incident re-arms and ignores the count.
+  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
+  // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve]");
     if (!btn) return;
-    const key = btn.dataset.resolve;
-    const v = prompt("Resume with how many retries? (a timer incident re-arms and ignores this)", "1");
-    if (v === null) return;
-    const n = parseInt(v, 10);
-    if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive number of retries", "warn"); return; }
-    try {
-      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: n });
-      toast("Incident resolved", "ok");
-    } catch (err) {
-      toast(err.message || "Resolve failed", "warn");
-    }
-    await load();
+    const incident = current[Number(btn.dataset.resolve)];
+    if (!incident) return;
+    if (await resolveIncidentFlow({ api, toast, incident })) await load();
   });
 
   document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// viewMailOutbox is the Operations "Outbox" view: the messages a mail connector on
+// the *preview* provider delivered in-server instead of sending (ADR-0150).
+//
+// It is what makes preview worth having. A first mail task can be modeled, run and
+// read here before anyone owns a submission host or an OAuth bundle — and what is
+// shown is not a paraphrase of the message but the very bytes the SMTP and Gmail
+// providers would put on the wire, framed by the same code. So the headers, the MIME
+// structure and the encoding are checkable here, which is precisely the part an author
+// cannot verify by re-reading their own model.
+//
+// The HTML body is rendered in a sandboxed, script-less iframe: a mail body is
+// composed from process variables, so it is untrusted markup by the same reasoning
+// that keeps an uploaded SVG out of the DOM (ADR-0148).
+async function viewMailOutbox() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Outbox</h1>
+      <span>
+        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn ghost danger" id="clear">Empty outbox</button>
+      </span>
+    </div>
+    <p class="muted">Messages a mail connector using the <b>preview</b> provider
+    delivered here instead of sending them (ADR-0150) — the zero-configuration way to
+    see what a mail task actually produces, before a real provider exists. The message
+    is framed by the same code that sends over SMTP or the Gmail API, so what you read
+    here is what would go out. Nothing here was ever delivered to a recipient, and the
+    outbox is memory only: it holds the newest messages and empties on restart.</p>
+    <div class="card" id="ob-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("ob-list");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const addrs = (a) => (a || []).join(", ");
+
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/mail/outbox");
+    } catch (e) {
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const msgs = (data && data.messages) || [];
+    if (!msgs.length) {
+      list.innerHTML = `<p class="empty">Nothing here yet. Add a mail connector with the
+        <b>Preview</b> provider under Organization &rsaquo; Connectors, point a mail task at it,
+        and every message it sends lands here.</p>`;
+      return;
+    }
+    list.innerHTML = (data.truncated
+      ? `<p class="muted" style="margin:10px 12px 0">Older messages have been dropped — the outbox keeps the newest ones.</p>`
+      : "") + msgs.map((m) => `<details class="ob-msg">
+        <summary>
+          <b>${esc(m.subject || "(no subject)")}</b>
+          <span class="muted">· to ${esc(addrs(m.to)) || "—"}</span>
+          <span class="muted">· ${esc(fmtNano(m.at))}</span>
+          <span class="pill">${esc(m.connector || "?")}</span>
+        </summary>
+        <div class="ob-body">
+          <div class="ob-head">
+            <div><b>From</b> ${esc(m.from || "—")}</div>
+            <div><b>To</b> ${esc(addrs(m.to)) || "—"}</div>
+            ${m.cc && m.cc.length ? `<div><b>Cc</b> ${esc(addrs(m.cc))}</div>` : ""}
+            ${m.bcc && m.bcc.length ? `<div><b>Bcc</b> ${esc(addrs(m.bcc))} <span class="muted">(never written into a header)</span></div>` : ""}
+            ${m.messageId ? `<div><b>Message-ID</b> <span class="chip">${esc(m.messageId)}</span></div>` : ""}
+          </div>
+          ${m.body ? `<h3>Text</h3><pre class="ob-pre">${esc(m.body)}</pre>` : ""}
+          ${m.html ? `<h3>HTML</h3><iframe class="ob-html" sandbox="" srcdoc="${esc(m.html)}" title="Rendered HTML body"></iframe>` : ""}
+          <h3>Source</h3><pre class="ob-pre">${esc(m.raw || "")}</pre>
+        </div>
+      </details>`).join("");
+  };
+
+  document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("clear").addEventListener("click", async () => {
+    if (!confirm("Empty the preview outbox? Nothing here was ever sent.")) return;
+    try {
+      await api("DELETE", "/api/v1/mail/outbox");
+      toast("Outbox emptied", "ok");
+    } catch (e) { toast(e.message || "Could not empty the outbox", "warn"); }
+    await load();
+  });
   await load();
 }
 
@@ -4724,6 +4955,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/incidents") return await viewIncidents();
+    if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded

@@ -171,15 +171,48 @@ type infoResp struct {
 type runtimeElement struct {
 	ElementID string `json:"elementId"`
 	Type      string `json:"type"`
-	Tokens    int    `json:"tokens"` // tokens sitting here now (live — drawn green)
-	Visits    int    `json:"visits"` // tokens that have ever passed through (history — drawn gray)
+	Tokens    int    `json:"tokens"`    // tokens sitting here now (live — drawn green)
+	Visits    int    `json:"visits"`    // tokens that have ever passed through (history — drawn gray)
+	Incidents int    `json:"incidents"` // of those live tokens, how many are parked behind an incident (drawn red)
+}
+
+// runtimeIncident is one unresolved incident on the overlay: which element instance is
+// parked, why, and what to resolve. It carries the *BPMN* element id (the diagram
+// speaks that, while model.IncidentValue holds the compiled index) so the browser can
+// mark the shape without a second lookup.
+type runtimeIncident struct {
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	JobKey             uint64 `json:"jobKey"`
+	ElementID          string `json:"elementId"`
+	RaisedAt           int64  `json:"raisedAt"`
+	Message            string `json:"message"`
 }
 
 type runtimeResp struct {
 	Instances int              `json:"instances"`
 	Tokens    int              `json:"tokens"`
 	Elements  []runtimeElement `json:"elements"`
+	// Incidents is why a token is not moving (ADR-0061). Without it a parked token
+	// renders exactly like one that is legitimately waiting, which is the reading an
+	// operator then gives it — "the task is still open" — while the engine has in fact
+	// been holding a failure for hours (ADR-0150).
+	Incidents []runtimeIncident `json:"incidents"`
+	// IncidentsTruncated marks a capped page: more elements are parked than the
+	// overlay lists. The per-element counts are then a floor, not a total.
+	IncidentsTruncated bool `json:"incidentsTruncated"`
 }
+
+// Bounds on the incident overlay. maxRuntimeIncidents caps what one response carries;
+// maxRuntimeIncidentScan caps how far the aggregate view reads to find them, so a
+// store full of *other* definitions' incidents cannot turn a 1.5-second poll into an
+// unbounded scan on the run loop (the O(elements) discipline of ADR-0080). The
+// single-instance view needs neither: it point-looks-up the incident of each token it
+// is already walking.
+const (
+	maxRuntimeIncidents    = 100
+	maxRuntimeIncidentScan = 2000
+)
 
 // collabPool is one pool (participant) of a collaboration, as a deployed
 // definition the collaboration runtime aggregates.
@@ -315,13 +348,29 @@ type resolveIncidentReq struct {
 	Retries int32 `json:"retries"`
 }
 
+// incidentView is one unresolved incident as the operator surfaces read it. Besides
+// the resolve key (ElementInstanceKey) it carries the diagram context the Operations
+// live view and the single-instance replay need to draw the incident *on the element
+// it stalls* and link it back: the definition it belongs to and the BPMN id of the
+// stuck element. Both are resolved on read from the instance and its compiled
+// process — the durable IncidentValue keeps holding only the compiled element index
+// (I6: nothing here is written back into an event) — ADR-0151.
 type incidentView struct {
 	ElementInstanceKey uint64 `json:"elementInstanceKey"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
+	ProcessID          string `json:"processId,omitempty"`
 	JobKey             uint64 `json:"jobKey"`
-	ElementId          int32  `json:"elementId"`
-	RaisedAt           int64  `json:"raisedAt"`
-	Message            string `json:"message"`
+	// ElementID is the BPMN diagram id of the stuck element (the id every other view
+	// calls `elementId`), empty when the instance outlived its deployment.
+	// ElementIndex is the compiled-graph index the incident actually stores.
+	ElementID    string `json:"elementId,omitempty"`
+	ElementIndex int32  `json:"elementIndex"`
+	// Type is what parked: "job" (a service-task job whose retries ran out) or
+	// "timer" (a job-less timer whose FEEL schedule stopped resolving, ADR-0064/0111).
+	Type     string `json:"type"`
+	RaisedAt int64  `json:"raisedAt"`
+	Message  string `json:"message"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -894,6 +943,39 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// collectDefIncidents adds the unresolved incidents of one definition to the overlay.
+// An incident carries its process instance, not its definition (model.IncidentValue),
+// so each candidate costs one point lookup to attribute — and attribute it must: a
+// compiled element index is only meaningful within its own definition, so an incident
+// let through from another one would mark a completely unrelated shape.
+//
+// The work is bounded twice, by how far it reads and by how much it returns, because
+// this runs on the run loop under a 1.5-second poll: a definition whose own tokens are
+// healthy must not pay an unbounded scan because some other definition has thousands
+// parked behind a broken connector. A bound that bites marks the page truncated, which
+// is what tells the browser its per-element counts are a floor rather than a total.
+func (s *Server) collectDefIncidents(defKey uint64, add func(uint64, *model.IncidentValue) bool, resp *runtimeResp) error {
+	scanned := 0
+	return unlessTruncated(s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+		if scanned++; scanned > maxRuntimeIncidentScan {
+			resp.IncidentsTruncated = true
+			return errListTruncated
+		}
+		pi, ok, err := s.store.ProcessInstance(v.ProcessInstanceKey)
+		if err != nil {
+			return err
+		}
+		if !ok || pi.ProcessDefKey != defKey {
+			return nil
+		}
+		if add(elKey, v) {
+			resp.IncidentsTruncated = true
+			return errListTruncated
+		}
+		return nil
+	}))
+}
+
 // handleProcessRuntime returns, for one definition, how many instances are live
 // and how many tokens (element instances) currently sit on each BPMN element —
 // the data the browser overlays onto the diagram. An optional ?instance=<key>
@@ -917,7 +999,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	var (
 		found   bool
 		scanErr error
-		resp    = runtimeResp{Elements: []runtimeElement{}}
+		resp    = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -946,6 +1028,26 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
+		// addIncident records one parked element instance on the overlay: a count on
+		// the element (so the diagram can mark the shape) and the detail behind it (so
+		// the panel can say why and offer the resolve). Full is the response cap.
+		addIncident := func(elKey uint64, v *model.IncidentValue) (full bool) {
+			e := get(v.ElementId)
+			if e == nil {
+				return false
+			}
+			e.Incidents++
+			resp.Incidents = append(resp.Incidents, runtimeIncident{
+				ElementInstanceKey: elKey,
+				ProcessInstanceKey: v.ProcessInstanceKey,
+				JobKey:             v.JobKey,
+				ElementID:          e.ElementID,
+				RaisedAt:           v.RaisedAt,
+				Message:            v.Message,
+			})
+			return len(resp.Incidents) >= maxRuntimeIncidents
+		}
+
 		if instanceFilter == 0 {
 			// Aggregate over the whole definition: read the maintained per-element
 			// and per-definition counters (ADR-0080). This is O(elements), never a
@@ -968,7 +1070,9 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 					}
 					return nil
 				}); scanErr == nil {
-					resp.Instances, scanErr = s.store.DefInstanceCount(key)
+					if resp.Instances, scanErr = s.store.DefInstanceCount(key); scanErr == nil {
+						scanErr = s.collectDefIncidents(key, addIncident, &resp)
+					}
 				}
 			}
 		} else {
@@ -976,13 +1080,25 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			// action, not the default view): the overlay walks instances filtered to
 			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
 			// aggregate default view above is what mattered for scale).
-			if scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+			if scanErr = s.store.ActiveElementInstances(func(elKey uint64, v *model.ElementInstanceValue) error {
 				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
 					return nil
 				}
 				if e := get(v.ElementId); e != nil {
 					e.Tokens++
 					resp.Tokens++
+				}
+				// One point lookup per token this instance holds: an element instance is
+				// where an incident hangs (ADR-0061), so the walk that draws the tokens
+				// also finds every reason one of them is not moving.
+				if len(resp.Incidents) < maxRuntimeIncidents {
+					inc, err := s.store.GetIncident(elKey)
+					if err != nil {
+						return err
+					}
+					if inc != nil && addIncident(elKey, inc) {
+						resp.IncidentsTruncated = true
+					}
 				}
 				return nil
 			}); scanErr == nil {
@@ -3117,8 +3233,21 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// incidentType names what an incident parked, the distinction the operator views
+// label: a job incident holds a service-task job whose retries ran out; a job-less
+// incident is a timer whose FEEL schedule stopped resolving (ADR-0064/0111).
+func incidentType(v *model.IncidentValue) string {
+	if v.JobKey != 0 {
+		return "job"
+	}
+	return "timer"
+}
+
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0061).
+// view (ADR-0061). Optionally scoped to one process instance (?instance=) or one
+// deployed definition (?process=): the replay badges a single instance's incidents
+// and the live view a whole version's, and neither should have to pull the server's
+// entire — page-capped — incident list to find its own (ADR-0151).
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
@@ -3131,23 +3260,82 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			limit = maxTaskListMax
 		}
 	}
+	var instanceFilter, processFilter uint64
+	for _, f := range []struct {
+		name string
+		dst  *uint64
+	}{{"instance", &instanceFilter}, {"process", &processFilter}} {
+		q := strings.TrimSpace(r.URL.Query().Get(f.name))
+		if q == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid "+f.name+" (want a key)")
+			return
+		}
+		*f.dst = n
+	}
 	list := []incidentView{}
 	truncated := false
 	var scanErr error
 	s.do(func() {
+		// One instance is looked up once however many of its elements are stuck, and
+		// a flood of incidents is usually a flood on few instances.
+		type instanceCtx struct {
+			defKey    uint64
+			processID string
+			cp        *compiler.CompiledProcess
+		}
+		resolved := map[uint64]instanceCtx{}
+		lookup := func(piKey uint64) (instanceCtx, error) {
+			if ctx, ok := resolved[piKey]; ok {
+				return ctx, nil
+			}
+			var ctx instanceCtx
+			pi, ok, err := s.store.ProcessInstance(piKey)
+			if err != nil {
+				return ctx, err
+			}
+			if ok {
+				ctx.defKey = pi.ProcessDefKey
+				if d, ok := s.deployments[pi.ProcessDefKey]; ok {
+					ctx.processID, ctx.cp = d.ProcessID, d.cp
+				}
+			}
+			resolved[piKey] = ctx
+			return ctx, nil
+		}
 		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
+				return nil
+			}
+			ctx, err := lookup(v.ProcessInstanceKey)
+			if err != nil {
+				return err
+			}
+			if processFilter != 0 && ctx.defKey != processFilter {
+				return nil
+			}
 			if len(list) >= limit {
 				truncated = true
 				return errListTruncated // page full: bound the response even under a flood of failures
 			}
-			list = append(list, incidentView{
+			view := incidentView{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
+				ProcessDefKey:      ctx.defKey,
+				ProcessID:          ctx.processID,
 				JobKey:             v.JobKey,
-				ElementId:          v.ElementId,
+				ElementIndex:       v.ElementId,
+				Type:               incidentType(v),
 				RaisedAt:           v.RaisedAt,
 				Message:            v.Message,
-			})
+			}
+			if ctx.cp != nil {
+				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+			}
+			list = append(list, view)
 			return nil
 		})
 		scanErr = unlessTruncated(err)

@@ -277,7 +277,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
@@ -531,6 +531,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
+
+		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
+			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors",
+			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
+
+		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{
+			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Connectors", resp: jsonBody("Outbox", tObject())}},
+		{"DELETE", "/api/v1/mail/outbox", s.handleClearMailOutbox, apiOp{
+			summary: "Empty the preview mail outbox", tag: "Connectors", status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", resp: jsonBody("Subscriptions", tArray())}},

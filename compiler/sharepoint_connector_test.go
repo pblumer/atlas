@@ -146,3 +146,57 @@ func TestParseSharePointConnectorErrors(t *testing.T) {
 		}
 	}
 }
+
+// sharePointCamelBPMN is the same task under the tag the Modeler writes. bpmn-js
+// derives an element's tag from its moddle type by lowercasing only the first
+// letter, so the type SharePointConnector serializes as <atlas:sharePointConnector>
+// — with a capital P — while hand-authored models use the all-lowercase spelling
+// above.
+const sharePointCamelBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="contoso" site="contoso.sharepoint.com,/sites/ops"
+                                   list="Incidents" resultVariable="created">
+          <atlas:itemField name="Title" value="Order shipped"/>
+        </atlas:sharePointConnector>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestParseSharePointConnectorCamelTag: a SharePoint task authored in the Modeler
+// must compile exactly like the hand-authored one. Go's XML matching is
+// case-sensitive, so before both spellings were read this task parsed as an
+// ordinary, unconfigured service task — its configuration sitting in the XML,
+// silently ignored, with no error to notice.
+func TestParseSharePointConnectorCamelTag(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(sharePointCamelBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	node := cp.Node(task)
+	if node.Type != TypeConnectorTask {
+		t.Fatalf("task node type = %v, want ConnectorTask — the Modeler's tag was ignored", node.Type)
+	}
+	d := cp.ConnectorTask(node.Detail)
+	if d.JobType != SharePointJobTypeIndex {
+		t.Errorf("jobType index = %d, want SharePointJobTypeIndex %d", d.JobType, SharePointJobTypeIndex)
+	}
+	if got := cp.Intern(d.Connector); got != "contoso" {
+		t.Errorf("connector = %q, want contoso", got)
+	}
+	if d.List.Literal != "Incidents" {
+		t.Errorf("list = %+v, want Incidents", d.List)
+	}
+	if len(d.Fields) != 1 || d.Fields[0].Name != "Title" {
+		t.Errorf("fields = %+v, want the Title item field", d.Fields)
+	}
+}

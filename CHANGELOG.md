@@ -14,6 +14,99 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A mail task you can run before you own a mail server**
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail
+  connector can now use the **`preview`** provider, which asks for no submission host
+  and no OAuth credential — it frames the message with the very same code the SMTP and
+  Gmail providers send and delivers it to an in-server outbox, readable under
+  **Operations › Outbox** (and over `GET /api/v1/mail/outbox`, or the `atlas_mail_outbox`
+  MCP tool). What you read there is the RFC 5322 message that would have gone on the
+  wire, so a preview run proves something about the message and not just about the
+  model. The same sender/recipient checks a real provider applies are applied here, so
+  it is a rehearsal rather than a bypass. The outbox is bounded and not durable:
+  nothing in it was ever sent, and nothing in it survives a restart.
+- **The live diagram says why a token is not moving** (ADR-0150): the runtime overlay
+  now carries the unresolved incidents on a definition, so the Operations live view
+  marks a parked element red, badges it with the failure's own message, and offers
+  **Resolve & retry** next to the diagram. Previously a token parked behind an incident
+  was drawn identically to one legitimately waiting for a worker — the engine had been
+  raising the incident correctly (ADR-0061) since the first failure, but only the
+  separate Incidents view ever showed it.
+
+- **A connector can be checked before it is trusted with anything**
+  ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): the
+  connector form has a **Test connection** button, and every configured mail connector
+  a **Test** action. The check runs against what is *typed* — nothing is saved to run it
+  — and each provider answers the question its own configuration raises: SMTP opens the
+  session a send opens (connect, STARTTLS, authenticate) and hangs up without a message;
+  Gmail and Microsoft Graph acquire an access token, which is exactly the step a revoked
+  or expired refresh token fails at; preview confirms it has an outbox. Give the check a
+  recipient and it sends a real test message instead, the only thing that proves
+  delivery. Both failures behind the outage this release fixes — a revoked Gmail refresh
+  token and an endpoint that could not dial — are now answered in a second, at the form,
+  by the person who typed them.
+
+- **The step-by-step replay says why an instance stopped**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)): ADR-0150 put a parked
+  token on the *live* diagram; the replay — the view whose whole purpose is
+  reconstructing what an instance did — still drew the stuck element like any other. It
+  now keeps that element outlined at **every** position of the playhead (an incident is a
+  fact about now, not about the frame being replayed), flags its row in the Instance
+  History, counts incidents beside the instance state, and resolves from the Details
+  panel with the same one-click **Resolve & retry** the live view offers. It costs no new
+  endpoint: the incidents ride the per-instance runtime overlay the replay already polls.
+
+- **The Instances overview flags what is stuck** (ADR-0151): a per-process **Incidents**
+  column that links to the *version* actually holding them — not the latest, which is the
+  wrong diagram whenever the fault sits on an older one — and a flag on any
+  variable-search hit that is parked. A stuck instance is counted as *running* like any
+  other, so "3 running" read as healthy while one of the three had not moved in a week.
+  Counts come from the incident list, not from the per-definition summary, which stays
+  O(1) per definition (ADR-0083); a page-capped count says so instead of quietly
+  undercounting.
+
+- **`GET /api/v1/incidents` can be scoped** (ADR-0151): `?instance=` for one process
+  instance, `?process=` for one deployed definition — also on the `atlas_list_incidents`
+  MCP tool. A client that wants one instance's incidents no longer pulls every incident
+  on the server and hopes its own survive the 5000-row page cap.
+
+### Changed
+
+- **Breaking (HTTP API): `elementId` in the incident list is now the BPMN diagram id**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)). The list previously
+  returned the *compiled-graph* element index under that name, which no view can draw
+  with and which contradicts every other endpoint, where `elementId` is the diagram id.
+  The integer survives under its own name, `elementIndex`. The list also gained
+  `processDefKey`, `processId` and `type` (`"job"` or `"timer"`), all resolved on read —
+  the durable `IncidentValue` is unchanged, so `applyToState` and replay are untouched.
+
+- **The incidents table's instance link works** (ADR-0151). It fed a *process instance*
+  key to the live view's *definition* route, so the link never landed on the instance it
+  named; it now opens that instance on its version's live diagram, with a replay link
+  beside it. Its resolve prompt became a dialog with room to say that a timer incident
+  re-arms and ignores the retry count.
+
+
+### Fixed
+
+- **The SMTP client speaks over one transport that a check can share** (ADR-0150,
+  ADR-0149): the send no longer goes through `net/smtp.SendMail` but through a session
+  Atlas opens itself — the shared connector call budget as its ceiling, TLS from the
+  first byte on the submissions port (465), STARTTLS wherever a server offers it,
+  authentication after the upgrade, then the envelope. Each step names itself, so a
+  rejection points at the address it was about ("recipient x@y refused") instead of at
+  the send as a whole, and a connector check walks the same connection a send does. A
+  send is also bounded by the context of the job that asked for it, which it never was
+  before.
+- **An SMTP endpoint written without a port is completed instead of failing at send
+  time** (ADR-0150): `mail.example.com` now becomes `mail.example.com:587` (and
+  `smtps://…` becomes `:465`), a pasted URL's path is dropped, a bare IPv6 literal is
+  bracketed, and an endpoint that cannot dial — a mailbox address in the server field,
+  a non-numeric port — is refused with a message naming what was typed. This runs on
+  create, on `PATCH /api/v1/connectors/{id}` (which carries no kind or provider and so
+  never reached the create validator at all), and when the client is built, so a
+  connector already stored in the old shape starts working instead of parking one token
+  per attempt behind `dial tcp: missing port in address`.
 - **Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN**: the new
   `atlas import-mim` command converts a MIM/FIM XOML workflow — or an
   `Export-FIMConfig` XML that embeds one — into deployable BPMN 2.0. Control flow
@@ -123,6 +216,42 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   guessed from the name. **Which** instance is a picker in the pane, since the one that took the
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
+
+- **Distributed traces, opt-in** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
+  collector — `--trace-endpoint http://collector:4318`, or the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` — and every `/api/v1` request is exported as an
+  OpenTelemetry server span. Off unless configured. Metrics say *that* a request was
+  slow; a trace says *where* the time went, and an incoming W3C `traceparent` is
+  continued, so a request arriving from another traced service lands in that trace
+  instead of starting an island.
+
+  **The engine is not traced, and a test enforces it.** A span costs an allocation, a
+  clock read and a lock — nothing next to an HTTP request, all three per batch on the
+  goroutine that owns the partition. `TestTheWriterIsNeverInstrumented` fails if
+  `engine`, `state`, `wal`, `model`, `compiler` or `checkpoint` ever imports a tracing
+  package. Probes and the metrics scrape are not traced either: they run forever on a
+  timer and would bury the spans someone is looking for.
+
+  **Span names are bounded by the code, not by traffic** — the same rule the metric
+  labels are under. A span is named for the route *pattern*
+  (`GET /api/v1/instances/{key}`), never the URL that matched it, and the attributes are
+  method, route and status; the raw target and query string are not recorded, so a key
+  cannot ride along into a backend's index.
+
+  The exporter is written here rather than taken off the shelf, and that is the
+  dependency decision: the official OTLP exporter pulls in protobuf and — even in its
+  HTTP form — gRPC, 66 gRPC packages and about 13MB of binary, for a service that speaks
+  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so Atlas takes
+  the OpenTelemetry API and SDK for the parts that are spec-bound and subtle (span model,
+  sampling, batching, W3C propagation) and writes the serializer. Measured: **+1.7MB and
+  five modules, no protobuf, no gRPC.**
+
+  Three deliberate limits: a 4xx is not an error (it is the caller being told no, and
+  counting it as a server failure makes the error rate meaningless), a caller that
+  already sampled is always honored whatever `--trace-sample-ratio` says (a
+  half-recorded distributed trace is worse than none), and a collector that is down
+  cannot take the server with it — export runs on its own goroutine after the response.
 
 - **Logs with names you can alert on** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line Atlas

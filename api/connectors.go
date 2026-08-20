@@ -1,15 +1,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
@@ -145,8 +148,9 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 // buildClioClients; a mail connector has no environment base (its provider and
 // credentials are managed only). Provider dispatch (SMTP, Gmail, Microsoft Graph)
 // lives in mail.NewProviderClient; a record whose provider is misconfigured — an
-// unparseable credential bundle, a missing field — is skipped (its tasks park) rather
-// than failing the whole rebuild. The resolved secret is an SMTP password or, for a
+// unparseable credential bundle, a missing field, an endpoint that names no host — is
+// skipped (its tasks park) rather than failing the whole rebuild. The preview provider
+// (ADR-0150) needs no credential at all and is handed the server's outbox instead. The resolved secret is an SMTP password or, for a
 // native provider, the OAuth credential JSON bundle held in the vault (I6).
 func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	clients := map[string]mail.Client{}
@@ -162,15 +166,16 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 		if provider == "" {
 			provider = mail.ProviderSMTP
 		}
-		// SMTP needs a submission endpoint; the native providers default their API base.
-		if provider == mail.ProviderSMTP && strings.TrimSpace(c.Endpoint) == "" {
-			continue
-		}
+		// SMTP needs a submission endpoint and the native providers a credential;
+		// mail.NewProviderClient is the single judge of both, so a record it cannot
+		// build is skipped below rather than pre-screened here.
 		client, err := mail.NewProviderClient(mail.ProviderConfig{
 			Provider: provider,
 			Endpoint: strings.TrimSpace(c.Endpoint),
 			Sender:   strings.TrimSpace(c.Sender),
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Name:     c.Name,
+			Outbox:   s.mailOutbox,
 		})
 		if err != nil {
 			continue // misconfigured provider: its tasks park until it is fixed (ADR-0093)
@@ -395,9 +400,10 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		rec     connector
-		found   bool
-		saveErr error
+		rec        connector
+		found      bool
+		saveErr    error
+		badRequest string
 	)
 	s.do(func() {
 		var e error
@@ -421,6 +427,12 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
 		}
+		// The updated record has to satisfy what a create would have demanded of it —
+		// an SMTP endpoint that dials, above all — or the change is refused here
+		// instead of parking a token later (ADR-0150).
+		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
+			return
+		}
 		if saveErr = s.connectors.Save(rec); saveErr != nil {
 			return
 		}
@@ -432,6 +444,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
+		return
+	case badRequest != "":
+		httpapi.Error(w, http.StatusBadRequest, badRequest)
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, rec)
@@ -561,4 +576,145 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		"scope":          scope,
 		"keyName":        keyName,
 	})
+}
+
+// handleMailOutbox lists what the preview mail provider has delivered, newest first —
+// the Outbox view in Operations (ADR-0150). An optional ?limit= returns only the
+// newest n; the response's "truncated" says older messages were left behind, by that
+// limit or by the outbox's own capacity.
+//
+// It deliberately does not go through s.do: the outbox is not run-loop state. A mail
+// worker writes it off the loop after fsync and the outbox holds its own lock, so
+// reading it here keeps the single writer free for the engine's own work, and a
+// browser polling the view can never slow a running process down.
+func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
+	limit := 0 // everything the outbox holds — it is capacity-bounded already
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	msgs, truncated := []mail.OutboxMessage{}, false
+	if s.mailOutbox != nil {
+		msgs, truncated = s.mailOutbox.Messages(limit)
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{"messages": msgs, "truncated": truncated})
+}
+
+// handleClearMailOutbox empties the preview outbox. Nothing here was ever sent and
+// nothing survives a restart, so clearing it destroys no record of anything —
+// it is the "start from a clean slate" the next trial run wants.
+func (s *Server) handleClearMailOutbox(w http.ResponseWriter, _ *http.Request) {
+	if s.mailOutbox != nil {
+		s.mailOutbox.Clear()
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// connectorTestTimeout backstops a connector check. Each attempt inside it is already
+// bounded by the shared connector call budget (ADR-0149) — this only bounds a check
+// that somehow outlives its own transport, so that a person waiting in front of the
+// form always gets an answer.
+const connectorTestTimeout = 2 * nettimeout.Default
+
+// connectorTestReq is the body of a connector check: the connector's own fields — the
+// same shape a create takes, so the form can check what is *typed*, before it is
+// saved, which is the moment a mistake is cheapest to fix — plus an optional
+// recipient. Without a recipient the check stops at the door: connect, upgrade,
+// authenticate. With one it sends a real message, the only way to learn what the
+// provider does with a message rather than with a connection.
+type connectorTestReq struct {
+	createConnectorParams
+	To string `json:"to"`
+}
+
+// handleTestConnector checks a mail connector and reports what happened in words the
+// person who typed it can act on (ADR-0150).
+//
+// It exists because every failure this catches used to be discovered the same way: a
+// process ran, a token parked, and an incident carried the provider's error to
+// whoever thought to look for it, hours later and far from the form where the mistake
+// was made. A revoked refresh token, a host that does not resolve, a password the
+// server rejects — all of them are answerable in a second at configuration time, and
+// none of them were being asked.
+//
+// A failed check is a 200 carrying ok:false, not an HTTP error: the request was
+// served correctly and the answer is "no". Only a malformed or unusable request
+// (a kind with nothing to check, an endpoint that cannot dial) is a 400. The vault
+// read rides the run loop because the store's owner is the run loop; the network call
+// never does (I3).
+func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
+	var req connectorTestReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = connectorKindMail
+	}
+	if req.Kind != connectorKindMail {
+		httpapi.Error(w, http.StatusBadRequest, "only a mail connector can be checked today")
+		return
+	}
+	if msg := validateMailConnector(&req.createConnectorParams); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	var secret string
+	s.do(func() { secret = s.resolveConnectorSecret(req.CredentialsRef) })
+
+	client, err := mail.NewProviderClient(mail.ProviderConfig{
+		Provider: req.Provider,
+		Endpoint: req.Endpoint,
+		Sender:   req.Sender,
+		Secret:   secret,
+		Name:     req.Name,
+		Outbox:   s.mailOutbox,
+	})
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), connectorTestTimeout)
+	defer cancel()
+
+	to := strings.TrimSpace(req.To)
+	if to == "" {
+		err = mail.Probe(ctx, client)
+	} else {
+		err = client.Send(ctx, mail.Message{
+			To:      []string{to},
+			Subject: "Atlas connector test",
+			Body: "This is a test message from the Atlas connector \"" + req.Name + "\".\n\n" +
+				"It was sent from the connector form, not by a process. If it reached you, " +
+				"the connector can deliver mail.\n",
+		})
+	}
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": err.Error()})
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true, "detail": connectorTestDetail(req.Provider, req.Endpoint, to)})
+}
+
+// connectorTestDetail says what the check actually proved, rather than "OK" — the
+// difference between "the credential was accepted" and "a message was delivered"
+// matters to whoever has to decide the connector is finished.
+func connectorTestDetail(provider, endpoint, to string) string {
+	switch {
+	case to != "" && provider == mail.ProviderPreview:
+		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
+	case to != "":
+		return "Test message sent to " + to + ". If it does not arrive, the message left Atlas and the provider still has it."
+	case provider == mail.ProviderPreview:
+		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
+	case provider == mail.ProviderSMTP:
+		return "Connected to " + endpoint + " and authenticated. No message was sent."
+	default:
+		return "Credential accepted — the provider issued an access token. No message was sent."
+	}
 }

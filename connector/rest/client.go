@@ -31,6 +31,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // Request is one HTTP call a REST connector task makes. URL is the full,
@@ -71,10 +73,13 @@ type HTTPClient struct {
 	http *http.Client
 }
 
-// NewHTTPClient builds a REST HTTP client backed by http.DefaultClient. A
-// configurable timeout is a follow-up (ADR-0067).
+// NewHTTPClient builds a REST HTTP client bounded by the shared connector call
+// budget (nettimeout.Default). The worker runs on the run-loop goroutine, so an
+// unbounded call would let a hung host stall the whole engine; see the
+// nettimeout package doc. A per-connector configurable timeout is a follow-up
+// (ADR-0067).
 func NewHTTPClient() *HTTPClient {
-	return &HTTPClient{http: http.DefaultClient}
+	return &HTTPClient{http: nettimeout.HTTPClient()}
 }
 
 func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {

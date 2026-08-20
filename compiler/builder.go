@@ -752,15 +752,25 @@ func (b *Builder) AddClioReadTask(connector, subject, resultVar string, limit, r
 }
 
 // RestAuth is a REST connector task's authentication config. Type is "", "basic",
-// "bearer", or "apiKey". Username (basic) and ApiKeyName (the apiKey header name)
-// are model data. SecretRef names a server-side secret (ADR-0041) — the basic
-// password, bearer token, or api-key value — resolved at runtime; the secret value
-// itself is never authored in the model or stored here.
+// "bearer", "apiKey", or "oauth2". Username (basic), ApiKeyName (the apiKey header
+// name), ClientID/TokenURL/Scope (oauth2 client-credentials) are model data.
+// SecretRef names a server-side secret (ADR-0041) — the basic password, bearer
+// token, api-key value, or oauth2 client secret — resolved at runtime; the secret
+// value itself is never authored in the model or stored here.
+//
+// For Type "oauth2" the worker performs a client-credentials grant (ADR-0152):
+// TokenURL is the token endpoint, ClientID the client identifier, SecretRef the
+// client secret reference, and Scope the optional space-delimited scopes; the
+// fetched access token is attached as a Bearer credential and cached until it
+// nears expiry.
 type RestAuth struct {
 	Type       string `json:"type,omitempty"`
 	Username   string `json:"username,omitempty"`
 	ApiKeyName string `json:"apiKeyName,omitempty"`
 	SecretRef  string `json:"secretRef,omitempty"`
+	TokenURL   string `json:"tokenUrl,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
+	Scope      string `json:"scope,omitempty"`
 }
 
 // RestConfig is the deploy-time configuration of an HTTP-REST connector task
