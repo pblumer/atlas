@@ -12,8 +12,9 @@ const (
 )
 
 // emitBPMN renders the accumulated nodes and flows as a BPMN 2.0 <definitions>
-// document. It carries no diagram interchange (DI): the model is semantically
-// complete and deployable; layout is left to the Modeler's auto-layout.
+// document, including a diagram-interchange (DI) plane laid out left-to-right by
+// layout(). The DI matters: the Modeler's canvas renders from it, so an import
+// without DI opens blank — the model is complete but invisible until laid out.
 func (b *builder) emitBPMN(root xnode) []byte {
 	procID := b.report.ProcessID
 	var s strings.Builder
@@ -21,6 +22,9 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	fmt.Fprintf(&s, `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"`+"\n")
 	fmt.Fprintf(&s, `             xmlns:atlas=%q`+"\n", nsAtlas)
 	fmt.Fprintf(&s, `             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"`+"\n")
+	fmt.Fprintf(&s, `             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"`+"\n")
+	fmt.Fprintf(&s, `             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"`+"\n")
+	fmt.Fprintf(&s, `             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"`+"\n")
 	fmt.Fprintf(&s, `             id="defs_%s" targetNamespace=%q>`+"\n", procID, nsMIM)
 	fmt.Fprintf(&s, `  <process id=%q name=%q isExecutable="true">`+"\n", procID, attr(b.name))
 
@@ -34,8 +38,10 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	for _, f := range b.flows {
 		emitFlow(&s, f)
 	}
-
 	s.WriteString("  </process>\n")
+
+	b.emitDI(&s, b.layout())
+
 	s.WriteString("</definitions>\n")
 	return []byte(s.String())
 }
