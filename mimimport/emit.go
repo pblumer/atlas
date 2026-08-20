@@ -28,9 +28,16 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	fmt.Fprintf(&s, `             id="defs_%s" targetNamespace=%q>`+"\n", procID, nsMIM)
 	fmt.Fprintf(&s, `  <process id=%q name=%q isExecutable="true">`+"\n", procID, attr(b.name))
 
+	meta := workflowMeta(root)
+	metaNote := ""
+	if len(meta) > 0 {
+		metaNote = " Workflow-Metadaten (ActorId, RequestId, TargetId, WorkflowDefinitionId …) sind in atlas:mimWorkflow erhalten."
+	}
 	fmt.Fprintf(&s, "    <documentation>%s</documentation>\n", text(fmt.Sprintf(
-		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). %d nativ, %d erhalten, %d manuell zu prüfen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten.",
-		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview))))
+		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). %d nativ, %d erhalten, %d manuell zu prüfen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten.%s",
+		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview), metaNote)))
+
+	emitWorkflowMeta(&s, root, meta)
 
 	for _, n := range b.nodes {
 		b.emitNode(&s, n)
@@ -104,6 +111,35 @@ func emitFlow(s *strings.Builder, f bflow) {
 	fmt.Fprintf(s, "    <sequenceFlow id=%q sourceRef=%q targetRef=%q%s>\n", f.id, f.from, f.to, name)
 	fmt.Fprintf(s, "      <conditionExpression>%s</conditionExpression>\n", text(f.cond))
 	s.WriteString("    </sequenceFlow>\n")
+}
+
+// workflowMeta returns the attributes to preserve from the workflow root —
+// MIM's request/actor/target/definition GUIDs, the x:Class/x:Name handles and
+// the CLR-namespace/assembly declarations that identify the activity library.
+// It fires only for a *Workflow* container: a bare-activity or generic-wrapper
+// root has no workflow-level identity, and its own attributes are already kept
+// on the leaf node's atlas:mimSource, so preserving them here would duplicate.
+func workflowMeta(root xnode) []xml.Attr {
+	if !strings.Contains(strings.ToLower(root.local()), "workflow") {
+		return nil
+	}
+	return root.Attrs
+}
+
+// emitWorkflowMeta writes the preserved workflow-level metadata as a
+// process-scoped <atlas:mimWorkflow> extension, one <atlas:mimProperty> per
+// root attribute. Nothing is emitted when there is no metadata to keep.
+func emitWorkflowMeta(s *strings.Builder, root xnode, meta []xml.Attr) {
+	if len(meta) == 0 {
+		return
+	}
+	s.WriteString("    <extensionElements>\n")
+	fmt.Fprintf(s, "      <atlas:mimWorkflow activity=%q>\n", attr(root.local()))
+	for _, a := range meta {
+		fmt.Fprintf(s, "        <atlas:mimProperty name=%q value=%q/>\n", attr(attrName(a)), attr(a.Value))
+	}
+	s.WriteString("      </atlas:mimWorkflow>\n")
+	s.WriteString("    </extensionElements>\n")
 }
 
 // attr escapes a string for use in a double-quoted XML attribute.

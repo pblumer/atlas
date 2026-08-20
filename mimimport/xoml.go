@@ -37,8 +37,11 @@ func (n xnode) attr(names ...string) (string, bool) {
 
 // displayName picks the most human-readable label MIM/WF activities carry,
 // falling back to the element's local name so a node is never nameless.
+// ActivityDisplayName comes first: MIMWAL activities (UpdateResources,
+// SendEmailNotification, …) label themselves with it, while their x:Name is a
+// generated handle like "actionActivity6" that carries no meaning.
 func (n xnode) displayName() string {
-	if v, ok := n.attr("DisplayName", "Description", "Title", "Name"); ok {
+	if v, ok := n.attr("ActivityDisplayName", "DisplayName", "Description", "Title", "Name"); ok {
 		if s := strings.TrimSpace(v); s != "" {
 			return s
 		}
@@ -55,14 +58,7 @@ func (n xnode) raw() string {
 	b.WriteByte('<')
 	b.WriteString(n.local())
 	for _, a := range n.Attrs {
-		name := a.Name.Local
-		if a.Name.Space != "" {
-			// Keep a readable prefix for xmlns-qualified attributes (e.g. x:Name).
-			if p := lastSegment(a.Name.Space); p != "" {
-				name = p + ":" + a.Name.Local
-			}
-		}
-		fmt.Fprintf(&b, ` %s="%s"`, name, attr(a.Value))
+		fmt.Fprintf(&b, ` %s="%s"`, attrName(a), attr(a.Value))
 	}
 	inner := strings.TrimSpace(n.Inner)
 	if inner == "" {
@@ -73,6 +69,18 @@ func (n xnode) raw() string {
 	b.WriteString(inner)
 	fmt.Fprintf(&b, "</%s>", n.local())
 	return b.String()
+}
+
+// attrName renders an attribute's name, keeping a readable prefix for
+// namespace-qualified attributes (e.g. x:Name, xmlns:ns0) so the source
+// survives a round trip.
+func attrName(a xml.Attr) string {
+	if a.Name.Space != "" {
+		if p := lastSegment(a.Name.Space); p != "" {
+			return p + ":" + a.Name.Local
+		}
+	}
+	return a.Name.Local
 }
 
 func lastSegment(ns string) string {

@@ -75,6 +75,57 @@ func TestConvertApprovalWorkflow(t *testing.T) {
 	}
 }
 
+// TestConvertMIMWALSequential guards the extraction of the three information
+// classes a raw MIMWAL SequentialWorkflow carries beyond its bare activity list:
+// the workflow-level identity metadata, the ActivityDisplayName labels, and the
+// per-activity ActivityExecutionCondition gates (as attribute and as property
+// element).
+func TestConvertMIMWALSequential(t *testing.T) {
+	src, err := os.ReadFile("testdata/mimwal-sequential.xoml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(bytes.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+
+	bpmn := string(res.BPMN)
+	wants := []string{
+		`<atlas:mimWorkflow`,          // workflow-level metadata preserved
+		`name="WorkflowDefinitionId"`, // the MIM identity GUIDs are kept
+		`name="ActorId"`,
+		`Version=2.20.723.0`, // the activity-library assembly/version survived
+		// ActivityDisplayName drives the node label instead of the x:Name handle.
+		`name="Global - Get CoreMIMConfiguration Parameter"`,
+		// Both condition forms are surfaced on the task documentation.
+		`ConvertToBoolean(//WorkflowData/HasStructureResponsibilities)`,
+		`ConvertToBoolean(//Target/PersonType/UseSuffixAccountName)`,
+	}
+	for _, w := range wants {
+		if !strings.Contains(bpmn, w) {
+			t.Errorf("generated BPMN is missing %q\n---\n%s", w, bpmn)
+		}
+	}
+
+	// The generated node must not be labelled by the meaningless x:Name handle.
+	if strings.Contains(bpmn, `name="actionActivity6"`) {
+		t.Errorf("node was labelled by x:Name handle instead of ActivityDisplayName:\n%s", bpmn)
+	}
+
+	// Each of the three execution conditions must be flagged for manual review.
+	conds := 0
+	for _, n := range res.Report.Notes {
+		if strings.HasPrefix(n.Detail, "ActivityExecutionCondition not translated") {
+			conds++
+		}
+	}
+	if conds != 3 {
+		t.Errorf("expected 3 ActivityExecutionCondition review notes, got %d\n%s", conds, res.Report.String())
+	}
+}
+
 func TestConvertExportWrapper(t *testing.T) {
 	// A miniature Export-FIMConfig shape: the workflow XOML lives, escaped, inside
 	// an <AttributeType> named XOML. The converter must locate and unescape it.

@@ -1,0 +1,19 @@
+<ns0:SequentialWorkflow x:Name="SequentialWorkflow" x:Class="SequentialWorkflow"
+    ActorId="00000000-0000-0000-0000-000000000000"
+    RequestId="00000000-0000-0000-0000-000000000000"
+    TargetId="00000000-0000-0000-0000-000000000000"
+    WorkflowDefinitionId="00000000-0000-0000-0000-000000000000"
+    xmlns:ns0="clr-namespace:MicrosoftServices.IdentityManagement.WorkflowActivityLibrary.Activities;Assembly=MicrosoftServices.IdentityManagement.WorkflowActivityLibrary, Version=2.20.723.0"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ns0:UpdateResources x:Name="actionActivity6" ActivityDisplayName="Global - Get CoreMIMConfiguration Parameter" Advanced="True" />
+  <ns0:UpdateResources x:Name="actionActivity4" ActivityDisplayName="Get necessary values / Set Template" Advanced="True" />
+  <ns0:UpdateResources x:Name="actionActivity8"
+      ActivityDisplayName="Format Table Responsibilities (Structure)" Advanced="True"
+      ActivityExecutionCondition="ConvertToBoolean(//WorkflowData/HasStructureResponsibilities) Or ConvertToBoolean(//WorkflowData/HasDisableInheritanceResponsibilities)" />
+  <ns0:SendEmailNotification x:Name="actionActivity2"
+      ActivityDisplayName="Send Mail &quot;responsibilities&quot; to specified mail recipient"
+      ActivityExecutionCondition="ConvertToBoolean(//WorkflowData/HasResponsibilities) And ConvertToBoolean(//WorkflowData/PersonTransitionInGracePeriod)" />
+  <ns0:UpdateResources x:Name="actionActivity11" ActivityDisplayName="Set attributes in Grace Period - AccountName Suffix" Advanced="True">
+    <ns0:UpdateResources.ActivityExecutionCondition>ConvertToBoolean(//Target/PersonType/UseSuffixAccountName)</ns0:UpdateResources.ActivityExecutionCondition>
+  </ns0:UpdateResources>
+</ns0:SequentialWorkflow>

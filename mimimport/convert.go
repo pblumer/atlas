@@ -340,18 +340,50 @@ func (b *builder) setDefault(gwID, flowID string) {
 
 // emitLeaf maps a single (non-control-flow) activity to a BPMN task and records
 // its status. The original activity is preserved on every leaf.
+//
+// A MIMWAL activity may carry an ActivityExecutionCondition — a gate that, at
+// MIM runtime, decides whether the step runs at all. BPMN has no per-task
+// execution guard, so the condition cannot be translated in a first pass; it is
+// surfaced on the task's documentation and flagged for manual review rather
+// than left buried in the preserved source.
 func (b *builder) emitLeaf(n xnode) string {
 	kind, jobType, status, detail := classifyLeaf(n.local())
+	doc := detail
+	cond, hasCond := executionCondition(n)
+	if hasCond {
+		doc += " · Ausführungsbedingung (Original, nicht nach FEEL übersetzt): " + cond
+	}
 	id := b.addNode(bnode{
 		kind:    kind,
 		name:    n.displayName(),
 		jobType: jobType,
 		rawName: n.local(),
 		raw:     n.raw(),
-		doc:     detail,
+		doc:     doc,
 	})
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
+	if hasCond {
+		b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: StatusManualReview,
+			Detail: "ActivityExecutionCondition not translated to FEEL: " + cond})
+	}
 	return id
+}
+
+// executionCondition returns a MIMWAL activity's ActivityExecutionCondition, as
+// an attribute or as a WF property element (<…​.ActivityExecutionCondition>),
+// if one is present and non-empty.
+func executionCondition(n xnode) (string, bool) {
+	if v, ok := n.attr("ActivityExecutionCondition"); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v), true
+	}
+	for _, k := range n.Kids {
+		if strings.HasSuffix(strings.ToLower(k.local()), "activityexecutioncondition") {
+			if s := strings.TrimSpace(k.Inner); s != "" {
+				return s, true
+			}
+		}
+	}
+	return "", false
 }
 
 // classifyLeaf maps an activity's local name to a BPMN task kind, an optional
