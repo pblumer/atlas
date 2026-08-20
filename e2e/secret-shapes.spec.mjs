@@ -1,4 +1,4 @@
-// e2e for the secret shape hints (api/web/secret-shapes.js, ADR-0153) — the answer to
+// e2e for the secret shape hints (api/web/secret-shapes.js, ADR-0155) — the answer to
 // a field that cannot show what it holds. A vault secret is a name and an opaque
 // string; the only thing that knows what the string should be is the connector that
 // resolves the reference. These tests pin that the form says so before the value is

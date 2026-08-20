@@ -1,4 +1,4 @@
-# ADR-0153: The Secrets panel says what a value has to be
+# ADR-0155: The Secrets panel says what a value has to be
 
 - **Status:** Accepted
 - **Date:** 2026-08-19
