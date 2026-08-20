@@ -62,7 +62,10 @@ func parkedServiceJob(t *testing.T, srv *Server, defKey uint64) (jobKey, instKey
 				return nil
 			}
 			instKey = v.ProcessInstanceKey
-			jobType := cp.ServiceTask(cp.Node(v.ElementId).Detail).JobType
+			// The job carries the *engine-wide* job type resolved at deploy, not the
+			// index interned locally in this process (ADR-0007/0157), so the lookup
+			// has to ask the detail for the one a job would have been written under.
+			jobType := cp.ServiceTask(cp.Node(v.ElementId).Detail).GlobalJobType()
 			return srv.store.ActivatableJobs(jobType, func(k uint64) error {
 				jobKey = k
 				return nil

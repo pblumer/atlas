@@ -714,6 +714,13 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		}
 
 		s.versions[pid] = version
+		// Translate the process's model-authored job types into the engine-wide index
+		// space before it can create any job, so the type a job carries means the same
+		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
+		// redeploy of the same model lands on the same indices.
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return deployed, nil, err
+		}
 		s.proc.Deploy(cp)
 		// Arm this fresh version's timer start events and supersede any the prior
 		// version left running, so the process starts on its schedule (ADR-0051).
@@ -2827,6 +2834,23 @@ type jobResp struct {
 // a client that only speaks HTTP can discover the job keys of parked service tasks
 // and finish them by hand. The scan runs on the run-loop goroutine (state's sole
 // owner) via do.
+// jobTypeName turns the job-type index on a job record back into the name an
+// operator authored. The engine-wide table is authoritative: since job types are
+// resolved at deploy (ADR-0007/0157) every job created from then on carries an
+// index that means the same thing across definitions.
+//
+// The fallback is for a job written *before* that table existed, whose index was
+// interned per process and is only meaningful against its own string table. Such
+// a job can still be read out under the wrong name if its local index happens to
+// collide with a registered one — it is why the jobs already in state need a
+// migration, which lands with the type-keyed pull that makes it observable.
+func (s *Server) jobTypeName(cp *compiler.CompiledProcess, jobType int32) string {
+	if name, ok := s.jobTypes.Name(jobType); ok {
+		return name
+	}
+	return cp.Intern(jobType)
+}
+
 func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -2847,7 +2871,7 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
 					cp := d.cp
 					jr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					jr.JobType = cp.Intern(jv.JobType)
+					jr.JobType = s.jobTypeName(cp, jv.JobType)
 				}
 			}
 			jobs = append(jobs, jr)

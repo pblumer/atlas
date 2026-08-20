@@ -4,6 +4,37 @@
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
+> **Implementation status (2026-08-20): step 1 partially delivered.** The
+> engine-wide job-type table exists (`jobtype.Registry`) and every deploy and
+> reload resolves its processes through it, so a job created from now on carries
+> an index that means the same thing in every definition. Three things are worth
+> recording precisely.
+>
+> **The collision surface was narrower than ADR-0007 implied.** Only a *service or
+> send task* carries a model-authored job type (`plain(st.TaskDefinition.Type, …)`
+> in `compiler/scope_compile.go` is the single path a `<zeebe:taskDefinition type>`
+> reaches the builder through); every other job-creating element — the connector
+> kinds, the script languages, DMN, temis, the user task — carries a reserved
+> constant that is already the same index everywhere. So the fix is one resolved
+> field on `ServiceTaskDetail`, not a change to every behavior.
+>
+> **The compiler does not know the registry.**
+> `CompiledProcess.ResolveJobTypes(intern)` takes the interner as an argument and
+> the registry supplies `Intern`, so the table can live outside the compiler; the
+> reserved half is seeded from `compiler.ReservedJobTypes()`, which is now the one
+> ordered list the builder itself reserves from, so the two cannot drift. An
+> unresolved process still reports its local index rather than 0 — 0 is the DMN
+> job type, and a silent zero value would hand every unresolved service task to
+> the DMN worker.
+>
+> **Still owed before the type-keyed pull: the migration.** Jobs written *before*
+> this carry per-process indices, and one of those may collide with a name the
+> registry has since registered. Nothing observes that today — the in-process
+> runner only dispatches reserved types, and the read path prefers the registry
+> and falls back to the process's own string table — but a worker subscribing by
+> name would see it, so the migration belongs in the same slice as the pull, where
+> it is testable.
+
 ## Context and problem statement
 
 [ADR-0156](0156-in-process-vs-out-of-process-service-tasks.md) established what the
