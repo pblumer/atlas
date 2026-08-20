@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The connector behind an incident can be reconfigured from the incident**
+  ([ADR-0160](docs/adr/0160-fix-the-connector-from-the-incident.md)): ADR-0158 let an
+  operator correct an incident's *variables*; a mail task parked on `dial tcp:
+  connection refused` has nothing wrong with its variables — what is wrong is the thing
+  it talks to. Every incident row now names the connector its task resolves through and
+  gains **⚙ Connector…**, which opens that connector's configuration prefilled — with
+  the runtime's own reason it could not be built, and a **Test connection** button —
+  and offers **Save & retry**, writing the change and handing the parked job one more
+  attempt against it. A connector reference nobody has configured points at the Console
+  instead, where one is created. Connector configuration is operator-managed runtime
+  state, so the change takes effect at once, with no redeploy; what the *model* says
+  stays immutable by design, and moving a running instance to a new version is instance
+  migration, which Atlas does not have yet.
+
+- **A stored connector has a real edit form** (ADR-0160): editing one used to be two
+  `window.prompt` boxes offering `endpoint` and `credentialsRef` to every kind,
+  including the kinds that use neither. Organization › Connectors now opens the same
+  dialog the incident does — the fields this kind and provider actually use, the
+  enabled switch, and the connection test — and both it and the create form derive
+  those fields from one shared description, so they cannot drift apart.
+
 - **A parked connector task now says what is actually wrong**
   ([ADR-0158](docs/adr/0158-a-connector-reference-that-explains-itself.md)): a mail task
   reported `no connector registered as "Patrick Blumer"` about a connector that was
@@ -125,6 +146,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **`PATCH /api/v1/connectors/{id}` accepts `provider`, and validates like a create**
+  (ADR-0160): switching a mail connector's provider was the one field the update could
+  not change, and re-creating it under the same name is not a workaround — the name is
+  the binding every deployed model references. The update now also re-runs the kind's
+  full create validation against the patched record instead of only re-normalizing an
+  SMTP endpoint, so switching to Gmail without a credential bundle is refused with the
+  reason, and switching to the preview transport clears the endpoint and credential it
+  no longer dials. Other kinds pass through unchanged.
+
 - **Breaking (HTTP API): `elementId` in the incident list is now the BPMN diagram id**
   ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)). The list previously
   returned the *compiled-graph* element index under that name, which no view can draw
@@ -169,7 +199,10 @@ _Changed_ / _Removed_ for each version.
   faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
   extension element and listed, with a `native`/`preserved`/`manual-review`
   status, in a per-node report. Every generated model is checked against the
-  compiler so it always deploys. Library: `mimimport`.
+  compiler so it always deploys. Library: `mimimport`. The Modeler exposes it too
+  — **Create new → Import MIM workflow (XOML)…** uploads a workflow, opens the
+  converted diagram as a draft, and shows the conversion report (status badge and
+  note per node) with a shortcut into the Modeler (`POST /api/v1/imports/mim`).
 
 ## [0.2.0] — 2026-08-19
 

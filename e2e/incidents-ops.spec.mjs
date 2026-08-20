@@ -134,6 +134,111 @@ test.describe("correcting the variables", () => {
   });
 });
 
+test.describe("reconfiguring the connector", () => {
+  test("names the connector on the incident and opens it prefilled", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    const row = page.locator("#var-panel .inc-row");
+    await expect(row).toHaveCount(1);
+
+    // "no connector registered as X" is unactionable until you know which integration
+    // X is — so the row says so, on the incident itself (ADR-0160).
+    await expect(row.locator(".inc-conn")).toContainText("mail");
+    await expect(row.locator(".inc-conn")).toContainText("Patrick Blumer");
+
+    await row.locator("[data-fix-conn]").click();
+    const modal = page.locator(".conn-modal");
+    await expect(modal).toBeVisible();
+    // It opens on what is stored, says which task is parked on it, and repeats the
+    // runtime's own reason the client could not be built.
+    await expect(modal.locator("#conn-endpoint")).toHaveValue("smtp.office365.com:587");
+    await expect(modal.locator("#conn-credref")).toHaveValue("o365_pw");
+    await expect(modal.locator("#conn-provider")).toHaveValue("smtp");
+    await expect(modal).toContainText("Task_pay is parked on this connector");
+    await expect(modal.locator(".conn-problem")).toContainText("connection refused");
+
+    // And it can be checked before anything is written.
+    await modal.locator("[data-conn-test]").click();
+    await expect(modal.locator(".conn-test-result")).toContainText("Connected and authenticated");
+    expect(await page.evaluate(() => window.__connPatches)).toEqual([]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("switching the provider saves and retries in one step", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-fix-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    // The preview transport dials nothing and authenticates against nothing, so the
+    // fields it does not use go away rather than standing there looking used.
+    await modal.locator("#conn-provider").selectOption("preview");
+    await expect(modal.locator(".conn-f-endpoint")).toBeHidden();
+    await expect(modal.locator(".conn-f-credref")).toBeHidden();
+    await expect(modal).toContainText("Outbox");
+
+    await modal.locator("[data-conn-extra]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    // The connector was changed, and the parked job handed one more attempt against
+    // the new configuration — one action, not a trip to the Console and back. The
+    // fields preview does not use are left out of the patch rather than sent empty;
+    // clearing them is the server's rule about the provider, not the form's.
+    await expect.poll(() => page.evaluate(() => window.__connPatches)).toEqual([
+      { id: "c1", body: { enabled: true, provider: "preview", sender: "bot@example.com" } },
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__resolved)).toEqual([{ key: "1001", retries: 1 }]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("saving without retrying leaves the incident standing", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-fix-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    await modal.locator("#conn-endpoint").fill("smtp.example.com:2525");
+    await modal.locator("[data-conn-save]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    await expect.poll(() => page.evaluate(() => window.__connPatches.length)).toBe(1);
+    expect(await page.evaluate(() => window.__connPatches[0].body.endpoint)).toBe("smtp.example.com:2525");
+    expect(await page.evaluate(() => window.__resolved)).toEqual([]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a name nobody configured points at the Console instead", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__unconfigureConnector());
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+
+    const row = page.locator("#var-panel .inc-row");
+    await expect(row.locator(".inc-conn")).toContainText("not configured");
+    // Nothing to open: the fix is to create one, and that lives in the Console.
+    await expect(row.locator("[data-fix-conn]")).toHaveCount(0);
+    await expect(row.locator('a[href="#/console/org"]')).toContainText("Configure connector");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the replay offers the same connector fix", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountReplay());
+    const details = page.locator("#tab-details");
+    await expect(details.locator(".vp-incidents .inc-row")).toHaveCount(1);
+
+    // One incident vocabulary across both diagrams (ADR-0151) — the connector included.
+    await expect(details.locator(".inc-conn")).toContainText("Patrick Blumer");
+    await details.locator("[data-fix-conn]").click();
+    await expect(page.locator(".conn-modal")).toBeVisible();
+    await page.locator(".conn-modal [data-conn-cancel]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__connPatches)).toEqual([]);
+    expect(page.__errors).toEqual([]);
+  });
+});
+
 test.describe("instance replay", () => {
   test("flags the stuck step and resolves it from the Details panel", async ({ page }) => {
     await open(page);

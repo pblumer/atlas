@@ -504,9 +504,15 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
+	// Every field an operator can change on a stored connector. Provider is here
+	// because switching one — an SMTP host that will not authenticate moved to the
+	// in-app preview transport, say — is the fix for a whole class of parked mail
+	// tasks, and re-creating the connector under the same name to change it would
+	// break every model referencing it (ADR-0160).
 	var p struct {
 		Endpoint       *string `json:"endpoint"`
 		CredentialsRef *string `json:"credentialsRef"`
+		Provider       *string `json:"provider"`
 		Sender         *string `json:"sender"`
 		Enabled        *bool   `json:"enabled"`
 	}
@@ -536,6 +542,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
 		}
+		if p.Provider != nil {
+			rec.Provider = strings.TrimSpace(*p.Provider)
+		}
 		if p.Sender != nil {
 			rec.Sender = strings.TrimSpace(*p.Sender)
 		}
@@ -543,8 +552,8 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 			rec.Enabled = *p.Enabled
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
-		// an SMTP endpoint that dials, above all — or the change is refused here
-		// instead of parking a token later (ADR-0150).
+		// an SMTP endpoint that dials, a provider that has a credential — or the change
+		// is refused here instead of parking a token later (ADR-0150/0159).
 		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
 			return
 		}
@@ -894,4 +903,61 @@ func connectorKindOfJobType(jobType int32) string {
 		}
 	}
 	return ""
+}
+
+// elementConnectorRef is the model half of "which connector is this element stuck
+// on?": the connector name the task refers to and the connector kind its reserved job
+// type says it needs. Both empty when the element refers to no connector — a local
+// decision, a task of another type, an element the compiled process does not describe
+// that way (ADR-0160).
+func elementConnectorRef(cp *compiler.CompiledProcess, elementID int32) (name, kind string) {
+	if cp == nil {
+		return "", ""
+	}
+	ref, ok := cp.NodeConnectorRef(elementID)
+	if !ok {
+		return "", "" // a local decision, or a task that names no connector
+	}
+	return ref.Connector, connectorKindOfJobType(ref.JobType)
+}
+
+// incidentConnectorLookup returns the resolver an incident listing uses to answer that
+// question for every row: the connector's name, the kind it needs, and the id of the
+// configured record standing under that name, if one is. An incident on a connector
+// task is very often a connector problem, and the fix is a field on the connector
+// rather than anything about the instance — so the incident carries what it takes to
+// get there in one click, instead of leaving an operator to read a name out of a
+// message and go hunting (ADR-0160).
+//
+// It is a closure rather than a plain function because both callers loop over up to
+// thousands of incidents on the run-loop goroutine: the connector store is read at
+// most once per listing, and not at all when nothing on the page is on a connector
+// task. A per-incident directory read there would block every writer behind it
+// (invariant I3).
+//
+// Everything is derived on read from the compiled process and the connector store;
+// nothing about it is durable (I6). An empty id means no connector of that kind is
+// configured under the name — a record under the same name but *another* kind is not
+// this task's connector, and offering it would open the wrong one.
+func (s *Server) incidentConnectorLookup() func(cp *compiler.CompiledProcess, elementID int32) (name, kind, id string) {
+	var (
+		recs   []connector
+		loaded bool
+	)
+	return func(cp *compiler.CompiledProcess, elementID int32) (string, string, string) {
+		name, kind := elementConnectorRef(cp, elementID)
+		if name == "" || kind == "" {
+			return name, kind, ""
+		}
+		if !loaded {
+			loaded = true
+			recs, _ = s.connectors.LoadAll() // on error the name and kind are still worth having
+		}
+		for _, c := range recs {
+			if c.Name == name && c.Kind == kind {
+				return name, kind, c.ID
+			}
+		}
+		return name, kind, ""
+	}
 }

@@ -1,4 +1,4 @@
-# ADR-0160: What an element was handed, on the diagram
+# ADR-0161: What an element was handed, on the diagram
 
 - **Status:** Accepted
 - **Date:** 2026-08-20

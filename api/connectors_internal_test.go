@@ -836,3 +836,82 @@ func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 		t.Errorf("warnings for a working connector = %v, want none", warns)
 	}
 }
+
+// TestConnectorProviderUpdate covers the fix an operator reaches for from a parked
+// mail task: switch the connector's provider instead of re-creating it under the same
+// name (which would be a different connector as far as every model referencing it is
+// concerned). A move to the in-app preview transport drops the endpoint and credential
+// it no longer dials; a move to a native provider without a credential bundle is
+// refused at the moment it is typed rather than at the next send (ADR-0160).
+func TestConnectorProviderUpdate(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	code, b := do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"Patrick Blumer","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create mail connector: %d %s", code, b)
+	}
+	var c connector
+	_ = json.Unmarshal(b, &c)
+
+	// Gmail without a credential bundle: refused, and the stored record is untouched.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"gmail","credentialsRef":""}`)
+	if code != http.StatusBadRequest || !strings.Contains(string(b), "credentialsRef") {
+		t.Fatalf("switch to gmail with no bundle = %d %s, want 400 naming the credentialsRef", code, b)
+	}
+
+	// Preview: nothing to dial, nothing to authenticate — the endpoint and credential
+	// are cleared so no dead configuration is left reading as if it were in use.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"preview"}`)
+	if code != http.StatusOK {
+		t.Fatalf("switch to preview: %d %s", code, b)
+	}
+	var up connector
+	_ = json.Unmarshal(b, &up)
+	if up.Provider != "preview" || up.Endpoint != "" || up.CredentialsRef != "" {
+		t.Fatalf("record after switching to preview = %+v, want provider preview and no endpoint/credential", up)
+	}
+
+	// And the switch is live: the rebuilt registry has a usable client under the name,
+	// so a task referencing it stops parking.
+	var (
+		client any
+		ok     bool
+	)
+	srv.do(func() { client, ok = srv.mailRegistry.Client("Patrick Blumer") })
+	if !ok || client == nil {
+		t.Fatalf("mail registry after the switch has no client for the connector")
+	}
+
+	// An unknown provider is rejected by the same validation a create runs.
+	if code, b := do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"carrier-pigeon"}`); code != http.StatusBadRequest {
+		t.Fatalf("unknown provider = %d %s, want 400", code, b)
+	}
+}
+
+// TestElementConnectorRefEdges covers the answers the incident's connector lookup has
+// to give when there is nothing to resolve: an instance whose definition is no longer
+// deployed (no compiled process to ask), and a task whose reserved job type belongs to
+// no managed connector kind — a REST task carries its URL in the model and resolves
+// through no registry, so its reference has a name but no kind and can match no stored
+// record (ADR-0160).
+func TestElementConnectorRefEdges(t *testing.T) {
+	if name, kind := elementConnectorRef(nil, 0); name != "" || kind != "" {
+		t.Errorf("elementConnectorRef(nil) = %q/%q, want both empty", name, kind)
+	}
+	if kind := connectorKindOfJobType(-1); kind != "" {
+		t.Errorf("connectorKindOfJobType(-1) = %q, want no kind", kind)
+	}
+	srv, _ := newValidateServer(t)
+	name, kind, id := srv.incidentConnectorLookup()(nil, 0)
+	if name != "" || kind != "" || id != "" {
+		t.Errorf("lookup on no compiled process = %q/%q/%q, want all empty", name, kind, id)
+	}
+}
