@@ -193,6 +193,15 @@ type runtimeIncident struct {
 	ElementID          string `json:"elementId"`
 	RaisedAt           int64  `json:"raisedAt"`
 	Message            string `json:"message"`
+	// Connector names the server-registered connector the stuck task refers to, and
+	// ConnectorKind the kind it needs; ConnectorID is the configured record's id when
+	// one exists under that name and kind. A connector task's incident is usually a
+	// connector problem, and the fix is a field on the connector — so the operator gets
+	// there from the incident instead of reading the name out of a message (ADR-0160).
+	// All three are empty for a task that names no connector.
+	Connector     string `json:"connector,omitempty"`
+	ConnectorKind string `json:"connectorKind,omitempty"`
+	ConnectorID   string `json:"connectorId,omitempty"`
 }
 
 type runtimeResp struct {
@@ -402,6 +411,13 @@ type incidentView struct {
 	Type     string `json:"type"`
 	RaisedAt int64  `json:"raisedAt"`
 	Message  string `json:"message"`
+	// Connector / ConnectorKind / ConnectorID are the server-registered connector the
+	// stuck task refers to, so the fix is one click from the incident rather than a
+	// name read out of a message (ADR-0160). Empty when the task names no connector,
+	// and ConnectorID alone is empty when nothing is configured under that name.
+	Connector     string `json:"connector,omitempty"`
+	ConnectorKind string `json:"connectorKind,omitempty"`
+	ConnectorID   string `json:"connectorId,omitempty"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -1066,6 +1082,9 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
+		// One resolver for the whole overlay, so the connector store is read once for
+		// the page rather than once per parked token (ADR-0160).
+		connectorFor := s.incidentConnectorLookup()
 		// addIncident records one parked element instance on the overlay: a count on
 		// the element (so the diagram can mark the shape) and the detail behind it (so
 		// the panel can say why and offer the resolve). Full is the response cap.
@@ -1075,14 +1094,16 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				return false
 			}
 			e.Incidents++
-			resp.Incidents = append(resp.Incidents, runtimeIncident{
+			inc := runtimeIncident{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
 				JobKey:             v.JobKey,
 				ElementID:          e.ElementID,
 				RaisedAt:           v.RaisedAt,
 				Message:            v.Message,
-			})
+			}
+			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
+			resp.Incidents = append(resp.Incidents, inc)
 			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
 
@@ -3425,6 +3446,10 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			cp        *compiler.CompiledProcess
 		}
 		resolved := map[uint64]instanceCtx{}
+		// One resolver for the whole page: the connector store is read once, not once
+		// per parked token, and not at all when nothing on the page is on a connector
+		// task (ADR-0159).
+		connectorFor := s.incidentConnectorLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
 			if ctx, ok := resolved[piKey]; ok {
 				return ctx, nil
@@ -3471,6 +3496,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			}
 			if ctx.cp != nil {
 				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
 			}
 			list = append(list, view)
 			return nil

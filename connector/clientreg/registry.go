@@ -10,7 +10,7 @@
 // connector registered as X" — which reads as *you never configured it* and sends an
 // operator looking for a connector that is sitting right there, disabled or broken.
 // So the registry carries the skipped ones too, with their reason, and the incident
-// can say what is actually wrong (ADR-0152).
+// can say what is actually wrong (ADR-0158).
 //
 // A Registry is read-only once populated and safe for concurrent use by workers; the
 // server serializes Replace with the workers that read it on its run-loop goroutine.

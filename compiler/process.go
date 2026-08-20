@@ -1230,33 +1230,49 @@ type ConnectorRef struct {
 	Connector string
 }
 
+// NodeConnectorRef returns the connector reference one node makes, and false when it
+// makes none. Both shapes are covered: a connector task (mail, REST, SharePoint, …)
+// and a business rule task delegating to a remote decision service, which names its
+// connector the same way. An element that names no connector — a local decision, a
+// REST task with its URL in the model, anything that is not one of those two task
+// types — is not a reference.
+//
+// It answers the question one element at a time because that is how an *incident* asks
+// it: a token is parked on this element, which connector is it stuck on (ADR-0160)?
+// ConnectorRefs asks the same question of every node.
+func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return ConnectorRef{}, false
+	}
+	var jobType, connector int32 = -1, -1
+	switch p.nodes[id].Type {
+	case TypeConnectorTask:
+		d := p.ConnectorTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	case TypeBusinessRuleTask:
+		d := p.BusinessRuleTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	default:
+		return ConnectorRef{}, false
+	}
+	if connector < 0 {
+		return ConnectorRef{}, false
+	}
+	return ConnectorRef{
+		ElementId: p.ElementBpmnId(id),
+		JobType:   jobType,
+		Connector: p.Intern(connector),
+	}, true
+}
+
 // ConnectorRefs returns every connector reference the process makes, in node order.
-// Both shapes are covered: a connector task (mail, REST, SharePoint, …) and a business
-// rule task delegating to a remote decision service, which names its connector the same
-// way. An element that names no connector — a local decision, a REST task with its URL
-// in the model — is not a reference and is left out.
+// An element that names no connector is left out; see NodeConnectorRef.
 func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
 	var out []ConnectorRef
 	for i := range p.nodes {
-		var jobType, connector int32 = -1, -1
-		switch p.nodes[i].Type {
-		case TypeConnectorTask:
-			d := p.ConnectorTask(p.nodes[i].Detail)
-			jobType, connector = d.JobType, d.Connector
-		case TypeBusinessRuleTask:
-			d := p.BusinessRuleTask(p.nodes[i].Detail)
-			jobType, connector = d.JobType, d.Connector
-		default:
-			continue
+		if ref, ok := p.NodeConnectorRef(int32(i)); ok {
+			out = append(out, ref)
 		}
-		if connector < 0 {
-			continue
-		}
-		out = append(out, ConnectorRef{
-			ElementId: p.ElementBpmnId(int32(i)),
-			JobType:   jobType,
-			Connector: p.Intern(connector),
-		})
 	}
 	return out
 }

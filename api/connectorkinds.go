@@ -301,28 +301,36 @@ func validateSharePointConnector(p *createConnectorParams) string {
 	return ""
 }
 
-// normalizeConnectorUpdate re-applies the endpoint normalization a *create* gets from
-// the per-kind validator to a record a PATCH has just changed, returning a message
-// when the result is unusable. A partial update carries no kind and no provider, so it
-// cannot route through validateCreate — which is exactly how an SMTP endpoint could be
-// edited into a shape that only fails much later, at send time (ADR-0150). Only mail
-// normalizes anything today; every other kind passes through untouched.
+// normalizeConnectorUpdate re-applies the per-kind create validation to a record a
+// PATCH has just changed, returning a message when the result is unusable. A partial
+// body carries no kind, so it cannot route through validateCreate — which is exactly
+// how an SMTP endpoint could be edited into a shape that only fails much later, at
+// send time (ADR-0150). The *record* does carry its kind, so the check a create got is
+// re-run against the record the update produced, which is what lets an operator switch
+// a mail connector's provider from an incident and be told immediately that the new
+// one needs a credential (ADR-0160).
+//
+// Only mail validates anything today; every other kind passes through untouched, so
+// emptying a temis endpoint is still allowed and reported as a problem on the
+// connector rather than refused — the shape an operator uses to park a connector they
+// are in the middle of moving.
 func normalizeConnectorUpdate(rec *connector) string {
 	if rec.Kind != connectorKindMail {
 		return ""
 	}
-	provider := strings.TrimSpace(rec.Provider)
-	if provider == "" {
-		provider = mail.ProviderSMTP
+	p := createConnectorParams{
+		Name:           rec.Name,
+		Kind:           rec.Kind,
+		Endpoint:       strings.TrimSpace(rec.Endpoint),
+		CredentialsRef: strings.TrimSpace(rec.CredentialsRef),
+		Provider:       strings.TrimSpace(rec.Provider),
+		Sender:         strings.TrimSpace(rec.Sender),
 	}
-	if provider != mail.ProviderSMTP {
-		return ""
+	if msg := validateMailConnector(&p); msg != "" {
+		return msg
 	}
-	endpoint, err := mail.NormalizeSMTPEndpoint(rec.Endpoint)
-	if err != nil {
-		return err.Error()
-	}
-	rec.Endpoint = endpoint
+	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
+	rec.Provider, rec.Sender = p.Provider, p.Sender
 	return ""
 }
 
