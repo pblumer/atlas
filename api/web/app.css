@@ -1782,7 +1782,7 @@ tr[hidden] { display: none; }
    turns each <h3> section in the properties panel into a header that toggles its
    fields, with a chevron and a filled dot when the group carries content. */
 /* A subtle expand-all / collapse-all control above the property groups. */
-.pgroup-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px 2px 2px; }
+.pgroup-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 2px 0; }
 .pgroup-all {
   background: none; border: none; cursor: pointer; padding: 2px; font-size: 11px;
   color: var(--muted); letter-spacing: .01em;
@@ -1790,13 +1790,32 @@ tr[hidden] { display: none; }
 .pgroup-all:hover { color: var(--accent); text-decoration: underline; }
 .pgroup-all-sep { color: var(--border-strong); font-size: 11px; }
 
+/* A caption naming the section the groups below it belong to (e.g. the chosen connector
+   above its Mail provider / Message / Failure handling groups). It is a label, not a
+   control: no chevron, no hover, not focusable — so it never suggests a collapse it
+   cannot do. Deliberately unlike .pgroup-head (smaller, uppercase, muted) so the two
+   never read as the same thing. */
+.pgroup-caption {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 2px 5px 0; border-top: 1px solid var(--border);
+  font: 700 11px/1.4 system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); cursor: default; user-select: none;
+}
+.pgroup-caption:first-child { border-top: none; }
+.pgroup-caption-icon { display: inline-flex; line-height: 0; flex: none; }
+/* The caption already draws the section's rule; don't double it on the first group. */
+.pgroup-caption + .pgroup { border-top: none; }
+
 .pgroup { border-top: 1px solid var(--border); }
 .pgroup:first-child { border-top: none; }
 .pgroup-tools + .pgroup { border-top: none; }
+/* Group rows are deliberately compact (bpmn-js / form-js properties density): a
+   collapsed panel should show the whole outline of an element at a glance rather than
+   a short list spread over a screen. ~34px per collapsed row. */
 .pgroup-head {
   display: flex; align-items: center; gap: 8px; width: 100%;
   background: none; border: none; cursor: pointer; text-align: left;
-  padding: 12px 2px 12px 0; color: var(--text);
+  padding: 8px 2px 8px 0; color: var(--text);
   font-size: 13px; font-weight: 600; letter-spacing: .01em;
 }
 .pgroup-head:hover { color: var(--accent); }
@@ -1807,7 +1826,7 @@ tr[hidden] { display: none; }
 .pgroup:not(.collapsed) .pgroup-chevron { transform: rotate(90deg); }
 .pgroup-title { flex: 1; }
 .pgroup-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
-.pgroup-body { padding: 0 0 12px 0; }
+.pgroup-body { padding: 0 0 10px 0; }
 .pgroup.collapsed .pgroup-body { display: none; }
 .pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
 
@@ -1817,7 +1836,7 @@ tr[hidden] { display: none; }
    Pin every direct child to one 10px step (hints a touch tighter), and zero the
    first child so it never doubles the header's gap. Scoped to the group body, so it
    can't leak into other panels. */
-.pgroup-body > * { margin-top: 10px; margin-bottom: 0; }
+.pgroup-body > * { margin-top: 8px; margin-bottom: 0; }
 .pgroup-body > *:first-child { margin-top: 0; }
 .pgroup-body > p { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 
@@ -1838,7 +1857,7 @@ tr[hidden] { display: none; }
 .io-group { border-top: 1px solid var(--border); }
 .io-group-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 2px 12px 0; cursor: pointer; user-select: none;
+  padding: 8px 2px 8px 0; cursor: pointer; user-select: none;
 }
 .io-group-title {
   flex: 1; font-size: 13px; font-weight: 600; letter-spacing: .01em; color: var(--text);
@@ -2441,3 +2460,27 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 6px;
   background: #fff;
 }
+
+/* ---------- Secret shape hints (ADR-0155) ---------- */
+/* A vault secret is a name and an opaque string, so the form has to say what the
+   string is for: which connector resolves it and what shape that connector needs. */
+.secret-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
+.secret-hint p { margin: 0 0 6px; }
+.secret-skeleton {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin: 0 0 6px; overflow-x: auto;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* A credential bundle is several lines that have to be pasted and read back before
+   saving — masking it is what made the shape unknowable in the first place. */
+.secret-json {
+  width: 100%; resize: vertical;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* Why a value cannot be what the connector needs, said where it was typed. */
+.secret-error {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: 6px;
+  border: 1px solid var(--danger); background: #fdecea; color: var(--danger);
+  font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.secret-set-row .field { margin: 0; }

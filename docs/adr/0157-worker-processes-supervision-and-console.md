@@ -1,4 +1,4 @@
-# ADR-0156: Every side-effecting task on a worker process — `atlas worker`, optional supervision, and a Workers console
+# ADR-0157: Every side-effecting task on a worker process — `atlas worker`, optional supervision, and a Workers console
 
 - **Status:** Proposed
 - **Date:** 2026-08-20
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-[ADR-0155](0155-in-process-vs-out-of-process-service-tasks.md) established what the
+[ADR-0156](0156-in-process-vs-out-of-process-service-tasks.md) established what the
 four execution seams cost and recommended an authoring rule, but it left the
 architecture in an awkward place: the mode that is safe for the engine
 (out-of-process) is the one nobody can use, and 17 of the 18 reserved job types run
@@ -19,7 +19,7 @@ should **Atlas start and supervise those processes itself**, and should there be
 **Workers view** — who is subscribed, who holds which jobs, how many each has
 processed, its logs, a restart button?
 
-This matters because it changes ADR-0155's rejection of "ban in-process
+This matters because it changes ADR-0156's rejection of "ban in-process
 connectors". That option was rejected because it "destroys the single-binary
 experience (ADR-0011); every trivial installation pays a distributed-system tax for
 a mail send to a local relay". **If Atlas launches the worker itself, from the same
@@ -70,7 +70,7 @@ lease only by key. No amount of supervision or UI changes that.
 
 **For where the work runs:**
 
-1. **Goroutine pool inside the engine process** — ADR-0149's option 3, ADR-0155's
+1. **Goroutine pool inside the engine process** — ADR-0149's option 3, ADR-0156's
    stated prerequisite. Handlers move off `Loop`'s goroutine, everything else stays.
 2. **A separate worker process per subscribed kind, deployed by the operator** —
    ADR-0007 finished as designed.
@@ -104,7 +104,7 @@ is CPU-bounded library code with no network.
 The rule is therefore **I/O and foreign code leave; pure computation stays**. That
 covers the connector kinds (REST, mail, SharePoint, Remedy, clio, temis, web scrape,
 SCIM, LDAP), CSV import, the user-provisioning connector, and the polyglot script
-languages — everything in ADR-0155's table that charges the engine for someone else's
+languages — everything in ADR-0156's table that charges the engine for someone else's
 latency.
 
 ### 2. A worker is a long-lived process, not a process per job
@@ -285,7 +285,7 @@ relocated.
 
 ## Links
 
-- extends [ADR-0155](0155-in-process-vs-out-of-process-service-tasks.md) — it classified the seams and deferred this; this record decides the target
+- extends [ADR-0156](0156-in-process-vs-out-of-process-service-tasks.md) — it classified the seams and deferred this; this record decides the target
 - completes [ADR-0007](0007-job-worker-protocol.md) (the pull protocol, fencing, and the counters it still owes) and keeps its amended HTTP transport
 - supersedes nothing, but turns [ADR-0149](0149-bounded-connector-call-budget.md)'s option 3 from a deferred idea into step 6 of a sequence
 - realizes [ADR-0047](0047-polyglot-script-tasks-via-job-workers.md)'s stated target (the interpreter in the customer's trust domain) and gives its "true resource limits" item a home
