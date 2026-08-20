@@ -4108,7 +4108,7 @@ type pulledJob struct {
 	LeaseToken uint64         `json:"leaseToken"`
 	Variables  map[string]any `json:"variables"`
 	// Connector is a connector task resolved into plain values, present only for a
-	// job whose kind Atlas no longer serves itself (ADR-0166). Absent for a plain
+	// job whose kind Atlas no longer serves itself (ADR-0167). Absent for a plain
 	// job-worker task, where there is nothing authored to resolve.
 	Connector *connectorPayload `json:"connector,omitempty"`
 }
@@ -4281,7 +4281,7 @@ type connectorPayload struct {
 // resolveConnectorTask turns a leased connector job into the payload a worker can
 // act on, or nil when there is nothing to resolve.
 //
-// This is the split ADR-0166 draws. Finding a task's detail in the compiled process
+// This is the split ADR-0167 draws. Finding a task's detail in the compiled process
 // and evaluating it against the instance's variables is engine work by necessity —
 // FEEL is compiled at deploy (ADR-0008/0015), and a worker has neither the compiled
 // process nor the scope chain. So the engine resolves, and only the *values* travel;

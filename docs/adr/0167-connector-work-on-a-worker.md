@@ -1,4 +1,4 @@
-# ADR-0166: Moving a connector onto a worker — where the task detail travels, and where the credential lives
+# ADR-0167: Moving a connector onto a worker — where the task detail travels, and where the credential lives
 
 - **Status:** Accepted
 - **Date:** 2026-08-20

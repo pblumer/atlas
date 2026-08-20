@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
-// TestOffloadedKindIsLeasableByAWorker is the prerequisite ADR-0166 exposed: a
+// TestOffloadedKindIsLeasableByAWorker is the prerequisite ADR-0167 exposed: a
 // connector kind cannot move to a worker while an in-process handler serves it,
 // because the pull refuses such a type — that refusal is what keeps work from being
 // done twice. Turning the handler off is therefore the operative act of relocating

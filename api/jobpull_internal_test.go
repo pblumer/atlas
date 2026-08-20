@@ -510,7 +510,7 @@ func waitTypeIndex(t *testing.T, srv *Server, name string) int32 {
 	return idx
 }
 
-// TestALeasedConnectorJobCarriesItsResolvedDetail is the mechanism ADR-0166 rests
+// TestALeasedConnectorJobCarriesItsResolvedDetail is the mechanism ADR-0167 rests
 // on. A worker has neither the compiled process nor the instance's scope chain, so
 // it cannot find a connector task's configuration or evaluate it. The engine does
 // that — it is the only one who can — and only the *result* travels: plain values a

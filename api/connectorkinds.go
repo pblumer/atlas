@@ -252,7 +252,7 @@ func (s *Server) setupManagedConnectors(store *state.Store) error {
 // deliberately spans more than the *managed* kinds: a kind is offloadable if Atlas
 // runs it itself, whether or not it also has a server-side registry. CSV import is
 // the clearest example — it has no registry precisely because it needs no credential
-// (ADR-0166), and it is the first kind meant to move.
+// (ADR-0167), and it is the first kind meant to move.
 //
 // The user task is absent on purpose: it waits for a person, and the pull refuses it
 // for that reason rather than because a handler serves it. Every *other* in-process
@@ -270,6 +270,7 @@ var offloadableKinds = map[string][]int32{
 	"scim":                  {compiler.ScimJobTypeIndex},
 	"ldap":                  {compiler.LdapJobTypeIndex},
 	"soap":                  {compiler.SoapJobTypeIndex},
+	"ad":                    {compiler.AdJobTypeIndex},
 	"webscrape":             {compiler.WebScrapeJobTypeIndex},
 	"dmn":                   {compiler.DMNJobTypeIndex},
 	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},

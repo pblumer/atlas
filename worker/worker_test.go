@@ -240,7 +240,7 @@ func TestWorkerSurvivesAJobTypeThatIsNotDeployedYet(t *testing.T) {
 	}
 }
 
-// TestWorkerRunsAnOffloadedCsvConnector is ADR-0166's first slice end to end: a
+// TestWorkerRunsAnOffloadedCsvConnector is ADR-0167's first slice end to end: a
 // connector kind the engine no longer serves, worked by an external process. The
 // engine resolved the task — found its detail in the compiled process and read the
 // source text up the scope chain — and the worker did the parsing, which needs
