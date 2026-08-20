@@ -607,6 +607,25 @@ type ConnectorTaskDetail struct {
 	SoapAction   RestExpr
 	SoapBody     RestExpr
 	SoapVersion  int32
+	// Active Directory connector fields (JobType == AdJobType, ADR-0166). AdURL is the
+	// server (ldaps://host:636) and AdBindDN the bind identity — literal-or-FEEL values.
+	// AdBindSecret is the interned name of the server-side bind-password secret (interned
+	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
+	// operation ("create-user"|"set-password"|"enable"|"disable"|"add-group-member"|
+	// "remove-group-member"). AdDN is the target user or group entry; AdMemberDN is the
+	// member added/removed for the group operations; AdEntryVar is the interned name of
+	// the process variable holding the create-user attribute object; AdNewPassword is the
+	// set-password value. Each is the zero value for a non-AD task. Read only by the
+	// in-process AD worker.
+	AdURL         RestExpr
+	AdBindDN      RestExpr
+	AdBindSecret  int32
+	AdStartTLS    bool
+	AdOp          int32
+	AdDN          RestExpr
+	AdMemberDN    RestExpr
+	AdEntryVar    int32
+	AdNewPassword RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
