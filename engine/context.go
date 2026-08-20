@@ -356,6 +356,15 @@ func (c *ProcessingContext) AppendVariableAuditEvent(v model.VariableAuditValue)
 	c.appendEvent(v.ProcessInstanceKey, model.VTVariableAudit, model.IntentVariableAudited, inflightValue{variableAudit: v})
 }
 
+// AppendOperatorActionEvent records that an operator intervened on a running instance
+// — completing a parked job by hand, say (ADR-0159). Like AppendVariableAuditEvent it
+// is pure history: emitted alongside the events the intervention produces, it freezes
+// who acted and why into the log, so a forced step is never indistinguishable from one
+// the engine drove and replay rebuilds the identical trail (invariant I6).
+func (c *ProcessingContext) AppendOperatorActionEvent(v model.OperatorActionValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTOperatorAction, model.IntentOperatorActed, inflightValue{operatorAct: v})
+}
+
 // AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
 // retains a completed compensable activity (keyed under its scope in completion order),
 // and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both

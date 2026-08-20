@@ -141,7 +141,7 @@ func TestCompleteJobViaTool(t *testing.T) {
 	jobKey := instanceJobKey(t, ts.URL, instances[0].Key)
 
 	// Complete the job with an output variable; the instance runs to completion.
-	text, isErr := toolText(t, result(t, run(t, ts, callTool(4, "atlas_complete_job", map[string]any{"key": jobKey, "variables": map[string]any{"paid": true}}))[0]))
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(4, "atlas_complete_job", map[string]any{"key": jobKey, "reason": "test: completed by hand", "variables": map[string]any{"paid": true}}))[0]))
 	if isErr || !strings.Contains(text, fmt.Sprintf(`"jobKey":%d`, jobKey)) {
 		t.Fatalf("complete_job = (%q, isErr=%v), want the jobKey echoed", text, isErr)
 	}
@@ -166,7 +166,7 @@ func TestCompleteJobViaTool(t *testing.T) {
 // surfacing the server's 404 as a tool error.
 func TestCompleteJobMissingIsToolError(t *testing.T) {
 	ts := newAtlas(t)
-	text, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_complete_job", map[string]any{"key": 999999}))[0]))
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_complete_job", map[string]any{"reason": "test: completed by hand", "key": 999999}))[0]))
 	if !isErr || !strings.Contains(text, "no job") {
 		t.Fatalf("complete missing job = (%q, isErr=%v), want a not-found tool error", text, isErr)
 	}
@@ -176,7 +176,7 @@ func TestCompleteJobMissingIsToolError(t *testing.T) {
 // branch for the job-completion tool.
 func TestCompleteJobRejectsNonObjectVariables(t *testing.T) {
 	ts := newAtlas(t)
-	text, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_complete_job", map[string]any{"key": 1, "variables": 5}))[0]))
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_complete_job", map[string]any{"reason": "test: completed by hand", "key": 1, "variables": 5}))[0]))
 	if !isErr || !strings.Contains(text, "must be an object") {
 		t.Fatalf("complete_job with non-object variables = (%q, isErr=%v), want a tool error", text, isErr)
 	}

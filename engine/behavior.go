@@ -547,6 +547,21 @@ func handleJobCompleted(c *ProcessingContext) {
 		c.AppendDecisionEvaluationEvent(dv)
 	}
 
+	// An operator forced this completion rather than a worker reporting real work
+	// (ADR-0159). Freeze who did it and why into append-only audit history, alongside
+	// the completion events themselves, so the timeline can mark the step as manual and
+	// replay rebuilds the identical trail without re-running the command (invariant I6).
+	if c.cmd.Manual {
+		c.AppendOperatorActionEvent(model.OperatorActionValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			ElementInstanceKey: job.ElementInstanceKey,
+			JobKey:             c.cmd.Key,
+			Kind:               model.OperatorActionCompleteJob,
+			Actor:              c.cmd.Actor,
+			Reason:             c.cmd.Reason,
+		})
+	}
+
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}

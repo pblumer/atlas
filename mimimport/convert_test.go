@@ -49,6 +49,9 @@ func TestConvertApprovalWorkflow(t *testing.T) {
 		`<exclusiveGateway`,       // IfElseActivity → gateway
 		`<atlas:mimSource`,        // original markup preserved
 		`New-Mailbox`,             // PowerShell body survived verbatim
+		`<bpmndi:BPMNDiagram`,     // diagram interchange so the Modeler can render it
+		`<bpmndi:BPMNShape`,       // a shape per node
+		`<di:waypoint`,            // an edge per flow
 	}
 	for _, w := range wants {
 		if !strings.Contains(bpmn, w) {

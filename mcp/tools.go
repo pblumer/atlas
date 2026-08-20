@@ -479,21 +479,29 @@ func runtimeTools() []Tool {
 			Description: "Complete a job by hand by its job key — the operator counterpart to an external " +
 				"worker completing it, driving an instance parked on a service (or other job-backed) task " +
 				"forward. Optional 'variables' are written into the instance scope as the job's outputs. " +
+				"A 'reason' is REQUIRED: forcing a step the engine would not have taken on its own is an " +
+				"operator intervention, recorded with who did it and why in append-only audit history that " +
+				"the instance timeline and replay surface (ADR-0159). " +
 				"Refused with a not-found error if no job has that key. Returns {jobKey}.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"key":       map[string]any{"type": "integer", "description": "The job key to complete."},
+					"reason":    map[string]any{"type": "string", "description": "Why this job is being completed by hand — recorded in the instance's audit trail. Required."},
 					"variables": objectProp("Optional job output variables, e.g. {\"paid\": true}. Omit for none."),
 				},
-				"required": []any{"key"},
+				"required": []any{"key", "reason"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")
 				if err != nil {
 					return "", err
 				}
-				body, err := optVariablesBody(args)
+				reason, err := argString(args, "reason")
+				if err != nil {
+					return "", err
+				}
+				body, err := optVariablesBodyWith(args, map[string]any{"reason": reason})
 				if err != nil {
 					return "", err
 				}

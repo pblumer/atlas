@@ -280,8 +280,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job by hand (operator counterpart to fail; not the worker protocol)", tag: "Incidents",
-			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
+			summary: "Complete a job by hand (operator intervention; requires a reason, recorded for audit)", tag: "Incidents",
+			req: jsonBody("A required reason for the intervention plus optional completion variables", schemaObj(map[string]any{
+				"reason": tString(), "variables": tObject(),
+			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
 			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
@@ -321,6 +323,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Move a draft to a project", tag: "Drafts", req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
+
+		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts",
+			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
+			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
 		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions",

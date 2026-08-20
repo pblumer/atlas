@@ -850,6 +850,15 @@ func (t *Tx) RecordVariableAudit(ts int64, pos uint64, v *model.VariableAuditVal
 	return t.b.Set(keyVariableAudit(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
 }
 
+// RecordOperatorAction retains one operator intervention under its owning process
+// instance, keyed in the order it happened (ADR-0159). ts and pos come from the event
+// header; the value carries who acted, on which element, and why. Written only from
+// applyToState, from the event alone, so it rebuilds identically on replay (invariant
+// I4); a plain Set on a unique (position-bearing) key, never overwritten.
+func (t *Tx) RecordOperatorAction(ts int64, pos uint64, v *model.OperatorActionValue) error {
+	return t.b.Set(keyOperatorAction(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

@@ -144,6 +144,11 @@ var mcpOmittedRoutes = map[string]string{
 	// not drive a scenario through this.
 	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
 
+	// MIM/FIM XOML import (#471): a human file-upload in the Modeler that converts a
+	// Microsoft Identity Manager workflow into a BPMN draft. An MCP agent authors BPMN
+	// directly via the authoring tools, so it never drives this upload path.
+	"POST /api/v1/imports/mim": "modeler-time MIM/FIM XOML upload that creates a draft; agents author BPMN directly",
+
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",

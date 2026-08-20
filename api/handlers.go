@@ -258,11 +258,17 @@ type collabRuntimeResp struct {
 // oldest-first, so the Operations view can step through them and show the
 // variables at each point.
 type timelineStep struct {
-	At                 int64          `json:"at"`              // unix nanoseconds (element activated)
-	EndAt              int64          `json:"endAt,omitempty"` // unix nanoseconds (element completed), 0 if still active
-	ElementID          string         `json:"elementId"`
-	Type               string         `json:"type"`
-	Variables          []variableView `json:"variables"`
+	At        int64          `json:"at"`              // unix nanoseconds (element activated)
+	EndAt     int64          `json:"endAt,omitempty"` // unix nanoseconds (element completed), 0 if still active
+	ElementID string         `json:"elementId"`
+	Type      string         `json:"type"`
+	Variables []variableView `json:"variables"`
+	// VariablesAfter is the variable set as it stood once this element finished, where
+	// Variables is the set it saw on entry (ADR-0159). A task that writes its result on
+	// completion — a job's outputs, an output mapping — shows nothing in Variables, so
+	// the replay would report "no variables" for an element that in fact produced some.
+	// Absent while the element is still active or parked, since it has not finished.
+	VariablesAfter     []variableView `json:"variablesAfter,omitempty"`
 	Position           uint64         `json:"position"`
 	TokenID            uint64         `json:"tokenId,omitempty"`
 	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
@@ -275,6 +281,21 @@ type timelineStep struct {
 	// whose child was never created (it parked). Resolved by the reverse
 	// ParentElementInstanceKey link, covering active and completed children.
 	ChildInstanceKey uint64 `json:"childInstanceKey,omitempty"`
+	// Manual attributes a step an operator forced rather than one the engine drove on
+	// its own (ADR-0159) — who completed the parked job by hand, and why. Absent for
+	// every ordinary step, so its presence alone marks the intervention.
+	Manual *manualActionView `json:"manual,omitempty"`
+}
+
+// manualActionView renders one operator intervention on a step for the operator UI
+// (ADR-0159). Reason is always present — the routes that mint these records require it
+// — while Actor is empty when auth is off or the caller was unidentified, exactly like
+// the variable-override attribution it sits beside.
+type manualActionView struct {
+	Action string `json:"action"`
+	Actor  string `json:"actor,omitempty"`
+	Reason string `json:"reason"`
+	At     int64  `json:"at"`
 }
 
 type timelineToken struct {
@@ -1415,10 +1436,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// keyed by the process instance cover every scope. An audit with no identity
 		// (auth off) is skipped — there is no actor to surface.
 		actorByPos := map[uint64]string{}
+		manualByElement := map[uint64]manualActionView{}
 		if scanErr == nil {
 			scanErr = s.store.VariableAuditHistory(key, func(_ int64, pos uint64, v *model.VariableAuditValue) error {
 				if v.Actor != "" && pos > 0 {
 					actorByPos[pos-1] = v.Actor
+				}
+				return nil
+			})
+		}
+		// Operator interventions (ADR-0159): who forced a step by hand, and why. Keyed by
+		// the element instance the action was applied to, so it attaches to that element's
+		// step below — the element id is resolved from the step, never read off the log
+		// (invariant I5 keeps ids interned, so the record carries only keys).
+		if scanErr == nil {
+			scanErr = s.store.OperatorActionHistory(key, func(ts int64, _ uint64, v *model.OperatorActionValue) error {
+				if v.ElementInstanceKey != 0 {
+					manualByElement[v.ElementInstanceKey] = manualActionView{
+						Action: v.Kind.String(), Actor: v.Actor, Reason: v.Reason, At: ts,
+					}
 				}
 				return nil
 			})
@@ -1474,7 +1510,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		active := map[uint64]timelineToken{}
 		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
-		endAt := map[uint64]int64{} // element instance key → completion timestamp (Action==2)
+		endAt := map[uint64]int64{}   // element instance key → completion timestamp (Action==2)
+		endPos := map[uint64]uint64{} // element instance key → completion log position (ADR-0159)
 		emitFrame := func(pos uint64, at int64) {
 			tokens := make([]timelineToken, 0, len(active))
 			for _, token := range active {
@@ -1515,12 +1552,14 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				// Nothing will activate from here — a termination hands its token on to
 				// no one, and a leaf has no successor to move into — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
+				endPos[v.ElementInstanceKey] = rr.pos
 				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
 				emitFrame(rr.pos, rr.at)
 			default:
 				// Defer: keep the token visible until its successor activates.
 				endAt[v.ElementInstanceKey] = rr.at
+				endPos[v.ElementInstanceKey] = rr.pos
 				pending[v.ElementInstanceKey] = v
 			}
 		}
@@ -1579,6 +1618,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// A step a person forced carries its attribution (ADR-0159).
+				if m, ok := manualByElement[rv.ElementInstanceKey]; ok {
+					mv := m
+					step.Manual = &mv
+				}
 				// A call activity carries the child instance it started, so the replay
 				// can drill from the caller into the child (ADR-0076).
 				if childByParent != nil && d.cp.Node(sr.elementID).Type == compiler.TypeCallActivity {
@@ -1603,6 +1647,50 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 			resp.Steps = append(resp.Steps, step)
+		}
+
+		// A second sweep for the variables as they stood once each element *finished*
+		// (ADR-0159). The pass above answers "what did this element see on entry"; a task
+		// that writes its result on completion has nothing to show there, which reads as
+		// "the element has no variables" even though it produced some. Folding the same
+		// ordered change list up to the element's completion position answers "what did it
+		// leave behind". Only a finished element has one, so an element still parked keeps
+		// it absent. The refs are walked in completion order so the sweep stays linear over
+		// the change list rather than re-folding per step.
+		type afterRef struct {
+			idx int
+			pos uint64
+		}
+		refs := make([]afterRef, 0, len(resp.Steps))
+		for i := range resp.Steps {
+			if k := resp.Steps[i].ElementInstanceKey; k != 0 {
+				if p, ok := endPos[k]; ok {
+					refs = append(refs, afterRef{idx: i, pos: p})
+				}
+			}
+		}
+		sort.Slice(refs, func(a, b int) bool { return refs[a].pos < refs[b].pos })
+		after := map[varKey]varEntry{}
+		ai := 0
+		for _, r := range refs {
+			for ai < len(changes) && changes[ai].pos <= r.pos {
+				c := changes[ai]
+				after[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
+				ai++
+			}
+			vars := make([]variableView, 0, len(after))
+			for _, e := range after {
+				if r.pos <= e.endPos {
+					vars = append(vars, e.view)
+				}
+			}
+			sort.Slice(vars, func(i, j int) bool {
+				if vars[i].Scope != vars[j].Scope {
+					return vars[i].Scope < vars[j].Scope
+				}
+				return vars[i].Name < vars[j].Name
+			})
+			resp.Steps[r.idx].VariablesAfter = vars
 		}
 	})
 	switch {
@@ -3191,6 +3279,12 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 // (e.g. when the external work was carried out out-of-band) until a real worker
 // transport lands. Discovering the job key is out of scope here — that comes
 // from runtime inspection.
+//
+// Because a person is forcing a step the engine would not have taken on its own, the
+// body must carry a "reason" and the completion is recorded as an operator action —
+// who, when, on which element, and why — in append-only audit history that the
+// instance timeline and the replay surface (ADR-0159). A blank or missing reason is a
+// 400: an unexplained manual completion is exactly what this route must not allow.
 func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -3210,6 +3304,32 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Forcing a step the engine would not have taken on its own is an intervention, so
+	// it must say why (ADR-0159). The reason is required — not merely recorded when
+	// offered — because the audit trail is the whole point of this route: without it a
+	// completed step would carry no explanation of why a person overrode the model.
+	var payload struct {
+		Reason string `json:"reason"`
+	}
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			return
+		}
+	}
+	reason := strings.TrimSpace(payload.Reason)
+	if reason == "" {
+		httpapi.Error(w, http.StatusBadRequest, "reason is required: completing a job by hand is an operator intervention and is recorded with who did it and why")
+		return
+	}
+	// Who is intervening, for the audit trail (ADR-0159/0098): the authenticated
+	// principal's username, or "" when auth is off (single-user) or the caller is
+	// unidentified. Read off the request before the run loop, like every other
+	// principal read.
+	actor := ""
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
 	var (
 		found  bool
 		runErr error
@@ -3219,7 +3339,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.CompleteJob(key, vars...)
+		s.proc.CompleteJobManually(key, actor, reason, vars...)
 		runErr = s.jobRunner.Drive()
 	})
 	switch {

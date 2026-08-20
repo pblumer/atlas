@@ -44,6 +44,7 @@ const (
 	cfCanceling              columnFamily = 0x1F // canceling:<txScopeKey> → 1: a transaction being cancelled (ADR-0108)
 	cfHistoryExpiry          columnFamily = 0x20 // histExp:<purgeDueDate>:<piKey> → nil (ADR-0146)
 	cfRuntimeTotal           columnFamily = 0x21 // rtTotal:<kind> → int64 engine-wide live count (merge, ADR-0142)
+	cfOperatorAction         columnFamily = 0x22 // opAct:<piKey>:<ts>:<pos> → OperatorActionValue (ADR-0159)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -436,6 +437,33 @@ func keyVariableAudit(piKey uint64, ts int64, pos uint64) []byte {
 // process instance, in change order.
 func variableAuditScopePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfVariableAudit)}, piKey)
+}
+
+// keyOperatorAction keys one operator intervention under its owning process instance,
+// the same (instance, ts, pos) shape as the variable-audit key, so the "who forced this
+// step" trail folds into the same instance timeline by log position (ADR-0159,
+// mirroring ADR-0098). Append-only: one record per intervention, never overwritten.
+func keyOperatorAction(piKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(operatorActionScopePrefix(piKey), ts)
+	return appendBE64(b, pos)
+}
+
+// operatorActionScopePrefix scans every operator intervention recorded under one
+// process instance, in the order they happened.
+func operatorActionScopePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfOperatorAction)}, piKey)
+}
+
+// timestampFromOperatorActionKey extracts the event timestamp from an operator-action
+// key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromOperatorActionKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromOperatorActionKey extracts the trailing log position from an
+// operator-action key.
+func positionFromOperatorActionKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
 // timestampFromVariableAuditKey extracts the event timestamp from a variable-audit

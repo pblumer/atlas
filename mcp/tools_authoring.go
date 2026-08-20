@@ -79,6 +79,24 @@ func optVariablesBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// optVariablesBodyWith builds a request body of {variables, ...extra}: the optional
+// variables map plus any additional top-level fields the route requires (the
+// mandatory completion reason of ADR-0159, say). Splitting it from optVariablesBody
+// keeps the plain variables-only callers unchanged.
+func optVariablesBodyWith(args map[string]any, extra map[string]any) ([]byte, error) {
+	vars, err := optVariablesMap(args)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{"variables": vars}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	// Marshalling JSON-decoded values plus plain strings cannot fail.
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // failJobBody builds the fail-job request body {retries, message?} from the tool
 // arguments. retries defaults to 0 (which exhausts the job and raises an
 // incident). The /fail endpoint requires a JSON body — unlike /complete it does

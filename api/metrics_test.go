@@ -475,7 +475,7 @@ func TestMetricsReportOpenWork(t *testing.T) {
 		t.Fatal("no activatable job to complete")
 	}
 	if code, body := h.x.do(http.MethodPost,
-		"/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/complete", "{}"); code != http.StatusOK {
+		"/api/v1/jobs/"+strconv.FormatUint(jobKey, 10)+"/complete", `{"reason":"test: operator completed the parked job by hand"}`); code != http.StatusOK {
 		t.Fatalf("complete job status=%d body=%s", code, body)
 	}
 	if got := sampleValue(t, scrape(t, h), "atlas_open_jobs"); got != 2 {
@@ -554,7 +554,7 @@ func TestJobLifecycleCounters(t *testing.T) {
 
 	// Complete one, fail the other with retries left.
 	if code, body := h.x.do(http.MethodPost,
-		"/api/v1/jobs/"+strconv.FormatUint(keys[0], 10)+"/complete", "{}"); code != http.StatusOK {
+		"/api/v1/jobs/"+strconv.FormatUint(keys[0], 10)+"/complete", `{"reason":"test: operator completed the parked job by hand"}`); code != http.StatusOK {
 		t.Fatalf("complete status=%d body=%s", code, body)
 	}
 	if code, body := h.x.do(http.MethodPost, "/api/v1/jobs/"+strconv.FormatUint(keys[1], 10)+"/fail",

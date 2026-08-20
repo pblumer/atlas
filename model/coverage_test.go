@@ -78,6 +78,29 @@ func TestAppendValueRoundTrip(t *testing.T) {
 			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 5), Name: "approved", Kind: VarBool, Bool: true},
 		},
 		{
+			name: "operator action",
+			vt:   VTOperatorAction,
+			v: &OperatorActionValue{
+				ProcessInstanceKey: NewKey(1, 1),
+				ElementInstanceKey: NewKey(1, 7),
+				JobKey:             NewKey(1, 8),
+				Kind:               OperatorActionCompleteJob,
+				Actor:              "patrick",
+				Reason:             "account created by hand in AD, ticket INC-4711",
+			},
+		},
+		{
+			name: "operator action (auth off, so no actor)",
+			vt:   VTOperatorAction,
+			v: &OperatorActionValue{
+				ProcessInstanceKey: NewKey(1, 2),
+				ElementInstanceKey: NewKey(1, 9),
+				JobKey:             NewKey(1, 10),
+				Kind:               OperatorActionCompleteJob,
+				Reason:             "done out of band",
+			},
+		},
+		{
 			name: "compensable",
 			vt:   VTCompensable,
 			v: &CompensableValue{
@@ -132,10 +155,41 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTSignal, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery, VTCompensable} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTSignal, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery, VTCompensable, VTOperatorAction} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
+	}
+}
+
+// TestOperatorActionDecodeErrors exercises the truncation guards in
+// OperatorActionValue.decode past its fixed 25-byte prefix: each of the two
+// length-prefixed strings must report a short buffer rather than silently decoding
+// a half-written audit record (ADR-0159).
+func TestOperatorActionDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &OperatorActionValue{
+		ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), JobKey: NewKey(1, 3),
+		Kind: OperatorActionCompleteJob, Actor: "a", Reason: "r",
+	})
+	for _, n := range []int{25, 26, 30} {
+		if n >= len(full) {
+			continue
+		}
+		var v OperatorActionValue
+		if err := v.decode(full[:n]); !errors.Is(err, ErrShortBuffer) {
+			t.Errorf("decode(truncated to %d) err = %v, want ErrShortBuffer", n, err)
+		}
+	}
+}
+
+// TestOperatorActionKindString covers the kind's label, including the guard for a
+// value written by a newer version than this one.
+func TestOperatorActionKindString(t *testing.T) {
+	if got := OperatorActionCompleteJob.String(); got != "completeJob" {
+		t.Errorf("OperatorActionCompleteJob.String() = %q, want completeJob", got)
+	}
+	if got := OperatorActionKind(200).String(); got != "OperatorActionKind(?)" {
+		t.Errorf("unknown kind String() = %q, want the guard label", got)
 	}
 }
 
@@ -346,7 +400,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
-		VTVariableAudit, VTCompensable,
+		VTVariableAudit, VTCompensable, VTOperatorAction,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -365,7 +419,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
 		IntentVariableModify, IntentVariableAudited,
-		IntentCompensableRecorded, IntentCompensableConsumed,
+		IntentCompensableRecorded, IntentCompensableConsumed, IntentOperatorActed,
 		IntentJobErrorThrown,
 	}
 	for _, in := range intents {

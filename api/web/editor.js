@@ -7362,6 +7362,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let badges = [];   // overlay ids for the execution-count badges
   let visits = {};   // elementId → cumulative execution count (the badge number)
   let selEik = 0;    // selected element-instance key (0 = none / process root)
+  // Which side of a selected element's variables the tab shows: "in" as they stood when
+  // the token entered, "out" as they stood once it finished (ADR-0159). A task that
+  // writes its result on completion has nothing on entry, so a bare "as of activation"
+  // view reports "no variables" for an element that plainly produced some.
+  let varSide = "in";
   let selElId = "";  // selected diagram element id (may cover several instances)
   let activeTab = "details";
   let showEnd = false; // history shows end date instead of start date
@@ -7373,6 +7378,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
+  // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
+  // shown — so its own contribution stands out from the values it merely inherited.
+  let changedNames = null;
   let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
 
   const speed = () => Number(speedSel.value) || 1;
@@ -7538,6 +7546,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // it is paragraphs rather than a value. Nothing at all when the element is undocumented.
   const docBlock = (text) => (text ? `<div class="ops-doc"><h4>Documentation</h4><p>${esc(text)}</p></div>` : "");
 
+  // manualBlock reports that this step was forced by a person rather than driven by the
+  // engine (ADR-0159): who completed the parked job by hand, when, and the reason they
+  // gave. It leads the block list because it changes how every other fact on the step
+  // should be read — the element did not finish on its own. Nothing at all for an
+  // ordinary step, so its presence alone is the signal.
+  const manualBlock = (s) => {
+    const m = s && s.manual;
+    if (!m) return "";
+    const who = m.actor ? esc(m.actor) : "an operator";
+    return `<div class="ops-manual">
+      <h4>&#10003; Completed manually</h4>
+      <p>This task was finished by hand by <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} —
+        the engine did not complete it on its own.</p>
+      <p class="ops-manual-reason">${esc(m.reason || "")}</p>
+    </div>`;
+  };
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -7584,7 +7609,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
       ${from}${rel}${child}
-    </dl>${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
+    </dl>${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
   }
 
   // A JSON variable's stored value is a JSON string; these read its shape without
@@ -7634,11 +7659,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // instance (ADR-0098). The audit log has carried who did it since that landed and
     // the timeline has returned it all along; showing it is what makes an operator
     // correction reviewable rather than an unexplained jump in the values (ADR-0158).
+    // On the Output side, mark what this element itself contributed — a value it wrote
+    // or rewrote — so its result stands apart from what it merely inherited (ADR-0159).
+    const changedChip = changedNames && changedNames.has(v.scope + "\u0000" + v.name)
+      ? ` <span class="c-changed" title="Written by this element">+</span>`
+      : "";
     const actorChip = v.actor
       ? ` <span class="c-actor" title="Set by ${esc(v.actor)} — an operator correction, not a value the process computed">✎ ${esc(v.actor)}</span>`
       : "";
     return `<tr>
-      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${actorChip}</td>
+      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${changedChip}${actorChip}</td>
       <td class="c-valcell">${valCell}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
@@ -7666,6 +7696,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     varsEl.innerHTML = `
       <div class="vp-head v-toolbar">
         <span class="vp-title" id="v-scope">Variables</span>
+        <span class="v-side" id="v-side" hidden>
+          <button type="button" class="v-side-btn" data-side="in" title="The variables as they stood when the token entered this element">Input</button>
+          <button type="button" class="v-side-btn" data-side="out" title="The variables as they stood once this element finished — its result, output mappings included">Output</button>
+        </span>
         <span class="vp-count" id="v-count">0 variables</span>
         <span class="v-filter">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
@@ -7682,6 +7716,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const filterEl = varsEl.querySelector("#v-filter");
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
+    varsEl.querySelector("#v-side").addEventListener("click", (e) => {
+      const b = e.target.closest(".v-side-btn");
+      if (!b) return;
+      varSide = b.dataset.side;
+      renderVars();
+    });
     varsBuilt = true;
   }
 
@@ -7692,11 +7732,37 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function renderVars() {
     if (!varsBuilt) buildVarsShell();
     let src, scope;
+    const sideEl = varsEl.querySelector("#v-side");
+    changedNames = null;
     if (selEik) {
       const s = stepByEik(selEik);
-      src = s ? s.variables : [];
-      scope = s ? `As of <b>${esc(stepLabel(s))}</b> activation` : "Variables";
+      const entry = (s && s.variables) || [];
+      const after = (s && s.variablesAfter) || null;
+      // Offer the two sides only for an element that has finished; while it is still
+      // running there is no "after" to show. Landing on Output when the element saw
+      // nothing on entry keeps the panel from reading as empty for a task whose whole
+      // contribution is its result.
+      sideEl.hidden = !after;
+      if (!after) varSide = "in";
+      else if (varSide === "in" && !entry.length && after.length) varSide = "out";
+      for (const b of sideEl.querySelectorAll(".v-side-btn")) b.classList.toggle("active", b.dataset.side === varSide);
+      const out = varSide === "out" && after;
+      src = out ? after : entry;
+      if (out) {
+        // Mark what this element actually contributed: a name absent on entry, or one
+        // whose value it rewrote.
+        const before = new Map(entry.map((v) => [v.scope + "\u0000" + v.name, v.value]));
+        changedNames = new Set();
+        for (const v of after) {
+          const k = v.scope + "\u0000" + v.name;
+          if (!before.has(k) || before.get(k) !== v.value) changedNames.add(k);
+        }
+      }
+      scope = s
+        ? `${out ? "After" : "As of"} <b>${esc(stepLabel(s))}</b> ${out ? "completion" : "activation"}`
+        : "Variables";
     } else {
+      sideEl.hidden = true;
       const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
       const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
       src = cur ? cur.variables : [];
