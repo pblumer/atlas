@@ -2441,3 +2441,27 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 6px;
   background: #fff;
 }
+
+/* ---------- Secret shape hints (ADR-0155) ---------- */
+/* A vault secret is a name and an opaque string, so the form has to say what the
+   string is for: which connector resolves it and what shape that connector needs. */
+.secret-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
+.secret-hint p { margin: 0 0 6px; }
+.secret-skeleton {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin: 0 0 6px; overflow-x: auto;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* A credential bundle is several lines that have to be pasted and read back before
+   saving — masking it is what made the shape unknowable in the first place. */
+.secret-json {
+  width: 100%; resize: vertical;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* Why a value cannot be what the connector needs, said where it was typed. */
+.secret-error {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: 6px;
+  border: 1px solid var(--danger); background: #fdecea; color: var(--danger);
+  font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.secret-set-row .field { margin: 0; }
