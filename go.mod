@@ -6,6 +6,8 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/andybalholm/cascadia v1.3.3
 	github.com/cockroachdb/pebble v1.1.5
+	github.com/go-asn1-ber/asn1-ber v1.5.8
+	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d
 	github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc
 	github.com/prometheus/client_golang v1.15.0
@@ -17,6 +19,7 @@ require (
 )
 
 require (
+	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

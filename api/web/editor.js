@@ -1990,6 +1990,114 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "scim", name: "SCIM Provisioning Connector", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
+    // A person mark with an outbound arrow reads "push this identity to another
+    // system", which is what SCIM is for — distinct from the user-provisioning
+    // connector's plain person, which acts on Atlas's own login store.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fe0"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.2" cy="5.9" r="2"/><path d="M2.9 12.3c0-2 1.5-3.1 3.3-3.1s3.3 1.1 3.3 3.1"/><path d="M11.1 6.1h2.5M12.4 4.8l1.3 1.3-1.3 1.3"/></g></svg>`,
+    ext: "atlas:ScimConnector",
+    fields: [
+      { group: "Service provider" },
+      { key: "baseUrl", label: "Base URL", placeholder: "https://idp.example.com/scim/v2", fx: true, hint: "The SCIM service provider's base URL, without the resource segment. May be a FEEL expression (fx)." },
+      { key: "resource", label: "Resource", placeholder: "Users", fx: true, hint: "The resource type segment, normally Users or Groups. May be a FEEL expression (fx)." },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create", l: "Create (POST)" },
+          { v: "get", l: "Get by id (GET)" },
+          { v: "replace", l: "Replace (PUT)" },
+          { v: "patch", l: "Patch (PATCH)" },
+          { v: "delete", l: "Delete (DELETE)" },
+          { v: "search", l: "Search by filter (GET)" },
+        ],
+      },
+      {
+        key: "resourceId", label: "Resource id", placeholder: "=scimId", fx: true,
+        showIf: (v) => v.operation === "get" || v.operation === "replace" || v.operation === "patch" || v.operation === "delete",
+        hint: "The provider's id for the resource. Usually a FEEL reference to the id a previous create wrote into a variable.",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: 'userName eq "arno"', fx: true,
+        showIf: (v) => v.operation === "search",
+        hint: "An RFC 7644 filter expression. May be a FEEL expression (fx).",
+      },
+      {
+        key: "bodyVariable", label: "Payload variable", placeholder: "scimUser",
+        showIf: (v) => v.operation === "create" || v.operation === "replace" || v.operation === "patch",
+        hint: "A process variable holding the JSON object to send. Empty sends the whole variable scope.",
+      },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "scimResponse", hint: "The provider's JSON response is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "ldap", name: "LDAP Directory Connector", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
+    // A root node branching into three children reads "directory tree" at a glance —
+    // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
+    ext: "atlas:LdapConnector",
+    fields: [
+      { group: "Directory server" },
+      { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldap://host:389 for a plain connection, ldaps://host:636 for TLS. May be a FEEL expression (fx)." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      {
+        key: "bindSecret", label: "Bind password reference", placeholder: "LDAP_BIND",
+        hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
+      },
+      {
+        key: "startTLS", label: "STARTTLS", type: "select",
+        options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
+        hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "search", l: "Search" },
+          { v: "add", l: "Add entry" },
+          { v: "modify", l: "Modify entry" },
+          { v: "delete", l: "Delete entry" },
+          { v: "modify-password", l: "Set password (RFC 3062)" },
+        ],
+      },
+      { key: "baseDN", label: "Base DN", placeholder: "ou=users,dc=example,dc=com", fx: true, showIf: (v) => v.operation === "search", hint: "The subtree the search starts from. May be a FEEL expression (fx)." },
+      { key: "filter", label: "Filter", placeholder: "(&(objectClass=person)(uid=arno))", fx: true, showIf: (v) => v.operation === "search", hint: "An RFC 4515 search filter. May be a FEEL expression (fx)." },
+      {
+        key: "scope", label: "Scope", type: "select", showIf: (v) => v.operation === "search",
+        options: [{ v: "", l: "Subtree (default)" }, { v: "base", l: "Base object only" }, { v: "one", l: "One level" }, { v: "sub", l: "Subtree" }],
+      },
+      {
+        key: "dn", label: "Entry DN", placeholder: "uid=arno,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "delete" || v.operation === "modify-password",
+        hint: "The entry the operation acts on. May be a FEEL expression (fx).",
+      },
+      {
+        key: "entryVariable", label: "Attributes variable", placeholder: "ldapEntry",
+        showIf: (v) => v.operation === "add" || v.operation === "modify",
+        hint: "A process variable holding a JSON object of attribute names to values.",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
+        showIf: (v) => v.operation === "modify-password",
+        hint: "Usually a FEEL reference to a variable, so no password is written into the model.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
+    ],
+  },
+  {
     id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading

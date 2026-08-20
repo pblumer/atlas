@@ -523,6 +523,47 @@ type ConnectorTaskDetail struct {
 	UserDisplayName RestExpr
 	UserRoles       RestExpr
 	UserPassword    RestExpr
+	// SCIM connector fields (JobType == ScimJobType, ADR-0153). ScimBaseURL is the
+	// service provider's SCIM v2 base endpoint and ScimResource the resource-type path
+	// segment ("Users"/"Groups") — each a literal-or-FEEL value evaluated over the
+	// instance's variables at call time. ScimOp is the interned operation
+	// ("create"|"get"|"replace"|"patch"|"delete"|"search"), which the worker maps to an
+	// HTTP method. ScimResourceID addresses a single resource (get/replace/patch/
+	// delete); ScimFilter is the SCIM filter for a search. ScimBody is the interned name
+	// of the process variable holding the create/replace/patch payload (interned "" →
+	// the whole variable scope, mirroring REST). Each is the zero value for a non-SCIM
+	// task; ResultVar (above) receives the JSON response and Auth (above) the
+	// bearer/basic/apiKey credential reference. Read only by the in-process SCIM worker.
+	ScimBaseURL    RestExpr
+	ScimResource   RestExpr
+	ScimOp         int32
+	ScimResourceID RestExpr
+	ScimFilter     RestExpr
+	ScimBody       int32
+	// LDAP connector fields (JobType == LdapJobType, ADR-0154). LdapURL is the server
+	// (ldap://host:389 or ldaps://host:636) and LdapBindDN the bind identity — each a
+	// literal-or-FEEL value evaluated over the instance's variables at call time.
+	// LdapBindSecret is the interned name of the server-side secret holding the bind
+	// password (interned "" → an anonymous bind); LdapStartTLS upgrades a plain
+	// connection with STARTTLS. LdapOp is the interned operation
+	// ("search"|"add"|"modify"|"delete"|"modify-password"). LdapDN is the target entry
+	// (add/modify/delete/modify-password); LdapBaseDN/LdapFilter/LdapScope (interned
+	// "base"|"one"|"sub") address a search. LdapEntryVar is the interned name of the
+	// process variable holding the add/modify attribute object; LdapNewPassword is the
+	// modify-password value. Each is the zero value for a non-LDAP task; ResultVar
+	// (above) receives a search's entries as a JSON array. Read only by the in-process
+	// LDAP worker.
+	LdapURL         RestExpr
+	LdapBindDN      RestExpr
+	LdapBindSecret  int32
+	LdapStartTLS    bool
+	LdapOp          int32
+	LdapDN          RestExpr
+	LdapBaseDN      RestExpr
+	LdapFilter      RestExpr
+	LdapScope       int32
+	LdapEntryVar    int32
+	LdapNewPassword RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
