@@ -3775,6 +3775,177 @@ const maxJobLease = 24 * time.Hour
 // type indices are interned per process, so the global activatable index cannot tell
 // one definition's "send-email" from another's "charge-card" — see ADR-0007. A worker
 // that lists an instance's jobs and leases them by key is unambiguous today.
+// maxJobsPerPull bounds one type-keyed activation. A worker that asks for more is
+// given this many: the cap exists so a single request cannot lease an entire
+// backlog, which would starve every other worker for a whole lease period.
+const maxJobsPerPull = 100
+
+// pulledJob is one leased job as a worker receives it: enough to do the work and
+// report the outcome without a second call. Variables are the ones *visible at the
+// task* — the element instance's scope chain, so an activity-local input mapping
+// shadows the instance value exactly as it does for an in-process worker.
+type pulledJob struct {
+	JobKey             uint64         `json:"jobKey"`
+	Type               string         `json:"type"`
+	ProcessInstanceKey uint64         `json:"processInstanceKey"`
+	ElementInstanceKey uint64         `json:"elementInstanceKey"`
+	ProcessDefKey      uint64         `json:"processDefKey"`
+	ElementID          string         `json:"elementId"`
+	Retries            int32          `json:"retries"`
+	LeaseExpiresAt     int64          `json:"leaseExpiresAt"`
+	Variables          map[string]any `json:"variables"`
+}
+
+// handleActivateJobsByType is the type-keyed pull ADR-0007 designed and its
+// amendment deferred: a worker asks for the next jobs of a *named* type rather
+// than having to know a job key. It is what makes an out-of-process worker
+// possible at all, and it only became correct once job types were resolved into
+// one engine-wide index space (ADR-0157) — before that a name meant a different
+// index in every definition.
+//
+// Two types are refused rather than served. One an in-process worker is already
+// draining would be worked twice, because that runner does not lease: it
+// dispatches whatever is activatable. And a user task is not worker work — it
+// waits for a person and is claimed through the Tasks app.
+//
+// Body: {"type": "send-email", "worker": "w1", "leaseMs": 30000, "maxJobs": 5}.
+// An empty jobs array is the ordinary answer for an idle queue; the caller polls
+// again. (Long-poll, so it need not, is the next slice.)
+func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Type    string `json:"type"`
+		Worker  string `json:"worker"`
+		LeaseMs int64  `json:"leaseMs"`
+		MaxJobs int    `json:"maxJobs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	body.Type = strings.TrimSpace(body.Type)
+	if body.Type == "" {
+		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
+		return
+	}
+	lease := defaultJobLease
+	if body.LeaseMs > 0 {
+		lease = time.Duration(body.LeaseMs) * time.Millisecond
+	}
+	if lease > maxJobLease {
+		httpapi.Error(w, http.StatusBadRequest,
+			"leaseMs is longer than the "+maxJobLease.String()+" maximum; a lease is what returns a job from a dead worker")
+		return
+	}
+	want := body.MaxJobs
+	if want <= 0 {
+		want = 1
+	}
+	if want > maxJobsPerPull {
+		want = maxJobsPerPull
+	}
+
+	var (
+		unknown  bool
+		inProc   bool
+		jobs     []pulledJob
+		scanErr  error
+		runErr   error
+		reserved bool
+	)
+	s.do(func() {
+		jobType, ok := s.jobTypes.Index(body.Type)
+		if !ok {
+			unknown = true
+			return
+		}
+		if jobType == compiler.UserTaskJobTypeIndex {
+			reserved = true
+			return
+		}
+		if s.jobRunner.Handles(jobType) {
+			inProc = true
+			return
+		}
+		// Collect first, then lease: activating mutates the very index being scanned.
+		var keys []uint64
+		if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
+			if len(keys) < want {
+				keys = append(keys, k)
+			}
+			return nil
+		}); scanErr != nil {
+			return
+		}
+		for _, k := range keys {
+			s.proc.ActivateJob(k, body.Worker, int64(lease))
+		}
+		if runErr = s.jobRunner.Drive(); runErr != nil {
+			return
+		}
+		for _, k := range keys {
+			j, ok := s.pulledJob(k, body.Type)
+			if !ok {
+				continue // completed or re-leased between the scan and here
+			}
+			jobs = append(jobs, j)
+		}
+	})
+	switch {
+	case unknown:
+		httpapi.Error(w, http.StatusNotFound,
+			"no job type "+strconv.Quote(body.Type)+" is known to this engine; it is registered when a process using it is deployed")
+	case reserved:
+		httpapi.Error(w, http.StatusConflict,
+			"a user task is not worker work: it waits for a person and is claimed through the Tasks API")
+	case inProc:
+		httpapi.Error(w, http.StatusConflict,
+			"job type "+strconv.Quote(body.Type)+" is served by an in-process worker; leasing it externally would run the work twice")
+	case scanErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "activate jobs: "+scanErr.Error())
+	case runErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "activate jobs: "+runErr.Error())
+	default:
+		if jobs == nil {
+			jobs = []pulledJob{}
+		}
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobs": jobs, "worker": body.Worker})
+	}
+}
+
+// pulledJob reads one leased job back out of state, with the element it sits on
+// and the variables visible there. It reads the lease deadline back rather than
+// recomputing it: the engine froze that value from its own clock, and it is what
+// the worker has to trust (invariant I6). Runs on the run-loop goroutine.
+func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
+	jv, ok, err := s.store.GetJob(jobKey)
+	if err != nil || !ok {
+		return pulledJob{}, false
+	}
+	j := pulledJob{
+		JobKey:             jobKey,
+		Type:               typeName,
+		ProcessInstanceKey: jv.ProcessInstanceKey,
+		ElementInstanceKey: jv.ElementInstanceKey,
+		Retries:            jv.Retries,
+		LeaseExpiresAt:     jv.LeaseExpiresAt,
+		Variables:          map[string]any{},
+	}
+	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+		j.ProcessDefKey = ei.ProcessDefKey
+		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+			j.ElementID = d.cp.ElementBpmnId(ei.ElementId)
+		}
+	}
+	// The task's own scope chain, so an input mapping shadows the instance value.
+	if err := s.store.VisibleVariablesOfScope(jv.ElementInstanceKey, func(v *model.VariableValue) error {
+		j.Variables[v.Name] = nativeVar(v)
+		return nil
+	}); err != nil {
+		return pulledJob{}, false
+	}
+	return j, true
+}
+
 func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

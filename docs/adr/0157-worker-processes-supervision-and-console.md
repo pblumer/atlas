@@ -27,13 +27,42 @@
 > job type, and a silent zero value would hand every unresolved service task to
 > the DMN worker.
 >
-> **Still owed before the type-keyed pull: the migration.** Jobs written *before*
-> this carry per-process indices, and one of those may collide with a name the
-> registry has since registered. Nothing observes that today — the in-process
-> runner only dispatches reserved types, and the read path prefers the registry
-> and falls back to the process's own string table — but a worker subscribing by
-> name would see it, so the migration belongs in the same slice as the pull, where
-> it is testable.
+> **The jobs written before the table are a declared discontinuity, not a
+> migration.** ADR-0007's amendment asked for "a migration for jobs already
+> written with per-process indices". Making one durable would mean a new event
+> and an `applyToState` arm — state is a fold of the log, so a direct rewrite of
+> the index would simply be rebuilt from the original `JobCreated` on the next
+> replay. Against that: this repository already states the posture for exactly
+> this situation — `checkpoint/manifest.go` records that **pre-1.0 there is no
+> in-place migration**, and "1.0 API stability commitment" is still unchecked on
+> the roadmap. So the pre-upgrade jobs of a model-authored type are simply not
+> visible to the type-keyed pull. They remain listed, leasable by key, and
+> completable, and the set drains as those instances finish. If a compatibility
+> commitment lands before this does, the migration event is the alternative and
+> this note is where to start.
+>
+> **Step 2, first half: the type-keyed pull is delivered.** `POST
+> /api/v1/jobs/activate` leases the next jobs of a *named* type — the endpoint
+> ADR-0007 designed and its amendment deferred for want of the table above. It
+> answers with everything a worker needs in one call, including the variables
+> visible **at the task** (the element instance's scope chain, so an
+> activity-local input mapping shadows the instance value exactly as it does for
+> an in-process worker) rather than making the worker fetch them separately and
+> race a concurrent write.
+>
+> Two job types are refused rather than served, and both refusals are the
+> decision above made mechanical. A type an **in-process worker** is registered
+> for returns 409: that runner does not lease, it dispatches whatever is
+> activatable, so handing the same job to an external worker is precisely how it
+> gets done twice — which makes "unregister the handler" the operative meaning of
+> relocating a kind, as this ADR says. And a **user task** returns 409 because it
+> is not worker work. An unknown type name is a 404 rather than an empty list: a
+> typo that polls forever with nothing to debug is the worse failure.
+>
+> **Still owed in step 2: long-poll.** The pull is a poll today; the post-fsync
+> notification it should wait on already exists (ADR-0005). It is deliberately
+> separate because a long-poll must wait *outside* `Loop.Do` — a request holding
+> the run loop while it waits is the very stall this whole sequence is about.
 
 ## Context and problem statement
 
