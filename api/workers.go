@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -142,11 +143,21 @@ type jobTypeStat struct {
 	// ServedInProcess is the answer to "why is nothing external picking this up",
 	// and the flag that says relocating the kind means unregistering that handler
 	// (ADR-0157).
-	ServedInProcess bool  `json:"servedInProcess"`
-	Parked          int64 `json:"parked"`
-	Truncated       bool  `json:"truncated,omitempty"`
-	InFlight        int64 `json:"inFlight"`
-	Incidents       int64 `json:"incidents"`
+	ServedInProcess bool `json:"servedInProcess"`
+	// BuiltIn marks a reserved job type — one of the kinds Atlas ships rather than
+	// one a model authored. The view leans on it to keep quiet built-ins out of the
+	// way: an engine knows eighteen of them, and listing every idle one buries the
+	// two an operator actually deployed.
+	BuiltIn bool `json:"builtIn"`
+	// Leasable is whether an external worker may pull this type at all. False for a
+	// type an in-process worker serves, and false for the user task, which waits for
+	// a person — the same two refusals the pull endpoint makes. Without it the view
+	// would draw "nobody is serving this" against a type nothing is meant to serve.
+	Leasable  bool  `json:"leasable"`
+	Parked    int64 `json:"parked"`
+	Truncated bool  `json:"truncated,omitempty"`
+	InFlight  int64 `json:"inFlight"`
+	Incidents int64 `json:"incidents"`
 }
 
 // handleWorkers is the Workers view (ADR-0157): every job type the engine knows
@@ -167,10 +178,13 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		incidents := s.incidentsByJobType()
 		for _, e := range s.jobTypes.All() {
+			inProcess := s.jobRunner.Handles(e.Index)
 			st := jobTypeStat{
 				Type:            e.Name,
 				Index:           e.Index,
-				ServedInProcess: s.jobRunner.Handles(e.Index),
+				ServedInProcess: inProcess,
+				BuiltIn:         e.Index < compiler.FirstDynamicJobTypeIndex(),
+				Leasable:        !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
 				InFlight:        s.workers.inFlightOf(e.Name),
 				Incidents:       incidents[e.Index],
 			}

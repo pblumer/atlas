@@ -15,6 +15,8 @@ type workersResp struct {
 		Type            string `json:"type"`
 		Index           int32  `json:"index"`
 		ServedInProcess bool   `json:"servedInProcess"`
+		BuiltIn         bool   `json:"builtIn"`
+		Leasable        bool   `json:"leasable"`
 		Parked          int64  `json:"parked"`
 		InFlight        int64  `json:"inFlight"`
 		Incidents       int64  `json:"incidents"`
@@ -172,5 +174,35 @@ func TestWorkersViewMarksInProcessTypes(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no row for the reserved mail job type in %+v", got.Types)
+	}
+}
+
+// The view has to tell a type nothing is *meant* to serve apart from one nobody
+// *is* serving. An in-process type and a user task are both refused by the pull, so
+// neither may be drawn as an unserved queue; a model-authored type is the only kind
+// an external worker can take.
+func TestWorkersViewMarksWhichTypesAWorkerMayLease(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	byType := map[string]struct{ builtIn, leasable, inProcess bool }{}
+	for _, row := range workers(t, srv).Types {
+		byType[row.Type] = struct{ builtIn, leasable, inProcess bool }{row.BuiltIn, row.Leasable, row.ServedInProcess}
+	}
+	for _, tc := range []struct {
+		name                         string
+		builtIn, leasable, inProcess bool
+	}{
+		{"send-email", false, true, false},
+		{compiler.MailJobType, true, false, true},
+		{compiler.UserTaskJobType, true, false, false},
+	} {
+		got, ok := byType[tc.name]
+		if !ok {
+			t.Errorf("no row for %q", tc.name)
+			continue
+		}
+		if got.builtIn != tc.builtIn || got.leasable != tc.leasable || got.inProcess != tc.inProcess {
+			t.Errorf("%q: builtIn/leasable/inProcess = %v/%v/%v, want %v/%v/%v",
+				tc.name, got.builtIn, got.leasable, got.inProcess, tc.builtIn, tc.leasable, tc.inProcess)
+		}
 	}
 }

@@ -2554,3 +2554,26 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
 }
 .secret-set-row .field { margin: 0; }
+
+/* The Workers view (ADR-0157). Two tables that only mean something read together:
+   a job type's queue depth, and who is pulling it. The one state worth catching —
+   work piling up with nobody serving it — is a row style rather than a number the
+   eye has to find, because an operator arrives here already suspecting something. */
+.wk-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A queue nobody is draining. Deliberately the same red as an incident: it is the
+   same class of problem, and it usually becomes one. */
+tr.wk-stuck > td { background: var(--danger-soft); }
+tr.wk-stuck .wk-why { display: block; margin-top: 2px; font-size: 12px; color: var(--danger); }
+.wk-count-bad { color: var(--danger); font-weight: 600; }
+/* A worker that has stopped pulling. Amber, not red: it may simply be idle — the
+   red row above is what says whether anyone should care. */
+tr.wk-stale > td { background: var(--warn-soft); }
+.wk-stale-at { color: #b26b00; font-weight: 600; }
+/* The footnote each table carries: what the numbers do and do not cover. */
+.wk-note {
+  margin: 0; padding: 10px 16px; border-top: 1px solid var(--border);
+  background: var(--bg); color: var(--muted); font-size: 12px;
+}
+/* Tables sit flush inside their card, so the card pads only its header. */
+.wk-card { padding: 0; overflow: hidden; }
+.wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
