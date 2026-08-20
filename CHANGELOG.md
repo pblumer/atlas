@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Process instance migration: the engine half**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): a running instance can now
+  be rebound from one deployed version of its process to another without being
+  cancelled. `IntentMigrating` carries the operator's request, `IntentMigrated` is the
+  durable fact carrying both definition keys and the **frozen** element mapping, and an
+  operator-action record beside it says who migrated, why, and which version the
+  instance came from. The fold rewrites the instance's binding, its element instances
+  and their live-token counters, its incidents and compensable records — preserving
+  every element instance key, which is what lets variables, data objects, jobs and the
+  whole scope tree ride through untouched. Nine validation rules refuse rather than
+  guess: an unmapped token, a changed element type, a scope or multi-instance role
+  change, a detached boundary event, a broken event-gateway race group, a changed
+  message name (the subscription is keyed by it), an index the target does not have.
+  Covered by a recovery test that replays a migrated instance into a fresh store and
+  demands identical state. No API or UI yet — that is the next slice.
+
 - **A connector says what it is for, and deleting one that models use is refused**
   ([ADR-0163](docs/adr/0163-deleting-a-referenced-connector.md)): ADR-0158 added a
   deploy-time check that every connector a model references actually resolves — and it

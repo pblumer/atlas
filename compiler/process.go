@@ -922,6 +922,12 @@ type CompiledProcess struct {
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
 
+// NodeCount is how many nodes the compiled graph has, so a caller holding an index
+// from *outside* the process — an operator's migration mapping, say (ADR-0162) — can
+// bounds-check it before Node indexes the slice directly. Every other caller gets its
+// indices from the graph itself and needs no check.
+func (p *CompiledProcess) NodeCount() int32 { return int32(len(p.nodes)) }
+
 // IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
 // that may hold a cancel end event and host a cancel boundary (ADR-0108).
 func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }

@@ -365,6 +365,15 @@ func (c *ProcessingContext) AppendOperatorActionEvent(v model.OperatorActionValu
 	c.appendEvent(v.ProcessInstanceKey, model.VTOperatorAction, model.IntentOperatorActed, inflightValue{operatorAct: v})
 }
 
+// AppendMigrationEvent rebinds a running instance to another deployed version of its
+// process (ADR-0162). Unlike every other event it describes no single entity's
+// transition: it carries the whole element mapping the fold rewrites the instance's
+// live records through, frozen at command time so replay reproduces the rebinding from
+// the log rather than by re-deriving it (invariants I4/I6).
+func (c *ProcessingContext) AppendMigrationEvent(v model.ProcessMigrationValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTProcessMigration, model.IntentMigrated, inflightValue{migration: v})
+}
+
 // AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
 // retains a completed compensable activity (keyed under its scope in completion order),
 // and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both

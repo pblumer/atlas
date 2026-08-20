@@ -559,6 +559,26 @@ func (p *Processor) PurgeInstance(piKey uint64, pi *model.ProcessInstanceValue) 
 	})
 }
 
+// MigrateInstance enqueues the rebinding of a running instance from one deployed
+// version of its process to another (ADR-0162), carrying the fully materialized element
+// mapping the fold will rewrite its live records through, plus who asked and why.
+//
+// The mapping is built and validated by the caller — it needs both compiled processes
+// and the deployment records, which the API holds — and re-checked here on the run loop
+// before anything is emitted, because the instance is free to move in between. A
+// migration that no longer holds is dropped; the caller's refusal is the one an
+// operator reads. Call RunUntilIdle to process it.
+func (p *Processor) MigrateInstance(v model.ProcessMigrationValue, actor, reason string) {
+	p.queue = append(p.queue, Command{
+		Key:       v.ProcessInstanceKey,
+		ValueType: model.VTProcessMigration,
+		Intent:    model.IntentMigrating,
+		Value:     inflightValue{migration: v},
+		Actor:     actor,
+		Reason:    reason,
+	})
+}
+
 // PublishMessage enqueues publication of a message with the given name and
 // correlation key, optionally carrying payload variables that are written into
 // every correlated instance's scope. It correlates against open subscriptions

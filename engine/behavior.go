@@ -33,6 +33,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTProcessInstance, model.IntentActivating):       handleProcessInstanceActivating,
 		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
 		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
+		handlerKey(model.VTProcessMigration, model.IntentMigrating):       handleProcessMigrating,
 		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
 		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
@@ -241,6 +242,53 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 // the deletion is safe; a re-enqueued purge just re-runs idempotent deletes.
 func handleProcessInstancePurging(c *ProcessingContext) {
 	c.AppendProcessInstanceEvent(c.cmd.Key, model.IntentPurged, c.cmd.Value.process)
+}
+
+// handleProcessMigrating rebinds a running instance to another deployed version of its
+// process (ADR-0162). The API has already validated the mapping and refused the request
+// if it could not hold; this re-runs the same check on the run loop, because between
+// that answer and this command the instance has been free to move — a token can have
+// advanced onto an element the mapping does not cover, or the instance can have
+// finished outright. A migration that no longer holds is dropped rather than applied:
+// the API's refusal is the one an operator reads, and half-rebinding an instance is the
+// failure this whole design exists to prevent.
+//
+// The rebinding and its audit are two events, as ADR-0159 established for an
+// intervention: IntentMigrated is the durable fact the fold reads, and the operator
+// action beside it is what makes the migration visible on the instance's timeline —
+// including the log position at which the instance stopped being the old version, which
+// is what lets the replay resolve each step through the definition in force at it.
+func handleProcessMigrating(c *ProcessingContext) {
+	v := c.cmd.Value.migration
+	pi := c.GetProcessInstance(v.ProcessInstanceKey)
+	if pi == nil || pi.ProcessDefKey != v.FromProcessDefKey {
+		return // finished, cancelled, or already migrated: nothing this command still describes
+	}
+	from, to := c.process(v.FromProcessDefKey), c.process(v.ToProcessDefKey)
+	if from == nil || to == nil {
+		return // a definition was undeployed between the API's check and this command
+	}
+	mapping := make(map[int32]int32, len(v.Mapping))
+	for _, m := range v.Mapping {
+		mapping[m.From] = m.To
+	}
+	var live []MigrationElement
+	c.ForEachElementInstance(v.ProcessInstanceKey, func(elKey uint64) {
+		if ei := c.GetElementInstance(elKey); ei != nil {
+			live = append(live, MigrationElementOf(elKey, ei))
+		}
+	})
+	if len(ValidateMigration(from, to, live, mapping)) > 0 {
+		return
+	}
+	c.AppendMigrationEvent(v)
+	c.AppendOperatorActionEvent(model.OperatorActionValue{
+		ProcessInstanceKey: v.ProcessInstanceKey,
+		Kind:               model.OperatorActionMigrate,
+		Actor:              c.cmd.Actor,
+		Reason:             c.cmd.Reason,
+		FromProcessDefKey:  v.FromProcessDefKey,
+	})
 }
 
 // historyPurgeDue freezes when retention may hard-delete an instance's finished record:
