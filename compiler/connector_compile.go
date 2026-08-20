@@ -55,8 +55,8 @@ var connectorCompilers = []connectorCompiler{
 		compile: compileUserConnectorTask,
 	},
 	{
-		present: func(st xmlServiceTask) bool { return st.SharePoint != nil },
-		retries: func(st xmlServiceTask) string { return st.SharePoint.Retries },
+		present: func(st xmlServiceTask) bool { return st.sharePointConn() != nil },
+		retries: func(st xmlServiceTask) string { return st.sharePointConn().Retries },
 		compile: compileSharePointConnectorTask,
 	},
 	{
@@ -307,7 +307,7 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // (Graph base, OAuth credential) is resolved server-side by connector name, like mail;
 // only the target (site, list, item fields) lives in the model.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
-	cn := st.SharePoint
+	cn := st.sharePointConn()
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
 	}

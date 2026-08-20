@@ -1729,8 +1729,19 @@ type xmlServiceTask struct {
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
 	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
-	// absent.
+	// absent. Read it through sharePointConn, not directly — the Modeler writes the
+	// tag with a capital P (see SharePointCamel).
 	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
+	// SharePointCamel is the same extension under the spelling the Modeler produces.
+	// bpmn-js derives an element's tag from its moddle type by lowercasing only the
+	// first letter, so the type SharePointConnector serializes as
+	// <atlas:sharePointConnector> — while hand-authored models (and every compiler
+	// test) use the all-lowercase <atlas:sharepointConnector>. Go's XML matching is
+	// case-sensitive, so a task authored in the Modeler was silently ignored: its
+	// configuration sat in the XML and the task compiled as an unconfigured service
+	// task. Accepting both spellings keeps hand-authored and Modeler-authored models
+	// working; sharePointConn normalizes them.
+	SharePointCamel *xmlSharePointConnector `xml:"extensionElements>sharePointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
 	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
@@ -1748,6 +1759,16 @@ type xmlServiceTask struct {
 	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+}
+
+// sharePointConn returns the task's SharePoint connector extension under either
+// spelling (see SharePointCamel), or nil when the task carries none. Every reader
+// must go through it so both hand-authored and Modeler-authored models compile.
+func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
+	if st.SharePoint != nil {
+		return st.SharePoint
+	}
+	return st.SharePointCamel
 }
 
 // xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to

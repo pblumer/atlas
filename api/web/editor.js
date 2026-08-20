@@ -2112,6 +2112,42 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "userconnector", name: "User Provisioning Connector", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    // A person mark on a teal tile reads "user account" at a glance. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white figure strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0d7a63"/><g fill="none" stroke="#fff" stroke-width="1.1"><circle cx="8" cy="6" r="2.2"/><path d="M3.8 13c0-2.3 1.9-3.6 4.2-3.6s4.2 1.3 4.2 3.6"/></g></svg>`,
+    ext: "atlas:UserConnector",
+    // This connector is gated to the protected system project and mutates the local
+    // user store, so — unlike every other connector — it names no server-registered
+    // provider and carries no credential reference at all (ADR-0122/0123).
+    fields: [
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create", l: "Create user" },
+          { v: "set-password", l: "Set password" },
+          { v: "disable", l: "Disable user" },
+        ],
+      },
+      { group: "Account" },
+      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The Atlas login to create, update, or disable. May be a FEEL expression (fx)." },
+      { key: "email", label: "E-mail", placeholder: "=email", fx: true, showIf: (v) => !v.operation || v.operation === "create" },
+      { key: "displayName", label: "Display name", placeholder: '=vorname + " " + nachname', fx: true, showIf: (v) => !v.operation || v.operation === "create" },
+      {
+        key: "roles", label: "Roles", placeholder: "user", fx: true,
+        showIf: (v) => !v.operation || v.operation === "create",
+        hint: "Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.",
+      },
+      { group: "Credential", showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password" },
+      {
+        key: "password", label: "Initial password", placeholder: "=initialpasswort", fx: true,
+        showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password",
+        hint: "At least 8 characters. Usually a FEEL reference to a variable an admin set on the approval form, so no password is written into the model.",
+      },
+    ],
+  },
+  {
     id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
     // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
     // task's counterpart to REST's globe and mail's envelope. The
