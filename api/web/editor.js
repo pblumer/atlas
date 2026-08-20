@@ -7252,6 +7252,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <option value="2">2&times;</option>
             <option value="0.5">0.5&times;</option>
           </select></label>
+        <label class="bar-toggle" title="Show the selected element's input and output variables on the diagram"><input type="checkbox" id="tg-io"> I/O on diagram</label>
         <span class="clock" id="clock">no steps yet</span>
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
@@ -7382,6 +7383,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // shown — so its own contribution stands out from the values it merely inherited.
   let changedNames = null;
   let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
+  // Whether the selected element carries its in/out card on the diagram, and the
+  // overlay ids + content signature backing it (see drawIOOverlay).
+  let showIO = localStorage.getItem("atlas.replay.io") !== "0";
+  let ioOverlays = [];
+  let ioSig = "";
 
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
@@ -7661,7 +7667,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // correction reviewable rather than an unexplained jump in the values (ADR-0158).
     // On the Output side, mark what this element itself contributed — a value it wrote
     // or rewrote — so its result stands apart from what it merely inherited (ADR-0159).
-    const changedChip = changedNames && changedNames.has(v.scope + "\u0000" + v.name)
+    const changedChip = changedNames && changedNames.has(varRef(v))
       ? ` <span class="c-changed" title="Written by this element">+</span>`
       : "";
     const actorChip = v.actor
@@ -7749,14 +7755,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const out = varSide === "out" && after;
       src = out ? after : entry;
       if (out) {
-        // Mark what this element actually contributed: a name absent on entry, or one
-        // whose value it rewrote.
-        const before = new Map(entry.map((v) => [v.scope + "\u0000" + v.name, v.value]));
-        changedNames = new Set();
-        for (const v of after) {
-          const k = v.scope + "\u0000" + v.name;
-          if (!before.has(k) || before.get(k) !== v.value) changedNames.add(k);
-        }
+        // Mark what this element actually contributed — the very set the diagram's
+        // in/out card labels "out", so the two surfaces can never tell different stories.
+        changedNames = new Set((writtenBy(s) || []).map(varRef));
       }
       scope = s
         ? `${out ? "After" : "As of"} <b>${esc(stepLabel(s))}</b> ${out ? "completion" : "activation"}`
@@ -7891,6 +7892,89 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(selElId, "atlas-selected");
       marked.push([selElId, "atlas-selected"]);
     }
+    drawIOOverlay();
+  }
+
+  // --- The selected element's in/out card, on the diagram ---
+  // The Variables tab answers "what did the whole instance hold at this point". This
+  // answers the narrower question an operator asks while reading the diagram itself:
+  // what went *into* this task, and what came *out* of it. Both halves are what actually
+  // happened, not what the model declares — in is the element's own input mappings as
+  // they were evaluated into its local scope (ADR-0068, carried on the step as `inputs`),
+  // out is the difference between the variables it saw on entry and the ones it left
+  // behind (ADR-0159). The card is informational: it never takes pointer events, so it
+  // cannot come between the operator and the element underneath it.
+  const IO_ROWS = 6; // beyond this the card stops being glanceable; the tab has them all
+
+  // varRef identifies a variable across two snapshots of the same instance. A
+  // subprocess-local shadows nothing — it is a distinct variable that happens to share a
+  // name with one in an enclosing scope — so the scope belongs in the key (ADR-0074).
+  const varRef = (v) => v.scope + "\u0000" + v.name;
+
+  // writtenBy is what an element itself contributed: every value it added or rewrote
+  // between its activation and its completion. null while it is still running — there
+  // is no "after" yet, which is a different statement from "it wrote nothing".
+  function writtenBy(s) {
+    const after = (s && s.variablesAfter) || null;
+    if (!after) return null;
+    const before = new Map(((s && s.variables) || []).map((v) => [varRef(v), v.value]));
+    return after.filter((v) => !before.has(varRef(v)) || before.get(varRef(v)) !== v.value);
+  }
+
+  const ioValueText = (v) => {
+    const text = isComplexVar(v) ? jsonSummary(v.value) : String(v.value);
+    return text.length > 30 ? text.slice(0, 29) + "…" : text;
+  };
+  const ioSection = (kind, list, empty) => {
+    const rows = (list || []).slice(0, IO_ROWS).map((v) => `<div class="io-row">
+        <span class="io-n">${esc(v.name)}</span>
+        <span class="io-v">${esc(ioValueText(v))}</span>
+      </div>`).join("");
+    const rest = (list || []).length - IO_ROWS;
+    return `<div class="io-sec ${kind}">
+        <span class="io-lbl">${kind}</span>
+        <div class="io-rows">${rows || `<div class="io-none">${esc(empty)}</div>`}${
+      rest > 0 ? `<div class="io-more">+${rest} more</div>` : ""}</div>
+      </div>`;
+  };
+
+  // ioOverlayHTML builds the card, or "" when there is nothing worth covering the
+  // diagram with: no selection, or an element that neither took mapped inputs nor
+  // wrote anything.
+  function ioOverlayHTML() {
+    if (!showIO || !selElId || !selEik) return "";
+    const s = stepByEik(selEik);
+    if (!s) return "";
+    const ins = s.inputs || [];
+    const outs = writtenBy(s);
+    if (!ins.length && !(outs && outs.length)) return "";
+    return `<div class="io-ov">
+        <div class="io-ov-h">${esc(stepLabel(s))}</div>
+        ${ioSection("in", ins, "no input mapping")}
+        ${outs ? ioSection("out", outs, "wrote nothing") : ioSection("out", null, "still running")}
+      </div>`;
+  }
+
+  // drawIOOverlay re-attaches the card to the selected element. renderOverlay runs on
+  // every frame and every 1.5s poll, so it re-draws only when the card's content (or the
+  // element it belongs to) actually changed — otherwise a scrub would rebuild the same
+  // DOM dozens of times.
+  function drawIOOverlay() {
+    const html = ioOverlayHTML();
+    const sig = html ? selElId + "\u0000" + html : "";
+    if (sig === ioSig) return;
+    ioSig = sig;
+    for (const id of ioOverlays) { try { overlays.remove(id); } catch { /* gone */ } }
+    ioOverlays = [];
+    const el = html && registry.get(selElId);
+    if (!el) return;
+    try {
+      ioOverlays.push(overlays.add(selElId, {
+        position: { top: (el.height || 80) + 10, left: 0 },
+        scale: { min: 0.7, max: 1.15 },
+        html,
+      }));
+    } catch { /* element not in this diagram */ }
   }
 
   // drawTokenDot places a filled token marker at the top-left of an element (index
@@ -8136,6 +8220,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     decEl.hidden = activeTab !== "decisions";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
+  // The in/out card can cover whatever the modeler drew below a task, so it is the
+  // operator's call — and it is remembered, since that preference is about how they
+  // read a diagram, not about this one instance.
+  const ioToggle = root.querySelector("#tg-io");
+  ioToggle.checked = showIO;
+  ioToggle.addEventListener("change", (e) => {
+    showIO = e.target.checked;
+    localStorage.setItem("atlas.replay.io", showIO ? "1" : "0");
+    drawIOOverlay();
+  });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();

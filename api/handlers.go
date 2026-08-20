@@ -268,7 +268,12 @@ type timelineStep struct {
 	// completion — a job's outputs, an output mapping — shows nothing in Variables, so
 	// the replay would report "no variables" for an element that in fact produced some.
 	// Absent while the element is still active or parked, since it has not finished.
-	VariablesAfter     []variableView `json:"variablesAfter,omitempty"`
+	VariablesAfter []variableView `json:"variablesAfter,omitempty"`
+	// Inputs is what this element itself was handed: the values its zeebe:ioMapping
+	// inputs were evaluated to, in its own activity-local scope (ADR-0068). Variables
+	// and VariablesAfter carry the process (and subprocess) scopes, so these locals are
+	// on the log but in neither. Absent for an element that declares no input mapping.
+	Inputs             []variableView `json:"inputs,omitempty"`
 	Position           uint64         `json:"position"`
 	TokenID            uint64         `json:"tokenId,omitempty"`
 	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
@@ -1567,6 +1572,48 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			emitFrame(last.pos, last.at)
 		}
 
+		// What each element was actually handed: an activity's zeebe:ioMapping inputs are
+		// evaluated into its *activity-local* scope, keyed by the element instance
+		// (ADR-0068). The folds above read the process and subprocess scopes only, so
+		// those values sit on the log but appear nowhere in the timeline — the one thing
+		// an operator asking "what went into this task" most wants. Kept off Variables /
+		// VariablesAfter deliberately: a local belongs to one element instance, and folding
+		// it into the shared running set would leak it onto every concurrent step.
+		//
+		// Only elements that declare input mappings are scanned, so an instance with none
+		// pays nothing, and only the declared targets are kept — an activity's local scope
+		// also carries values its own behavior parked there (a script result awaiting its
+		// output mapping, a multi-instance loop counter), which are not inputs.
+		inputsByEIK := map[uint64][]variableView{}
+		for _, v := range activations {
+			ins := d.cp.IOInputs(v.ElementID)
+			if len(ins) == 0 || v.ElementInstanceKey == 0 {
+				continue
+			}
+			targets := make(map[string]struct{}, len(ins))
+			for _, m := range ins {
+				targets[d.cp.Intern(m.Target)] = struct{}{}
+			}
+			byName := map[string]variableView{}
+			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
+				if _, ok := targets[vv.Name]; !ok {
+					return nil
+				}
+				view := toVariableView(vv)
+				view.Actor = actorByPos[pos] // an operator may have corrected a local too (ADR-0098)
+				byName[vv.Name] = view       // later write wins, as in the folds above
+				return nil
+			}); scanErr != nil {
+				return
+			}
+			list := make([]variableView, 0, len(byName))
+			for _, view := range byName {
+				list = append(list, view)
+			}
+			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
+			inputsByEIK[v.ElementInstanceKey] = list
+		}
+
 		// Walk the steps in order, advancing through every variable change at or
 		// before each step's position, so a step carries the variables as they stood
 		// when the token entered that element. A change overwrites the previous value
@@ -1611,6 +1658,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).
 				if m, ok := manualByElement[rv.ElementInstanceKey]; ok {
 					mv := m

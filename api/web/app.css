@@ -847,6 +847,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
+.bar-toggle {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;
+  font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer;
+}
 .bar-select select { width: auto; min-width: 96px; max-width: 240px; padding: 5px 8px; font-size: 13px; }
 
 /* Variables panel. In the replay view it sits beneath the diagram (a wide strip);
@@ -1308,6 +1312,43 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
   font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
 }
+
+/* The selected element's in/out card, hung under it on the replay canvas: what its
+   input mappings were handed, and what it wrote (drawIOOverlay, ADR-0068/0159). It is
+   a read-out, not a control — pointer-events stay off so a click always reaches the
+   diagram beneath it. */
+.io-ov {
+  pointer-events: none; user-select: none; width: 240px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+  box-shadow: var(--shadow); overflow: hidden; font-size: 11px; color: var(--text);
+}
+.io-ov-h {
+  padding: 4px 8px; border-bottom: 1px solid var(--border);
+  background: var(--bg); font-weight: 600; font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-sec { display: flex; gap: 7px; padding: 5px 8px; align-items: flex-start; }
+.io-sec + .io-sec { border-top: 1px dashed var(--border); }
+.io-lbl {
+  flex: 0 0 auto; margin-top: 1px; padding: 1px 5px; border-radius: 4px;
+  font: 700 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase;
+  letter-spacing: .04em; background: var(--accent-soft); color: var(--accent);
+}
+/* Out reads green against in's accent blue, mixed from the success token rather than
+   a literal so it follows the theme. */
+.io-sec.out .io-lbl { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.io-rows { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+.io-row { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.io-n {
+  flex: 0 1 auto; min-width: 0; max-width: 62%; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-v {
+  flex: 1 1 auto; min-width: 0; text-align: right;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-none, .io-more { color: var(--muted); font-style: italic; }
 
 /* Implementation-type marker the editor draws on a task in the Implement view (and the
    runtime views), so its executable nature reads at a glance — a script task's language
