@@ -257,6 +257,20 @@ const SoapJobType = "io.atlas.soap"
 // LdapJobTypeIndex (ADR-0165).
 const SoapJobTypeIndex int32 = 18
 
+// AdJobType is the reserved job type an Active Directory connector task carries. AD
+// speaks LDAP, so it dials like the generic LDAP connector, but it adds the
+// AD-specific provisioning primitives the generic connector cannot express: setting a
+// password via unicodePwd over LDAPS, enabling/disabling an account via
+// userAccountControl, and adding/removing a group member incrementally (ADR-0166).
+const AdJobType = "io.atlas.ad"
+
+// AdJobTypeIndex is the interned index AdJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it twentieth (after the nineteen job types
+// above), so it is always 19. This lets a single in-process AD worker subscribe by one
+// global index across every deployed process, the same way the LDAP worker uses
+// LdapJobTypeIndex (ADR-0166).
+const AdJobTypeIndex int32 = 19
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -283,6 +297,7 @@ var reservedJobTypes = []string{
 	ScimJobType,          // 16
 	LdapJobType,          // 17
 	SoapJobType,          // 18
+	AdJobType,            // 19
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1054,6 +1069,62 @@ func (b *Builder) AddSoapConnectorTask(cfg SoapConfig) int32 {
 		SoapAction:   cfg.Action,
 		SoapBody:     cfg.Body,
 		SoapVersion:  b.intern(cfg.Version),
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AdConfig is the deploy-time configuration of an Active Directory connector task
+// (ADR-0166). URL is the server (ldaps://host:636 — a password set needs LDAPS) and
+// BindDN the bind identity — literal-or-FEEL values; BindSecret names the server-side
+// secret for the bind password (empty → an anonymous bind); StartTLS upgrades a plain
+// ldap:// connection. Op is the operation ("create-user"|"set-password"|"enable"|
+// "disable"|"add-group-member"|"remove-group-member"). DN is the target user or group
+// entry; MemberDN is the member added/removed for the group operations; EntryVar names
+// the process variable holding the create-user attribute object; NewPassword is the
+// set-password value.
+type AdConfig struct {
+	URL         RestExpr
+	BindDN      RestExpr
+	BindSecret  string
+	StartTLS    bool
+	Op          string
+	DN          RestExpr
+	MemberDN    RestExpr
+	EntryVar    string
+	NewPassword RestExpr
+	Retries     int32
+}
+
+// AddAdConnectorTask adds an Active Directory connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved AdJobType so the in-process AD worker picks it up, evaluates any FEEL
+// url/dn values over the instance's variables, binds, performs the AD operation
+// (create-user / set-password via unicodePwd / enable / disable via userAccountControl
+// / group-member add or remove), and completes the job (ADR-0166). The server and DNs
+// live in the model; the bind password never does (BindSecret references a server-side
+// secret, ADR-0041).
+func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:       b.intern(AdJobType),
+		Connector:     -1, // AD carries its endpoint in the model, not a registry name
+		Subject:       -1, // not a clio task
+		EventType:     -1,
+		ClioQuery:     -1,
+		ReduceSpec:    -1,
+		Method:        -1, // the AD operation, not an HTTP method, is authored
+		Auth:          -1, // the bind password is a dedicated secret ref, not RestAuth
+		ResultVar:     -1, // AD operations write to the directory, not back to a variable
+		Retries:       cfg.Retries,
+		AdURL:         cfg.URL,
+		AdBindDN:      cfg.BindDN,
+		AdBindSecret:  b.intern(cfg.BindSecret),
+		AdStartTLS:    cfg.StartTLS,
+		AdOp:          b.intern(cfg.Op),
+		AdDN:          cfg.DN,
+		AdMemberDN:    cfg.MemberDN,
+		AdEntryVar:    b.intern(cfg.EntryVar),
+		AdNewPassword: cfg.NewPassword,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

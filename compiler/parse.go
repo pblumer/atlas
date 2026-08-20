@@ -1805,6 +1805,10 @@ type xmlServiceTask struct {
 	// task (ADR-0165): it invokes a SOAP operation against a model-authored web-service
 	// endpoint through the job path.
 	Soap *xmlSoapConnector `xml:"extensionElements>soapConnector"`
+	// Ad, when present, marks this service task an Active Directory connector task
+	// (ADR-0166): it performs an AD-specific provisioning operation against a
+	// model-authored server through the job path.
+	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1929,6 +1933,28 @@ type xmlSoapConnector struct {
 	AuthUsername   string `xml:"authUsername,attr"`
 	AuthApiKeyName string `xml:"authApiKeyName,attr"`
 	AuthSecret     string `xml:"authSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlAdConnector is the <atlas:adConnector> extension on a service task (ADR-0166).
+// url is the server (ldaps://host:636 for a password set); bindDN/bindSecret
+// authenticate the bind (bindSecret a reference, never a value, ADR-0041); startTLS
+// upgrades a plain connection. operation selects the AD operation. dn is the target
+// user or group entry; memberDN is the member added/removed for the group operations;
+// entryVariable names the create-user attribute object; newPassword is the
+// set-password value. url/bindDN/dn/memberDN/newPassword carry literal-or-FEEL values.
+type xmlAdConnector struct {
+	URL           string `xml:"url,attr"`
+	BindDN        string `xml:"bindDN,attr"`
+	BindSecret    string `xml:"bindSecret,attr"`
+	StartTLS      string `xml:"startTLS,attr"`
+	Operation     string `xml:"operation,attr"`
+	DN            string `xml:"dn,attr"`
+	MemberDN      string `xml:"memberDN,attr"`
+	EntryVariable string `xml:"entryVariable,attr"`
+	NewPassword   string `xml:"newPassword,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
