@@ -226,6 +226,21 @@ const ScimJobType = "io.atlas.scim"
 // worker uses RestJobTypeIndex (ADR-0152).
 const ScimJobTypeIndex int32 = 16
 
+// LdapJobType is the reserved job type a generic LDAP connector task carries. Like
+// the REST/SCIM connectors it authors its endpoint in the model — the LDAP server
+// URL, bind DN, and target/base DN — and names a server-side secret for the bind
+// password (ADR-0041); the in-process LDAP connector worker subscribes to it to
+// perform the directory operation (search/add/modify/delete/modify-password) off the
+// hot path (ADR-0153).
+const LdapJobType = "io.atlas.ldap"
+
+// LdapJobTypeIndex is the interned index LdapJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it eighteenth (after the seventeen job
+// types above), so it is always 17. This lets a single in-process LDAP worker
+// subscribe by one global index across every deployed process, the same way the SCIM
+// worker uses ScimJobTypeIndex (ADR-0153).
+const LdapJobTypeIndex int32 = 17
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -320,6 +335,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
 	b.intern(UserConnectorJobType) // reserve UserConnectorJobTypeIndex == 15
 	b.intern(ScimJobType)          // reserve ScimJobTypeIndex == 16
+	b.intern(LdapJobType)          // reserve LdapJobTypeIndex == 17
 	return b
 }
 
@@ -877,6 +893,66 @@ func (b *Builder) AddScimConnectorTask(cfg ScimConfig) int32 {
 		ScimResourceID: cfg.ResourceID,
 		ScimFilter:     cfg.Filter,
 		ScimBody:       b.intern(cfg.BodyVar),
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// LdapConfig is the deploy-time configuration of a generic LDAP connector task
+// (ADR-0153). URL is the server (ldap://host:389 or ldaps://host:636) and BindDN the
+// bind identity — literal-or-FEEL values; BindSecret names the server-side secret for
+// the bind password (empty → an anonymous bind); StartTLS upgrades a plain ldap://
+// connection with STARTTLS. Op is the operation
+// ("search"|"add"|"modify"|"delete"|"modify-password"). DN is the target entry
+// (add/modify/delete/modify-password); BaseDN/Filter/Scope address a search; EntryVar
+// names the process variable holding the add/modify attribute object; NewPassword is
+// the modify-password value. ResultVar receives a search's entries as a JSON array.
+type LdapConfig struct {
+	URL         RestExpr
+	BindDN      RestExpr
+	BindSecret  string
+	StartTLS    bool
+	Op          string
+	DN          RestExpr
+	BaseDN      RestExpr
+	Filter      RestExpr
+	Scope       string
+	EntryVar    string
+	NewPassword RestExpr
+	ResultVar   string
+	Retries     int32
+}
+
+// AddLdapConnectorTask adds a generic LDAP connector task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved LdapJobType so the in-process LDAP worker picks it up, evaluates any FEEL
+// url/dn/filter values over the instance's variables, binds and performs the
+// directory operation, writes a search's entries into ResultVar, and completes the
+// job (ADR-0153). The server and DNs live in the model; the bind password never does
+// (BindSecret references a server-side secret, ADR-0041).
+func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(LdapJobType),
+		Connector:       -1, // LDAP carries its endpoint in the model, not a registry name
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // the LDAP operation, not an HTTP method, is authored
+		Auth:            -1, // the bind password is a dedicated secret ref, not RestAuth
+		ResultVar:       b.intern(cfg.ResultVar),
+		Retries:         cfg.Retries,
+		LdapURL:         cfg.URL,
+		LdapBindDN:      cfg.BindDN,
+		LdapBindSecret:  b.intern(cfg.BindSecret),
+		LdapStartTLS:    cfg.StartTLS,
+		LdapOp:          b.intern(cfg.Op),
+		LdapDN:          cfg.DN,
+		LdapBaseDN:      cfg.BaseDN,
+		LdapFilter:      cfg.Filter,
+		LdapScope:       b.intern(cfg.Scope),
+		LdapEntryVar:    b.intern(cfg.EntryVar),
+		LdapNewPassword: cfg.NewPassword,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

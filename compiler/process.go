@@ -540,6 +540,30 @@ type ConnectorTaskDetail struct {
 	ScimResourceID RestExpr
 	ScimFilter     RestExpr
 	ScimBody       int32
+	// LDAP connector fields (JobType == LdapJobType, ADR-0153). LdapURL is the server
+	// (ldap://host:389 or ldaps://host:636) and LdapBindDN the bind identity — each a
+	// literal-or-FEEL value evaluated over the instance's variables at call time.
+	// LdapBindSecret is the interned name of the server-side secret holding the bind
+	// password (interned "" → an anonymous bind); LdapStartTLS upgrades a plain
+	// connection with STARTTLS. LdapOp is the interned operation
+	// ("search"|"add"|"modify"|"delete"|"modify-password"). LdapDN is the target entry
+	// (add/modify/delete/modify-password); LdapBaseDN/LdapFilter/LdapScope (interned
+	// "base"|"one"|"sub") address a search. LdapEntryVar is the interned name of the
+	// process variable holding the add/modify attribute object; LdapNewPassword is the
+	// modify-password value. Each is the zero value for a non-LDAP task; ResultVar
+	// (above) receives a search's entries as a JSON array. Read only by the in-process
+	// LDAP worker.
+	LdapURL         RestExpr
+	LdapBindDN      RestExpr
+	LdapBindSecret  int32
+	LdapStartTLS    bool
+	LdapOp          int32
+	LdapDN          RestExpr
+	LdapBaseDN      RestExpr
+	LdapFilter      RestExpr
+	LdapScope       int32
+	LdapEntryVar    int32
+	LdapNewPassword RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
