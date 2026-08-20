@@ -2537,3 +2537,72 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere;
 }
 .secret-set-row .field { margin: 0; }
+
+/* ---------- What's New (Console landing page) ----------
+   A compact, collapsible feed of recent user-facing features (see renderWhatsNew in
+   app.js). Everything is theme-variable driven so it follows the accent and any
+   theme. The whole section, and each entry, is a native <details>. */
+.whats-new { margin-top: 18px; }
+/* The section header doubles as the collapse toggle: title on the left, the DE/EN
+   toggle on the right. A caret marks open/closed in place of the default marker. */
+.whats-new .wn-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; cursor: pointer; list-style: none;
+}
+.whats-new .wn-head::-webkit-details-marker { display: none; }
+.whats-new .wn-title {
+  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
+}
+.whats-new .wn-title::before {
+  content: "▸"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
+}
+.whats-new .wn-root[open] .wn-title::before { transform: rotate(90deg); }
+
+/* Segmented DE/EN toggle. */
+.whats-new .wn-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.whats-new .wn-lang button {
+  appearance: none; border: 0; background: var(--surface); color: var(--muted);
+  font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; cursor: pointer;
+}
+.whats-new .wn-lang button + button { border-left: 1px solid var(--border); }
+.whats-new .wn-lang button:hover { background: var(--bg); }
+.whats-new .wn-lang button.active { background: var(--accent-soft); color: var(--accent); }
+
+.whats-new .wn-list { margin-top: 10px; }
+
+/* One feature. The summary row is always visible; the body opens on click. */
+.whats-new .wn-item { border-top: 1px solid var(--border); padding: 10px 2px; }
+.whats-new .wn-item:first-child { border-top: 0; }
+.whats-new .wn-item > summary {
+  cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.whats-new .wn-item > summary::marker { color: var(--muted); }
+.whats-new .wn-item-title { font-weight: 600; }
+.whats-new .wn-date { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
+.whats-new .wn-date.wn-new {
+  font-family: system-ui, sans-serif; font-weight: 600; color: var(--accent);
+  background: var(--accent-soft); border-radius: 999px; padding: 1px 8px;
+}
+
+.whats-new .wn-body { margin: 8px 0 2px; padding-left: 18px; }
+.whats-new .wn-body > p { margin: 0; color: var(--text); }
+
+/* The optional step-by-step tutorial, boxed off from the summary. */
+.whats-new .wn-tutorial {
+  margin-top: 10px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg);
+}
+.whats-new .wn-tut-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.whats-new .wn-tutorial ol { margin: 0; padding-left: 20px; }
+.whats-new .wn-tutorial li { margin: 3px 0; }
+
+.whats-new .wn-links { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
+.whats-new .wn-link { font-size: 13px; font-weight: 600; }
+.whats-new .wn-try { padding: 4px 12px; font-size: 13px; }
+
+/* "Show older" reveals the entries beyond the initial few. */
+.whats-new .wn-more {
+  appearance: none; margin-top: 10px; background: transparent; border: 0;
+  color: var(--accent); font: 600 13px/1 system-ui, sans-serif; cursor: pointer; padding: 4px 0;
+}
+.whats-new .wn-more:hover { text-decoration: underline; }
