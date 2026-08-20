@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Secrets panel says what a value has to be**
+  ([ADR-0152](docs/adr/0152-secret-shape-hints.md)): a vault secret is a name and an
+  opaque string, and because it is write-only nobody can look at a stored value
+  afterwards and say what is wrong with it — so the form now says it beforehand. The
+  moment a name matches a connector's token reference, the panel names the connector
+  that resolves it and the shape it needs, offers an insertable skeleton for the JSON
+  credential bundles, and refuses a value that cannot be one: a bare Google refresh
+  token pasted where the bundle belongs is caught at the field, with the connector
+  named, instead of surfacing later as `invalid character '/' after top-level value`.
+  Each secret's row also says which connectors use it, so a rotation is no longer done
+  blind. Rotation itself moved out of a one-line browser prompt — the wrong instrument
+  for a multi-line bundle, and structurally unable to carry an explanation — into an
+  inline panel with a real text field.
+
 - **A mail task you can run before you own a mail server**
   ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail
   connector can now use the **`preview`** provider, which asks for no submission host
