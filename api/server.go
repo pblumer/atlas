@@ -180,7 +180,10 @@ type Server struct {
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.
-	jobTypes         *jobtype.Registry
+	jobTypes *jobtype.Registry
+	// workers is the Workers view's runtime registry (ADR-0157): who pulled what,
+	// this run. Not durable and not engine state — see api/workers.go.
+	workers          *workerRegistry
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -819,6 +822,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		versions:    map[string]int32{},
 		deploys:     ds,
 		jobTypes:    jobTypes,
+		workers:     newWorkerRegistry(nil),
 		drafts:      drafts,
 		forms:       forms,
 		publicLinks: publicLinks,

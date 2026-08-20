@@ -291,3 +291,25 @@ func TestNewRegistryFailsOnAnUnreadableRecord(t *testing.T) {
 		t.Error("NewRegistry succeeded over an undecodable record, want an error")
 	}
 }
+
+// All is the whole table in index order — the reserved half and whatever has been
+// registered since — because the Workers view has to list the kinds nobody is
+// serving, not only the ones with traffic.
+func TestAllListsTheWholeTableInIndexOrder(t *testing.T) {
+	r := newRegistry(t, t.TempDir())
+	if _, err := r.Intern("send-email"); err != nil {
+		t.Fatalf("Intern: %v", err)
+	}
+	all := r.All()
+	if len(all) != len(compiler.ReservedJobTypes())+1 {
+		t.Fatalf("All() has %d entries, want the %d reserved plus one", len(all), len(compiler.ReservedJobTypes()))
+	}
+	for i, e := range all {
+		if e.Index != int32(i) {
+			t.Errorf("All()[%d] has index %d, want the listing in index order", i, e.Index)
+		}
+	}
+	if last := all[len(all)-1]; last.Name != "send-email" {
+		t.Errorf("last entry = %q, want the newly registered send-email", last.Name)
+	}
+}

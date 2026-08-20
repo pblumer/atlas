@@ -62,6 +62,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_complete_job":            "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":                "POST /api/v1/jobs/{key}/fail",
 	"atlas_list_incidents":          "GET /api/v1/incidents",
+	"atlas_workers":                 "GET /api/v1/workers",
 	"atlas_resolve_incident":        "POST /api/v1/incidents/{key}/resolve",
 	"atlas_mail_outbox":             "GET /api/v1/mail/outbox",
 	"atlas_clear_mail_outbox":       "DELETE /api/v1/mail/outbox",
