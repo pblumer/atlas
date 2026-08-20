@@ -152,3 +152,87 @@ func TestMigrationLabels(t *testing.T) {
 }
 
 func ptr(v ProcessMigrationValue) *ProcessMigrationValue { return &v }
+
+// TestEveryValueRefusesATruncatedBuffer is a property of the durable format rather than
+// of any one value: a payload cut short — a torn write, a truncated segment, a record
+// from a newer version read by an older one — must be refused, never decoded into a
+// half-filled struct that then folds into state as fact (I6).
+//
+// It walks every value type with a fully-populated instance, and checks every prefix
+// shorter than the encoding. A prefix may legitimately decode when the bytes it drops
+// are an *appended* field (that is what append-compatibility means), so the assertion
+// is the weaker, true one: decoding must either succeed or report ErrShortBuffer —
+// never panic, and never return some other error.
+func TestEveryValueRefusesATruncatedBuffer(t *testing.T) {
+	values := []Value{
+		&ElementInstanceValue{ProcessInstanceKey: 1, ProcessDefKey: 2, ElementId: 3, FlowScopeKey: 4, BpmnElementType: 5, AttachedToKey: 6, TokenID: 7, ParentTokenID: 8, SourceFlowId: 9, MultiInstance: 1, EventGatewayKey: 10},
+		&JobValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobType: 3, Retries: 4, Deadline: 5, Assignee: "someone", RetryDueDate: 6, LeaseExpiresAt: 7},
+		&TimerValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, TargetElementId: 3, DueDate: 4, Repetitions: 5, ProcessDefKey: 6, JobKey: 7},
+		&ProcessInstanceValue{ProcessDefKey: 1, State: PIActive, CompletedAt: 2, CreatedAt: 3, CorrelationKey: "k", ParentElementInstanceKey: 4, ExpiryDueDate: 5, CompletedPosition: 6, PurgeDueDate: 7},
+		&VariableValue{ScopeKey: 1, Name: "n", Kind: VarString, Text: "t"},
+		&MessageSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, MessageName: "m", CorrelationKey: "c", ProcessDefKey: 3, ElementId: 4},
+		&SignalSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, SignalName: "s", ProcessDefKey: 3, ElementId: 4},
+		&DataObjectValue{ScopeKey: 1, Name: "d", Kind: VarNumber, Text: "1"},
+		&IncidentValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobKey: 3, ElementId: 4, RaisedAt: 5, Message: "why"},
+		&InboundDeliveryValue{SourceID: "src", SourceSeq: 9},
+		&VariableAuditValue{ProcessInstanceKey: 1, ScopeKey: 2, Actor: "a", Name: "n", Kind: VarBool, Bool: true},
+		&CompensableValue{ProcessInstanceKey: 1, ProcessDefKey: 2, ScopeKey: 3, ElementInstanceKey: 4, Seq: 5, ElementId: 6, HandlerNode: 7},
+		&OperatorActionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobKey: 3, Kind: OperatorActionMigrate, Actor: "a", Reason: "r", FromProcessDefKey: 4},
+		ptr(NewProcessMigration(1, 2, 3, map[int32]int32{1: 2, 3: 4})),
+	}
+	for _, v := range values {
+		vt := v.ValueType()
+		full := AppendValue(nil, v)
+		for n := 0; n < len(full); n++ {
+			decoded, err := DecodeValue(vt, full[:n])
+			if err != nil && !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("%v truncated to %d: err = %v, want ErrShortBuffer or success", vt, n, err)
+			}
+			if err == nil && decoded == nil {
+				t.Errorf("%v truncated to %d: decoded to nil with no error", vt, n)
+			}
+		}
+		// And the full buffer must always decode.
+		if _, err := DecodeValue(vt, full); err != nil {
+			t.Errorf("%v: the complete encoding failed to decode: %v", vt, err)
+		}
+	}
+}
+
+// TestEveryLabelIsDistinct covers the log's vocabulary: an intent or value type whose
+// String falls through to the placeholder is one a reader cannot name, and two sharing
+// a label are two a reader cannot tell apart. Both show up in the dev view and in every
+// log line about a record.
+func TestEveryLabelIsDistinct(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i <= int(VTProcessMigration); i++ {
+		label := ValueType(i).String()
+		if label == "ValueType(?)" {
+			t.Errorf("ValueType(%d) has no label", i)
+			continue
+		}
+		if seen[label] {
+			t.Errorf("ValueType(%d) reuses the label %q", i, label)
+		}
+		seen[label] = true
+	}
+	if got := ValueType(250).String(); got != "ValueType(?)" {
+		t.Errorf("an unknown value type = %q, want the guard label", got)
+	}
+
+	seen = map[string]bool{}
+	for i := 0; i <= int(IntentMigrated); i++ {
+		label := Intent(i).String()
+		if label == "Intent(?)" {
+			t.Errorf("Intent(%d) has no label", i)
+			continue
+		}
+		if seen[label] {
+			t.Errorf("Intent(%d) reuses the label %q", i, label)
+		}
+		seen[label] = true
+	}
+	if got := Intent(250).String(); got != "Intent(?)" {
+		t.Errorf("an unknown intent = %q, want the guard label", got)
+	}
+}

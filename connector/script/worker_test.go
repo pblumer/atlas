@@ -122,7 +122,7 @@ func TestScriptTaskRunsAndWritesResult(t *testing.T) {
 	}
 	fx := &fakeExec{result: "Hallo Anna"}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(store, lookupOf(cp), fx) })
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "Vorname", Kind: model.VarString, Text: "Anna"})
 	if err := runner.Drive(); err != nil {
@@ -183,7 +183,7 @@ func TestScriptTaskSeesInputMappedLocal(t *testing.T) {
 	}
 	fx := &fakeExec{result: "done"}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(store, lookupOf(cp), fx) })
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Anna"})
 	if err := runner.Drive(); err != nil {
@@ -221,7 +221,9 @@ func TestScriptTaskNoProcessLookup(t *testing.T) {
 	}
 	// A lookup that never resolves the process.
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, script.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeExec{result: "x"}))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return script.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeExec{result: "x"})
+	})
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -247,7 +249,7 @@ func TestScriptTaskWithoutResultVarCompletes(t *testing.T) {
 	}
 	fx := &fakeExec{result: "ignored"}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(store, lookupOf(cp), fx) })
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -276,7 +278,7 @@ func TestScriptTaskExecErrorRaisesIncident(t *testing.T) {
 	}
 	fx := &fakeExec{err: context.DeadlineExceeded}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(store, lookupOf(cp), fx) })
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {

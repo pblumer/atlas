@@ -9,6 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -83,7 +84,9 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateEndpointOnlyConnector,
 		newRegistry:    func(s *Server) { s.temisRegistry = temis.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+			s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+				return temis.Handler(rd, s.processLookup, s.temisRegistry, nil)
+			})
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildTemisClients()
@@ -110,9 +113,9 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateEndpointOnlyConnector,
 		newRegistry:    func(s *Server) { s.clioRegistry = clio.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
-			s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
-			s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
+			s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, func(rd state.Reader) job.Handler { return clio.Handler(rd, s.processLookup, s.clioRegistry) })
+			s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, func(rd state.Reader) job.OutputHandler { return clio.QueryHandler(rd, s.processLookup, s.clioRegistry) })
+			s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, func(rd state.Reader) job.OutputHandler { return clio.ReadHandler(rd, s.processLookup, s.clioRegistry) })
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildClioClients()
@@ -147,7 +150,7 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.mailOutbox = mail.NewOutbox(0)
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
+			s.jobRunner.Handle(compiler.MailJobTypeIndex, func(rd state.Reader) job.Handler { return mail.Handler(rd, s.processLookup, s.mailRegistry) })
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildMailClients()
@@ -175,7 +178,9 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateSharePointConnector,
 		newRegistry:    func(s *Server) { s.sharePointRegistry = sharepoint.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, sharepoint.Handler(store, s.processLookup, s.sharePointRegistry))
+			s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return sharepoint.Handler(rd, s.processLookup, s.sharePointRegistry)
+			})
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildSharePointClients()
@@ -203,7 +208,7 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateRemedyConnector,
 		newRegistry:    func(s *Server) { s.remedyRegistry = remedy.NewRegistry() },
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, remedy.Handler(store, s.processLookup, s.remedyRegistry))
+			s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, func(rd state.Reader) job.OutputHandler { return remedy.Handler(rd, s.processLookup, s.remedyRegistry) })
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildRemedyClients()

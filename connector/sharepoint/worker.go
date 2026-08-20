@@ -27,7 +27,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // as that variable to be written back on completion. Returning an error leaves the
 // job pending (retry, then an incident, ADR-0061); the runner completes it only on
 // success.
-func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.OutputHandler {
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -111,7 +111,7 @@ func resolveKVs(kvs []compiler.RestKV, scope uint64, scopeVars map[string]model.
 // readScopeVars reads all of a scope's variables into a map keyed by name, so the
 // worker binds only the names each expression reads without a per-name store lookup
 // (mirrors the REST worker).
-func readScopeVars(store *state.Store, scope uint64) (map[string]model.VariableValue, error) {
+func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
 	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
 		vars[v.Name] = *v

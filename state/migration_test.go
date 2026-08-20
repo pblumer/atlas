@@ -281,3 +281,64 @@ func sameCounts(got, want map[int32]int64) bool {
 	}
 	return true
 }
+
+// TestMigrateInstanceFailsOnUnreadableState covers the error paths the fold must not
+// swallow. A migration that half-rebinds an instance is the failure this design exists
+// to prevent, so a record it cannot decode has to fail the whole transaction rather
+// than skip that record and carry on.
+func TestMigrateInstanceFailsOnUnreadableState(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		corrupt func(s *state.Store) error
+	}{
+		{"the instance itself", func(s *state.Store) error { return s.InjectCorruptProcessInstance(migPI) }},
+		{"an element instance", func(s *state.Store) error { return s.InjectCorruptElementInstance(migElA) }},
+		{"an incident", func(s *state.Store) error { return s.InjectCorruptIncident(migElA) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := openStore(t)
+			migrationFixture(t, s)
+			if err := tc.corrupt(s); err != nil {
+				t.Fatalf("inject: %v", err)
+			}
+			v := migrationMapping()
+			tx := s.NewTransaction()
+			defer tx.Close()
+			if err := tx.MigrateInstance(&v); err == nil {
+				t.Errorf("migrating with %s unreadable returned no error", tc.name)
+			}
+		})
+	}
+}
+
+// TestIncidentCountCountsTheStuckTokens covers the counter behind the Operations nav
+// badge (ADR-0151). It is counted from the incident family's keys rather than from a
+// maintained number, because an incident leaves state two ways — resolved by an
+// operator, and dropped with the element instance it sits on — and only one of those
+// announces itself, so a maintained counter would drift while a scan cannot. It lives
+// here because the api package is the only caller, and a cross-package call leaves the
+// function reading 0% in this package's own profile.
+func TestIncidentCountCountsTheStuckTokens(t *testing.T) {
+	s := openStore(t)
+	if n, err := s.IncidentCount(); err != nil || n != 0 {
+		t.Fatalf("IncidentCount on an empty store = %d, %v; want 0", n, err)
+	}
+	commit(t, s, func(tx *state.Tx) error {
+		for i := uint64(1); i <= 3; i++ {
+			if err := tx.PutIncident(&model.IncidentValue{
+				ProcessInstanceKey: migPI, ElementInstanceKey: 500 + i, ElementId: int32(i), Message: "stuck",
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if n, err := s.IncidentCount(); err != nil || n != 3 {
+		t.Fatalf("IncidentCount = %d, %v; want 3", n, err)
+	}
+	// Resolving one is a delete, and the count follows without anything maintaining it.
+	commit(t, s, func(tx *state.Tx) error { return tx.DeleteIncident(501) })
+	if n, err := s.IncidentCount(); err != nil || n != 2 {
+		t.Fatalf("IncidentCount after a resolve = %d, %v; want 2", n, err)
+	}
+}

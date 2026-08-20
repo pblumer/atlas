@@ -108,8 +108,10 @@ func TestBusinessRuleTaskMergesStaticAndMappedInputs(t *testing.T) {
 
 	var got []dmn.Result
 	runner := job.NewRunner(store, p)
-	runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg,
-		func(r dmn.Result) { got = append(got, r) }))
+	runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler {
+		return dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg,
+			func(r dmn.Result) { got = append(got, r) })
+	})
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "season", Kind: model.VarString, Text: "Winter"})
 	if err := runner.Drive(); err != nil {
@@ -162,7 +164,9 @@ func TestBusinessRuleTaskRoutesOnMappedResult(t *testing.T) {
 			}
 
 			runner := job.NewRunner(store, p)
-			runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
+			runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler {
+				return dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil)
+			})
 
 			p.CreateInstance(cp.Key, model.VariableValue{Name: "season", Kind: model.VarString, Text: tc.season})
 			if err := runner.Drive(); err != nil {

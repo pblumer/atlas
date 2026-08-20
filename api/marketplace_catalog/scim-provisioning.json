@@ -1,0 +1,29 @@
+{
+  "id": "atlas.scim-provisioning",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "SCIM Provisioning",
+  "author": "Atlas core",
+  "description": "Create, read, replace, patch, delete or search a user or group on a SCIM 2.0 identity provider (Entra ID, Okta, Keycloak, …). The base URL, operation and resource are authored in the model; the JSON response maps to a result variable. The credential stays on the server, referenced by name.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "SCIM Provisioning",
+    "id": "atlas.scim-provisioning",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Operation", "type": "Dropdown", "value": "create", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [ { "name": "Create", "value": "create" }, { "name": "Get", "value": "get" }, { "name": "Replace", "value": "replace" }, { "name": "Patch", "value": "patch" }, { "name": "Delete", "value": "delete" }, { "name": "Search", "value": "search" } ] },
+      { "label": "Base URL", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:baseUrl" } },
+      { "label": "Resource", "type": "Dropdown", "value": "Users", "binding": { "type": "property", "name": "atlas:resource" },
+        "choices": [ { "name": "Users", "value": "Users" }, { "name": "Groups", "value": "Groups" } ] },
+      { "label": "Resource id (get/replace/patch/delete)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:resourceId" } },
+      { "label": "Filter (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:filter" } },
+      { "label": "Payload variable (create/replace/patch)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:bodyVariable" } },
+      { "label": "Authentication", "type": "Dropdown", "value": "bearer", "binding": { "type": "property", "name": "atlas:authType" },
+        "choices": [ { "name": "None", "value": "none" }, { "name": "Bearer (server credential)", "value": "bearer" }, { "name": "Basic (server credential)", "value": "basic" }, { "name": "API key (server credential)", "value": "apiKey" } ] },
+      { "label": "Credential reference", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:authSecret" } },
+      { "label": "Result variable", "type": "String", "value": "scimResponse", "binding": { "type": "property", "name": "atlas:resultVariable" } }
+    ]
+  }
+}

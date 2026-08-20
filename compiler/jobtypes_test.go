@@ -218,3 +218,29 @@ func mustBuild(t *testing.T, b *Builder) *CompiledProcess {
 	}
 	return cp
 }
+
+// Node ids are the dense range [0, NodeCount), which is what lets a caller outside
+// the compiler walk a process — the Workers view does, to find which definitions
+// use a job type.
+func TestNodeCountCoversEveryNode(t *testing.T) {
+	b := NewBuilder(1, "orders", 1)
+	start := b.AddStartEvent()
+	task := b.AddServiceTask("send-email", 1)
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	cp := mustBuild(t, b)
+
+	if got := cp.NodeCount(); got != 3 {
+		t.Fatalf("NodeCount() = %d, want 3", got)
+	}
+	seen := map[BpmnType]int{}
+	for id := range int32(cp.NodeCount()) {
+		seen[cp.Node(id).Type]++
+	}
+	for _, want := range []BpmnType{TypeStartEvent, TypeServiceTask, TypeEndEvent} {
+		if seen[want] != 1 {
+			t.Errorf("walking [0,NodeCount) saw %d nodes of type %v, want 1", seen[want], want)
+		}
+	}
+}

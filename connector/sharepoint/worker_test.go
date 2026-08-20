@@ -150,7 +150,9 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *share
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, sharepoint.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return sharepoint.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 	p.CreateInstance(cp.Key, vars...)
 	return runner.Drive()
 }
@@ -331,7 +333,9 @@ func TestSharePointConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, sharepoint.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, sharepoint.NewRegistry()))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return sharepoint.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, sharepoint.NewRegistry())
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)

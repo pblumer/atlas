@@ -100,7 +100,9 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *remed
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, remedy.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return remedy.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 	p.CreateInstance(cp.Key, vars...)
 	return runner.Drive()
 }
@@ -282,7 +284,9 @@ func TestRemedyConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, remedy.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, remedy.NewRegistry()))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return remedy.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, remedy.NewRegistry())
+	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)

@@ -176,7 +176,9 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, dialer lda
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, ldap.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, dialer, secret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return ldap.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, dialer, secret)
+	})
 	p.CreateInstance(cp.Key, vars...)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -481,7 +483,9 @@ func TestLdapRecoversAcrossRestart(t *testing.T) {
 	}
 	conn := &fakeConn{}
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, ldap.Handler(store2, lookup, &fakeDialer{conn: conn}, noSecret))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return ldap.Handler(store2, lookup, &fakeDialer{conn: conn}, noSecret)
+	})
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}

@@ -75,14 +75,14 @@ type migrationRequest struct {
 // override is an operator believing they mapped something they did not.
 func deriveMigrationMapping(from, to *compiler.CompiledProcess, overrides []migrationPair) (map[int32]int32, []string) {
 	byID := map[string]int32{}
-	for i := int32(0); i < to.NodeCount(); i++ {
+	for i := int32(0); int(i) < to.NodeCount(); i++ {
 		if id := to.ElementBpmnId(i); id != "" {
 			byID[id] = i
 		}
 	}
 	fromByID := map[string]int32{}
 	mapping := map[int32]int32{}
-	for i := int32(0); i < from.NodeCount(); i++ {
+	for i := int32(0); int(i) < from.NodeCount(); i++ {
 		id := from.ElementBpmnId(i)
 		if id == "" {
 			continue
@@ -148,6 +148,10 @@ func (s *Server) planMigration(piKey, targetDefKey uint64, overrides []migration
 	src, srcOK := s.deployments[pi.ProcessDefKey]
 	dst, dstOK := s.deployments[targetDefKey]
 	if !srcOK || src.cp == nil {
+		// Defensive: the API refuses to delete a definition with running instances, so
+		// this is reachable only in a degraded system (a deployment sidecar lost between
+		// restarts). It answers rather than fails, because the *instance* is fine — it is
+		// the request that cannot be served.
 		plan.Problems = []engine.MigrationProblem{{Reason: "the version this instance is running is no longer deployed, so its elements cannot be mapped"}}
 		return plan, true, nil
 	}
@@ -308,10 +312,10 @@ func (s *Server) handleMigrateInstance(w http.ResponseWriter, r *http.Request) {
 func migrationValueOf(s *Server, plan migrationPlanResp) model.ProcessMigrationValue {
 	src, dst := s.deployments[plan.FromProcessDefKey], s.deployments[plan.ToProcessDefKey]
 	byIDFrom, byIDTo := map[string]int32{}, map[string]int32{}
-	for i := int32(0); i < src.cp.NodeCount(); i++ {
+	for i := int32(0); int(i) < src.cp.NodeCount(); i++ {
 		byIDFrom[src.cp.ElementBpmnId(i)] = i
 	}
-	for i := int32(0); i < dst.cp.NodeCount(); i++ {
+	for i := int32(0); int(i) < dst.cp.NodeCount(); i++ {
 		byIDTo[dst.cp.ElementBpmnId(i)] = i
 	}
 	mapping := make(map[int32]int32, len(plan.Mapping))

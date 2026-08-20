@@ -306,8 +306,8 @@ func TestMigrateToTheSameVersionIsANoOp(t *testing.T) {
 // v2 is v1 with one task inserted, so every node after the start event shifts by one.
 func mappingFor(from, to *compiler.CompiledProcess) map[int32]int32 {
 	mapping := map[int32]int32{0: 0} // the start event is index 0 in both
-	for i := int32(1); i < from.NodeCount(); i++ {
-		if i+1 < to.NodeCount() {
+	for i := int32(1); int(i) < from.NodeCount(); i++ {
+		if int(i+1) < to.NodeCount() {
 			mapping[i] = i + 1
 		}
 	}

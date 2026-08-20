@@ -128,7 +128,7 @@ func TestConnectorTaskWritesToClio(t *testing.T) {
 		return nil
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, clio.Handler(store, lookup, reg))
+	runner.Handle(jobType, func(rd state.Reader) job.Handler { return clio.Handler(store, lookup, reg) })
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "orderId", Kind: model.VarString, Text: "c-1"})
 	if err := runner.Drive(); err != nil {
@@ -209,7 +209,7 @@ func TestConnectorTaskRecoversAcrossRestart(t *testing.T) {
 	reg := clio.NewRegistry()
 	reg.Register("orders-clio", rc)
 	runner := job.NewRunner(store2, p2)
-	runner.Handle(jobType, clio.Handler(store2, lookup, reg))
+	runner.Handle(jobType, func(rd state.Reader) job.Handler { return clio.Handler(store2, lookup, reg) })
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestConnectorUnregistered(t *testing.T) {
 	}
 	lookup := func(uint64) *compiler.CompiledProcess { return cp }
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, clio.Handler(store, lookup, clio.NewRegistry())) // empty registry
+	runner.Handle(jobType, func(rd state.Reader) job.Handler { return clio.Handler(store, lookup, clio.NewRegistry()) }) // empty registry
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -278,7 +278,9 @@ func TestConnectorNoCompiledProcess(t *testing.T) {
 	reg := clio.NewRegistry()
 	reg.Register("orders-clio", &recordingClient{})
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, clio.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, reg))
+	runner.Handle(jobType, func(rd state.Reader) job.Handler {
+		return clio.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, reg)
+	})
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -391,7 +393,9 @@ func TestClioQueryTaskWritesResult(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -414,7 +418,7 @@ func TestClioResultDiscarded(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		add     func(b *compiler.Builder) int32
-		handler func(*state.Store, clio.ProcessLookup, *clio.Registry) job.OutputHandler
+		handler func(state.Reader, clio.ProcessLookup, *clio.Registry) job.OutputHandler
 	}{
 		{"query", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "", "", "q", "", 3) }, clio.QueryHandler},
 		{"read", func(b *compiler.Builder) int32 { return b.AddClioReadTask("orders-clio", "s", "", 0, 3) }, clio.ReadHandler},
@@ -440,7 +444,9 @@ func TestClioResultDiscarded(t *testing.T) {
 				t.Fatalf("Recover: %v", err)
 			}
 			runner := job.NewRunner(store, p)
-			runner.HandleWithOutput(jobType, tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+			runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+				return tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+			})
 			p.CreateInstance(cp.Key)
 			if err := runner.Drive(); err != nil {
 				t.Fatalf("Drive: %v", err)
@@ -460,7 +466,7 @@ func TestClioHandlerCallErrors(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		add     func(b *compiler.Builder) int32
-		handler func(*state.Store, clio.ProcessLookup, *clio.Registry) job.OutputHandler
+		handler func(state.Reader, clio.ProcessLookup, *clio.Registry) job.OutputHandler
 	}{
 		{"run_query", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "", "", "q", "r", 3) }, clio.QueryHandler},
 		{"get_state", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "s", "spec", "", "r", 3) }, clio.QueryHandler},
@@ -487,7 +493,9 @@ func TestClioHandlerCallErrors(t *testing.T) {
 				t.Fatalf("Recover: %v", err)
 			}
 			runner := job.NewRunner(store, p)
-			runner.HandleWithOutput(jobType, tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+			runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+				return tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+			})
 			p.CreateInstance(cp.Key)
 			if err := runner.Drive(); err != nil {
 				t.Fatalf("Drive: %v", err)
@@ -527,7 +535,9 @@ func TestClioQueryTaskGetStateBranch(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -569,7 +579,9 @@ func TestClioReadTaskWritesEvents(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, clio.ReadHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return clio.ReadHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+	})
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {

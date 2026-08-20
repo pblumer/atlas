@@ -126,6 +126,17 @@ type JobValue struct {
 	// job is offered again. 0 means unheld, which is every job's steady state.
 	// Append-compatible: an old record without it decodes to 0.
 	LeaseExpiresAt int64
+	// LeaseEpoch counts how many times this job has been leased, and is the fencing
+	// token a worker presents when it reports an outcome (ADR-0007's third open item).
+	// Assignee alone does not fence: two instances of one worker deployment share a
+	// name, so a completion from a holder whose lease expired would be accepted while
+	// the second instance still holds the job. The epoch differs per lease, so a
+	// stale report presents a number the job has moved past and is refused.
+	//
+	// It is incremented at command time and written into the JobActivated event, never
+	// recomputed on replay (I6). Append-compatible: an old record decodes to 0, which
+	// reads correctly as "never leased".
+	LeaseEpoch uint64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -140,7 +151,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
 	dst = appendString(dst, v.Assignee)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
+	return binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -157,13 +169,16 @@ func (v *JobValue) decode(src []byte) error {
 		return err
 	}
 	v.Assignee = assignee
-	// RetryDueDate and LeaseExpiresAt are appended fields: a record written before either
-	// ends earlier and leaves it zero (ADR-0111, ADR-0007).
+	// RetryDueDate, LeaseExpiresAt and LeaseEpoch are appended fields: a record written
+	// before any of them ends earlier and leaves it zero (ADR-0111, ADR-0007).
 	if len(rest) >= 8 {
 		v.RetryDueDate = int64(binary.LittleEndian.Uint64(rest))
 	}
 	if len(rest) >= 16 {
 		v.LeaseExpiresAt = int64(binary.LittleEndian.Uint64(rest[8:]))
+	}
+	if len(rest) >= 24 {
+		v.LeaseEpoch = binary.LittleEndian.Uint64(rest[16:])
 	}
 	return nil
 }

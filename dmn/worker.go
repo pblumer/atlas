@@ -80,7 +80,7 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 // made live and after the fact (ADR-0066). sink, if non-nil, additionally observes
 // each result. [Handler] (local) and the temis connector worker (central, ADR-0050)
 // are both built on it.
-func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
+func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
 	return func(j job.Job) (job.Completion, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -159,7 +159,7 @@ func jsonObject(m map[string]any) string {
 // model deployed under the process's own key (ADR-0014). Register it with a
 // [job.Runner] via HandleCompleting for the reserved DMN job type
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
-func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
 		// The task's binding selects which deployed model version to evaluate
 		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
@@ -186,7 +186,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(
 // subprocess or a multi-instance body reads its enclosing scope's variables — e.g.
 // a per-row `inputElement` bound by a multi-instance loop (ADR-0068 scope-chain
 // resolution, ADR-0077, ADR-0084). piKey binds the reserved processInstanceKey.
-func buildInputs(store *state.Store, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
+func buildInputs(store state.Reader, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
 	base, err := decodeInputs(staticJSON)
 	if err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ const maxScopeDepth = 64
 // this degenerates to the previous single-scope read. The chain is walked via each
 // scope's element instance's FlowScopeKey; the process-instance root has no element
 // instance, which ends it.
-func readScopeChainVars(store *state.Store, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
+func readScopeChainVars(store state.Reader, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
 	scope := elementInstanceKey
 	for depth := 0; depth <= maxScopeDepth; depth++ {

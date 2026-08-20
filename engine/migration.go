@@ -85,7 +85,7 @@ func ValidateMigration(from, to *compiler.CompiledProcess, live []MigrationEleme
 			add(el, "no element in the target version is mapped to it, so its token would be stranded")
 			continue
 		}
-		if target < 0 || target >= to.NodeCount() {
+		if target < 0 || int(target) >= to.NodeCount() {
 			// Node indexes the graph directly, so an index from outside it — a stale
 			// mapping, a hand-written override — has to be checked before it is used.
 			add(el, "maps to element index %d, which the target version does not have", target)
