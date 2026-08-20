@@ -193,6 +193,15 @@ type runtimeIncident struct {
 	ElementID          string `json:"elementId"`
 	RaisedAt           int64  `json:"raisedAt"`
 	Message            string `json:"message"`
+	// Connector names the server-registered connector the stuck task refers to, and
+	// ConnectorKind the kind it needs; ConnectorID is the configured record's id when
+	// one exists under that name and kind. A connector task's incident is usually a
+	// connector problem, and the fix is a field on the connector — so the operator gets
+	// there from the incident instead of reading the name out of a message (ADR-0160).
+	// All three are empty for a task that names no connector.
+	Connector     string `json:"connector,omitempty"`
+	ConnectorKind string `json:"connectorKind,omitempty"`
+	ConnectorID   string `json:"connectorId,omitempty"`
 }
 
 type runtimeResp struct {
@@ -268,7 +277,12 @@ type timelineStep struct {
 	// completion — a job's outputs, an output mapping — shows nothing in Variables, so
 	// the replay would report "no variables" for an element that in fact produced some.
 	// Absent while the element is still active or parked, since it has not finished.
-	VariablesAfter     []variableView `json:"variablesAfter,omitempty"`
+	VariablesAfter []variableView `json:"variablesAfter,omitempty"`
+	// Inputs is what this element itself was handed: the values its zeebe:ioMapping
+	// inputs were evaluated to, in its own activity-local scope (ADR-0068). Variables
+	// and VariablesAfter carry the process (and subprocess) scopes, so these locals are
+	// on the log but in neither. Absent for an element that declares no input mapping.
+	Inputs             []variableView `json:"inputs,omitempty"`
 	Position           uint64         `json:"position"`
 	TokenID            uint64         `json:"tokenId,omitempty"`
 	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
@@ -370,6 +384,10 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// Worker names the worker reporting the failure, for attribution in the Workers
+	// view (ADR-0157). Optional and non-authoritative: it changes nothing about how
+	// the failure is handled.
+	Worker string `json:"worker"`
 	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
 	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
 	RetryBackoff int64 `json:"retryBackoff"`
@@ -402,6 +420,13 @@ type incidentView struct {
 	Type     string `json:"type"`
 	RaisedAt int64  `json:"raisedAt"`
 	Message  string `json:"message"`
+	// Connector / ConnectorKind / ConnectorID are the server-registered connector the
+	// stuck task refers to, so the fix is one click from the incident rather than a
+	// name read out of a message (ADR-0160). Empty when the task names no connector,
+	// and ConnectorID alone is empty when nothing is configured under that name.
+	Connector     string `json:"connector,omitempty"`
+	ConnectorKind string `json:"connectorKind,omitempty"`
+	ConnectorID   string `json:"connectorId,omitempty"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -735,6 +760,13 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		}
 
 		s.versions[pid] = version
+		// Translate the process's model-authored job types into the engine-wide index
+		// space before it can create any job, so the type a job carries means the same
+		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
+		// redeploy of the same model lands on the same indices.
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return deployed, nil, err
+		}
 		s.proc.Deploy(cp)
 		// Arm this fresh version's timer start events and supersede any the prior
 		// version left running, so the process starts on its schedule (ADR-0051).
@@ -1066,6 +1098,9 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
+		// One resolver for the whole overlay, so the connector store is read once for
+		// the page rather than once per parked token (ADR-0160).
+		connectorFor := s.incidentConnectorLookup()
 		// addIncident records one parked element instance on the overlay: a count on
 		// the element (so the diagram can mark the shape) and the detail behind it (so
 		// the panel can say why and offer the resolve). Full is the response cap.
@@ -1075,14 +1110,16 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				return false
 			}
 			e.Incidents++
-			resp.Incidents = append(resp.Incidents, runtimeIncident{
+			inc := runtimeIncident{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
 				JobKey:             v.JobKey,
 				ElementID:          e.ElementID,
 				RaisedAt:           v.RaisedAt,
 				Message:            v.Message,
-			})
+			}
+			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
+			resp.Incidents = append(resp.Incidents, inc)
 			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
 
@@ -1567,6 +1604,48 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			emitFrame(last.pos, last.at)
 		}
 
+		// What each element was actually handed: an activity's zeebe:ioMapping inputs are
+		// evaluated into its *activity-local* scope, keyed by the element instance
+		// (ADR-0068). The folds above read the process and subprocess scopes only, so
+		// those values sit on the log but appear nowhere in the timeline — the one thing
+		// an operator asking "what went into this task" most wants. Kept off Variables /
+		// VariablesAfter deliberately: a local belongs to one element instance, and folding
+		// it into the shared running set would leak it onto every concurrent step.
+		//
+		// Only elements that declare input mappings are scanned, so an instance with none
+		// pays nothing, and only the declared targets are kept — an activity's local scope
+		// also carries values its own behavior parked there (a script result awaiting its
+		// output mapping, a multi-instance loop counter), which are not inputs.
+		inputsByEIK := map[uint64][]variableView{}
+		for _, v := range activations {
+			ins := d.cp.IOInputs(v.ElementID)
+			if len(ins) == 0 || v.ElementInstanceKey == 0 {
+				continue
+			}
+			targets := make(map[string]struct{}, len(ins))
+			for _, m := range ins {
+				targets[d.cp.Intern(m.Target)] = struct{}{}
+			}
+			byName := map[string]variableView{}
+			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
+				if _, ok := targets[vv.Name]; !ok {
+					return nil
+				}
+				view := toVariableView(vv)
+				view.Actor = actorByPos[pos] // an operator may have corrected a local too (ADR-0098)
+				byName[vv.Name] = view       // later write wins, as in the folds above
+				return nil
+			}); scanErr != nil {
+				return
+			}
+			list := make([]variableView, 0, len(byName))
+			for _, view := range byName {
+				list = append(list, view)
+			}
+			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
+			inputsByEIK[v.ElementInstanceKey] = list
+		}
+
 		// Walk the steps in order, advancing through every variable change at or
 		// before each step's position, so a step carries the variables as they stood
 		// when the token entered that element. A change overwrites the previous value
@@ -1611,6 +1690,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).
 				if m, ok := manualByElement[rv.ElementInstanceKey]; ok {
 					mv := m
@@ -2915,6 +2995,23 @@ type jobResp struct {
 // a client that only speaks HTTP can discover the job keys of parked service tasks
 // and finish them by hand. The scan runs on the run-loop goroutine (state's sole
 // owner) via do.
+// jobTypeName turns the job-type index on a job record back into the name an
+// operator authored. The engine-wide table is authoritative: since job types are
+// resolved at deploy (ADR-0007/0157) every job created from then on carries an
+// index that means the same thing across definitions.
+//
+// The fallback is for a job written *before* that table existed, whose index was
+// interned per process and is only meaningful against its own string table. Such
+// a job can still be read out under the wrong name if its local index happens to
+// collide with a registered one — it is why the jobs already in state need a
+// migration, which lands with the type-keyed pull that makes it observable.
+func (s *Server) jobTypeName(cp *compiler.CompiledProcess, jobType int32) string {
+	if name, ok := s.jobTypes.Name(jobType); ok {
+		return name
+	}
+	return cp.Intern(jobType)
+}
+
 func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -2935,7 +3032,7 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
 					cp := d.cp
 					jr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					jr.JobType = cp.Intern(jv.JobType)
+					jr.JobType = s.jobTypeName(cp, jv.JobType)
 				}
 			}
 			jobs = append(jobs, jr)
@@ -3224,11 +3321,19 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		runErr error
 	)
 	s.do(func() {
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
+		// Attribution only: a worker naming itself lets the Workers view show whose
+		// jobs are failing (ADR-0157). It changes nothing about the failure itself.
+		if worker := strings.TrimSpace(req.Worker); worker != "" {
+			if name, ok := s.jobTypes.Name(jv.JobType); ok {
+				s.workers.failed(worker, name)
+			}
+		}
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -3286,6 +3391,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// completed step would carry no explanation of why a person overrode the model.
 	var payload struct {
 		Reason string `json:"reason"`
+		Worker string `json:"worker"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -3294,7 +3400,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	reason := strings.TrimSpace(payload.Reason)
-	if reason == "" {
+	// A worker reporting the outcome of a job it holds a lease on is the ordinary
+	// protocol path (ADR-0007), not an intervention: it is doing exactly what the
+	// model asked for. Only a completion *by hand* is an override, and only that one
+	// needs a reason and an audit entry. The lease is what separates them — a caller
+	// naming a worker it is not the holder for is refused below rather than quietly
+	// demoted to an operator, so this cannot become a way around the audit trail.
+	worker := strings.TrimSpace(payload.Worker)
+	if worker == "" && reason == "" {
 		httpapi.Error(w, http.StatusBadRequest, "reason is required: completing a job by hand is an operator intervention and is recorded with who did it and why")
 		return
 	}
@@ -3307,15 +3420,28 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		actor = p.Username
 	}
 	var (
-		found  bool
-		runErr error
+		found     bool
+		notHolder bool
+		runErr    error
 	)
 	s.do(func() {
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
-		s.proc.CompleteJobManually(key, actor, reason, vars...)
+		if worker != "" {
+			if jv.LeaseExpiresAt == 0 || jv.Assignee != worker {
+				notHolder = true
+				return
+			}
+			s.proc.CompleteJob(key, vars...)
+			if name, ok := s.jobTypes.Name(jv.JobType); ok {
+				s.workers.completed(worker, name)
+			}
+		} else {
+			s.proc.CompleteJobManually(key, actor, reason, vars...)
+		}
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -3323,6 +3449,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(worker)+" does not hold a lease on this job; lease it first, or complete it as an operator with a reason")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -3425,6 +3554,10 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			cp        *compiler.CompiledProcess
 		}
 		resolved := map[uint64]instanceCtx{}
+		// One resolver for the whole page: the connector store is read once, not once
+		// per parked token, and not at all when nothing on the page is on a connector
+		// task (ADR-0159).
+		connectorFor := s.incidentConnectorLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
 			if ctx, ok := resolved[piKey]; ok {
 				return ctx, nil
@@ -3471,6 +3604,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			}
 			if ctx.cp != nil {
 				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
 			}
 			list = append(list, view)
 			return nil
@@ -3871,6 +4005,178 @@ const maxJobLease = 24 * time.Hour
 // type indices are interned per process, so the global activatable index cannot tell
 // one definition's "send-email" from another's "charge-card" — see ADR-0007. A worker
 // that lists an instance's jobs and leases them by key is unambiguous today.
+// maxJobsPerPull bounds one type-keyed activation. A worker that asks for more is
+// given this many: the cap exists so a single request cannot lease an entire
+// backlog, which would starve every other worker for a whole lease period.
+const maxJobsPerPull = 100
+
+// pulledJob is one leased job as a worker receives it: enough to do the work and
+// report the outcome without a second call. Variables are the ones *visible at the
+// task* — the element instance's scope chain, so an activity-local input mapping
+// shadows the instance value exactly as it does for an in-process worker.
+type pulledJob struct {
+	JobKey             uint64         `json:"jobKey"`
+	Type               string         `json:"type"`
+	ProcessInstanceKey uint64         `json:"processInstanceKey"`
+	ElementInstanceKey uint64         `json:"elementInstanceKey"`
+	ProcessDefKey      uint64         `json:"processDefKey"`
+	ElementID          string         `json:"elementId"`
+	Retries            int32          `json:"retries"`
+	LeaseExpiresAt     int64          `json:"leaseExpiresAt"`
+	Variables          map[string]any `json:"variables"`
+}
+
+// handleActivateJobsByType is the type-keyed pull ADR-0007 designed and its
+// amendment deferred: a worker asks for the next jobs of a *named* type rather
+// than having to know a job key. It is what makes an out-of-process worker
+// possible at all, and it only became correct once job types were resolved into
+// one engine-wide index space (ADR-0157) — before that a name meant a different
+// index in every definition.
+//
+// Two types are refused rather than served. One an in-process worker is already
+// draining would be worked twice, because that runner does not lease: it
+// dispatches whatever is activatable. And a user task is not worker work — it
+// waits for a person and is claimed through the Tasks app.
+//
+// Body: {"type": "send-email", "worker": "w1", "leaseMs": 30000, "maxJobs": 5}.
+// An empty jobs array is the ordinary answer for an idle queue; the caller polls
+// again. (Long-poll, so it need not, is the next slice.)
+func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Type    string `json:"type"`
+		Worker  string `json:"worker"`
+		LeaseMs int64  `json:"leaseMs"`
+		MaxJobs int    `json:"maxJobs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	body.Type = strings.TrimSpace(body.Type)
+	if body.Type == "" {
+		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
+		return
+	}
+	lease := defaultJobLease
+	if body.LeaseMs > 0 {
+		lease = time.Duration(body.LeaseMs) * time.Millisecond
+	}
+	if lease > maxJobLease {
+		httpapi.Error(w, http.StatusBadRequest,
+			"leaseMs is longer than the "+maxJobLease.String()+" maximum; a lease is what returns a job from a dead worker")
+		return
+	}
+	want := body.MaxJobs
+	if want <= 0 {
+		want = 1
+	}
+	if want > maxJobsPerPull {
+		want = maxJobsPerPull
+	}
+
+	var (
+		unknown  bool
+		inProc   bool
+		jobs     []pulledJob
+		scanErr  error
+		runErr   error
+		reserved bool
+	)
+	s.do(func() {
+		jobType, ok := s.jobTypes.Index(body.Type)
+		if !ok {
+			unknown = true
+			return
+		}
+		if jobType == compiler.UserTaskJobTypeIndex {
+			reserved = true
+			return
+		}
+		if s.jobRunner.Handles(jobType) {
+			inProc = true
+			return
+		}
+		// Collect first, then lease: activating mutates the very index being scanned.
+		var keys []uint64
+		if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
+			if len(keys) < want {
+				keys = append(keys, k)
+			}
+			return nil
+		}); scanErr != nil {
+			return
+		}
+		for _, k := range keys {
+			s.proc.ActivateJob(k, body.Worker, int64(lease))
+		}
+		if runErr = s.jobRunner.Drive(); runErr != nil {
+			return
+		}
+		for _, k := range keys {
+			j, ok := s.pulledJob(k, body.Type)
+			if !ok {
+				continue // completed or re-leased between the scan and here
+			}
+			jobs = append(jobs, j)
+		}
+		s.workers.leased(body.Worker, body.Type, len(jobs))
+	})
+	switch {
+	case unknown:
+		httpapi.Error(w, http.StatusNotFound,
+			"no job type "+strconv.Quote(body.Type)+" is known to this engine; it is registered when a process using it is deployed")
+	case reserved:
+		httpapi.Error(w, http.StatusConflict,
+			"a user task is not worker work: it waits for a person and is claimed through the Tasks API")
+	case inProc:
+		httpapi.Error(w, http.StatusConflict,
+			"job type "+strconv.Quote(body.Type)+" is served by an in-process worker; leasing it externally would run the work twice")
+	case scanErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "activate jobs: "+scanErr.Error())
+	case runErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "activate jobs: "+runErr.Error())
+	default:
+		if jobs == nil {
+			jobs = []pulledJob{}
+		}
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobs": jobs, "worker": body.Worker})
+	}
+}
+
+// pulledJob reads one leased job back out of state, with the element it sits on
+// and the variables visible there. It reads the lease deadline back rather than
+// recomputing it: the engine froze that value from its own clock, and it is what
+// the worker has to trust (invariant I6). Runs on the run-loop goroutine.
+func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
+	jv, ok, err := s.store.GetJob(jobKey)
+	if err != nil || !ok {
+		return pulledJob{}, false
+	}
+	j := pulledJob{
+		JobKey:             jobKey,
+		Type:               typeName,
+		ProcessInstanceKey: jv.ProcessInstanceKey,
+		ElementInstanceKey: jv.ElementInstanceKey,
+		Retries:            jv.Retries,
+		LeaseExpiresAt:     jv.LeaseExpiresAt,
+		Variables:          map[string]any{},
+	}
+	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+		j.ProcessDefKey = ei.ProcessDefKey
+		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+			j.ElementID = d.cp.ElementBpmnId(ei.ElementId)
+		}
+	}
+	// The task's own scope chain, so an input mapping shadows the instance value.
+	if err := s.store.VisibleVariablesOfScope(jv.ElementInstanceKey, func(v *model.VariableValue) error {
+		j.Variables[v.Name] = nativeVar(v)
+		return nil
+	}); err != nil {
+		return pulledJob{}, false
+	}
+	return j, true
+}
+
 func (s *Server) handleActivateJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

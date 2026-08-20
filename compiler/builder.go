@@ -3,6 +3,7 @@ package compiler
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -241,6 +242,44 @@ const LdapJobType = "io.atlas.ldap"
 // worker uses ScimJobTypeIndex (ADR-0154).
 const LdapJobTypeIndex int32 = 17
 
+// reservedJobTypes is the ordered list of job types Atlas reserves: every builder
+// interns these first, so a reserved name occupies the same index in every compiled
+// process, and the *engine-wide* job-type registry seeds itself from the same list
+// so the two cannot disagree about what a low index means. Position is identity —
+// each entry's index is baked into jobs already on disk, so a name may be appended
+// but never reordered or removed.
+var reservedJobTypes = []string{
+	DMNJobType,           // 0
+	UserTaskJobType,      // 1
+	PwshJobType,          // 2
+	TemisDecisionJobType, // 3
+	RestJobType,          // 4
+	PythonJobType,        // 5
+	JsJobType,            // 6
+	ClioWriteJobType,     // 7
+	ClioQueryJobType,     // 8
+	ClioReadJobType,      // 9
+	MailJobType,          // 10
+	CsvImportJobType,     // 11
+	SharePointJobType,    // 12
+	RemedyJobType,        // 13
+	WebScrapeJobType,     // 14
+	UserConnectorJobType, // 15
+	ScimJobType,          // 16
+	LdapJobType,          // 17
+}
+
+// ReservedJobTypes returns the reserved job-type names in index order, so index i
+// of the result is the job type whose reserved index is i. It returns a copy: the
+// slice is the definition of those indices, and a caller reordering it would
+// re-point every job already written under them.
+func ReservedJobTypes() []string { return slices.Clone(reservedJobTypes) }
+
+// FirstDynamicJobTypeIndex is the lowest index available to a model-authored job
+// type (a <zeebe:taskDefinition type>), i.e. one past the reserved range. The
+// engine-wide registry assigns from here up.
+func FirstDynamicJobTypeIndex() int32 { return int32(len(reservedJobTypes)) }
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -318,24 +357,11 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		flowScope:     -1,   // nodes land at the process root until a scope is pushed
 		interner:      map[string]int32{},
 	}
-	b.intern(DMNJobType)           // reserve DMNJobTypeIndex == 0
-	b.intern(UserTaskJobType)      // reserve UserTaskJobTypeIndex == 1
-	b.intern(PwshJobType)          // reserve PwshJobTypeIndex == 2
-	b.intern(TemisDecisionJobType) // reserve TemisDecisionJobTypeIndex == 3
-	b.intern(RestJobType)          // reserve RestJobTypeIndex == 4
-	b.intern(PythonJobType)        // reserve PythonJobTypeIndex == 5
-	b.intern(JsJobType)            // reserve JsJobTypeIndex == 6
-	b.intern(ClioWriteJobType)     // reserve ClioWriteJobTypeIndex == 7
-	b.intern(ClioQueryJobType)     // reserve ClioQueryJobTypeIndex == 8
-	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
-	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
-	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
-	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
-	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
-	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
-	b.intern(UserConnectorJobType) // reserve UserConnectorJobTypeIndex == 15
-	b.intern(ScimJobType)          // reserve ScimJobTypeIndex == 16
-	b.intern(LdapJobType)          // reserve LdapJobTypeIndex == 17
+	// Reserve the built-in job types first, in order, so each lands on the index its
+	// constant documents in every compiled process (see reservedJobTypes).
+	for _, name := range reservedJobTypes {
+		b.intern(name)
+	}
 	return b
 }
 
@@ -563,8 +589,9 @@ func (b *Builder) AddEndEvent() int32 { return b.addNode(TypeEndEvent, -1) }
 func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	detail := int32(len(b.serviceTasks))
 	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
-		JobType: b.intern(jobType),
-		Retries: retries,
+		JobType:       b.intern(jobType),
+		Retries:       retries,
+		globalJobType: jobTypeUnresolved,
 	})
 	return b.addNode(TypeServiceTask, detail)
 }
@@ -577,8 +604,9 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 func (b *Builder) AddSendTask(jobType string, retries int32) int32 {
 	detail := int32(len(b.serviceTasks))
 	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
-		JobType: b.intern(jobType),
-		Retries: retries,
+		JobType:       b.intern(jobType),
+		Retries:       retries,
+		globalJobType: jobTypeUnresolved,
 	})
 	return b.addNode(TypeSendTask, detail)
 }

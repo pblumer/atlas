@@ -62,6 +62,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_complete_job":            "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":                "POST /api/v1/jobs/{key}/fail",
 	"atlas_list_incidents":          "GET /api/v1/incidents",
+	"atlas_workers":                 "GET /api/v1/workers",
 	"atlas_resolve_incident":        "POST /api/v1/incidents/{key}/resolve",
 	"atlas_mail_outbox":             "GET /api/v1/mail/outbox",
 	"atlas_clear_mail_outbox":       "DELETE /api/v1/mail/outbox",
@@ -119,6 +120,7 @@ var mcpOmittedRoutes = map[string]string{
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
 	// pointed at, and never needs to hold one against other workers.
 	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
+	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
 	"GET /api/v1/checkpoints":          "admin recovery-checkpoint status, not an agent action",
 	"POST /api/v1/checkpoints":         "admin on-demand checkpoint/compaction, not an agent action",
 

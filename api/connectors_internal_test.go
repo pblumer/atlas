@@ -192,9 +192,21 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 		t.Fatalf("connector list = %s, want risk and no secret", lb)
 	}
 
-	// Delete it.
-	if code, _ := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID, ""); code != http.StatusNoContent {
-		t.Fatalf("delete connector: want 204")
+	// Deleting it is refused while the deployed model still references it: removing
+	// the thing a resolved reference points at parks every one of its tasks, with a
+	// message that reads as if it had never been configured (ADR-0163). The refusal
+	// names the model rather than a count, because that is what an operator decides on.
+	code, db := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID, "")
+	if code != http.StatusConflict {
+		t.Fatalf("delete a referenced connector = %d %s, want 409", code, db)
+	}
+	if !strings.Contains(string(db), `"usedBy"`) || !strings.Contains(string(db), `"decide"`) {
+		t.Fatalf("refusal = %s, want the referencing process and its element", db)
+	}
+
+	// Deleting anyway is the operator's call, made explicitly.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+created.ID+"?force=true", ""); code != http.StatusNoContent {
+		t.Fatalf("forced delete: %d %s, want 204", code, b)
 	}
 	if code, _ := x.do(http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":true}`); code != http.StatusNotFound {
 		t.Fatalf("update deleted connector: want 404")
@@ -550,6 +562,18 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 	if do(http.MethodDelete, "/api/v1/connectors/other", "") != http.StatusInternalServerError {
 		t.Error("delete with a failing registry rebuild: want 500")
 	}
+
+	// Delete read failure: the reference guard reads the record before deleting it
+	// (ADR-0163), so a record that will not decode fails the request rather than
+	// silently skipping the check and deleting anyway.
+	stRead, _ := newConnectorStore(filepath.Join(t.TempDir(), "read"))
+	if err := os.WriteFile(stRead.FileFor("u3"), []byte("{bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv.connectors = stRead
+	if do(http.MethodDelete, "/api/v1/connectors/u3", "") != http.StatusInternalServerError {
+		t.Error("delete whose reference check cannot read the record: want 500")
+	}
 }
 
 // TestResolveConnectorSecret covers the env-reference secret resolution.
@@ -834,5 +858,180 @@ func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
 	}
 	if warns = srv.connectorWarnings(cp); len(warns) != 0 {
 		t.Errorf("warnings for a working connector = %v, want none", warns)
+	}
+}
+
+// TestConnectorProviderUpdate covers the fix an operator reaches for from a parked
+// mail task: switch the connector's provider instead of re-creating it under the same
+// name (which would be a different connector as far as every model referencing it is
+// concerned). A move to the in-app preview transport drops the endpoint and credential
+// it no longer dials; a move to a native provider without a credential bundle is
+// refused at the moment it is typed rather than at the next send (ADR-0160).
+func TestConnectorProviderUpdate(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	code, b := do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"Patrick Blumer","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create mail connector: %d %s", code, b)
+	}
+	var c connector
+	_ = json.Unmarshal(b, &c)
+
+	// Gmail without a credential bundle: refused, and the stored record is untouched.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"gmail","credentialsRef":""}`)
+	if code != http.StatusBadRequest || !strings.Contains(string(b), "credentialsRef") {
+		t.Fatalf("switch to gmail with no bundle = %d %s, want 400 naming the credentialsRef", code, b)
+	}
+
+	// Preview: nothing to dial, nothing to authenticate — the endpoint and credential
+	// are cleared so no dead configuration is left reading as if it were in use.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"preview"}`)
+	if code != http.StatusOK {
+		t.Fatalf("switch to preview: %d %s", code, b)
+	}
+	var up connector
+	_ = json.Unmarshal(b, &up)
+	if up.Provider != "preview" || up.Endpoint != "" || up.CredentialsRef != "" {
+		t.Fatalf("record after switching to preview = %+v, want provider preview and no endpoint/credential", up)
+	}
+
+	// And the switch is live: the rebuilt registry has a usable client under the name,
+	// so a task referencing it stops parking.
+	var (
+		client any
+		ok     bool
+	)
+	srv.do(func() { client, ok = srv.mailRegistry.Client("Patrick Blumer") })
+	if !ok || client == nil {
+		t.Fatalf("mail registry after the switch has no client for the connector")
+	}
+
+	// An unknown provider is rejected by the same validation a create runs.
+	if code, b := do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"provider":"carrier-pigeon"}`); code != http.StatusBadRequest {
+		t.Fatalf("unknown provider = %d %s, want 400", code, b)
+	}
+}
+
+// TestElementConnectorRefEdges covers the answers the incident's connector lookup has
+// to give when there is nothing to resolve: an instance whose definition is no longer
+// deployed (no compiled process to ask), and a task whose reserved job type belongs to
+// no managed connector kind — a REST task carries its URL in the model and resolves
+// through no registry, so its reference has a name but no kind and can match no stored
+// record (ADR-0160).
+func TestElementConnectorRefEdges(t *testing.T) {
+	if name, kind := elementConnectorRef(nil, 0); name != "" || kind != "" {
+		t.Errorf("elementConnectorRef(nil) = %q/%q, want both empty", name, kind)
+	}
+	if kind := connectorKindOfJobType(-1); kind != "" {
+		t.Errorf("connectorKindOfJobType(-1) = %q, want no kind", kind)
+	}
+	srv, _ := newValidateServer(t)
+	name, kind, id := srv.incidentConnectorLookup()(nil, 0)
+	if name != "" || kind != "" || id != "" {
+		t.Errorf("lookup on no compiled process = %q/%q/%q, want all empty", name, kind, id)
+	}
+}
+
+// TestConnectorUsageIsVisibleBeforeDeleting covers the reverse of the deploy-time
+// check: the connector list says which deployed models reference each connector, and
+// how many instances are running on them, so an operator can see what a delete would
+// park before attempting it — and a connector nothing references deletes without a
+// fight (ADR-0163).
+func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Central")
+	x.saveDraft(pid, centralDecisionBPMN) // references the temis connector "risk"
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"risk","endpoint":"http://risk.internal"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create referenced connector: %d %s", code, cb)
+	}
+	var referenced connector
+	_ = json.Unmarshal(cb, &referenced)
+
+	code, ob := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"orphan","endpoint":"http://nobody.internal"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create unreferenced connector: %d %s", code, ob)
+	}
+	var orphan connector
+	_ = json.Unmarshal(ob, &orphan)
+
+	// The list carries the usage per connector: the referenced one names the model and
+	// the element, the unreferenced one carries nothing at all.
+	_, lb := x.do(http.MethodGet, "/api/v1/connectors", "")
+	var views []struct {
+		Name   string         `json:"name"`
+		UsedBy []connectorUse `json:"usedBy"`
+	}
+	if err := json.Unmarshal(lb, &views); err != nil {
+		t.Fatalf("connector list: %v (%s)", err, lb)
+	}
+	byName := map[string][]connectorUse{}
+	for _, v := range views {
+		byName[v.Name] = v.UsedBy
+	}
+	uses := byName["risk"]
+	if len(uses) != 1 {
+		t.Fatalf("usedBy for the referenced connector = %+v, want exactly the deployed model", uses)
+	}
+	if len(uses[0].Elements) != 1 || uses[0].Elements[0] != "decide" {
+		t.Errorf("usedBy elements = %v, want the business rule task", uses[0].Elements)
+	}
+	if uses[0].ProcessDefKey == 0 || uses[0].Version == 0 {
+		t.Errorf("usedBy = %+v, want the definition key and version so the UI can link to it", uses[0])
+	}
+	if got := byName["orphan"]; len(got) != 0 {
+		t.Errorf("usedBy for an unreferenced connector = %+v, want nothing", got)
+	}
+
+	// A second deployed model referencing the same connector aggregates onto it, in
+	// definition-key order, so the operator sees every process a delete would park and
+	// not just the first one found.
+	pid2 := x.mkProject("Central again")
+	x.saveDraft(pid2, centralDecisionBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid2+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("second deploy: %d %s", code, b)
+	}
+	_, lb2 := x.do(http.MethodGet, "/api/v1/connectors", "")
+	var views2 []struct {
+		Name   string         `json:"name"`
+		UsedBy []connectorUse `json:"usedBy"`
+	}
+	if err := json.Unmarshal(lb2, &views2); err != nil {
+		t.Fatalf("connector list: %v (%s)", err, lb2)
+	}
+	for _, v := range views2 {
+		if v.Name != "risk" {
+			continue
+		}
+		if len(v.UsedBy) != 2 {
+			t.Fatalf("usedBy after a second deploy = %+v, want both definitions", v.UsedBy)
+		}
+		if v.UsedBy[0].ProcessDefKey >= v.UsedBy[1].ProcessDefKey {
+			t.Errorf("usedBy = %+v, want definition-key order", v.UsedBy)
+		}
+	}
+
+	// Nothing references it, so deleting it is uneventful — the guard must not stand
+	// in the way of the ordinary case.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+orphan.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete an unreferenced connector = %d %s, want 204", code, b)
+	}
+	// The referenced one is refused, and says by what.
+	if code, b := x.do(http.MethodDelete, "/api/v1/connectors/"+referenced.ID, ""); code != http.StatusConflict {
+		t.Fatalf("delete a referenced connector = %d %s, want 409", code, b)
 	}
 }

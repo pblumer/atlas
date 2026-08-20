@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -371,9 +372,14 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 		if loadErr != nil {
 			return
 		}
+		uses := s.connectorUseIndex()
 		views = make([]connectorView, 0, len(recs))
 		for _, c := range recs {
-			views = append(views, connectorView{connector: c, Problem: s.connectorProblem(c.Kind, c.Name)})
+			views = append(views, connectorView{
+				connector: c,
+				Problem:   s.connectorProblem(c.Kind, c.Name),
+				UsedBy:    uses[c.Kind+"/"+c.Name],
+			})
 		}
 	})
 	if loadErr != nil {
@@ -392,6 +398,11 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 type connectorView struct {
 	connector
 	Problem string `json:"problem,omitempty"`
+	// UsedBy is every deployed definition whose model references this connector, so the
+	// operator page can say what a delete would park *before* they try it (ADR-0163).
+	// Empty when nothing references it — which is the only state in which deleting is
+	// uneventful.
+	UsedBy []connectorUse `json:"usedBy,omitempty"`
 }
 
 // connectorProblem asks the kind's live registry why this connector is not usable, or
@@ -504,9 +515,15 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
+	// Every field an operator can change on a stored connector. Provider is here
+	// because switching one — an SMTP host that will not authenticate moved to the
+	// in-app preview transport, say — is the fix for a whole class of parked mail
+	// tasks, and re-creating the connector under the same name to change it would
+	// break every model referencing it (ADR-0160).
 	var p struct {
 		Endpoint       *string `json:"endpoint"`
 		CredentialsRef *string `json:"credentialsRef"`
+		Provider       *string `json:"provider"`
 		Sender         *string `json:"sender"`
 		Enabled        *bool   `json:"enabled"`
 	}
@@ -536,6 +553,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
 		}
+		if p.Provider != nil {
+			rec.Provider = strings.TrimSpace(*p.Provider)
+		}
 		if p.Sender != nil {
 			rec.Sender = strings.TrimSpace(*p.Sender)
 		}
@@ -543,8 +563,8 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 			rec.Enabled = *p.Enabled
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
-		// an SMTP endpoint that dials, above all — or the change is refused here
-		// instead of parking a token later (ADR-0150).
+		// an SMTP endpoint that dials, a provider that has a credential — or the change
+		// is refused here instead of parking a token later (ADR-0150/0159).
 		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
 			return
 		}
@@ -571,8 +591,31 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 // decision referencing it parks again (until reconfigured).
 func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var delErr error
+	force := r.URL.Query().Get("force") == "true"
+	var (
+		delErr error
+		inUse  []connectorUse
+	)
 	s.do(func() {
+		// Deleting a connector deployed models still reference parks every one of their
+		// tasks, with a message that reads as if it had never been configured. A deploy
+		// has warned about a reference it cannot resolve since ADR-0158; removing the
+		// thing a resolved reference points at was the same mistake from the other end,
+		// made silently. So the reference check runs here too, and here it refuses
+		// (ADR-0163) — deleting is not reversible the way deploying a model early is,
+		// which is the asymmetry that makes a warning right there and a refusal here.
+		if !force {
+			rec, found, e := s.connectors.Get(id)
+			if e != nil {
+				delErr = e
+				return
+			}
+			if found {
+				if inUse = s.connectorUsers(rec.Name, rec.Kind); len(inUse) > 0 {
+					return
+				}
+			}
+		}
 		if delErr = s.connectors.Delete(id); delErr != nil {
 			return
 		}
@@ -580,6 +623,17 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	if delErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())
+		return
+	}
+	if len(inUse) > 0 {
+		// 409 with the models themselves, not just a count: "3 processes use this" is
+		// not something an operator can act on, and the whole point is that they decide
+		// with the list in front of them. ?force=true is the decision.
+		httpapi.JSON(w, http.StatusConflict, map[string]any{
+			"error":   "connector is referenced by deployed processes; delete with ?force=true to remove it anyway",
+			"usedBy":  inUse,
+			"details": "Their tasks will park with \"no connector registered\" until the connector is recreated under the same name.",
+		})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -883,6 +937,86 @@ func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 	return out
 }
 
+// connectorUse is one deployed definition that references a connector, as the
+// operator needs to see it before deleting that connector: which model, which version,
+// which element(s), and whether anything is running on it right now.
+type connectorUse struct {
+	ProcessDefKey   uint64   `json:"processDefKey"`
+	ProcessID       string   `json:"processId"`
+	Name            string   `json:"name"`
+	Version         int32    `json:"version"`
+	Elements        []string `json:"elements"`
+	ActiveInstances int      `json:"activeInstances"`
+}
+
+// connectorUsers is connectorWarnings read backwards: instead of asking "what does this
+// model reference that is missing?", it asks "what would break if this connector were
+// gone?" — every deployed definition whose compiled graph names this connector under
+// this kind (ADR-0163).
+//
+// The check existed for a deploy since ADR-0158 and ran nowhere else, so removing a
+// connector was silent: the models referencing it kept referencing it, and the next
+// token to reach one of their tasks parked with "no connector registered as X" — the
+// same message that started ADR-0158, produced this time by the operator who deleted
+// it rather than by one who never created it.
+//
+// Reads the deployment map and the state store, so it runs on the run-loop goroutine
+// (invariant I3). Results are ordered by definition key so the answer is stable.
+func (s *Server) connectorUsers(name, kind string) []connectorUse {
+	return s.connectorUseIndex()[kind+"/"+name]
+}
+
+// connectorUseIndex walks every deployed definition once and indexes its connector
+// references by "kind/name". The list view needs the answer for every connector at
+// once, and asking per connector would re-walk every compiled graph per row; one pass
+// answers all of them. Ordered by definition key, so the answer is stable.
+func (s *Server) connectorUseIndex() map[string][]connectorUse {
+	keys := make([]uint64, 0, len(s.deployments))
+	for key := range s.deployments {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	// One instance count per definition, not per reference: a model naming the same
+	// connector on three tasks must not read the counter three times.
+	index := map[string][]connectorUse{}
+	for _, key := range keys {
+		d := s.deployments[key]
+		if d == nil || d.cp == nil {
+			continue
+		}
+		byConnector := map[string][]string{}
+		var order []string
+		for _, ref := range d.cp.ConnectorRefs() {
+			kind := connectorKindOfJobType(ref.JobType)
+			if kind == "" {
+				continue // a job type no managed kind claims
+			}
+			k := kind + "/" + ref.Connector
+			if byConnector[k] == nil {
+				order = append(order, k)
+			}
+			byConnector[k] = append(byConnector[k], ref.ElementId)
+		}
+		if len(order) == 0 {
+			continue
+		}
+		// Running instances are what turn "this model would break" into "this model is
+		// breaking"; a failed count is not worth failing the answer over.
+		active := 0
+		if n, err := s.store.DefInstanceCount(key); err == nil {
+			active = n
+		}
+		for _, k := range order {
+			index[k] = append(index[k], connectorUse{
+				ProcessDefKey: key, ProcessID: d.ProcessID, Name: d.Name,
+				Version: d.Version, Elements: byConnector[k], ActiveInstances: active,
+			})
+		}
+	}
+	return index
+}
+
 // connectorKindOfJobType maps a reserved job-type index back to the managed connector
 // kind whose registry serves it, or "" for a job type no managed kind claims.
 func connectorKindOfJobType(jobType int32) string {
@@ -894,4 +1028,61 @@ func connectorKindOfJobType(jobType int32) string {
 		}
 	}
 	return ""
+}
+
+// elementConnectorRef is the model half of "which connector is this element stuck
+// on?": the connector name the task refers to and the connector kind its reserved job
+// type says it needs. Both empty when the element refers to no connector — a local
+// decision, a task of another type, an element the compiled process does not describe
+// that way (ADR-0160).
+func elementConnectorRef(cp *compiler.CompiledProcess, elementID int32) (name, kind string) {
+	if cp == nil {
+		return "", ""
+	}
+	ref, ok := cp.NodeConnectorRef(elementID)
+	if !ok {
+		return "", "" // a local decision, or a task that names no connector
+	}
+	return ref.Connector, connectorKindOfJobType(ref.JobType)
+}
+
+// incidentConnectorLookup returns the resolver an incident listing uses to answer that
+// question for every row: the connector's name, the kind it needs, and the id of the
+// configured record standing under that name, if one is. An incident on a connector
+// task is very often a connector problem, and the fix is a field on the connector
+// rather than anything about the instance — so the incident carries what it takes to
+// get there in one click, instead of leaving an operator to read a name out of a
+// message and go hunting (ADR-0160).
+//
+// It is a closure rather than a plain function because both callers loop over up to
+// thousands of incidents on the run-loop goroutine: the connector store is read at
+// most once per listing, and not at all when nothing on the page is on a connector
+// task. A per-incident directory read there would block every writer behind it
+// (invariant I3).
+//
+// Everything is derived on read from the compiled process and the connector store;
+// nothing about it is durable (I6). An empty id means no connector of that kind is
+// configured under the name — a record under the same name but *another* kind is not
+// this task's connector, and offering it would open the wrong one.
+func (s *Server) incidentConnectorLookup() func(cp *compiler.CompiledProcess, elementID int32) (name, kind, id string) {
+	var (
+		recs   []connector
+		loaded bool
+	)
+	return func(cp *compiler.CompiledProcess, elementID int32) (string, string, string) {
+		name, kind := elementConnectorRef(cp, elementID)
+		if name == "" || kind == "" {
+			return name, kind, ""
+		}
+		if !loaded {
+			loaded = true
+			recs, _ = s.connectors.LoadAll() // on error the name and kind are still worth having
+		}
+		for _, c := range recs {
+			if c.Name == name && c.Kind == kind {
+				return name, kind, c.ID
+			}
+		}
+		return name, kind, ""
+	}
 }

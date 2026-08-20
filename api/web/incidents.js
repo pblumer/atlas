@@ -9,6 +9,8 @@
 // budget, so it asks — which also gives room to say that a timer incident re-arms and
 // ignores the count, something window.prompt had nowhere to put.
 
+import { editConnectorFlow } from "./connectordialog.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -29,11 +31,45 @@ export function incidentPill(inc) {
 // event) as a local timestamp.
 export const fmtRaised = (ns) => (ns ? new Date(ns / 1e6).toLocaleString() : "—");
 
+// incidentConnectorChip names the connector the parked task resolves through, when it
+// has one. An operator reading "no connector registered as X" has to know *which*
+// integration X is before they can go and fix it, and the incident is where they are
+// standing (ADR-0160). It is a plain chip, not a link: the action is the button below.
+export function incidentConnectorChip(inc) {
+  if (!inc.connector) return "";
+  const kind = inc.connectorKind ? `${esc(inc.connectorKind)} &middot; ` : "";
+  const missing = !inc.connectorId;
+  return `<div class="inc-conn"><span class="pill${missing ? " warn" : ""}" title="${missing
+    ? "The model references this connector by name, but no connector of that kind is configured under it"
+    : "The configured connector this task resolves through"}">&#9881; ${kind}${esc(inc.connector)}${missing ? " &mdash; not configured" : ""}</span></div>`;
+}
+
+// incidentConnectorAction is the way out of an incident that the others cannot reach:
+// change what the task is configured to *talk to*. A mail task parked on an SMTP host
+// that will not authenticate is not fixed by correcting the data, by retrying, or by
+// declaring the work done — it is fixed by pointing its connector somewhere else
+// (ADR-0160). When the referenced connector does not exist at all there is nothing to
+// open, so the button becomes the way to the Console, where it can be created.
+//
+// This is the diagram-side row only. The Operations incidents table puts the same two
+// non-primary actions behind the ⋯ menu every other table there uses, because a third
+// visible button pushed that table past the width of its card (ADR-0163) — so the two
+// surfaces render the action differently on purpose, over the same fixConnectorFlow.
+function incidentConnectorAction(inc) {
+  if (!inc.connector) return "";
+  if (!inc.connectorId) {
+    return `<a class="btn neutral sm" href="#/console/org"
+      title="No connector is configured under this name — add one in Organization &rsaquo; Connectors">&#9881; Configure &#8599;</a>`;
+  }
+  return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+    title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Connector&hellip;</button>`;
+}
+
 // incidentRowHTML is one incident beside a diagram: where it is parked, why, and the
-// one action that resumes it. `label` names the element (a caller holding the
-// rendered diagram knows its label; the raw id is the fallback), and `showInstance`
-// adds the instance it belongs to — which the live view's all-instances scope needs
-// and a single-instance panel does not.
+// actions that resume it. `label` names the element (a caller holding the rendered
+// diagram knows its label; the raw id is the fallback), and `showInstance` adds the
+// instance it belongs to — which the live view's all-instances scope needs and a
+// single-instance panel does not.
 export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
   const where = showInstance
     ? `<span class="muted">· instance ${esc(String(inc.processInstanceKey))}</span>`
@@ -43,9 +79,11 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
         ${where}
         ${inc.raisedAt ? `<span class="muted">· ${esc(fmtRaised(inc.raisedAt))}</span>` : ""}</div>
       <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
+      ${incidentConnectorChip(inc)}
       <div class="inc-actions">
         <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
           title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
+        ${incidentConnectorAction(inc)}
         <button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
           title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button>
         <button class="btn neutral sm" data-complete="${esc(String(inc.elementInstanceKey))}"
@@ -328,16 +366,59 @@ function askCompletion(inc) {
   });
 }
 
-// bindIncidentActions wires one surface's incident block: the two actions on every
-// row, delegated on a container that re-renders under them. `resolve` picks which
-// resolve this surface offers — "quick" beside a diagram (one click, one attempt,
-// ADR-0150), "ask" in the incidents table, where an operator triaging a list may want
-// a bigger budget. onChanged runs after anything actually changed, so the caller can
-// re-poll. `incidents()` returns the rows currently on screen.
+// fixConnectorFlow reconfigures the integration the parked task resolves through, then
+// retries it. It is the way out an operator needs when the message is about the
+// connector rather than the data — an endpoint that will not answer, a credential that
+// expired, a provider that has to change — and until now the only route to it was to
+// leave the incident, find the connector in the Console, guess which one it was, and
+// come back (ADR-0160).
+//
+// The connector is looked up fresh rather than carried on the incident: the incident
+// is a fact frozen when the token parked (I6), while the connector is live state that
+// may already have been edited. Resolves "resolved" when the incident was also
+// cleared, "saved" when only the connector was changed, and null when nothing happened.
+export async function fixConnectorFlow({ api, toast, incident }) {
+  let connectors = [];
+  try {
+    connectors = (await api("GET", "/api/v1/connectors")) || [];
+  } catch (e) {
+    toast("Could not read the connectors: " + (e && e.message ? e.message : e), "warn");
+    return null;
+  }
+  const c = connectors.find((x) => x.id === incident.connectorId)
+    || connectors.find((x) => x.name === incident.connector && x.kind === incident.connectorKind);
+  if (!c) {
+    // It was there when the incident was rendered and is gone now, or was never
+    // configured — either way there is nothing to open, and the Console is where one
+    // is created.
+    toast(`No connector named "${incident.connector}" is configured — add one in Organization › Connectors`, "warn");
+    return null;
+  }
+  const res = await editConnectorFlow({
+    api, toast, connector: c,
+    intro: `${incident.elementId || "This task"} is parked on this connector: ${incident.message || "(no message)"}`,
+    extraLabel: "Save & retry",
+    okToast: "",
+  });
+  if (!res) return null;
+  if (!res.extra) {
+    toast("Connector updated — the incident is still open", "ok");
+    return "saved";
+  }
+  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+}
+
+// bindIncidentActions wires one surface's incident block: the actions on every row,
+// delegated on a container that re-renders under them. `resolve` picks which resolve
+// this surface offers — "quick" beside a diagram (one click, one attempt, ADR-0150),
+// "ask" in the incidents table, where an operator triaging a list may want a bigger
+// budget. onChanged runs after anything actually changed, so the caller can re-poll.
+// `incidents()` returns the rows currently on screen.
 export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
+  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-complete]"]
+    .map((s) => (within ? `${within} ${s}` : s)).join(", ");
   root.addEventListener("click", async (ev) => {
-    const sel = "[data-resolve], [data-fix-vars], [data-complete]";
-    const btn = ev.target.closest(within ? sel.split(", ").map((x) => `${within} ${x}`).join(", ") : sel);
+    const btn = ev.target.closest(sel);
     if (!btn) return;
     ev.preventDefault();
     const key = btn.dataset.resolve || btn.dataset.inc || btn.dataset.complete;
@@ -348,10 +429,12 @@ export function bindIncidentActions(root, { api, toast, incidents, onChanged, re
       const changed = btn.dataset.complete
         ? await completeManuallyFlow({ api, toast, incident })
         : btn.dataset.fixVars
-        ? !!(await fixVariablesFlow({ api, toast, incident }))
-        : resolve === "ask"
-          ? await resolveIncidentFlow({ api, toast, incident })
-          : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+          ? !!(await fixVariablesFlow({ api, toast, incident }))
+          : btn.dataset.fixConn
+            ? !!(await fixConnectorFlow({ api, toast, incident }))
+            : resolve === "ask"
+              ? await resolveIncidentFlow({ api, toast, incident })
+              : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
       if (changed && onChanged) await onChanged();
     } finally {
       btn.disabled = false;

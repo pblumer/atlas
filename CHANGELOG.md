@@ -14,6 +14,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A connector says what it is for, and deleting one that models use is refused**
+  ([ADR-0163](docs/adr/0163-deleting-a-referenced-connector.md)): ADR-0158 added a
+  deploy-time check that every connector a model references actually resolves — and it
+  ran in exactly one place. Deleting a connector three deployed processes referenced
+  returned `204` and said nothing, and their tasks then parked with `no connector
+  registered as "…"`: the same failure that record was written about, produced this time
+  by the operator who deleted it. Each connector row now says which processes resolve
+  through it and how many instances are running on them, `DELETE` answers **409 with
+  that list** rather than a bare count (`?force=true` proceeds), and the Console asks a
+  second time with the processes in hand. Deploying a model before its connectors exist
+  still only warns — that is a plan; deleting one in use is a loss.
+
+- **The connector behind an incident can be reconfigured from the incident**
+  ([ADR-0160](docs/adr/0160-fix-the-connector-from-the-incident.md)): ADR-0158 let an
+  operator correct an incident's *variables*; a mail task parked on `dial tcp:
+  connection refused` has nothing wrong with its variables — what is wrong is the thing
+  it talks to. Every incident row now names the connector its task resolves through and
+  gains **⚙ Connector…**, which opens that connector's configuration prefilled — with
+  the runtime's own reason it could not be built, and a **Test connection** button —
+  and offers **Save & retry**, writing the change and handing the parked job one more
+  attempt against it. A connector reference nobody has configured points at the Console
+  instead, where one is created. Connector configuration is operator-managed runtime
+  state, so the change takes effect at once, with no redeploy; what the *model* says
+  stays immutable by design, and moving a running instance to a new version is instance
+  migration, which Atlas does not have yet.
+
+- **A stored connector has a real edit form** (ADR-0160): editing one used to be two
+  `window.prompt` boxes offering `endpoint` and `credentialsRef` to every kind,
+  including the kinds that use neither. Organization › Connectors now opens the same
+  dialog the incident does — the fields this kind and provider actually use, the
+  enabled switch, and the connection test — and both it and the create form derive
+  those fields from one shared description, so they cannot drift apart.
+
 - **A parked connector task now says what is actually wrong**
   ([ADR-0158](docs/adr/0158-a-connector-reference-that-explains-itself.md)): a mail task
   reported `no connector registered as "Patrick Blumer"` about a connector that was
@@ -125,6 +158,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Breaking (HTTP API): `DELETE /api/v1/connectors/{id}` can return 409**
+  (ADR-0163) when deployed processes still reference the connector. The response body
+  carries `usedBy` — the processes, their versions, the elements that resolve through
+  it, and their running instance counts. Pass `?force=true` to delete anyway. A
+  connector nothing references still deletes with `204`, unchanged.
+
+- **`PATCH /api/v1/connectors/{id}` accepts `provider`, and validates like a create**
+  (ADR-0160): switching a mail connector's provider was the one field the update could
+  not change, and re-creating it under the same name is not a workaround — the name is
+  the binding every deployed model references. The update now also re-runs the kind's
+  full create validation against the patched record instead of only re-normalizing an
+  SMTP endpoint, so switching to Gmail without a credential bundle is refused with the
+  reason, and switching to the preview transport clears the endpoint and credential it
+  no longer dials. Other kinds pass through unchanged.
+
 - **Breaking (HTTP API): `elementId` in the incident list is now the BPMN diagram id**
   ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)). The list previously
   returned the *compiled-graph* element index under that name, which no view can draw
@@ -141,6 +189,19 @@ _Changed_ / _Removed_ for each version.
 
 
 ### Fixed
+
+- **A wide table no longer draws outside its card** (ADR-0163). A cell that cannot
+  wrap makes a table's minimum width larger than the card holding it, and a table
+  cannot be laid out narrower than that — so it was drawn past the card's right edge,
+  border and header rule stopping short while the cells hung in the page beside it. The
+  Operations **Incidents** table did exactly that once ADR-0160 added a third action
+  button to every row. Two fixes: any card holding a table now scrolls it horizontally
+  instead of letting it escape, and the incidents row keeps **Resolve…** as its one
+  visible action with *Fix variables…* and *Configure connector…* behind the **⋯** menu
+  the rest of the console already uses — so a fourth way out of an incident costs no
+  width at all. The incident block beside a diagram keeps all of its buttons and wraps
+  them instead, because that panel is resizable.
+
 
 - **The SMTP client speaks over one transport that a check can share** (ADR-0150,
   ADR-0149): the send no longer goes through `net/smtp.SendMail` but through a session

@@ -267,6 +267,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
+			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents",
+			resp: jsonBody("Workers and job-type queues", tObject())}},
+		{"POST", "/api/v1/jobs/activate", s.handleActivateJobsByType, apiOp{
+			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull (ADR-0007)", tag: "Incidents",
+			req: jsonBody("Job type, worker id, lease and batch size", schemaObj(map[string]any{
+				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(),
+			}, "type")),
+			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
 			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents",
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
@@ -274,9 +283,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job by hand (operator intervention; requires a reason, recorded for audit)", tag: "Incidents",
-			req: jsonBody("A required reason for the intervention plus optional completion variables", schemaObj(map[string]any{
-				"reason": tString(), "variables": tObject(),
+			summary: "Complete a job — as its lease-holding worker (\"worker\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
+			req: jsonBody("Either the holding worker id (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
+				"worker": tString(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
@@ -542,9 +551,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
 			summary: "Create a managed connector instance", tag: "Connectors", req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
 		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Update a managed connector instance (endpoint, provider, sender, credential reference, enabled), re-validated as a create would be (ADR-0160)", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
-			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
+			summary: "Delete a managed connector instance; refused with 409 and the referencing processes when deployed models still reference it, unless ?force=true (ADR-0163)", tag: "Connectors", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
 			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors",

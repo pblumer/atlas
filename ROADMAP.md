@@ -590,6 +590,24 @@ What it takes to run this for real.
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
+- 🔲 **Instance migration**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md), designed): move running
+  instances from one deployed version to the next. A deployment is immutable and
+  `applyToState` must replay identically live and on recovery (ADR-0019, I4/I6), so a
+  model fix reaches instances that are already running only by cancelling and restarting
+  them today — which discards work already done and re-runs side effects already
+  committed, and which
+  [ADR-0160](docs/adr/0160-fix-the-connector-from-the-incident.md) named as the missing
+  piece behind "adjust this service task and try again": the *connector* behind a task
+  is operator-managed runtime state and is now editable from the incident, but what the
+  model says is not. The record decides the shape — a durable per-instance event
+  carrying a **frozen** element mapping (never one recomputed during the fold, which
+  would make replay depend on the matching algorithm's code), element instance keys
+  preserved so variables, jobs and the scope tree ride through untouched, validation
+  that refuses rather than guesses, and history left unrewritten with the replay
+  switching definitions at the migration's log position. Implementation sequence:
+  record encoding and the fold → validation → the plan/migrate endpoints → recovery
+  tests across the boundary → the timeline's two-definition reader → the Operations UI.
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 
 ## Milestone 5 — Scale-out 🔲

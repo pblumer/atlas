@@ -60,6 +60,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
@@ -171,11 +172,18 @@ type Server struct {
 
 	// The fields below are touched only on the run-loop goroutine (via do), so
 	// they need no locking — the same single-owner discipline as process state.
-	deployments      map[uint64]*deployment
-	order            []uint64 // deployment keys in registration order, for stable listing
-	nextKey          uint64
-	versions         map[string]int32  // bpmnProcessId → highest version deployed
-	deploys          *deployStore      // durable sidecar for deployments (ADR-0019)
+	deployments map[uint64]*deployment
+	order       []uint64 // deployment keys in registration order, for stable listing
+	nextKey     uint64
+	versions    map[string]int32 // bpmnProcessId → highest version deployed
+	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
+	// are resolved through it at deploy and on reload so a job type index means the
+	// same thing in every definition; it also turns an index on a job back into a name.
+	jobTypes *jobtype.Registry
+	// workers is the Workers view's runtime registry (ADR-0157): who pulled what,
+	// this run. Not durable and not engine state — see api/workers.go.
+	workers          *workerRegistry
 	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
@@ -723,6 +731,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The engine-wide job-type table. Every compiled process is resolved through it
+	// before it is deployed, so the job type a service task's job carries means the
+	// same thing across definitions (ADR-0007/0157).
+	jobTypes, err := jobtype.NewRegistry(filepath.Join(dataDir, "jobtypes"))
+	if err != nil {
+		return nil, err
+	}
 	drafts, err := newDraftStore(filepath.Join(dataDir, "drafts"))
 	if err != nil {
 		return nil, err
@@ -806,6 +821,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		nextKey:     1,
 		versions:    map[string]int32{},
 		deploys:     ds,
+		jobTypes:    jobTypes,
+		workers:     newWorkerRegistry(nil),
 		drafts:      drafts,
 		forms:       forms,
 		publicLinks: publicLinks,
@@ -1528,6 +1545,12 @@ func (s *Server) loadDeployments() error {
 			return fmt.Errorf("api: reload deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
 		}
 		cp.Version = rec.Version
+		// Re-resolve the job types the same way the original deploy did. The registry
+		// is durable and never recycles an index, so this lands on exactly the indices
+		// the jobs already in state were written under (ADR-0007/0157).
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+		}
 		s.proc.Deploy(cp)
 		// Re-register the process's DMN models so its business rule tasks evaluate
 		// after a restart, exactly as they did when first deployed (ADR-0014). The

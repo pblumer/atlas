@@ -117,6 +117,16 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   box-shadow: var(--shadow); padding: 22px;
 }
 .card + .card { margin-top: 18px; }
+/* A data table lives in a card, and a card is a fixed-width box. A cell that cannot
+   wrap — an action column, a monospace identifier — makes the table's *min-content*
+   width larger than the card, and a table cannot be drawn narrower than that: it is
+   laid out past the card's right edge, so the header rule stops, the border stops, and
+   the buttons hang in the page beside it. Scroll it inside the card instead.
+   Deliberately a rule about every card that holds a table, not about the one table
+   that happened to overflow — the next column added to any of them would do this
+   again (ADR-0163). */
+.card:has(> table) { overflow-x: auto; }
+
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
@@ -305,6 +315,28 @@ textarea::placeholder {
   margin-top: 3px; max-width: 340px; color: var(--danger);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
 }
+/* The connector a parked task resolves through, named on the incident itself
+   (ADR-0160). An operator reading "no connector registered as X" has to know which
+   integration X is before they can go and fix it, and the incident is where they are
+   standing. Amber when the model references a name nobody configured. */
+.inc-conn { margin: 4px 0 6px; }
+.inc-conn .pill { font-weight: 600; }
+/* The shared connector dialog (ADR-0160): the same form whether it is opened from
+   Organization › Connectors or from the incident a misconfigured connector parked. */
+.conn-modal { max-width: 640px; width: 92vw; }
+.conn-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.conn-fields .field { margin: 0; }
+.conn-modal .conn-problem {
+  max-width: none; margin: 0 0 10px; padding: 7px 9px;
+  border-radius: var(--radius); background: var(--danger-soft);
+}
+.conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
+.conn-enabled input { width: auto; margin: 0; }
+/* Which deployed processes resolve through a connector, under its row (ADR-0163) —
+   the line that turns Delete from a click into a decision. */
+.conn-usage { font-size: 12px; margin-top: 3px; line-height: 1.5; }
+.conn-usage a { color: var(--accent); text-decoration: none; }
+.conn-usage a:hover { text-decoration: underline; }
 a.pill { text-decoration: none; font-weight: 600; }
 a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
@@ -838,6 +870,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .vp-incidents .vp-title { color: var(--danger); }
 .vp-incidents .inc-row + .inc-row { border-top: 1px solid rgba(0,0,0,0.09); margin-top: 8px; padding-top: 8px; }
 .vp-incidents .inc-where { font-size: 12px; }
+/* The incident row's actions, beside a diagram rather than in a table: the live view's
+   variables panel is user-resizable and the replay's Details tab is narrow, so three
+   buttons have to wrap onto a second line instead of pushing the panel wider than the
+   operator made it (ADR-0163). */
+.vp-incidents .inc-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .vp-incidents .inc-msg {
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere; margin: 3px 0 6px;
@@ -847,6 +884,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
+.bar-toggle {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;
+  font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer;
+}
 .bar-select select { width: auto; min-width: 96px; max-width: 240px; padding: 5px 8px; font-size: 13px; }
 
 /* Variables panel. In the replay view it sits beneath the diagram (a wide strip);
@@ -1308,6 +1349,43 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
   font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
 }
+
+/* The selected element's in/out card, hung under it on the replay canvas: what its
+   input mappings were handed, and what it wrote (drawIOOverlay, ADR-0068/0159). It is
+   a read-out, not a control — pointer-events stay off so a click always reaches the
+   diagram beneath it. */
+.io-ov {
+  pointer-events: none; user-select: none; width: 240px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+  box-shadow: var(--shadow); overflow: hidden; font-size: 11px; color: var(--text);
+}
+.io-ov-h {
+  padding: 4px 8px; border-bottom: 1px solid var(--border);
+  background: var(--bg); font-weight: 600; font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-sec { display: flex; gap: 7px; padding: 5px 8px; align-items: flex-start; }
+.io-sec + .io-sec { border-top: 1px dashed var(--border); }
+.io-lbl {
+  flex: 0 0 auto; margin-top: 1px; padding: 1px 5px; border-radius: 4px;
+  font: 700 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase;
+  letter-spacing: .04em; background: var(--accent-soft); color: var(--accent);
+}
+/* Out reads green against in's accent blue, mixed from the success token rather than
+   a literal so it follows the theme. */
+.io-sec.out .io-lbl { background: color-mix(in srgb, var(--ok) 13%, var(--surface)); color: var(--ok); }
+.io-rows { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+.io-row { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.io-n {
+  flex: 0 1 auto; min-width: 0; max-width: 62%; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-v {
+  flex: 1 1 auto; min-width: 0; text-align: right;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.io-none, .io-more { color: var(--muted); font-style: italic; }
 
 /* Implementation-type marker the editor draws on a task in the Implement view (and the
    runtime views), so its executable nature reads at a glance — a script task's language
@@ -2606,3 +2684,26 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   color: var(--accent); font: 600 13px/1 system-ui, sans-serif; cursor: pointer; padding: 4px 0;
 }
 .whats-new .wn-more:hover { text-decoration: underline; }
+
+/* The Workers view (ADR-0157). Two tables that only mean something read together:
+   a job type's queue depth, and who is pulling it. The one state worth catching —
+   work piling up with nobody serving it — is a row style rather than a number the
+   eye has to find, because an operator arrives here already suspecting something. */
+.wk-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A queue nobody is draining. Deliberately the same red as an incident: it is the
+   same class of problem, and it usually becomes one. */
+tr.wk-stuck > td { background: var(--danger-soft); }
+tr.wk-stuck .wk-why { display: block; margin-top: 2px; font-size: 12px; color: var(--danger); }
+.wk-count-bad { color: var(--danger); font-weight: 600; }
+/* A worker that has stopped pulling. Amber, not red: it may simply be idle — the
+   red row above is what says whether anyone should care. */
+tr.wk-stale > td { background: var(--warn-soft); }
+.wk-stale-at { color: #b26b00; font-weight: 600; }
+/* The footnote each table carries: what the numbers do and do not cover. */
+.wk-note {
+  margin: 0; padding: 10px 16px; border-top: 1px solid var(--border);
+  background: var(--bg); color: var(--muted); font-size: 12px;
+}
+/* Tables sit flush inside their card, so the card pads only its header. */
+.wk-card { padding: 0; overflow: hidden; }
+.wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }

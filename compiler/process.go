@@ -229,8 +229,34 @@ type CompiledFlow struct {
 
 // ServiceTaskDetail is the per-service-task data a behavior needs at runtime.
 type ServiceTaskDetail struct {
-	JobType int32 // interned string → index
+	JobType int32 // interned string → index, local to this compiled process
 	Retries int32
+	// globalJobType is JobType translated into the engine-wide job-type index space
+	// by [CompiledProcess.ResolveJobTypes] at deploy time, or jobTypeUnresolved when
+	// the process was never resolved. It exists because JobType is interned *per
+	// process* while the activatable-job index is engine-wide, so the same local
+	// index means different job types in two definitions and a worker subscribing by
+	// it would be handed the wrong work (ADR-0007). Unexported: only resolution may
+	// set it, and [ServiceTaskDetail.GlobalJobType] is how a behavior reads it.
+	globalJobType int32
+}
+
+// jobTypeUnresolved marks a service task whose job type has not been translated
+// into the engine-wide index space. It is deliberately not 0 — 0 is the DMN job
+// type, so a zero value would silently hand every unresolved service task to the
+// DMN worker.
+const jobTypeUnresolved int32 = -1
+
+// GlobalJobType is the job type a job created for this task must carry: the
+// engine-wide index when the process has been resolved, and otherwise the locally
+// interned one, which is what a compiled process used before resolution existed
+// and keeps a standalone process (a test, the conformance runner) behaving as it
+// always did.
+func (d *ServiceTaskDetail) GlobalJobType() int32 {
+	if d.globalJobType == jobTypeUnresolved {
+		return d.JobType
+	}
+	return d.globalJobType
 }
 
 // ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
@@ -985,6 +1011,35 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 }
 
 // ServiceTask returns the detail at the given table index.
+// ResolveJobTypes translates every model-authored job type in this process into
+// the engine-wide index space, by handing each one's *name* to intern and keeping
+// the index it returns. Service and send tasks are the only elements that need it:
+// every other job-creating element carries a reserved job type, which is already
+// the same index in every process (see reservedJobTypes).
+//
+// It is called once per process at deploy time and again for each process on
+// reload, so intern must be idempotent — the same name must come back with the
+// same index. A failure aborts the whole resolution: a half-resolved process is
+// worse than an unresolved one, because only some of its jobs would be findable.
+//
+// The interner is supplied by the caller rather than imported, so the compiler
+// stays independent of where the engine-wide table lives.
+func (p *CompiledProcess) ResolveJobTypes(intern func(name string) (int32, error)) error {
+	for i := range p.serviceTasks {
+		d := &p.serviceTasks[i]
+		name := p.Intern(d.JobType)
+		if name == "" {
+			continue // no task definition type: nothing to resolve
+		}
+		idx, err := intern(name)
+		if err != nil {
+			return fmt.Errorf("compiler: resolve job type %q: %w", name, err)
+		}
+		d.globalJobType = idx
+	}
+	return nil
+}
+
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
@@ -1230,33 +1285,49 @@ type ConnectorRef struct {
 	Connector string
 }
 
+// NodeConnectorRef returns the connector reference one node makes, and false when it
+// makes none. Both shapes are covered: a connector task (mail, REST, SharePoint, …)
+// and a business rule task delegating to a remote decision service, which names its
+// connector the same way. An element that names no connector — a local decision, a
+// REST task with its URL in the model, anything that is not one of those two task
+// types — is not a reference.
+//
+// It answers the question one element at a time because that is how an *incident* asks
+// it: a token is parked on this element, which connector is it stuck on (ADR-0160)?
+// ConnectorRefs asks the same question of every node.
+func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return ConnectorRef{}, false
+	}
+	var jobType, connector int32 = -1, -1
+	switch p.nodes[id].Type {
+	case TypeConnectorTask:
+		d := p.ConnectorTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	case TypeBusinessRuleTask:
+		d := p.BusinessRuleTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	default:
+		return ConnectorRef{}, false
+	}
+	if connector < 0 {
+		return ConnectorRef{}, false
+	}
+	return ConnectorRef{
+		ElementId: p.ElementBpmnId(id),
+		JobType:   jobType,
+		Connector: p.Intern(connector),
+	}, true
+}
+
 // ConnectorRefs returns every connector reference the process makes, in node order.
-// Both shapes are covered: a connector task (mail, REST, SharePoint, …) and a business
-// rule task delegating to a remote decision service, which names its connector the same
-// way. An element that names no connector — a local decision, a REST task with its URL
-// in the model — is not a reference and is left out.
+// An element that names no connector is left out; see NodeConnectorRef.
 func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
 	var out []ConnectorRef
 	for i := range p.nodes {
-		var jobType, connector int32 = -1, -1
-		switch p.nodes[i].Type {
-		case TypeConnectorTask:
-			d := p.ConnectorTask(p.nodes[i].Detail)
-			jobType, connector = d.JobType, d.Connector
-		case TypeBusinessRuleTask:
-			d := p.BusinessRuleTask(p.nodes[i].Detail)
-			jobType, connector = d.JobType, d.Connector
-		default:
-			continue
+		if ref, ok := p.NodeConnectorRef(int32(i)); ok {
+			out = append(out, ref)
 		}
-		if connector < 0 {
-			continue
-		}
-		out = append(out, ConnectorRef{
-			ElementId: p.ElementBpmnId(int32(i)),
-			JobType:   jobType,
-			Connector: p.Intern(connector),
-		})
 	}
 	return out
 }

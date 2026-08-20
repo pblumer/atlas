@@ -1721,14 +1721,21 @@ type serviceTaskBehavior struct{}
 func (serviceTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ServiceTask(cp.Node(ei.ElementId).Detail)
+	// A service task is the only element whose job type is authored in the model, so
+	// it is the only one whose index is interned per process rather than reserved.
+	// The job carries the engine-wide index resolved at deploy time, because the
+	// activatable index a worker subscribes to is engine-wide (ADR-0007). An
+	// unresolved process falls back to the local index, which is what it carried
+	// before resolution existed.
+	jobType := detail.GlobalJobType()
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
-		JobType:            detail.JobType,
+		JobType:            jobType,
 		Retries:            detail.Retries,
 	})
-	c.NotifyJobAvailable(detail.JobType)
+	c.NotifyJobAvailable(jobType)
 	// Stays Activated: no Completing until a worker completes the job.
 }
 
