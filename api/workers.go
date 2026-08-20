@@ -158,6 +158,19 @@ type jobTypeStat struct {
 	Truncated bool  `json:"truncated,omitempty"`
 	InFlight  int64 `json:"inFlight"`
 	Incidents int64 `json:"incidents"`
+	// Processes names the deployed definitions whose tasks create jobs of this type,
+	// newest version of each. It is what makes a row actionable: an engine with fifty
+	// job types has fifty rows saying "nobody", and none of them means anything until
+	// you can see which process is waiting on it.
+	Processes []typeUser `json:"processes"`
+}
+
+// typeUser is one definition that uses a job type, with what a link needs.
+type typeUser struct {
+	ProcessDefKey uint64 `json:"processDefKey"`
+	ProcessID     string `json:"processId"`
+	Name          string `json:"name"`
+	Version       int32  `json:"version"`
 }
 
 // handleWorkers is the Workers view (ADR-0157): every job type the engine knows
@@ -177,6 +190,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		incidents := s.incidentsByJobType()
+		users := s.jobTypeUsers()
 		for _, e := range s.jobTypes.All() {
 			inProcess := s.jobRunner.Handles(e.Index)
 			st := jobTypeStat{
@@ -187,6 +201,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 				Leasable:        !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
 				InFlight:        s.workers.inFlightOf(e.Name),
 				Incidents:       incidents[e.Index],
+				Processes:       users[e.Index],
 			}
 			if err := s.store.ActivatableJobs(e.Index, func(uint64) error {
 				if st.Parked >= maxTypeScan {
@@ -232,5 +247,67 @@ func (s *Server) incidentsByJobType() map[int32]int64 {
 		}
 		return nil
 	})
+	return out
+}
+
+// jobTypeUsers maps each job type to the deployed definitions whose service or send
+// tasks create jobs of it. Only a model-authored type has users to find: every other
+// job-creating element carries a reserved type, and those are the engine's own.
+//
+// One entry per BPMN process id, at its newest deployed version. An engine keeps
+// every version it ever deployed, and listing all of them turns one useful link into
+// a column of near-identical ones. Runs on the run-loop goroutine, over the
+// in-memory deployment registry — no state reads.
+func (s *Server) jobTypeUsers() map[int32][]typeUser {
+	// newest[jobType][processId] keeps the highest version seen for that pair.
+	newest := map[int32]map[string]typeUser{}
+	for key, d := range s.deployments {
+		if d.cp == nil {
+			continue
+		}
+		for _, jobType := range serviceTaskJobTypes(d.cp) {
+			byID, ok := newest[jobType]
+			if !ok {
+				byID = map[string]typeUser{}
+				newest[jobType] = byID
+			}
+			if prev, seen := byID[d.ProcessID]; seen && prev.Version >= d.Version {
+				continue
+			}
+			byID[d.ProcessID] = typeUser{
+				ProcessDefKey: key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
+			}
+		}
+	}
+	out := make(map[int32][]typeUser, len(newest))
+	for jobType, byID := range newest {
+		list := make([]typeUser, 0, len(byID))
+		for _, u := range byID {
+			list = append(list, u)
+		}
+		// Stable order, so the console does not reshuffle links between polls.
+		sort.Slice(list, func(i, j int) bool { return list[i].ProcessID < list[j].ProcessID })
+		out[jobType] = list
+	}
+	return out
+}
+
+// serviceTaskJobTypes is the set of engine-wide job types a compiled process creates
+// jobs of from its service and send tasks — the only elements carrying a job type the
+// model authored (ADR-0157).
+func serviceTaskJobTypes(cp *compiler.CompiledProcess) []int32 {
+	var out []int32
+	seen := map[int32]bool{}
+	for id := range int32(cp.NodeCount()) {
+		n := cp.Node(id)
+		if n.Type != compiler.TypeServiceTask && n.Type != compiler.TypeSendTask {
+			continue
+		}
+		jobType := cp.ServiceTask(n.Detail).GlobalJobType()
+		if !seen[jobType] {
+			seen[jobType] = true
+			out = append(out, jobType)
+		}
+	}
 	return out
 }

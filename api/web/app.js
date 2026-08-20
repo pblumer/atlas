@@ -3720,9 +3720,15 @@ async function viewWorkers() {
         <tbody>${typeRows.map((row) => {
           const pullers = pullersOf(workerRows, row.type);
           const stuck = unserved.includes(row);
+          // Which process is waiting on this type. Fifty "nobody" rows say nothing
+          // until you can see that, so the link is in the row rather than a drill-in.
+          const used = (row.processes || []).map((u) =>
+            `<a href="#/operations/p/${u.processDefKey}" title="${esc(`${u.processId} v${u.version}`)}">${esc(u.name || u.processId)}</a>`).join(", ");
           return `<tr class="${stuck ? "wk-stuck" : ""}">
-            <td><b>${esc(row.type)}</b>${stuck
-              ? `<span class="wk-why">Work is queued and nothing is pulling this type</span>` : ""}</td>
+            <td data-filter="${esc(row.type + " " + (row.processes || []).map((u) => `${u.name} ${u.processId}`).join(" "))}">
+              <b>${esc(row.type)}</b>
+              ${used ? `<span class="wk-used">${used}</span>` : ""}
+              ${stuck ? `<span class="wk-why">Work is queued and nothing is pulling this type</span>` : ""}</td>
             <td>${servedBy(row, pullers)}</td>
             <td class="wk-num ${stuck ? "wk-count-bad" : ""}">${row.parked}${row.truncated ? "+" : ""}</td>
             <td class="wk-num ${stuck ? "wk-count-bad" : ""}">${row.servedInProcess ? "&mdash;" : row.inFlight}</td>

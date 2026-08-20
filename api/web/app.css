@@ -2618,3 +2618,8 @@ tr.wk-stale > td { background: var(--warn-soft); }
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
+/* Which process a job type belongs to. Without it a table of fifty types is fifty
+   names with no way back to the model that needs them. */
+.wk-used { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.wk-used a { color: var(--muted); }
+.wk-used a:hover { color: var(--accent); }
