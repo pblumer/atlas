@@ -132,6 +132,20 @@ h2 { font-size: 15px; margin: 0 0 10px; }
   background: var(--accent-soft); border: 1px solid var(--accent-soft);
   padding: 0 6px; border-radius: 5px; white-space: nowrap;
 }
+/* How many versions are deployed, beside the latest one. A small muted badge instead
+   of a sentence, so a narrow Versions column can't break mid-phrase. */
+.ver-count {
+  display: inline-block; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 0 6px; border-radius: 9px; margin-left: 4px; white-space: nowrap; cursor: default;
+}
+/* An overview cell that must stay on one line (a timestamp, a version). */
+td.nowrap { white-space: nowrap; }
+/* One primary action plus the ⋯ overflow menu, right-aligned on one line, so every
+   row keeps the same height regardless of which actions it offers. */
+td.row-actions { text-align: right; white-space: nowrap; }
+td.row-actions > * { vertical-align: middle; }
+td.row-actions .icon-btn { margin-left: 4px; }
 
 /* Operations instances toolbar: a process filter and a jump-to-instance box. */
 .ops-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
@@ -151,6 +165,10 @@ h2 { font-size: 15px; margin: 0 0 10px; }
   border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--text);
 }
 .ops-jump input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* The jump is a compact arrow button, not a wide label: a squeezed flex row used to
+   wrap "Open replay" onto two lines. Toolbar buttons never wrap their label. */
+.ops-jump-go { flex: none; padding: 7px 12px; font-size: 15px; line-height: 1; }
+.ops-toolbar .btn, .ops-varsearch .btn { white-space: nowrap; }
 /* Variable-content instance search. */
 .ops-varsearch { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 .ops-varsearch .ops-search { flex: 1 1 320px; }
