@@ -43,8 +43,11 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
         ${where}
         ${inc.raisedAt ? `<span class="muted">· ${esc(fmtRaised(inc.raisedAt))}</span>` : ""}</div>
       <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
-      <div class="inc-actions"><button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
-        title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button></div>
+      <div class="inc-actions">
+        <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+          title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
+        <button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
+          title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button></div>
     </div>`;
 }
 
@@ -135,4 +138,120 @@ export async function resolveIncidentFlow({ api, toast, incident }) {
     toast(e.message || "Resolve failed", "warn");
     return false;
   }
+}
+
+// fixVariablesFlow is the other half of resolving: a retry alone repeats whatever
+// failed, so an operator who has read the message usually has to correct the data
+// first. It opens the instance's variables, writes what was changed through the
+// audited operator override (ADR-0098 — every write records who made it, which the
+// replay then shows beside the value), and optionally resolves in the same step.
+//
+// The variables are edited as JSON rather than as a form: the endpoint sets or
+// overwrites exactly the keys it is given, and a value can be an object or an array,
+// which no flat field grid represents honestly. Removing a key here leaves it
+// untouched — this corrects values, it does not delete them.
+//
+// Resolves "resolved" when the incident was also cleared, "saved" when only the
+// variables were written, and null when nothing happened.
+export async function fixVariablesFlow({ api, toast, incident }) {
+  const instance = incident.processInstanceKey;
+  let current = {};
+  try {
+    current = (await api("GET", `/api/v1/instances/${encodeURIComponent(instance)}/variables`)) || {};
+  } catch (e) {
+    toast("Could not read the instance's variables: " + (e && e.message ? e.message : e), "warn");
+    return null;
+  }
+  const choice = await askVariables(incident, current);
+  if (!choice) return null;
+
+  try {
+    await api("POST", `/api/v1/instances/${encodeURIComponent(instance)}/variables`, { variables: choice.variables });
+  } catch (e) {
+    // Writing live process state is admin-only when auth is on (ADR-0098); say that
+    // rather than leaving a bare 403 to be interpreted.
+    const msg = (e && e.message ? e.message : String(e));
+    toast(/403|forbidden/i.test(msg) ? "Changing variables needs an admin account" : "Could not set the variables: " + msg, "warn");
+    return null;
+  }
+  if (!choice.retry) {
+    toast("Variables updated — the incident is still open", "ok");
+    return "saved";
+  }
+  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+}
+
+// askVariables opens the editor and resolves to {variables, retry}, or null if the
+// operator cancelled. It refuses to submit invalid JSON rather than letting the
+// request fail server-side with the change already typed and lost.
+function askVariables(inc, current) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal inc-vars-modal" role="dialog" aria-modal="true" aria-labelledby="inc-vars-title">
+        <div class="modal-head"><h2 id="inc-vars-title">Fix variables &middot; instance ${esc(String(inc.processInstanceKey))}</h2></div>
+        <div class="modal-body">
+          ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
+          <p class="muted" style="margin:0 0 8px">Correct the values the retry will run against. Keys you leave out stay as they are; this sets and overwrites, it never deletes. Every change is recorded with your name and shown in the replay.</p>
+          <textarea id="inc-vars" class="inc-vars-json" spellcheck="false" rows="12"></textarea>
+          <p class="err" id="inc-vars-err" style="margin:6px 0 0"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-vars-cancel>Cancel</button>
+          <button class="btn neutral" data-vars-save>Save only</button>
+          <button class="btn" data-vars-go>Save &amp; retry</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const ta = ov.querySelector("#inc-vars");
+    const err = ov.querySelector("#inc-vars-err");
+    ta.value = JSON.stringify(current, null, 2);
+    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    const submit = (retry) => {
+      let parsed;
+      try { parsed = JSON.parse(ta.value); }
+      catch (e) { err.textContent = "Not valid JSON: " + (e && e.message ? e.message : e); return; }
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        err.textContent = "Expected an object of variable names to values.";
+        return;
+      }
+      close({ variables: parsed, retry });
+    };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-vars-cancel]").addEventListener("click", () => close(null));
+    ov.querySelector("[data-vars-save]").addEventListener("click", () => submit(false));
+    ov.querySelector("[data-vars-go]").addEventListener("click", () => submit(true));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    ta.focus();
+  });
+}
+
+// bindIncidentActions wires one surface's incident block: the two actions on every
+// row, delegated on a container that re-renders under them. `resolve` picks which
+// resolve this surface offers — "quick" beside a diagram (one click, one attempt,
+// ADR-0150), "ask" in the incidents table, where an operator triaging a list may want
+// a bigger budget. onChanged runs after anything actually changed, so the caller can
+// re-poll. `incidents()` returns the rows currently on screen.
+export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
+  root.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest(within ? `${within} [data-resolve], ${within} [data-fix-vars]` : "[data-resolve], [data-fix-vars]");
+    if (!btn) return;
+    ev.preventDefault();
+    const key = btn.dataset.resolve || btn.dataset.inc;
+    const incident = (incidents() || []).find((i) => String(i.elementInstanceKey) === String(key));
+    if (!incident) return;
+    btn.disabled = true;
+    try {
+      const changed = btn.dataset.fixVars
+        ? !!(await fixVariablesFlow({ api, toast, incident }))
+        : resolve === "ask"
+          ? await resolveIncidentFlow({ api, toast, incident })
+          : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+      if (changed && onChanged) await onChanged();
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }

@@ -10,7 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
-import { incidentPill, fmtRaised, resolveIncidentFlow } from "./incidents.js";
+import { incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow } from "./incidents.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -970,9 +970,16 @@ async function viewConsoleOrg() {
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
           c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div></td>
-      <td>${c.enabled
-        ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
-        : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
+      <td>${!c.enabled
+        ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
+        : c.problem
+          // Stored and enabled, but the runtime could not build its client — so its
+          // tasks park. Saying it here is the difference between finding out now and
+          // finding out from an incident that claims the connector does not exist
+          // (ADR-0155).
+          ? `<span class="pill err"><span class="dot"></span>not usable</span>
+             <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
+          : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
         ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
@@ -3507,7 +3514,8 @@ async function viewIncidents() {
           <td>${cause}</td>
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}</td>
-          <td style="text-align:right"><button class="btn sm" data-resolve="${i}">Resolve…</button></td>
+          <td style="text-align:right; white-space:nowrap"><button class="btn ghost sm" data-fix="${i}" title="Correct the instance's variables before retrying">✎ Variables…</button>
+            <button class="btn sm" data-resolve="${i}">Resolve…</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3519,11 +3527,16 @@ async function viewIncidents() {
   // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
   // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-resolve]");
+    const btn = e.target.closest("button[data-resolve], button[data-fix]");
     if (!btn) return;
-    const incident = current[Number(btn.dataset.resolve)];
+    const incident = current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
     if (!incident) return;
-    if (await resolveIncidentFlow({ api, toast, incident })) {
+    // Correcting the variables first is the other half of resolving: a retry alone
+    // repeats whatever failed (ADR-0158).
+    const changed = btn.dataset.fix !== undefined
+      ? !!(await fixVariablesFlow({ api, toast, incident }))
+      : await resolveIncidentFlow({ api, toast, incident });
+    if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree
     }

@@ -47,6 +47,12 @@ type deployResp struct {
 	ProcessID   string            `json:"processId"`
 	Version     int32             `json:"version"`
 	Deployments []deployedProcess `json:"deployments"`
+	// Warnings are things that deployed fine but will not run as written — today, a
+	// connector reference naming something that is not configured, or is configured
+	// as another kind, or cannot be built. The deploy succeeds anyway (a model is
+	// routinely deployed before its connectors exist), but the author is told now
+	// rather than by the first token to park (ADR-0158).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type processResp struct {
@@ -628,6 +634,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			ProcessID:   deployed[0].ProcessID,
 			Version:     deployed[0].Version,
 			Deployments: deployed,
+		}
+		// Still on the run loop, where the connector store and the registries may be
+		// read (I3), and with every pool of a collaboration already registered.
+		for _, d := range deployed {
+			if dep, ok := s.deployments[d.Key]; ok && dep.cp != nil {
+				resp.Warnings = append(resp.Warnings, s.connectorWarnings(dep.cp)...)
+			}
 		}
 	})
 	switch {

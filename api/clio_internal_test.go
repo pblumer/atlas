@@ -128,7 +128,7 @@ func TestBuildClioClients(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "3", Name: "temis", Kind: "temis", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
 	_ = srv.connectors.Save(connector{ID: "4", Name: "noendpoint", Kind: "clio", Endpoint: "", Enabled: true, CreatedAt: 4})
 
-	clients, err := srv.buildClioClients()
+	clients, _, err := srv.buildClioClients()
 	if err != nil {
 		t.Fatalf("buildClioClients: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestBuildClioClients(t *testing.T) {
 func TestBuildClioClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
-	if _, err := srv.buildClioClients(); err == nil {
+	if _, _, err := srv.buildClioClients(); err == nil {
 		t.Error("buildClioClients with a broken store: want error")
 	}
 }

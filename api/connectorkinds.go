@@ -43,6 +43,17 @@ type managedConnectorKind struct {
 	// store and swaps it atomically. It reads the store, so it runs on the run-loop
 	// goroutine (the store's owner), like the build*Clients helpers it wraps.
 	rebuild func(s *Server) error
+	// problem reports why a *configured* connector of this kind is not in the live
+	// registry — disabled, missing an endpoint or credential, of another kind — and
+	// false when it is usable or unknown. It is what lets the connector list say a
+	// record is stored but not working, instead of leaving that to be discovered by a
+	// token parking on it (ADR-0158).
+	problem func(s *Server, name string) (string, bool)
+	// jobTypes are the reserved compiler job-type indices whose tasks resolve a
+	// connector of this kind. They are what turns a model's connector reference back
+	// into "a connector of kind X is required here", so a deploy can check the name
+	// against the store instead of leaving the mismatch to the first token (ADR-0158).
+	jobTypes []int32
 }
 
 // createConnectorParams is the decoded body of a create-connector request. The
@@ -75,13 +86,20 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
 		},
 		rebuild: func(s *Server) error {
-			clients, err := s.buildTemisClients()
+			clients, problems, err := s.buildTemisClients()
 			if err != nil {
 				return err
 			}
-			s.temisRegistry.Replace(clients)
+			s.temisRegistry.ReplaceWith(clients, problems)
 			return nil
 		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.temisRegistry == nil {
+				return "", false
+			}
+			return s.temisRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.TemisDecisionJobTypeIndex},
 	},
 	{
 		// A clio connector task appends, reads, or queries a server-registered clio
@@ -97,13 +115,20 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
 		},
 		rebuild: func(s *Server) error {
-			clients, err := s.buildClioClients()
+			clients, problems, err := s.buildClioClients()
 			if err != nil {
 				return err
 			}
-			s.clioRegistry.Replace(clients)
+			s.clioRegistry.ReplaceWith(clients, problems)
 			return nil
 		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.clioRegistry == nil {
+				return "", false
+			}
+			return s.clioRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	},
 	{
 		// An outbound mail connector task sends a model-authored message through a
@@ -125,13 +150,20 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
 		},
 		rebuild: func(s *Server) error {
-			clients, err := s.buildMailClients()
+			clients, problems, err := s.buildMailClients()
 			if err != nil {
 				return err
 			}
-			s.mailRegistry.Replace(clients)
+			s.mailRegistry.ReplaceWith(clients, problems)
 			return nil
 		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.mailRegistry == nil {
+				return "", false
+			}
+			return s.mailRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.MailJobTypeIndex},
 	},
 	{
 		// A SharePoint connector task creates a list item through a server-registered
@@ -146,13 +178,20 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, sharepoint.Handler(store, s.processLookup, s.sharePointRegistry))
 		},
 		rebuild: func(s *Server) error {
-			clients, err := s.buildSharePointClients()
+			clients, problems, err := s.buildSharePointClients()
 			if err != nil {
 				return err
 			}
-			s.sharePointRegistry.Replace(clients)
+			s.sharePointRegistry.ReplaceWith(clients, problems)
 			return nil
 		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.sharePointRegistry == nil {
+				return "", false
+			}
+			return s.sharePointRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.SharePointJobTypeIndex},
 	},
 	{
 		// A BMC Remedy connector task creates an entry (e.g. an incident) in a Remedy
@@ -167,13 +206,20 @@ var managedConnectorKinds = []managedConnectorKind{
 			s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, remedy.Handler(store, s.processLookup, s.remedyRegistry))
 		},
 		rebuild: func(s *Server) error {
-			clients, err := s.buildRemedyClients()
+			clients, problems, err := s.buildRemedyClients()
 			if err != nil {
 				return err
 			}
-			s.remedyRegistry.Replace(clients)
+			s.remedyRegistry.ReplaceWith(clients, problems)
 			return nil
 		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.remedyRegistry == nil {
+				return "", false
+			}
+			return s.remedyRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.RemedyJobTypeIndex},
 	},
 }
 

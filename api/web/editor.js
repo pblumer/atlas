@@ -12,7 +12,7 @@ import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
-import { incidentPanelHTML, incidentRowHTML, resolveIncidentQuick } from "./incidents.js";
+import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -5948,11 +5948,20 @@ function wireActions(root, modeler, api, toast, projectId) {
   // showDeploySuccess replaces the panel form with a confirmation that carries a
   // link into Operations — the deploy→run→observe roundtrip. `href` targets the
   // started instance (Deploy & run) or the process (Deploy only / collaboration).
-  const showDeploySuccess = (message, href) => {
+  const showDeploySuccess = (message, href, warnings) => {
     dactions.hidden = true;
     derr.textContent = "";
+    // A deploy can succeed and still not run as written — a connector reference
+    // naming something nobody configured, or configured as another kind. The server
+    // does not refuse it (deploying before the connectors exist is legitimate), so
+    // this is the moment to say it, while the author is still here (ADR-0158).
+    const warned = (warnings || []).length
+      ? `<div class="deploy-warnings"><b>⚠ Deployed, but this will not run as written:</b>
+          <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`
+      : "";
     dbody.innerHTML = `<div class="deploy-success">
       <p class="deploy-success-msg">✓ ${esc(message)}</p>
+      ${warned}
       <div class="row">
         <a class="btn" href="${href}">Open in Operations →</a>
         <button type="button" class="btn neutral" id="deploy-done">Close</button>
@@ -5989,17 +5998,18 @@ function wireActions(root, modeler, api, toast, projectId) {
         // Start variables don't apply here — there's no single instance to seed.
         const msg = `Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`;
         toast(msg, "ok");
-        showDeploySuccess(msg, "#/operations");
+        showDeploySuccess(msg, "#/operations", dep.warnings);
       } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
         const msg = `Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`;
         toast(msg, "ok");
-        showDeploySuccess(msg, await resolveInstanceLink(dep.key));
+        showDeploySuccess(msg, await resolveInstanceLink(dep.key), dep.warnings);
       } else {
         const msg = `Deployed ${dep.processId} v${dep.version}`;
-        toast(msg, "ok");
-        showDeploySuccess(msg, `#/operations/p/${dep.key}`);
+        toast((dep.warnings || []).length ? msg + ` — with ${dep.warnings.length} warning${dep.warnings.length === 1 ? "" : "s"}` : msg,
+          (dep.warnings || []).length ? "warn" : "ok");
+        showDeploySuccess(msg, `#/operations/p/${dep.key}`, dep.warnings);
       }
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
@@ -6427,12 +6437,6 @@ export async function mountLive(root, { api, toast, key, instance }) {
     });
   }
 
-  // resolveIncident clears one incident and re-activates its job with a fresh single
-  // attempt, then re-polls so the diagram catches up. The attempt count and the
-  // reasoning behind it live with the shared action (incidents.js).
-  async function resolveIncident(key) {
-    if (await resolveIncidentQuick({ api, toast, key })) await poll();
-  }
 
   async function poll() {
     await refreshInstances();
@@ -6633,8 +6637,15 @@ export async function mountLive(root, { api, toast, key, instance }) {
       return;
     }
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
-    const res = t.closest("[data-resolve]");
-    if (res) { await resolveIncident(res.dataset.resolve); return; }
+  });
+
+  // The incident block's two actions — resolve, and correct the variables the retry
+  // will run against — are the shared ones, so this panel and the replay's Details tab
+  // behave identically (ADR-0151/0152).
+  bindIncidentActions(varPanel, {
+    api, toast,
+    incidents: () => incidents,
+    onChanged: poll,
   });
 
   // runTerminate confirms, then terminates either the whole version (filter mode,
@@ -7619,8 +7630,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const scopeChip = v.scope
       ? ` <span class="c-scope" title="Local to subprocess ${esc(v.scope)}">${esc(v.scope)}</span>`
       : "";
+    // A value the process did not compute: an operator set it by hand on the running
+    // instance (ADR-0098). The audit log has carried who did it since that landed and
+    // the timeline has returned it all along; showing it is what makes an operator
+    // correction reviewable rather than an unexplained jump in the values (ADR-0158).
+    const actorChip = v.actor
+      ? ` <span class="c-actor" title="Set by ${esc(v.actor)} — an operator correction, not a value the process computed">✎ ${esc(v.actor)}</span>`
+      : "";
     return `<tr>
-      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}</td>
+      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${actorChip}</td>
       <td class="c-valcell">${valCell}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
@@ -8034,19 +8052,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     selectElement(el.id, 0);
   });
 
-  // The Details panel's "↻ Resolve & retry" is HTML inside a tab body that re-renders,
-  // so it is wired by delegation on the view root — the same one-click action, with the
-  // same single attempt, that the live view offers beside its diagram (ADR-0150/0151).
-  root.addEventListener("click", async (ev) => {
-    const btn = ev.target.closest("#tab-details [data-resolve]");
-    if (!btn) return;
-    ev.preventDefault();
-    btn.disabled = true;
-    try {
-      if (await resolveIncidentQuick({ api, toast, key: btn.dataset.resolve })) await poll();
-    } finally {
-      btn.disabled = false;
-    }
+  // The Details panel's incident actions are HTML inside a tab body that re-renders,
+  // so they are wired by delegation on the view root — the same actions, with the same
+  // semantics, the live view offers beside its diagram (ADR-0150/0151/0152).
+  bindIncidentActions(root, {
+    api, toast,
+    within: "#tab-details",
+    incidents: () => incidents,
+    onChanged: poll,
   });
 
   root.querySelectorAll("#rp-tabs button").forEach((b) => b.addEventListener("click", () => {

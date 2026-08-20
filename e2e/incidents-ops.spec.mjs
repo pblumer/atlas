@@ -71,6 +71,69 @@ test.describe("live view", () => {
   });
 });
 
+test.describe("correcting the variables", () => {
+  test("fixes the data the retry will run against, then resolves — in one step", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+
+    // A retry alone would repeat exactly what failed, so the row offers the fix first.
+    await page.locator("#var-panel .inc-row [data-fix-vars]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    // It opens on the instance's *current* variables, not on an empty box.
+    const json = modal.locator("#inc-vars");
+    expect(JSON.parse(await json.inputValue())).toEqual({ betrag: 42, empfaenger: "" });
+
+    await json.fill(JSON.stringify({ betrag: 43, empfaenger: "patrick@blumer.net" }, null, 2));
+    await modal.locator("[data-vars-go]").click();
+    await expect(modal).toHaveCount(0);
+
+    // The correction went through the audited override, and the incident was resolved
+    // in the same step.
+    await expect
+      .poll(() => page.evaluate(() => window.__varWrites))
+      .toEqual([{ instance: "900001", variables: { betrag: 43, empfaenger: "patrick@blumer.net" } }]);
+    await expect
+      .poll(() => page.evaluate(() => window.__resolved))
+      .toEqual([{ key: "1001", retries: 1 }]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("refuses invalid JSON instead of losing the edit", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-fix-vars]").click();
+
+    const modal = page.locator(".modal-ov");
+    await modal.locator("#inc-vars").fill("{ betrag: ");
+    await modal.locator("[data-vars-go]").click();
+
+    await expect(modal).toBeVisible();                        // still open…
+    await expect(modal.locator("#inc-vars-err")).toContainText("Not valid JSON");
+    await expect(modal.locator("#inc-vars")).toHaveValue("{ betrag: "); // …and the edit survives
+    expect(await page.evaluate(() => window.__varWrites)).toEqual([]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("saving without retrying leaves the incident standing", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-fix-vars]").click();
+
+    const modal = page.locator(".modal-ov");
+    await modal.locator("#inc-vars").fill(JSON.stringify({ betrag: 7 }));
+    await modal.locator("[data-vars-save]").click();
+    await expect(modal).toHaveCount(0);
+
+    await expect.poll(() => page.evaluate(() => window.__varWrites.length)).toBe(1);
+    expect(await page.evaluate(() => window.__resolved)).toEqual([]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+});
+
 test.describe("instance replay", () => {
   test("flags the stuck step and resolves it from the Details panel", async ({ page }) => {
     await open(page);
@@ -105,6 +168,22 @@ test.describe("instance replay", () => {
     await expect(page.locator(".incident-badge")).toHaveCount(0);
     await expect(page.locator('#canvas g[data-element-id="Task_pay"]')).not.toHaveClass(/atlas-incident/);
     await expect(page.locator('#history-list .ops-hrow[data-eik="1001"]')).not.toHaveClass(/inc/);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("names who set a variable by hand", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__mountReplay());
+    await expect(page.locator("#history-list .ops-hrow").first()).toBeVisible();
+
+    await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
+    await page.locator('#rp-tabs button[data-tab="variables"]').click();
+
+    // The value the process computed carries no mark; the one an operator corrected
+    // names them, so a jump in the values is explainable rather than mysterious.
+    const rows = page.locator("#tab-variables tbody tr");
+    await expect(rows.filter({ hasText: "empfaenger" }).locator(".c-actor")).toHaveText("✎ admin");
+    await expect(rows.filter({ hasText: "betrag" }).locator(".c-actor")).toHaveCount(0);
     expect(page.__errors).toEqual([]);
   });
 

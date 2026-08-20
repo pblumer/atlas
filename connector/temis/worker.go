@@ -2,7 +2,6 @@ package temis
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
@@ -29,7 +28,7 @@ func Handler(store *state.Store, lookup dmn.ProcessLookup, reg *Registry, sink f
 		name := cp.Intern(detail.Connector)
 		client, ok := reg.Client(name)
 		if !ok {
-			return nil, fmt.Errorf("temis: no connector registered as %q", name)
+			return nil, reg.Unresolved("temis", name)
 		}
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (dmn.Evaluation, error) {
 			out, err := client.Evaluate(ctx, decisionId, inputs)

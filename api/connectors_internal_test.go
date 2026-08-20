@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/mail"
 )
 
@@ -292,7 +293,7 @@ func TestBuildMailNativeClients(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "2", Name: "graph", Kind: "mail", Provider: "microsoft", Sender: "b@x", CredentialsRef: "graph_bundle", Enabled: true, CreatedAt: 2})
 	_ = srv.connectors.Save(connector{ID: "3", Name: "broken", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 3})
 
-	clients, err := srv.buildMailClients()
+	clients, _, err := srv.buildMailClients()
 	if err != nil {
 		t.Fatalf("buildMailClients: %v", err)
 	}
@@ -366,7 +367,7 @@ func TestBuildMailClients(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "4", Name: "noendpoint", Kind: "mail", Endpoint: "", Sender: "d@x", Enabled: true, CreatedAt: 4})
 	_ = srv.connectors.Save(connector{ID: "5", Name: "future", Kind: "mail", Endpoint: "graph:0", Provider: "microsoft-graph", Enabled: true, CreatedAt: 5})
 
-	clients, err := srv.buildMailClients()
+	clients, _, err := srv.buildMailClients()
 	if err != nil {
 		t.Fatalf("buildMailClients: %v", err)
 	}
@@ -382,7 +383,7 @@ func TestBuildMailClients(t *testing.T) {
 func TestBuildMailClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
-	if _, err := srv.buildMailClients(); err == nil {
+	if _, _, err := srv.buildMailClients(); err == nil {
 		t.Error("buildMailClients with a broken store: want error")
 	}
 }
@@ -439,7 +440,7 @@ func TestBuildRemedyClients(t *testing.T) {
 	_ = srv.connectors.Save(connector{ID: "5", Name: "nocreds", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "", Enabled: true, CreatedAt: 5})
 	_ = srv.connectors.Save(connector{ID: "6", Name: "broken", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "bad_creds", Enabled: true, CreatedAt: 6})
 
-	clients, err := srv.buildRemedyClients()
+	clients, _, err := srv.buildRemedyClients()
 	if err != nil {
 		t.Fatalf("buildRemedyClients: %v", err)
 	}
@@ -455,7 +456,7 @@ func TestBuildRemedyClients(t *testing.T) {
 func TestBuildRemedyClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
-	if _, err := srv.buildRemedyClients(); err == nil {
+	if _, _, err := srv.buildRemedyClients(); err == nil {
 		t.Error("buildRemedyClients with a broken store: want error")
 	}
 }
@@ -496,7 +497,7 @@ func TestConnectorStoreLoadAllReadError(t *testing.T) {
 func TestBuildTemisClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
-	if _, err := srv.buildTemisClients(); err == nil {
+	if _, _, err := srv.buildTemisClients(); err == nil {
 		t.Error("buildTemisClients with a broken store: want error")
 	}
 }
@@ -693,5 +694,145 @@ func TestConnectorHandlerStoreErrors(t *testing.T) {
 	srv.connectors = good
 	if do(http.MethodPatch, "/api/v1/connectors/u", `{"enabled":false}`) != http.StatusInternalServerError {
 		t.Error("update over a corrupt record: want 500")
+	}
+}
+
+// TestMailProblemsExplainASkippedConnector is the fix for the report that started
+// this: a mail task parked with "no connector registered as %q" while the connector
+// sat right there in the list. Every reason a configured connector is left out of the
+// registry must now come back as a sentence an operator can act on — and the
+// never-configured case must stay distinguishable from all of them.
+func TestMailProblemsExplainASkippedConnector(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	t.Setenv("ATLAS_CONNECTOR_BAD_BUNDLE_TOKEN", `not valid json`)
+
+	_ = srv.connectors.Save(connector{ID: "1", Name: "works", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "off", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "b@x", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "no creds", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "missing_ref", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "bad bundle", Kind: "mail", Provider: "gmail", Sender: "d@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "5", Name: "elsewhere", Kind: "clio", Endpoint: "https://clio.example", Enabled: true, CreatedAt: 5})
+
+	clients, problems, err := srv.buildMailClients()
+	if err != nil {
+		t.Fatalf("buildMailClients: %v", err)
+	}
+	if _, ok := clients["works"]; !ok || len(clients) != 1 {
+		t.Fatalf("clients = %v, want exactly the usable one", clients)
+	}
+	if why, ok := problems["works"]; ok {
+		t.Errorf("the usable connector carries a problem: %q", why)
+	}
+	for name, want := range map[string]string{
+		"off":        "disabled",
+		"no creds":   "no credential",
+		"bad bundle": "not valid JSON",
+		"elsewhere":  `not "mail"`,
+	} {
+		why, ok := problems[name]
+		if !ok {
+			t.Errorf("no problem recorded for %q — it would report as never configured", name)
+			continue
+		}
+		if !strings.Contains(why, want) {
+			t.Errorf("problem for %q = %q, want it to mention %q", name, why, want)
+		}
+	}
+
+	// The message the parked token carries: the reason, not a denial that it exists.
+	srv.mailRegistry = mail.NewRegistry()
+	srv.mailRegistry.ReplaceWith(clients, problems)
+	if got := srv.mailRegistry.Unresolved("mail", "off").Error(); !strings.Contains(got, "configured but not usable") {
+		t.Errorf("incident message for a disabled connector = %q", got)
+	}
+	if got := srv.mailRegistry.Unresolved("mail", "never heard of it").Error(); !strings.Contains(got, "no connector registered") {
+		t.Errorf("incident message for an unconfigured connector = %q", got)
+	}
+}
+
+// TestListConnectorsCarriesTheProblem: the operator list is where you look *before*
+// a token parks, so a stored-but-unusable connector has to say so there too.
+func TestListConnectorsCarriesTheProblem(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	_ = srv.connectors.Save(connector{ID: "1", Name: "off", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "b@x", Enabled: false, CreatedAt: 1})
+	if err := srv.rebuildConnectorRegistries(); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+
+	var views []connectorView
+	srv.do(func() {
+		recs, _ := srv.connectors.LoadAll()
+		for _, c := range recs {
+			views = append(views, connectorView{connector: c, Problem: srv.connectorProblem(c.Kind, c.Name)})
+		}
+	})
+	if len(views) != 1 {
+		t.Fatalf("views = %d, want 1", len(views))
+	}
+	if !strings.Contains(views[0].Problem, "disabled") {
+		t.Errorf("listed connector's problem = %q, want it to name the disabled state", views[0].Problem)
+	}
+}
+
+// deployWarnBPMN references a mail connector by name, the way every model refers to a
+// server-registered connector (ADR-0036/0041).
+const deployWarnBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+  <process id="warnme" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="notify">
+      <extensionElements><atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="notify"/>
+    <sequenceFlow id="f2" sourceRef="notify" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestConnectorWarningsCatchTheMismatchAtDeploy is the other half of the fix: a model
+// that names a connector nobody configured deploys fine and then parks its first token.
+// The deploy is the moment somebody is looking, so it says so there — without refusing,
+// since deploying before the connectors exist is legitimate.
+func TestConnectorWarningsCatchTheMismatchAtDeploy(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	cp, err := compiler.Parse(1, 1, strings.NewReader(deployWarnBPMN))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	// Nothing configured at all.
+	warns := srv.connectorWarnings(cp)
+	if len(warns) != 1 || !strings.Contains(warns[0], "not configured on this server") {
+		t.Fatalf("warnings with no connector = %v, want one naming it as unconfigured", warns)
+	}
+	if !strings.Contains(warns[0], "notify") || !strings.Contains(warns[0], "Patrick Blumer") {
+		t.Errorf("warning names neither the element nor the connector: %q", warns[0])
+	}
+
+	// Configured under the wrong kind — the mistake that reads as "no such connector".
+	_ = srv.connectors.Save(connector{ID: "1", Name: "Patrick Blumer", Kind: "clio", Endpoint: "https://clio.example", Enabled: true, CreatedAt: 1})
+	if err := srv.rebuildConnectorRegistries(); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	warns = srv.connectorWarnings(cp)
+	if len(warns) != 1 || !strings.Contains(warns[0], `configured as a "clio" connector`) {
+		t.Fatalf("warnings for a wrong-kind connector = %v", warns)
+	}
+
+	// Configured, right kind, but disabled: stored and still not going to run.
+	_ = srv.connectors.Save(connector{ID: "1", Name: "Patrick Blumer", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "a@x", Enabled: false, CreatedAt: 1})
+	if err := srv.rebuildConnectorRegistries(); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	warns = srv.connectorWarnings(cp)
+	if len(warns) != 1 || !strings.Contains(warns[0], "configured but not usable") || !strings.Contains(warns[0], "disabled") {
+		t.Fatalf("warnings for a disabled connector = %v", warns)
+	}
+
+	// Usable: nothing to say.
+	_ = srv.connectors.Save(connector{ID: "1", Name: "Patrick Blumer", Kind: "mail", Provider: "smtp", Endpoint: "mx.example.ch:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
+	if err := srv.rebuildConnectorRegistries(); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	if warns = srv.connectorWarnings(cp); len(warns) != 0 {
+		t.Errorf("warnings for a working connector = %v, want none", warns)
 	}
 }

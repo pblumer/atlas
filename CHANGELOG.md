@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A parked connector task now says what is actually wrong**
+  ([ADR-0158](docs/adr/0158-a-connector-reference-that-explains-itself.md)): a mail task
+  reported `no connector registered as "Patrick Blumer"` about a connector that was
+  configured, enabled and visible in the list. The registry rebuild skips connectors it
+  cannot build — correctly, so they never send wrongly — but threw the reason away, so
+  *never configured*, *disabled*, *configured as another kind* and *configured but
+  broken* all came out as the one sentence describing the only case that had not
+  happened. The reason now travels: the incident says `connector "X" is configured but
+  not usable: the connector is disabled` (or the provider's own error — a missing
+  credential, a credential that will not parse, an endpoint naming no host), and the
+  connector row in Organization › Connectors shows it before a token parks at all.
+  Behind it, the five identical per-kind registries became one.
+
+- **A deploy warns about connector references that will not resolve** (ADR-0158): a
+  model naming a connector that does not exist — or exists as another kind, or cannot
+  be built — used to deploy silently and fail at the first instance. The deploy response
+  now carries warnings and the Modeler shows them beside the success. It stays a
+  warning: deploying a model before its connectors are provisioned is legitimate.
+
+- **An incident can be fixed, not just retried** (ADR-0158): every incident row — live
+  view, replay, incidents table — gains **✎ Fix variables…**, which opens the instance's
+  variables, writes them through the audited operator override (ADR-0098) and optionally
+  resolves in the same step. A retry alone repeats whatever failed, and until now the
+  correction was reachable only over the API. And the replay finally shows **who** set a
+  variable by hand — the audit has recorded it and the timeline returned it since
+  ADR-0098; nothing rendered it.
+
 - **The Operations nav counts what is stuck**
   ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md) follow-up): the
   **Incidents** entry carries a red count of the tokens parked behind an unresolved

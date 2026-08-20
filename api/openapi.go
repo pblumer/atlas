@@ -160,7 +160,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
-			summary: "Deploy a BPMN model", tag: "Deployments",
+			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured connector)", tag: "Deployments",
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
