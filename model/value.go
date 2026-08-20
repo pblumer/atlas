@@ -104,14 +104,25 @@ type JobValue struct {
 	ElementInstanceKey uint64
 	JobType            int32 // interned string → index
 	Retries            int32
-	Deadline           int64
-	Assignee           string
+	// Deadline is the *user task* due date (ADR-0032) — when the work is due, not
+	// anything about a worker. It is displayed and sorted on, and a job carrying one is
+	// as pullable as any other. The worker lease lives in LeaseExpiresAt below; the two
+	// were nearly conflated, and a user task with a due date would then have been
+	// invisible to every worker.
+	Deadline int64
+	Assignee string
 	// RetryDueDate is the unix-nano instant a failed-but-retryable job may be handed to a
 	// worker again — a retry backoff (ADR-0111). While it is non-zero and in the future the
 	// job is held OFF the activatable index; a retry timer clears it when the backoff elapses.
 	// 0 means "pullable now" (no backoff), which is every job's steady state. Append-compatible:
 	// an old record without it decodes to 0.
 	RetryDueDate int64
+	// LeaseExpiresAt is the unix-nano instant an external worker's claim on this job runs
+	// out (ADR-0007). While it is non-zero the job is held OFF the activatable index and
+	// Assignee names the holder; a lease timer clears it when the deadline passes, and the
+	// job is offered again. 0 means unheld, which is every job's steady state.
+	// Append-compatible: an old record without it decodes to 0.
+	LeaseExpiresAt int64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -125,7 +136,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Retries))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
 	dst = appendString(dst, v.Assignee)
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -142,10 +154,13 @@ func (v *JobValue) decode(src []byte) error {
 		return err
 	}
 	v.Assignee = assignee
-	// RetryDueDate is an appended field: a record written before it ends after the assignee
-	// string and leaves it zero (ADR-0111).
+	// RetryDueDate and LeaseExpiresAt are appended fields: a record written before either
+	// ends earlier and leaves it zero (ADR-0111, ADR-0007).
 	if len(rest) >= 8 {
 		v.RetryDueDate = int64(binary.LittleEndian.Uint64(rest))
+	}
+	if len(rest) >= 16 {
+		v.LeaseExpiresAt = int64(binary.LittleEndian.Uint64(rest[8:]))
 	}
 	return nil
 }
@@ -164,14 +179,33 @@ type TimerValue struct {
 	// start timer is precisely one with ProcessInstanceKey == 0 and
 	// ProcessDefKey != 0; TargetElementId then names its timer-start element.
 	ProcessDefKey uint64
-	// JobKey marks a retry-backoff timer (ADR-0111): non-zero means this timer, when due,
-	// re-activates the failed job with that key rather than firing an element. 0 for every
-	// ordinary (catch/boundary/start/TTL) timer. Append-compatible: an old record decodes to 0.
+	// JobKey marks a job timer: non-zero means this timer, when due, acts on the job with
+	// that key rather than firing an element. 0 for every ordinary (catch/boundary/start/
+	// TTL) timer. Append-compatible: an old record decodes to 0.
 	JobKey uint64
+	// JobKind says *which* hold on the job this timer releases, and is only meaningful
+	// with JobKey set. Two holds can sit on one job at once — a worker leases it and then
+	// fails it with a backoff (ADR-0007 and ADR-0111) — and each timer must release only
+	// its own, or the lease expiry would hand the job out early and defeat the backoff.
+	// Append-compatible: a record written before this field decodes to JobTimerRetry,
+	// which is what every job timer was.
+	JobKind JobTimerKind
 }
+
+// JobTimerKind distinguishes the holds a job timer releases.
+type JobTimerKind int32
+
+const (
+	// JobTimerRetry releases a retry backoff (ADR-0111). Zero so pre-existing records,
+	// which are all retry timers, decode correctly.
+	JobTimerRetry JobTimerKind = 0
+	// JobTimerLease releases a worker's lease when it expires (ADR-0007).
+	JobTimerLease JobTimerKind = 1
+)
 
 const timerSize = 8 + 8 + 4 + 8 + 4 + 8
 const timerJobSize = timerSize + 8
+const timerJobKindSize = timerJobSize + 4
 
 func (*TimerValue) ValueType() ValueType { return VTTimer }
 
@@ -182,7 +216,8 @@ func (v *TimerValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.DueDate))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
-	return binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.JobKind))
 }
 
 func (v *TimerValue) decode(src []byte) error {
@@ -199,6 +234,11 @@ func (v *TimerValue) decode(src []byte) error {
 	// zero (an ordinary timer, ADR-0111).
 	if len(src) >= timerJobSize {
 		v.JobKey = binary.LittleEndian.Uint64(src[timerSize:])
+	}
+	// JobKind likewise: a record written before it decodes to JobTimerRetry, which every
+	// job timer was until leases existed (ADR-0007).
+	if len(src) >= timerJobKindSize {
+		v.JobKind = JobTimerKind(binary.LittleEndian.Uint32(src[timerJobSize:]))
 	}
 	return nil
 }
