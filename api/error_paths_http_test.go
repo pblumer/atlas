@@ -83,7 +83,7 @@ func TestUnknownEntityNotFound(t *testing.T) {
 		{http.MethodGet, "/api/v1/processes/999999/runtime", ""},
 		{http.MethodPost, "/api/v1/processes/999999/instances", "{}"},
 		{http.MethodDelete, "/api/v1/instances/999999", ""},
-		{http.MethodPost, "/api/v1/jobs/999999/complete", "{}"},
+		{http.MethodPost, "/api/v1/jobs/999999/complete", `{"reason":"test: operator completed the parked job by hand"}`},
 		{http.MethodPost, "/api/v1/jobs/999999/fail", "{}"},
 		{http.MethodPost, "/api/v1/incidents/999999/resolve", "{}"},
 		{http.MethodGet, "/api/v1/tasks/999999", ""},

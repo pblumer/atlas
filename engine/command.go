@@ -43,6 +43,17 @@ type Command struct {
 	// rides only on the non-hot-path IntentVariableModify command, so it never touches
 	// the token-movement fast path.
 	Actor string
+	// Reason is the operator's justification for an intervention that forces a step the
+	// engine would not have taken on its own — completing a parked job by hand (ADR-0159).
+	// It rides only on such a command, alongside Manual, and is frozen into the audit event
+	// the handler emits, so "why" is as durable and replayable as "who". Empty for every
+	// other command, so it never touches the token-movement fast path.
+	Reason string
+	// Manual marks a completion an operator forced rather than a worker reporting real
+	// work (ADR-0159). It is the explicit gate for the audit record — never inferred from
+	// Reason being set — so a manual completion is always attributable even if the reason
+	// is somehow empty, and a worker's completion never mints an operator-action record.
+	Manual bool
 	// RetryBackoff is the delay (unix-nanoseconds) a worker asked to wait before its failed
 	// job may be retried (ADR-0111). It rides only on the non-hot-path IntentJobFailed command;
 	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's

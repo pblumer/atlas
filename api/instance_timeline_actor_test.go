@@ -44,7 +44,7 @@ func TestInstanceTimelineSurfacesOverrideActor(t *testing.T) {
 		t.Fatalf("override: %d (%s)", code, sv)
 	}
 	jobKey := firstActivatableJob(t, admin, ts, key)
-	if code, cj := cReq(t, admin, ts, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey), ""); code != http.StatusOK {
+	if code, cj := cReq(t, admin, ts, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey), `{"reason":"test: operator completed the parked job by hand"}`); code != http.StatusOK {
 		t.Fatalf("complete job: %d (%s)", code, cj)
 	}
 

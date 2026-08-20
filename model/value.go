@@ -623,6 +623,83 @@ func (v *VariableAuditValue) decode(src []byte) error {
 	return nil
 }
 
+// OperatorActionKind is the verb of an operator intervention. It is a small closed
+// vocabulary encoded as a byte rather than free text, so the log never carries a
+// model string (invariant I5) and the record stays fixed-width apart from its two
+// genuinely free-form fields.
+type OperatorActionKind uint8
+
+const (
+	// OperatorActionCompleteJob is an operator completing a parked job by hand, the
+	// job a worker would otherwise have completed (ADR-0159).
+	OperatorActionCompleteJob OperatorActionKind = iota + 1
+)
+
+func (k OperatorActionKind) String() string {
+	switch k {
+	case OperatorActionCompleteJob:
+		return "completeJob"
+	default:
+		return "OperatorActionKind(?)"
+	}
+}
+
+// OperatorActionValue records one operator intervention on a running instance for
+// audit (ADR-0159): who forced what, on which element, and why. ADR-0098 made an
+// operator's variable corrections durable and replayable; this is its counterpart for
+// the act itself — completing a parked job by hand — so a step the engine did not drive
+// on its own is never indistinguishable from one it did. It is keyed under its owning
+// ProcessInstanceKey as append-only history, folds into the same instance timeline at
+// its log position, and survives the instance finishing.
+//
+// The element is referenced by ElementInstanceKey, never by its id: element ids are
+// interned at compile time and never written to the log as text (invariant I5), so a
+// reader resolves the id from the element instance exactly as the timeline already
+// does. Actor is the acting principal's username, or "" when auth is off (single-user)
+// or the caller is unidentified; Reason is the operator's justification, required by
+// the surfaces that mint these records. Both are genuine runtime data, so — like a
+// variable — the encoding is length-prefixed.
+type OperatorActionValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ElementInstanceKey uint64 // the element the action was applied to; 0 when instance-wide
+	JobKey             uint64 // the job that was acted on; 0 when the action is not job-scoped
+	Kind               OperatorActionKind
+	Actor              string // who performed it; "" when auth is off / unidentified
+	Reason             string // why — free text supplied by the operator
+}
+
+func (*OperatorActionValue) ValueType() ValueType { return VTOperatorAction }
+
+func (v *OperatorActionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	dst = append(dst, byte(v.Kind))
+	dst = appendString(dst, v.Actor)
+	return appendString(dst, v.Reason)
+}
+
+func (v *OperatorActionValue) decode(src []byte) error {
+	if len(src) < 25 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.JobKey = binary.LittleEndian.Uint64(src[16:])
+	v.Kind = OperatorActionKind(src[24])
+	actor, rest, err := readString(src[25:])
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	reason, _, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Reason = reason
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -945,6 +1022,8 @@ func newValue(vt ValueType) Value {
 		return &VariableAuditValue{}
 	case VTCompensable:
 		return &CompensableValue{}
+	case VTOperatorAction:
+		return &OperatorActionValue{}
 	default:
 		return nil
 	}

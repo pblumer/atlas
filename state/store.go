@@ -883,6 +883,22 @@ func (s *Store) VariableAuditHistory(piKey uint64, fn func(ts int64, pos uint64,
 	})
 }
 
+// OperatorActionHistory folds the retained operator interventions of one process
+// instance, calling fn with each action's event timestamp, log position, and its frozen
+// record (who acted, on which element, and why) in the order they occurred (ADR-0159).
+// Like VariableAuditHistory the key sorts by timestamp then position, so the trail lines
+// up with the step at which each intervention happened, and it surfaces both live and
+// after the instance has finished since the records are append-only history.
+func (s *Store) OperatorActionHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.OperatorActionValue) error) error {
+	return s.scanPrefix(operatorActionScopePrefix(piKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTOperatorAction, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromOperatorActionKey(k), positionFromOperatorActionKey(k), v.(*model.OperatorActionValue))
+	})
+}
+
 // EachDecisionEvaluation folds every retained DMN decision evaluation across all
 // process instances, calling fn with the owning scope (process instance) key, the
 // evaluation's event timestamp, and its frozen record (ADR-0066). It scans the

@@ -99,7 +99,7 @@ func TestCompleteServiceJobOverHTTP(t *testing.T) {
 	jobKey, instKey := parkedServiceJob(t, srv, deploy.Key)
 
 	// Complete the parked job with the outputs a worker would have returned.
-	code, body = serveInternal(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey), `{"variables":{"paid":true}}`, "application/json")
+	code, body = serveInternal(t, srv, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey), `{"reason":"test: operator completed the parked job by hand","variables":{"paid":true}}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("complete job: status=%d body=%s", code, body)
 	}
@@ -142,7 +142,7 @@ func TestCompleteJobErrors(t *testing.T) {
 		t.Errorf("complete bad body: status=%d, want 400", code)
 	}
 	// Well-formed request for a job that does not exist → 404.
-	if code, _ := serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/999999/complete", `{}`, "application/json"); code != http.StatusNotFound {
+	if code, _ := serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/999999/complete", `{"reason":"test: operator completed the parked job by hand"}`, "application/json"); code != http.StatusNotFound {
 		t.Errorf("complete missing job: status=%d, want 404", code)
 	}
 }

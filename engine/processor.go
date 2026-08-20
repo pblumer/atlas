@@ -389,6 +389,25 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	})
 }
 
+// CompleteJobManually completes a job the way a worker would, but on an operator's
+// say-so rather than because the work was reported (ADR-0159): the job is completed
+// exactly as CompleteJob does, and the intervention is additionally frozen into an
+// append-only audit event carrying who forced it and why. actor is the acting
+// principal's username ("" when auth is off); reason is their justification. Use this,
+// never CompleteJob, for anything a person triggers, so a forced step is never
+// indistinguishable from one the engine drove.
+func (p *Processor) CompleteJobManually(jobKey uint64, actor, reason string, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		Actor:     actor,
+		Reason:    reason,
+		Manual:    true,
+	})
+}
+
 // CompleteJobWithDecision completes a business rule task's job like CompleteJob,
 // additionally carrying the DMN decision evaluation the worker produced (ADR-0066):
 // its inputs, outputs, and trace, frozen into a history event when the completion

@@ -47,7 +47,9 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
         <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
           title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
         <button class="btn neutral sm" data-resolve="${esc(String(inc.elementInstanceKey))}"
-          title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button></div>
+          title="Clear the incident and hand the job one more attempt">&#8635; Resolve &amp; retry</button>
+        <button class="btn neutral sm" data-complete="${esc(String(inc.elementInstanceKey))}"
+          title="Finish this task by hand and let the process continue — recorded with your name and the reason you give">&#10003; Complete manually&hellip;</button></div>
     </div>`;
 }
 
@@ -228,6 +230,104 @@ function askVariables(inc, current) {
   });
 }
 
+// completeManuallyFlow finishes a parked task by hand so the process can continue
+// (ADR-0159). It is the escape hatch for work that was carried out outside the engine —
+// the account really was created, the mail really was sent — where retrying only repeats
+// whatever cannot succeed here. Because it forces a step the engine would not have taken
+// on its own, the server requires a reason: the completion is recorded as an operator
+// action (who, when, which element, why) in append-only audit history that the instance
+// timeline and the replay surface, and any outputs entered here are written as the job's
+// result, carrying the same attribution the "Fix variables" path does. Resolves true when
+// the task was completed.
+export async function completeManuallyFlow({ api, toast, incident }) {
+  // The audit record hangs off the job. An incident on a task carries its job key
+  // directly; fall back to the instance's job list for one that does not.
+  let jobKey = incident.jobKey || 0;
+  if (!jobKey) {
+    try {
+      const jobs = (await api("GET", `/api/v1/instances/${incident.processInstanceKey}/jobs`)) || [];
+      const mine = jobs.find((j) => String(j.elementInstanceKey) === String(incident.elementInstanceKey));
+      jobKey = mine ? mine.key : 0;
+    } catch (e) {
+      toast("could not read the task: " + e.message, "err");
+      return false;
+    }
+  }
+  if (!jobKey) {
+    toast("This incident has no job to complete — it is not parked on a task.", "err");
+    return false;
+  }
+  const answer = await askCompletion(incident);
+  if (!answer) return false;
+  try {
+    await api("POST", `/api/v1/jobs/${jobKey}/complete`, { reason: answer.reason, variables: answer.variables });
+    toast("Task completed manually — recorded in the instance's audit trail", "ok");
+    return true;
+  } catch (e) {
+    toast("complete failed: " + e.message, "err");
+    return false;
+  }
+}
+
+// askCompletion opens the manual-completion dialog and resolves to {reason, variables},
+// or null if the operator cancelled. The reason is mandatory here as well as on the
+// server, so the requirement is visible before the request rather than as a rejection
+// after it; the outputs are optional and must be a JSON object when given.
+function askCompletion(inc) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal inc-vars-modal" role="dialog" aria-modal="true" aria-labelledby="inc-done-title">
+        <div class="modal-head"><h2 id="inc-done-title">Complete manually &middot; ${esc(inc.elementId || "task")}</h2></div>
+        <div class="modal-body">
+          ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
+          <p class="muted" style="margin:0 0 8px">This finishes the task as a worker would and lets the process continue.
+            It is recorded as a manual completion — your name, the time, and the reason below — and shown on this step in the replay.</p>
+          <label class="field"><span>Reason <b>(required)</b></span>
+            <input type="text" id="inc-done-reason" spellcheck="false" placeholder="e.g. account created by hand in AD, ticket INC-4711"/></label>
+          <label class="field"><span>Output variables (optional JSON)</span>
+            <textarea id="inc-done-vars" class="inc-vars-json" spellcheck="false" rows="7">{}</textarea></label>
+          <p class="err" id="inc-done-err" style="margin:6px 0 0"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-done-cancel>Cancel</button>
+          <button class="btn" data-done-go>Complete task</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const reasonEl = ov.querySelector("#inc-done-reason");
+    const varsEl = ov.querySelector("#inc-done-vars");
+    const err = ov.querySelector("#inc-done-err");
+    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    const submit = () => {
+      const reason = (reasonEl.value || "").trim();
+      if (!reason) {
+        err.textContent = "A reason is required — it is what makes the manual completion auditable.";
+        reasonEl.focus();
+        return;
+      }
+      let parsed = {};
+      const raw = (varsEl.value || "").trim();
+      if (raw) {
+        try { parsed = JSON.parse(raw); }
+        catch (e) { err.textContent = "Output variables are not valid JSON: " + (e && e.message ? e.message : e); return; }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          err.textContent = "Expected an object of variable names to values.";
+          return;
+        }
+      }
+      close({ reason, variables: parsed });
+    };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-done-cancel]").addEventListener("click", () => close(null));
+    ov.querySelector("[data-done-go]").addEventListener("click", submit);
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    reasonEl.focus();
+  });
+}
+
 // bindIncidentActions wires one surface's incident block: the two actions on every
 // row, delegated on a container that re-renders under them. `resolve` picks which
 // resolve this surface offers — "quick" beside a diagram (one click, one attempt,
@@ -236,15 +336,18 @@ function askVariables(inc, current) {
 // re-poll. `incidents()` returns the rows currently on screen.
 export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
   root.addEventListener("click", async (ev) => {
-    const btn = ev.target.closest(within ? `${within} [data-resolve], ${within} [data-fix-vars]` : "[data-resolve], [data-fix-vars]");
+    const sel = "[data-resolve], [data-fix-vars], [data-complete]";
+    const btn = ev.target.closest(within ? sel.split(", ").map((x) => `${within} ${x}`).join(", ") : sel);
     if (!btn) return;
     ev.preventDefault();
-    const key = btn.dataset.resolve || btn.dataset.inc;
+    const key = btn.dataset.resolve || btn.dataset.inc || btn.dataset.complete;
     const incident = (incidents() || []).find((i) => String(i.elementInstanceKey) === String(key));
     if (!incident) return;
     btn.disabled = true;
     try {
-      const changed = btn.dataset.fixVars
+      const changed = btn.dataset.complete
+        ? await completeManuallyFlow({ api, toast, incident })
+        : btn.dataset.fixVars
         ? !!(await fixVariablesFlow({ api, toast, incident }))
         : resolve === "ask"
           ? await resolveIncidentFlow({ api, toast, incident })

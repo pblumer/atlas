@@ -275,6 +275,31 @@ textarea::placeholder {
   padding: 0 6px; border-radius: 999px;
   color: var(--warn); background: var(--warn-soft);
 }
+/* A value the selected element itself wrote, on the Variables tab's Output side
+   (ADR-0159), so its own contribution stands out from what it inherited. */
+.c-changed {
+  font: 700 10px/1.6 system-ui, sans-serif; white-space: nowrap;
+  padding: 0 5px; border-radius: 999px;
+  color: var(--ok); background: var(--ok-soft, var(--accent-soft));
+}
+/* Input / Output switch in the replay Variables toolbar (ADR-0159). */
+.v-side { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.v-side-btn {
+  background: none; border: none; cursor: pointer; border-radius: 4px;
+  padding: 2px 8px; font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
+}
+.v-side-btn:hover { color: var(--text); }
+.v-side-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+/* A step a person forced rather than one the engine drove (ADR-0159). It leads the
+   Details tab's blocks because it changes how every other fact on the step reads. */
+.ops-manual {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--warn); background: var(--warn-soft);
+}
+.ops-manual h4 { margin: 0 0 4px; font-size: 12px; color: var(--warn); }
+.ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
+.ops-manual-reason { margin-top: 6px !important; font-style: italic; }
+
 /* Why a stored connector is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);

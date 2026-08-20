@@ -334,6 +334,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordVariableAudit(h.Timestamp, h.Position, &v.variableAudit)
 		}
 
+	case model.VTOperatorAction:
+		if h.Intent == model.IntentOperatorActed {
+			// Retain who forced a step from outside the model — an operator completing a
+			// parked job by hand — as append-only audit history (ADR-0159), the "who did
+			// it, and why" analogue of the variable-override record. The record carries
+			// everything (actor, reason, element, job); the timestamp and position come
+			// from this event's header, so replay rebuilds identical history without
+			// re-running the command (invariants I4/I6).
+			return tx.RecordOperatorAction(h.Timestamp, h.Position, &v.operatorAct)
+		}
+
 	case model.VTDecisionEvaluation:
 		if h.Intent == model.IntentDecisionEvaluated {
 			// Retain how a business rule task's decision was made — its inputs, outputs
