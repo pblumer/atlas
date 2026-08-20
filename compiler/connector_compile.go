@@ -79,6 +79,68 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ldap.Retries },
 		compile: compileLdapConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Soap != nil },
+		retries: func(st xmlServiceTask) string { return st.Soap.Retries },
+		compile: compileSoapConnectorTask,
+	},
+}
+
+// soapVersions is the set of SOAP protocol versions a connector task can author. 1.1
+// sends text/xml with a quoted SOAPAction header; 1.2 sends application/soap+xml with
+// the action as a Content-Type parameter (envelope namespaces differ too).
+var soapVersions = map[string]bool{"1.1": true, "1.2": true}
+
+// compileSoapConnectorTask compiles an <atlas:soapConnector> task: it invokes a SOAP
+// operation against a model-authored web-service endpoint via the job path (ADR-0165),
+// not an external service-task worker. Like REST the endpoint lives in the model and
+// credentials never do; unlike REST it wraps the authored body in a SOAP envelope and
+// turns a SOAP Fault into the job-failure message. A call needs an endpoint, an
+// operation name, and a body (the operation's request element).
+func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Soap
+	if strings.TrimSpace(cn.Endpoint) == "" {
+		return 0, fmt.Errorf("compiler: soap connector task %q needs an endpoint (the web-service URL)", st.Id)
+	}
+	if strings.TrimSpace(cn.Operation) == "" {
+		return 0, fmt.Errorf("compiler: soap connector task %q needs an operation", st.Id)
+	}
+	if strings.TrimSpace(cn.Body) == "" {
+		return 0, fmt.Errorf("compiler: soap connector task %q needs a body (the SOAP request payload)", st.Id)
+	}
+	version := strings.TrimSpace(cn.Version)
+	if version == "" {
+		version = "1.1"
+	}
+	if !soapVersions[version] {
+		return 0, fmt.Errorf("compiler: soap connector task %q has an unknown soapVersion %q (want 1.1 or 1.2)", st.Id, cn.Version)
+	}
+	endpoint, err := connectorValue(st.Id, "soap connector", "endpoint", cn.Endpoint)
+	if err != nil {
+		return 0, err
+	}
+	action, err := connectorValue(st.Id, "soap connector", "soapAction", cn.Action)
+	if err != nil {
+		return 0, err
+	}
+	body, err := connectorValue(st.Id, "soap connector", "body", cn.Body)
+	if err != nil {
+		return 0, err
+	}
+	auth, err := connectorAuth(st.Id, "soap connector", cn.AuthType, cn.AuthUsername, cn.AuthApiKeyName, cn.AuthSecret)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddSoapConnectorTask(SoapConfig{
+		Endpoint:  endpoint,
+		Op:        strings.TrimSpace(cn.Operation),
+		Action:    action,
+		Body:      body,
+		Version:   version,
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Auth:      auth,
+		Retries:   retries,
+	}), nil
 }
 
 // ldapOps is the set of directory operations an LDAP connector task can author.
