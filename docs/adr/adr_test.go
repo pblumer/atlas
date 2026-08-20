@@ -137,24 +137,7 @@ func TestADRIndexMatchesDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read README.md: %v", err)
 	}
-	type indexRow struct {
-		num    int
-		link   string
-		title  string
-		status string
-	}
-	var rows []indexRow
-	for _, line := range strings.Split(string(readme), "\n") {
-		m := indexRowPattern.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		num, err := strconv.Atoi(m[1])
-		if err != nil {
-			t.Fatalf("index row %q: %v", line, err)
-		}
-		rows = append(rows, indexRow{num: num, link: m[2], title: m[3], status: m[4]})
-	}
+	rows := indexRows(t, string(readme))
 
 	if len(rows) != len(adrs) {
 		t.Errorf("README index has %d rows for %d ADR files", len(rows), len(adrs))
@@ -178,6 +161,10 @@ func TestADRIndexMatchesDirectory(t *testing.T) {
 		if r.link != a.name {
 			t.Errorf("README row for ADR-%04d links to %s, but the file is %s", a.num, r.link, a.name)
 		}
+		if r.title != a.title {
+			t.Errorf("README row for ADR-%04d has title %q, but %s declares %q — the index carries the record's title, not a summary of it",
+				a.num, r.title, a.name, a.title)
+		}
 		if got, want := baseStatus(r.status), baseStatus(a.status); got != want {
 			t.Errorf("README row for ADR-%04d says status %q, but %s says %q", a.num, got, a.name, want)
 		}
@@ -186,6 +173,70 @@ func TestADRIndexMatchesDirectory(t *testing.T) {
 	for num, r := range indexed {
 		t.Errorf("README index row for ADR-%04d (%s) has no matching file", num, r.link)
 	}
+}
+
+// TestADRIndexTableRenders guards the shape of the table rather than its contents.
+// A Markdown table ends at the first line that is not a row, so a single blank line
+// slipped between two rows does not fail any of the checks above — it silently cuts
+// the index in half, and every row below it renders as a paragraph of raw pipes.
+// That happened at ADR-0148 and went unnoticed for seventeen records, because each
+// new ADR appended its row to the broken half.
+func TestADRIndexTableRenders(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	lines := strings.Split(string(readme), "\n")
+
+	first, last := -1, -1
+	for i, line := range lines {
+		if indexRowPattern.MatchString(line) {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		t.Fatal("README.md has no index rows at all")
+	}
+	for i := first; i <= last; i++ {
+		if !indexRowPattern.MatchString(lines[i]) {
+			t.Errorf("README.md:%d interrupts the index table with %q — a Markdown table ends at the first line that is not a row, so every row below this one stops rendering as a table",
+				i+1, lines[i])
+		}
+	}
+	if first < 2 || !strings.HasPrefix(lines[first-1], "|--") || !strings.HasPrefix(lines[first-2], "| ADR ") {
+		t.Errorf("README.md:%d — the first index row is not preceded by the `| ADR | Title | Status |` header and its separator", first+1)
+	}
+}
+
+// indexRows parses README.md's index table into rows. The pattern is deliberately
+// anchored: a row that does not match is a row this test cannot vouch for, and the
+// count check in TestADRIndexMatchesDirectory turns that into a failure.
+func indexRows(t *testing.T, readme string) []indexRow {
+	t.Helper()
+	var rows []indexRow
+	for _, line := range strings.Split(readme, "\n") {
+		m := indexRowPattern.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		num, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Fatalf("index row %q: %v", line, err)
+		}
+		rows = append(rows, indexRow{num: num, link: m[2], title: m[3], status: m[4]})
+	}
+	return rows
+}
+
+// indexRow is one row of README.md's index table.
+type indexRow struct {
+	num    int
+	link   string
+	title  string
+	status string
 }
 
 // TestADRReferencesResolve checks that every `[ADR-NNNN](NNNN-....md)` link inside

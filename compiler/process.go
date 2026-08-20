@@ -590,6 +590,23 @@ type ConnectorTaskDetail struct {
 	LdapScope       int32
 	LdapEntryVar    int32
 	LdapNewPassword RestExpr
+	// SOAP connector fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
+	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
+	// over the instance's variables at call time. SoapOp is the interned operation name,
+	// used for diagnostics and as the default SOAPAction. SoapAction is the SOAPAction
+	// header value (literal-or-FEEL; the interned SoapOp is used when it evaluates to
+	// empty). SoapBody is the literal-or-FEEL XML payload placed inside the envelope's
+	// <soap:Body> — the operation's request element, typically FEEL-interpolated with the
+	// instance's variables. SoapVersion is the interned protocol version ("1.1"|"1.2"),
+	// which selects the envelope namespace and how the action is carried. Each is the zero
+	// value for a non-SOAP task; ResultVar (above) receives the parsed response body and
+	// Auth (above) the bearer/basic/apiKey credential reference. Read only by the
+	// in-process SOAP worker.
+	SoapEndpoint RestExpr
+	SoapOp       int32
+	SoapAction   RestExpr
+	SoapBody     RestExpr
+	SoapVersion  int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

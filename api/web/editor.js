@@ -2098,6 +2098,43 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "soap", name: "SOAP / Web Services Connector", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
+    // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
+    // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
+    // connectors.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f8a7e"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"><rect x="3" y="4.5" width="10" height="7" rx="0.8"/><path d="M3.2 5l4.8 3.6L12.8 5"/></g></svg>`,
+    ext: "atlas:SoapConnector",
+    fields: [
+      { group: "Web service" },
+      { key: "endpoint", label: "Endpoint URL", placeholder: "https://ws.example.com/UserService", fx: true, hint: "The web service's endpoint (the WSDL's soap:address). May be a FEEL expression (fx)." },
+      { key: "operation", label: "Operation", placeholder: "GetUser", hint: "The operation name, used in diagnostics and as the default SOAPAction." },
+      { key: "soapAction", label: "SOAPAction", placeholder: "urn:GetUser", fx: true, hint: "The SOAPAction header (SOAP 1.1) or Content-Type action (1.2). Empty uses the operation name. May be a FEEL expression (fx)." },
+      {
+        key: "soapVersion", label: "SOAP version", type: "select",
+        options: [{ v: "", l: "1.1 (default)" }, { v: "1.1", l: "1.1" }, { v: "1.2", l: "1.2" }],
+        hint: "1.1 sends text/xml with a SOAPAction header; 1.2 sends application/soap+xml.",
+      },
+      {
+        key: "body", label: "Request body (XML)", placeholder: "<tns:GetUser xmlns:tns='urn:x'><id>1</id></tns:GetUser>", fx: true,
+        hint: "The operation's request element, placed inside the SOAP envelope's Body. Use the fx toggle for a FEEL expression that interpolates the instance's variables into the XML.",
+      },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "WS_PASSWORD",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "soapResponse", hint: "The parsed SOAP response body is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
     id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading
