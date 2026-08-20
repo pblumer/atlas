@@ -137,3 +137,98 @@ test.describe("instance replay", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+// The Operations overview is the real app shell, not a harness page: it renders the
+// per-process list and the variable search, both of which flag what is stuck. The
+// shell talks to the Go API, which this static server does not run, so it is driven
+// against a routed mock — the UI wiring is what these tests are about.
+const OVERVIEW = {
+  processes: [
+    { key: 7, processId: "zahlung", name: "Zahlung", version: 2, deployedAt: 20, active: true },
+    { key: 6, processId: "zahlung", name: "Zahlung", version: 1, deployedAt: 10, active: true },
+    { key: 9, processId: "sauber", name: "Sauber", version: 1, deployedAt: 30, active: true },
+  ],
+  summary: [
+    { processDefKey: 7, processId: "zahlung", version: 2, active: 1, completed: 4, latestCompletedAt: 0 },
+    { processDefKey: 6, processId: "zahlung", version: 1, active: 2, completed: 9, latestCompletedAt: 0 },
+    { processDefKey: 9, processId: "sauber", version: 1, active: 3, completed: 0, latestCompletedAt: 0 },
+  ],
+  // Two incidents on the OLD version and one on the latest: linking to the latest
+  // would land the operator on the diagram holding the fewest of them.
+  incidents: [
+    { elementInstanceKey: "1001", processInstanceKey: "900001", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5001", raisedAt: 1, message: "boom" },
+    { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
+    { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
+  ],
+  search: [
+    { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+    { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+  ],
+};
+
+const bootOverview = async (page, { truncated = false } = {}) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/processes") return route.fulfill({ json: OVERVIEW.processes });
+    if (path === "/api/v1/instances/summary") return route.fulfill({ json: OVERVIEW.summary });
+    if (path === "/api/v1/incidents") {
+      return route.fulfill({
+        json: { incidents: OVERVIEW.incidents },
+        headers: truncated ? { "X-Incidents-Truncated": "true" } : {},
+      });
+    }
+    if (path === "/api/v1/instances/search") return route.fulfill({ json: OVERVIEW.search });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/index.html");
+  await page.waitForFunction(
+    () => document.querySelector("#view") && document.querySelector("#view").children.length > 0,
+    null, { timeout: 15000 });
+  await page.evaluate(() => { location.hash = "#/operations"; });
+  await expect(page.locator("#view h1").first()).toHaveText("Instances");
+};
+
+// row returns the process row whose first cell names this process.
+const row = (page, name) => page.locator("#rows tr", { has: page.locator("td", { hasText: name }) }).first();
+
+test.describe("instances overview", () => {
+  test("flags a process whose tokens are stuck, and links to the version holding them", async ({ page }) => {
+    await bootOverview(page);
+
+    // Three incidents over two versions of one process; the other process is clean.
+    const flag = row(page, "Zahlung").locator("a.pill.err");
+    await expect(flag).toHaveText("⚠ 3");
+    // v1 holds two of the three, so that is where the link lands — not the latest (v2).
+    await expect(flag).toHaveAttribute("href", "#/operations/p/6");
+    await expect(flag).toHaveAttribute("title", /across 2 versions/);
+    await expect(row(page, "Sauber").locator("a.pill.err")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a capped incident page says the counts are a lower bound", async ({ page }) => {
+    await bootOverview(page, { truncated: true });
+    await expect(page.locator("#ops-inc-note")).toContainText("lower bound");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a variable-search hit that is stuck says so, and opens its replay", async ({ page }) => {
+    await bootOverview(page);
+    await page.locator("#var-q").fill("betrag=42");
+    await page.locator("#var-search button[type=submit]").click();
+
+    const results = page.locator(".var-results tbody tr");
+    await expect(results).toHaveCount(2);
+    // 900001 holds an incident; 900009 does not — both are "active", which is exactly
+    // why the state pill alone is not enough.
+    const stuck = results.filter({ hasText: "900001" }).locator("a.pill.err");
+    await expect(stuck).toHaveText("⚠ 1");
+    await expect(stuck).toHaveAttribute("href", "#/operations/i/900001");
+    await expect(results.filter({ hasText: "900009" }).locator("a.pill.err")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+});

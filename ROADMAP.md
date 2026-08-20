@@ -476,7 +476,8 @@ Making processes wait, react, and time out.
   outline the stuck element in red, badge it `⚠ incident`, list the fault beside the
   variables — the live view's "All instances" scope covering a whole version at once —
   and **resolve it in place**, the same one-click affordance a waiting user task already
-  had. The incident list carries the facts that needs (`processDefKey`, `processId`, the
+  had. The Instances overview flags affected processes (and stuck variable-search hits)
+  so "is anything stuck at all?" is answered before opening anything. The incident list carries the facts that needs (`processDefKey`, `processId`, the
   BPMN `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new
   is written into the durable record.
 

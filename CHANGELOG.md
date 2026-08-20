@@ -29,6 +29,14 @@ _Changed_ / _Removed_ for each version.
   module, so the Operations incidents table now uses the same dialog (which can explain
   that a timer incident re-arms and ignores the retry count) instead of a `window.prompt`.
 
+- **The Instances overview flags what is stuck**: a per-process **Incidents** column
+  that links to the *version* actually holding them (not the latest, which is often the
+  wrong diagram), and a `⚠ n` on any variable-search hit that is parked. A stuck instance
+  is counted as *running* like any other, so "3 running" read as healthy when one of the
+  three had not moved in a week. Counts come from the incident list, not from the
+  per-definition summary, which stays O(1) per definition (ADR-0083); a page-capped
+  count says so instead of quietly undercounting.
+
 - **`GET /api/v1/incidents` can be scoped**: `?instance=` for one process instance,
   `?process=` for one deployed definition. A view that wants its own incidents no longer
   pulls every incident on the server and hopes its own survive the 5000-row page cap.

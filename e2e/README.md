@@ -103,6 +103,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   keeps the element outlined wherever the playhead sits, and resolves from the Details panel.
   Drives the real `mountLive` and `mountInstanceReplay` against a mock `api` that actually
   serves the resolve POST, so a resolved incident really does disappear on the next poll.
+  The **Instances overview** tests in the same file drive the real app shell against a
+  routed mock instead: the per-process Incidents column links to the version holding them
+  (not the latest), a capped incident page says its counts are a lower bound, and a
+  variable-search hit that is parked is flagged apart from an equally "active" one.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

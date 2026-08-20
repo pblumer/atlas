@@ -1,4 +1,4 @@
-# ADR-0150: Incidents on the diagram — the live view and the replay
+# ADR-0150: Incidents on the diagram — the live view, the replay, and the lists that lead there
 
 - **Status:** Accepted
 - **Date:** 2026-08-19
@@ -51,7 +51,8 @@ Three things stood in the way, all in the read model rather than the engine:
   stands; this is a *read-side* problem. Invariants I4/I6 mean nothing derived for a
   view may be written back into an event.
 - **A whole version at once.** "Is anything in production stuck?" is asked of a
-  version, not of an instance — the live view's "All instances" scope should answer it.
+  version, not of an instance — the live view's "All instances" scope should answer it,
+  and the overview should answer the same question for the server without being opened.
 
 ## Considered options
 
@@ -60,7 +61,7 @@ Three things stood in the way, all in the read model rather than the engine:
 2. **Enrich the incident read model and render it on both diagrams.** Resolve the
    definition and the BPMN element id when the list is read, scope the list by
    instance/definition, and let the live view and the replay badge, list, and resolve
-   an incident in place.
+   an incident in place — with the Instances overview flagging the way in.
 3. **Store the diagram id on the incident.** Write the BPMN id into `IncidentValue` at
    raise time so no read-side resolution is needed.
 
@@ -112,8 +113,21 @@ the incident for the selected element instance, and the instance-level panel (no
 selected) lists all of them; both resolve in place. The header gains an incident
 count beside the state.
 
+**Instances overview.** The list an operator opens *first* flags what is stuck too: a
+per-process **Incidents** column, and a `⚠ n` on any variable-search hit that is parked
+— because a stuck instance is counted as *running* like any other, so "3 running" reads
+as healthy when one of the three has not moved in a week. The column links to the
+version that actually holds the incidents rather than the latest one: landing on the
+newest version's diagram would show nothing whenever the fault sits on an older one,
+which is the case where the flag matters most. The counts come from the same incident
+list, read once per refresh and bucketed in the browser, deliberately *not* from
+`/api/v1/instances/summary` — that endpoint is O(1) per definition by design (ADR-0083,
+after a scan-based version blocked the single-writer loop on every load) and must not
+grow a scan. A capped incident page is called out, so the counts are never silently a
+lower bound.
+
 **One interaction.** The badge, the card, and the resolve dialog live in one module
-(`api/web/incidents.js`) that all three surfaces import, so the Operations table's
+(`api/web/incidents.js`) that every surface imports, so the Operations table's
 own resolve action is now the same dialog — which also replaced its `window.prompt`
 with something that can explain that a timer incident re-arms and ignores the retry
 count. The table's instance link is corrected to the live view's definition/instance
@@ -123,7 +137,8 @@ route, and gains a replay link beside it.
 
 - **Positive:** an operator sees a stuck token as stuck, on the diagram they were
   already looking at, and unblocks it without leaving. "Is anything in this version
-  stuck?" is answered by opening the version. The incident, the task and the decision
+  stuck?" is answered by opening the version — and "is anything stuck at all?" by the
+  Instances overview, without opening anything. The incident, the task and the decision
   badge now form one consistent vocabulary of "something to look at here". The
   wrong-key link in the incidents table is fixed as a side effect of having the
   definition key.
@@ -132,7 +147,9 @@ route, and gains a replay link beside it.
   old value survives as `elementIndex`. Listing incidents now costs one process
   instance lookup per distinct instance rather than a pure scan — bounded by the same
   page cap, memoized per request, and off the hot path. The views poll incidents on
-  the existing 1.5 s cadence, one more small request per tick.
+  the existing 1.5 s cadence, one more small request per tick; the Instances overview
+  reads the list once per refresh, and under a flood its counts are a page-capped lower
+  bound (said so on the page) rather than exact.
 - **Follow-ups / risks to watch:** the resolve dialog grants a retry budget only; a
   "resolve and set variables first" flow (fix the cause, then retry) is the obvious
   next step and is deliberately not in this slice. An incident on an element of a

@@ -224,6 +224,10 @@ textarea::placeholder {
 .pill.warn { background: #fdf3e2; color: #b26b00; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
 .pill.err .dot, .pill.warn .dot { background: currentColor; }
+/* A pill can be the link to what it counts — the incident flag in the Operations
+   lists opens the version (or instance) it is about (ADR-0150). */
+a.pill { text-decoration: none; font-weight: 600; }
+a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
 
 /* Tables */
