@@ -114,3 +114,63 @@ func TestWorkSkipsUnhandledTypes(t *testing.T) {
 		t.Errorf("outcomes = %+v, want only the handled job", got)
 	}
 }
+
+// TestWorkBoundsHowManyHandlersRunAtOnce is the other half of running handlers
+// concurrently, and the half that is easy to forget: a round must be *bounded*.
+//
+// Serial dispatch had one virtue — a backlog could not become a thundering herd.
+// Concurrency without a cap trades one failure for another: a thousand parked jobs
+// would become a thousand simultaneous outbound calls, exhausting file descriptors
+// here and hammering whatever is on the other end. The cap keeps the throughput and
+// drops the herd.
+func TestWorkBoundsHowManyHandlersRunAtOnce(t *testing.T) {
+	r := job.NewRunner(nil, nil)
+	r.Concurrency = 3
+
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	r.Handle(1, func(state.Reader) job.Handler {
+		return func(job.Job) error {
+			mu.Lock()
+			inFlight++
+			if inFlight > peak {
+				peak = inFlight
+			}
+			mu.Unlock()
+			time.Sleep(5 * time.Millisecond)
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+			return nil
+		}
+	})
+
+	jobs := make([]job.Job, 30)
+	for i := range jobs {
+		jobs[i] = job.Job{Key: uint64(i + 1), Type: 1}
+	}
+	got := r.Work(jobs, nil)
+	if len(got) != len(jobs) {
+		t.Fatalf("%d outcomes, want %d — the cap must not drop work", len(got), len(jobs))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if peak > r.Concurrency {
+		t.Errorf("%d handlers ran at once, want at most %d", peak, r.Concurrency)
+	}
+	if peak < 2 {
+		t.Errorf("peak concurrency was %d — the round ran serially", peak)
+	}
+}
+
+// An unconfigured runner still bounds itself: the default is what every existing
+// caller gets, so it cannot be the unbounded case.
+func TestRunnerHasADefaultConcurrency(t *testing.T) {
+	r := job.NewRunner(nil, nil)
+	if r.Concurrency <= 0 {
+		t.Errorf("default concurrency = %d, want a positive bound", r.Concurrency)
+	}
+	if r.Concurrency > 128 {
+		t.Errorf("default concurrency = %d, which is not a bound anyone would call safe", r.Concurrency)
+	}
+}
