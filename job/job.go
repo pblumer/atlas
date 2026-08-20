@@ -98,6 +98,18 @@ func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) {
 // dispatch as the others; its Completion rides along on the CompleteJob command.
 func (r *Runner) HandleCompleting(jobType int32, h CompletingHandler) { r.handlers[jobType] = h }
 
+// Handles reports whether an in-process worker is registered for a job type.
+//
+// It is what keeps one job from being worked twice: an external worker leasing by
+// type must be refused a type this runner is already draining, because nothing
+// else separates them — the runner does not lease, it simply dispatches whatever
+// is activatable (ADR-0157). Relocating a kind to an external worker therefore
+// means not registering its handler here.
+func (r *Runner) Handles(jobType int32) bool {
+	_, ok := r.handlers[jobType]
+	return ok
+}
+
 // PollOnce pulls every activatable job of a registered type, runs its handler,
 // and submits a completion command for each that succeeds. It returns how many
 // jobs it dispatched. The submitted completions are processed on the next

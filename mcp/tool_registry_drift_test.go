@@ -119,6 +119,7 @@ var mcpOmittedRoutes = map[string]string{
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
 	// pointed at, and never needs to hold one against other workers.
 	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
+	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
 	"GET /api/v1/checkpoints":          "admin recovery-checkpoint status, not an agent action",
 	"POST /api/v1/checkpoints":         "admin on-demand checkpoint/compaction, not an agent action",
 

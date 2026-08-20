@@ -229,8 +229,34 @@ type CompiledFlow struct {
 
 // ServiceTaskDetail is the per-service-task data a behavior needs at runtime.
 type ServiceTaskDetail struct {
-	JobType int32 // interned string → index
+	JobType int32 // interned string → index, local to this compiled process
 	Retries int32
+	// globalJobType is JobType translated into the engine-wide job-type index space
+	// by [CompiledProcess.ResolveJobTypes] at deploy time, or jobTypeUnresolved when
+	// the process was never resolved. It exists because JobType is interned *per
+	// process* while the activatable-job index is engine-wide, so the same local
+	// index means different job types in two definitions and a worker subscribing by
+	// it would be handed the wrong work (ADR-0007). Unexported: only resolution may
+	// set it, and [ServiceTaskDetail.GlobalJobType] is how a behavior reads it.
+	globalJobType int32
+}
+
+// jobTypeUnresolved marks a service task whose job type has not been translated
+// into the engine-wide index space. It is deliberately not 0 — 0 is the DMN job
+// type, so a zero value would silently hand every unresolved service task to the
+// DMN worker.
+const jobTypeUnresolved int32 = -1
+
+// GlobalJobType is the job type a job created for this task must carry: the
+// engine-wide index when the process has been resolved, and otherwise the locally
+// interned one, which is what a compiled process used before resolution existed
+// and keeps a standalone process (a test, the conformance runner) behaving as it
+// always did.
+func (d *ServiceTaskDetail) GlobalJobType() int32 {
+	if d.globalJobType == jobTypeUnresolved {
+		return d.JobType
+	}
+	return d.globalJobType
 }
 
 // ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
@@ -985,6 +1011,35 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 }
 
 // ServiceTask returns the detail at the given table index.
+// ResolveJobTypes translates every model-authored job type in this process into
+// the engine-wide index space, by handing each one's *name* to intern and keeping
+// the index it returns. Service and send tasks are the only elements that need it:
+// every other job-creating element carries a reserved job type, which is already
+// the same index in every process (see reservedJobTypes).
+//
+// It is called once per process at deploy time and again for each process on
+// reload, so intern must be idempotent — the same name must come back with the
+// same index. A failure aborts the whole resolution: a half-resolved process is
+// worse than an unresolved one, because only some of its jobs would be findable.
+//
+// The interner is supplied by the caller rather than imported, so the compiler
+// stays independent of where the engine-wide table lives.
+func (p *CompiledProcess) ResolveJobTypes(intern func(name string) (int32, error)) error {
+	for i := range p.serviceTasks {
+		d := &p.serviceTasks[i]
+		name := p.Intern(d.JobType)
+		if name == "" {
+			continue // no task definition type: nothing to resolve
+		}
+		idx, err := intern(name)
+		if err != nil {
+			return fmt.Errorf("compiler: resolve job type %q: %w", name, err)
+		}
+		d.globalJobType = idx
+	}
+	return nil
+}
+
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
