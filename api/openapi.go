@@ -280,9 +280,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job by hand (operator intervention; requires a reason, recorded for audit)", tag: "Incidents",
-			req: jsonBody("A required reason for the intervention plus optional completion variables", schemaObj(map[string]any{
-				"reason": tString(), "variables": tObject(),
+			summary: "Complete a job — as its lease-holding worker (\"worker\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
+			req: jsonBody("Either the holding worker id (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
+				"worker": tString(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{

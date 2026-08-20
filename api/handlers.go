@@ -3310,6 +3310,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// completed step would carry no explanation of why a person overrode the model.
 	var payload struct {
 		Reason string `json:"reason"`
+		Worker string `json:"worker"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -3318,7 +3319,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	reason := strings.TrimSpace(payload.Reason)
-	if reason == "" {
+	// A worker reporting the outcome of a job it holds a lease on is the ordinary
+	// protocol path (ADR-0007), not an intervention: it is doing exactly what the
+	// model asked for. Only a completion *by hand* is an override, and only that one
+	// needs a reason and an audit entry. The lease is what separates them — a caller
+	// naming a worker it is not the holder for is refused below rather than quietly
+	// demoted to an operator, so this cannot become a way around the audit trail.
+	worker := strings.TrimSpace(payload.Worker)
+	if worker == "" && reason == "" {
 		httpapi.Error(w, http.StatusBadRequest, "reason is required: completing a job by hand is an operator intervention and is recorded with who did it and why")
 		return
 	}
@@ -3331,15 +3339,25 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		actor = p.Username
 	}
 	var (
-		found  bool
-		runErr error
+		found     bool
+		notHolder bool
+		runErr    error
 	)
 	s.do(func() {
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
-		s.proc.CompleteJobManually(key, actor, reason, vars...)
+		if worker != "" {
+			if jv.LeaseExpiresAt == 0 || jv.Assignee != worker {
+				notHolder = true
+				return
+			}
+			s.proc.CompleteJob(key, vars...)
+		} else {
+			s.proc.CompleteJobManually(key, actor, reason, vars...)
+		}
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -3347,6 +3365,9 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(worker)+" does not hold a lease on this job; lease it first, or complete it as an operator with a reason")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}

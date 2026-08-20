@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 )
 
 // pullResp is the shape POST /api/v1/jobs/activate answers with.
@@ -186,21 +187,66 @@ func TestPullByTypeRefusesAnOverlongLease(t *testing.T) {
 	}
 }
 
-// The whole point of leasing by type: the job that comes back can then be
-// completed by key, and the instance moves on.
-func TestPulledJobCanBeCompleted(t *testing.T) {
+// TestPulledJobIsCompletedByItsWorkerWithoutAReason is the other half of the
+// protocol, and it is where completing a job by hand and completing one as its
+// worker part company. Completing by key is an *operator intervention* and must
+// say why (ADR-0159) — but a worker reporting the outcome of work it holds a
+// lease on is the ordinary path ADR-0007 describes, not an override of the model,
+// and demanding a reason from it would both block the protocol and file every
+// worker completion in the operator audit trail.
+func TestPulledJobIsCompletedByItsWorkerWithoutAReason(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	_, got := pull(t, srv, `{"type":"send-email","worker":"w1"}`)
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want 1", len(got.Jobs))
+	}
+	job := got.Jobs[0]
+
+	path := fmt.Sprintf("/api/v1/jobs/%d/complete", job.JobKey)
+	if code, body := serveInternal(t, srv, http.MethodPost, path,
+		`{"worker":"w1","variables":{"sent":true}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("worker completion: status=%d body=%s", code, body)
+	}
+
+	// Nothing is parked any more…
+	if code, after := pull(t, srv, `{"type":"send-email","worker":"w2"}`); code != http.StatusOK || len(after.Jobs) != 0 {
+		t.Errorf("after completing: status=%d jobs=%d, want 200 and 0", code, len(after.Jobs))
+	}
+	// …and the completion was not filed as an operator intervention.
+	actions := 0
+	srv.do(func() {
+		_ = srv.store.OperatorActionHistory(job.ProcessInstanceKey, func(int64, uint64, *model.OperatorActionValue) error {
+			actions++
+			return nil
+		})
+	})
+	if actions != 0 {
+		t.Errorf("%d operator action(s) recorded for a worker completion, want 0", actions)
+	}
+}
+
+// A worker id that does not hold the lease is not the lease holder, whatever it
+// claims: say so plainly rather than silently treating it as an operator.
+func TestCompletingAsTheWrongWorkerIsRefused(t *testing.T) {
 	srv := jobPullSrv(t, "send-email", `{}`)
 	_, got := pull(t, srv, `{"type":"send-email","worker":"w1"}`)
 	if len(got.Jobs) != 1 {
 		t.Fatalf("pulled %d jobs, want 1", len(got.Jobs))
 	}
 	path := fmt.Sprintf("/api/v1/jobs/%d/complete", got.Jobs[0].JobKey)
-	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"sent":true}}`, "application/json"); code != http.StatusOK {
-		t.Fatalf("complete: status=%d body=%s", code, body)
+	if code, _ := serveInternal(t, srv, http.MethodPost, path, `{"worker":"w2"}`, "application/json"); code != http.StatusConflict {
+		t.Errorf("completion by a non-holder: status=%d, want 409", code)
 	}
-	// Nothing is parked any more.
-	if code, after := pull(t, srv, `{"type":"send-email","worker":"w2"}`); code != http.StatusOK || len(after.Jobs) != 0 {
-		t.Errorf("after completing: status=%d jobs=%d, want 200 and 0", code, len(after.Jobs))
+}
+
+// An operator completing an unleased job still has to say why: the worker path
+// must not become a way around the audit trail by naming any worker at all.
+func TestCompletingAnUnleasedJobAsAWorkerIsRefused(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	jobKey, _ := parkedServiceJob(t, srv, 1)
+	path := fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey)
+	if code, _ := serveInternal(t, srv, http.MethodPost, path, `{"worker":"w1"}`, "application/json"); code != http.StatusConflict {
+		t.Errorf("completion of an unleased job as a worker: status=%d, want 409", code)
 	}
 }
 
