@@ -316,6 +316,10 @@ type instanceResp struct {
 type statsResp struct {
 	ActiveProcessInstances int `json:"activeProcessInstances"`
 	ActiveElementInstances int `json:"activeElementInstances"`
+	// UnresolvedIncidents is how many tokens are parked behind an incident right now
+	// (ADR-0061). The shell polls it for the Operations nav badge, so "something is
+	// stuck" reaches an operator who is not looking at a diagram (ADR-0151).
+	UnresolvedIncidents int `json:"unresolvedIncidents"`
 }
 
 type createInstanceResp struct {

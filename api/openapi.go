@@ -93,9 +93,10 @@ func (s *Server) apiRoutes() []apiRoute {
 				"product": tString(), "version": tString(),
 			}))}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
-			summary: "Live active-instance counts", tag: "System",
+			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System",
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
 				"activeProcessInstances": tInteger(), "activeElementInstances": tInteger(),
+				"unresolvedIncidents": tInteger(),
 			}))}},
 		{"GET", "/api/v1/logs", s.handleLogs, apiOp{
 			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",

@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Operations nav counts what is stuck**
+  ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md) follow-up): the
+  **Incidents** entry carries a red count of the tokens parked behind an unresolved
+  incident, polled by the shell while Operations is open. Every other incident surface
+  says "this is stuck" only once you are already looking at it; this one finds you. It
+  reads a new `unresolvedIncidents` field on `GET /api/v1/stats`, counted from state
+  rather than from a maintained counter — an incident also leaves state *with* the
+  element instance it sits on (an instance cancel, an interrupting boundary), which no
+  resolution event announces, so a maintained number would drift while a count cannot.
+  Resolving from the incidents table updates the badge at once instead of waiting out
+  the poll.
+
 - **A mail task you can run before you own a mail server**
   ([ADR-0150](docs/adr/0150-preview-mail-provider-and-visible-incidents.md)): a mail
   connector can now use the **`preview`** provider, which asks for no submission host

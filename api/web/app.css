@@ -66,6 +66,14 @@ b { font-weight: 600; }
 }
 .topnav a:hover { color: var(--text); text-decoration: none; }
 .topnav a.active { color: var(--text); border-bottom-color: var(--accent); }
+/* Count on a nav entry — today the parked tokens on Operations › Incidents
+   (ADR-0151). Red and always legible, including on the muted inactive entry: an
+   operator should see it without first landing on the view it belongs to. */
+.topnav .nav-badge {
+  margin-left: 6px; min-width: 18px; padding: 0 6px; border-radius: 999px;
+  background: var(--danger); color: #fff;
+  font: 700 11px/18px system-ui, sans-serif; text-align: center;
+}
 .spacer { flex: 1; }
 .org { color: var(--muted); font-size: 13px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

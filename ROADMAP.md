@@ -477,7 +477,9 @@ Making processes wait, react, and time out.
   and the **replay**, the **Instances list** and the variable search say it too
   ([ADR-0151](docs/adr/0151-incidents-beyond-the-live-diagram.md)) — the replay keeping
   the stuck element outlined at every position of the playhead and flagging its history
-  row, the overview linking to the *version* that holds the incidents. `GET /incidents`
+  row, the overview linking to the *version* that holds the incidents, and the
+  **Operations nav** carrying a live count of the parked tokens so "something is stuck"
+  reaches an operator who has not opened anything. `GET /incidents`
   carries the diagram context that needs (`processDefKey`, `processId`, the BPMN
   `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new is
   written into the durable record.
