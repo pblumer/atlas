@@ -12,9 +12,9 @@ import {
 import { enhanceTable } from "./table.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
-  incidentConnectorChip, incidentConnectorAction,
+  incidentConnectorChip,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape } from "./connectordialog.js";
+import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -44,7 +44,15 @@ export async function apiRaw(method, path, body, isXML) {
   const text = await res.text();
   let data = text;
   try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
-  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  if (!res.ok) {
+    // The message is the readable half; the status and the decoded body ride along for
+    // the few callers that need to *act* on the failure rather than report it — a 409
+    // that names what is in the way, say (ADR-0163).
+    const err = new Error((data && data.error) || res.statusText);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
   return { data, headers: res.headers };
 }
 
@@ -973,7 +981,8 @@ async function viewConsoleOrg() {
       <td><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
-          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div></td>
+          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div>
+        ${connectorUsageHTML(c.usedBy)}</td>
       <td>${!c.enabled
         ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
         : c.problem
@@ -2501,8 +2510,10 @@ function wireConnectorManagement(connectors) {
           // and provider actually use, and it can check the result before saving.
           if (!(await editConnectorFlow({ api, toast, connector: c }))) return;
         } else if (btn.dataset.cact === "delete") {
-          if (!window.confirm(`Delete connector "${c.name}"?`)) return;
-          await api("DELETE", "/api/v1/connectors/" + encodeURIComponent(id));
+          // The server refuses a delete that would park deployed models' tasks
+          // (ADR-0163), so this asks only about what it can see and lets the refusal
+          // carry the rest — the confirm names the processes instead of a bare count.
+          if (!(await deleteConnectorFlow({ api, connector: c }))) return;
         }
         reload();
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
@@ -3517,6 +3528,24 @@ function overrideCell(r) {
 // current variables (re-raising if it still fails). The list shares the task list's
 // ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
 // order.
+// incidentMenu is the row's non-primary actions, behind the ⋯ menu every other table
+// in the console puts them behind. Resolving is the one action that belongs on the row;
+// correcting the data and reconfiguring the integration are the two ways to make that
+// resolve *work*, and they were three visible buttons until the third one pushed the
+// table past the width of its card (ADR-0163). Behind the menu, a fourth way out costs
+// no width at all.
+function incidentMenu(r, i) {
+  const items = [{ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } }];
+  if (r.connector && r.connectorId) {
+    items.push({ label: "Configure connector…", icon: "⚙", act: "fixconn", data: { row: i } });
+  } else if (r.connector) {
+    // Nothing to open — the model names a connector nobody configured, so the way out
+    // is the Console, where one is created.
+    items.push({ label: "Configure connector ↗", icon: "⚙", href: "#/console/org" });
+  }
+  return items;
+}
+
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
@@ -3571,9 +3600,9 @@ async function viewIncidents() {
           <td>${cause}</td>
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}${incidentConnectorChip(r)}</td>
-          <td style="text-align:right; white-space:nowrap"><button class="btn ghost sm" data-fix="${i}" title="Correct the instance's variables before retrying">✎ Variables…</button>
-            ${incidentConnectorAction(r, { cls: "btn ghost sm" })}
-            <button class="btn sm" data-resolve="${i}">Resolve…</button></td>
+          <td class="row-actions">
+            <button class="btn sm" data-resolve="${i}">Resolve…</button>
+            ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -3585,21 +3614,19 @@ async function viewIncidents() {
   // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
   // and the POST are the shared incident flow every surface uses (ADR-0151).
   tbody.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-resolve], button[data-fix], button[data-fix-conn]");
+    const btn = e.target.closest("button[data-resolve], .dropdown-menu button[data-act]");
     if (!btn) return;
-    // The connector button carries the incident's own key (it is rendered by the
-    // shared row helper, which knows nothing about this table's row indices); the
-    // other two carry the row index.
-    const incident = btn.dataset.fixConn
-      ? current.find((x) => String(x.elementInstanceKey) === btn.dataset.inc)
-      : current[Number(btn.dataset.resolve ?? btn.dataset.fix)];
+    // Both the row's primary button and its menu items carry the row index; the menu
+    // items say *which* action in data-act.
+    const incident = current[Number(btn.dataset.resolve ?? btn.dataset.row)];
     if (!incident) return;
     // Correcting the variables first is the other half of resolving: a retry alone
     // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
     // way, for when the message is about the integration and not the data (ADR-0160).
-    const changed = btn.dataset.fix !== undefined
+    const act = btn.dataset.act;
+    const changed = act === "fixvars"
       ? !!(await fixVariablesFlow({ api, toast, incident }))
-      : btn.dataset.fixConn
+      : act === "fixconn"
         ? !!(await fixConnectorFlow({ api, toast, incident }))
         : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {

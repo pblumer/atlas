@@ -9,6 +9,12 @@
 // a kind and a name, and the name is the binding every model references, ADR-0036/
 // 0041), and it keeps its inline form in the Console; what the two share is the shape
 // of a kind's fields, exported as connectorShape so the rules cannot drift apart.
+//
+// Deleting one lives here too (ADR-0163). It is not a dialog on the same record, but
+// it asks the same kind of question — what does this connector's configuration mean
+// for the models that resolve through it — and putting it here is what makes it
+// reachable from a test at all: app.js boots the whole console on import, so anything
+// left in it is only ever exercised by hand.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -204,4 +210,50 @@ function askConnector({ api, connector, intro, extraLabel }) {
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
     (c.kind === "mail" ? providerSel : endpointIn).focus();
   });
+}
+
+// connectorUsageHTML says what a connector is *for*, read off the deployed models
+// rather than remembered: the processes whose tasks resolve through it, and how many
+// instances are running on them. It is what makes Delete a decision rather than a
+// click (ADR-0163) — and it is the same list the server refuses the delete with, so
+// the row and the refusal cannot tell different stories.
+export function connectorUsageHTML(usedBy) {
+  if (!usedBy || !usedBy.length) {
+    return `<div class="muted conn-usage">Referenced by no deployed process</div>`;
+  }
+  const live = usedBy.reduce((n, u) => n + (u.activeInstances || 0), 0);
+  const links = usedBy.map((u) =>
+    `<a href="#/operations/p/${esc(String(u.processDefKey))}" title="${esc((u.elements || []).join(", "))}">${esc(u.name || u.processId)} v${esc(String(u.version))}</a>`).join(", ");
+  return `<div class="conn-usage">Used by ${links}${
+    live ? ` &middot; <b>${live}</b> running instance${live === 1 ? "" : "s"}` : ""}</div>`;
+}
+
+// deleteConnectorFlow asks, then deletes — and when the server refuses because deployed
+// models still reference the connector (ADR-0163), asks the *second* question with the
+// answer in hand: these processes, this many instances running, their tasks will park
+// with "no connector registered" until it exists again. Resolves true when the
+// connector was actually deleted, so the caller reloads only then.
+//
+// Two prompts rather than one pre-flight check: the usage shown on the row may be
+// stale by the time the button is pressed, and the server is the one that decides.
+export async function deleteConnectorFlow({ api, connector }) {
+  const c = connector || {};
+  if (!window.confirm(`Delete connector "${c.name}"?`)) return false;
+  const url = "/api/v1/connectors/" + encodeURIComponent(c.id);
+  try {
+    await api("DELETE", url);
+    return true;
+  } catch (err) {
+    const used = err && err.body && err.body.usedBy;
+    if (!used || !used.length) throw err;
+    const lines = used.map((u) => `  \u2022 ${u.name || u.processId} v${u.version}${
+      u.activeInstances ? ` (${u.activeInstances} running)` : ""} \u2014 ${(u.elements || []).join(", ")}`).join("\n");
+    if (!window.confirm(
+      `"${c.name}" is referenced by ${used.length} deployed process${used.length === 1 ? "" : "es"}:\n\n${lines}\n\n` +
+      `Deleting it parks those tasks with "no connector registered as ${c.name}" until a connector of the same name and kind exists again.\n\nDelete anyway?`)) {
+      return false;
+    }
+    await api("DELETE", url + "?force=true");
+    return true;
+  }
 }

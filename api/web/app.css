@@ -117,6 +117,16 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   box-shadow: var(--shadow); padding: 22px;
 }
 .card + .card { margin-top: 18px; }
+/* A data table lives in a card, and a card is a fixed-width box. A cell that cannot
+   wrap — an action column, a monospace identifier — makes the table's *min-content*
+   width larger than the card, and a table cannot be drawn narrower than that: it is
+   laid out past the card's right edge, so the header rule stops, the border stops, and
+   the buttons hang in the page beside it. Scroll it inside the card instead.
+   Deliberately a rule about every card that holds a table, not about the one table
+   that happened to overflow — the next column added to any of them would do this
+   again (ADR-0163). */
+.card:has(> table) { overflow-x: auto; }
+
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
@@ -322,6 +332,11 @@ textarea::placeholder {
 }
 .conn-enabled { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12.5px; }
 .conn-enabled input { width: auto; margin: 0; }
+/* Which deployed processes resolve through a connector, under its row (ADR-0163) —
+   the line that turns Delete from a click into a decision. */
+.conn-usage { font-size: 12px; margin-top: 3px; line-height: 1.5; }
+.conn-usage a { color: var(--accent); text-decoration: none; }
+.conn-usage a:hover { text-decoration: underline; }
 a.pill { text-decoration: none; font-weight: 600; }
 a.pill:hover { filter: brightness(0.94); }
 tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
@@ -855,6 +870,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .vp-incidents .vp-title { color: var(--danger); }
 .vp-incidents .inc-row + .inc-row { border-top: 1px solid rgba(0,0,0,0.09); margin-top: 8px; padding-top: 8px; }
 .vp-incidents .inc-where { font-size: 12px; }
+/* The incident row's actions, beside a diagram rather than in a table: the live view's
+   variables panel is user-resizable and the replay's Details tab is narrow, so three
+   buttons have to wrap onto a second line instead of pushing the panel wider than the
+   operator made it (ADR-0163). */
+.vp-incidents .inc-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .vp-incidents .inc-msg {
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere; margin: 3px 0 6px;
