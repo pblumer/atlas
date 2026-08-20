@@ -1,4 +1,4 @@
-# ADR-0161: Process instance migration
+# ADR-0162: Process instance migration
 
 - **Status:** Proposed
 - **Date:** 2026-08-20
@@ -59,7 +59,6 @@ rewrites all of them or leaves the instance inconsistent. Grouped by what they a
 | `cfSignalSubscription` | `ProcessDefKey`, `ElementId` (the signal name is in the key) |
 | `cfIncident` | `ElementId` |
 | `cfCompensable` | `ProcessDefKey`, `ElementId`, `HandlerNode` |
-| `cfJob` / `cfJobActivatable` | `JobType` — an interned index, per-process for a custom service-task type (the reserved connector/user-task indices are pinned globally and do not move) |
 | `cfElementTokenCount` | keyed `elTok:<defKey>:<elementId>` — the live-token counter behind the Operations overlay (ADR-0080) |
 | `cfDefInstanceCount` | keyed `defInst:<defKey>` — the active-instance counter |
 | `cfActiveStartKey` | keyed `activeStartKey:<defKey>:<corrKey>`, for a message-start instance (ADR-0094) |
@@ -69,6 +68,16 @@ rewrites all of them or leaves the instance inconsistent. Grouped by what they a
 `cfCanceling`. Variables, data objects, the parallel-join child counts, the boundary
 event's link to its host, token ids — all of it keys off *element instance keys*, which
 a migration does not change.
+
+`cfJob` and `cfJobActivatable` join that list, but only recently and for a different
+reason. A job carries its type as an integer, and until the engine-wide job-type table
+landed (`jobtype.Registry`, ADR-0007 step 1 / ADR-0157) that integer was interned *per
+compiled process*, so the same index meant different things in two definitions and a
+migration would have had to remap it. Now every deploy resolves its service tasks
+through one persistent table, so the same job-type **name** has the same index in both
+versions and the job needs no rewriting. What is left is not a rewrite but a check: if
+the mapped task's job-type *name* changed between versions, the job already on disk
+still carries the old name's index, and no worker for the new name will pick it up.
 
 **History — deliberately not rewritten:** `cfProcessInstanceHistory`, `cfElementStep`,
 `cfElementReplay`, `cfVariableSnapshot`, `cfDataObjectSnapshot`, `cfDecisionEvaluation`,
@@ -167,6 +176,11 @@ The command is rejected — nothing written, no partial state — when any of th
   follow-ups.
 - **A compensation handler does not map.** A compensable record names both the
   activity and its handler node (ADR-0103); both must land somewhere.
+- **A mapped service task's job type name changes** while a job for it already
+  exists. The job carries the engine-wide index of the *old* name, so after the
+  migration it sits on the activatable index under a type no worker for the new
+  version subscribes to — a token that looks live and is unreachable. Re-keying it is
+  a follow-up; refusing it is this record.
 - **The instance is not in a migratable state.** Terminated, completed, or currently
   being cancelled (`cfCanceling`, ADR-0108).
 - **The target is not a version of the same process id**, or is not deployed.
@@ -238,10 +252,12 @@ indices reach the log (I5: no model strings in the log).
   old version, migrate the rest, retire it. The instance keeps its variables, its
   history and its keys, so nothing downstream that references an element instance key
   breaks. The migration is on the record, with an actor and a reason.
-- **Negative / trade-offs accepted:** it is a genuinely large surface — eleven durable
+- **Negative / trade-offs accepted:** it is a genuinely large surface — ten durable
   families rewritten in one fold, and every one of them a place to be wrong; the
   validation rules are the feature, and they will refuse migrations an operator
-  believes should work. The event is variable-length in a way most engine events are
+  believes should work — and the surface moves as the engine does: the engine-wide
+  job-type table removed one family from it while this record was being written, and
+  the next structural change will move it again. The event is variable-length in a way most engine events are
   not (the mapping), so the record encoding needs a length-prefixed list and an
   explicit bound, and the value decoder needs a fuzz/round-trip test against a
   truncated or oversized list the way the other variable-length values have.
@@ -302,6 +318,10 @@ indices reach the log (I5: no model strings in the log).
   [ADR-0160](0160-fix-the-connector-from-the-incident.md), which fixed the *runtime
   configuration* layer of "adjust this service task and try again" and could not touch
   the model layer
+- narrowed by the engine-wide job-type table (`jobtype.Registry`, the ADR-0007 /
+  [ADR-0157](0157-worker-processes-supervision-and-console.md) prerequisite): with job
+  type indices resolved once per engine instead of interned per process, a job needs no
+  rewriting on migration — only a check that its type name did not change
 - reuses [ADR-0159](0159-manual-task-completion-audit.md)'s operator-action record —
   the seam it left for other interventions — for the migration's audit and for the
   position the replay switches definitions at

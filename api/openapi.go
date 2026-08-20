@@ -267,6 +267,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"POST", "/api/v1/jobs/activate", s.handleActivateJobsByType, apiOp{
+			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull (ADR-0007)", tag: "Incidents",
+			req: jsonBody("Job type, worker id, lease and batch size", schemaObj(map[string]any{
+				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(),
+			}, "type")),
+			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
 			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents",
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
@@ -274,9 +280,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job by hand (operator intervention; requires a reason, recorded for audit)", tag: "Incidents",
-			req: jsonBody("A required reason for the intervention plus optional completion variables", schemaObj(map[string]any{
-				"reason": tString(), "variables": tObject(),
+			summary: "Complete a job — as its lease-holding worker (\"worker\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
+			req: jsonBody("Either the holding worker id (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
+				"worker": tString(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{

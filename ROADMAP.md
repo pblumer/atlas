@@ -591,7 +591,7 @@ What it takes to run this for real.
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 **Instance migration**
-  ([ADR-0161](docs/adr/0161-process-instance-migration.md), designed): move running
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md), designed): move running
   instances from one deployed version to the next. A deployment is immutable and
   `applyToState` must replay identically live and on recovery (ADR-0019, I4/I6), so a
   model fix reaches instances that are already running only by cancelling and restarting

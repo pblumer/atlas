@@ -143,7 +143,7 @@ integration they are in the middle of moving.
   labelled with what it does, and it is the same switch the Console has always had.
 - **Follow-ups / risks to watch:** **instance migration** is the missing piece behind
   layer 3; it now has its record in
-  [ADR-0161](0161-process-instance-migration.md) — a durable per-instance event
+  [ADR-0162](0162-process-instance-migration.md) — a durable per-instance event
   carrying a frozen element mapping, validated so `applyToState` stays deterministic
   across it (I4). Until that is built, a model change reaches running instances only by
   cancelling and restarting them. `connectorShape` covers the five
@@ -188,4 +188,4 @@ integration they are in the middle of moving.
   provider and credential reference are operator-managed runtime state)
 - bounded by ADR-0019 and invariants I4/I6 (a deployment is immutable; `applyToState`
   runs identically live and on recovery), which is why the model side of the question
-  is answered by [ADR-0161](0161-process-instance-migration.md) and not here
+  is answered by [ADR-0162](0162-process-instance-migration.md) and not here

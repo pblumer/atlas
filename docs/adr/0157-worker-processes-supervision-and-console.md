@@ -4,6 +4,66 @@
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
+> **Implementation status (2026-08-20): step 1 partially delivered.** The
+> engine-wide job-type table exists (`jobtype.Registry`) and every deploy and
+> reload resolves its processes through it, so a job created from now on carries
+> an index that means the same thing in every definition. Three things are worth
+> recording precisely.
+>
+> **The collision surface was narrower than ADR-0007 implied.** Only a *service or
+> send task* carries a model-authored job type (`plain(st.TaskDefinition.Type, …)`
+> in `compiler/scope_compile.go` is the single path a `<zeebe:taskDefinition type>`
+> reaches the builder through); every other job-creating element — the connector
+> kinds, the script languages, DMN, temis, the user task — carries a reserved
+> constant that is already the same index everywhere. So the fix is one resolved
+> field on `ServiceTaskDetail`, not a change to every behavior.
+>
+> **The compiler does not know the registry.**
+> `CompiledProcess.ResolveJobTypes(intern)` takes the interner as an argument and
+> the registry supplies `Intern`, so the table can live outside the compiler; the
+> reserved half is seeded from `compiler.ReservedJobTypes()`, which is now the one
+> ordered list the builder itself reserves from, so the two cannot drift. An
+> unresolved process still reports its local index rather than 0 — 0 is the DMN
+> job type, and a silent zero value would hand every unresolved service task to
+> the DMN worker.
+>
+> **The jobs written before the table are a declared discontinuity, not a
+> migration.** ADR-0007's amendment asked for "a migration for jobs already
+> written with per-process indices". Making one durable would mean a new event
+> and an `applyToState` arm — state is a fold of the log, so a direct rewrite of
+> the index would simply be rebuilt from the original `JobCreated` on the next
+> replay. Against that: this repository already states the posture for exactly
+> this situation — `checkpoint/manifest.go` records that **pre-1.0 there is no
+> in-place migration**, and "1.0 API stability commitment" is still unchecked on
+> the roadmap. So the pre-upgrade jobs of a model-authored type are simply not
+> visible to the type-keyed pull. They remain listed, leasable by key, and
+> completable, and the set drains as those instances finish. If a compatibility
+> commitment lands before this does, the migration event is the alternative and
+> this note is where to start.
+>
+> **Step 2, first half: the type-keyed pull is delivered.** `POST
+> /api/v1/jobs/activate` leases the next jobs of a *named* type — the endpoint
+> ADR-0007 designed and its amendment deferred for want of the table above. It
+> answers with everything a worker needs in one call, including the variables
+> visible **at the task** (the element instance's scope chain, so an
+> activity-local input mapping shadows the instance value exactly as it does for
+> an in-process worker) rather than making the worker fetch them separately and
+> race a concurrent write.
+>
+> Two job types are refused rather than served, and both refusals are the
+> decision above made mechanical. A type an **in-process worker** is registered
+> for returns 409: that runner does not lease, it dispatches whatever is
+> activatable, so handing the same job to an external worker is precisely how it
+> gets done twice — which makes "unregister the handler" the operative meaning of
+> relocating a kind, as this ADR says. And a **user task** returns 409 because it
+> is not worker work. An unknown type name is a 404 rather than an empty list: a
+> typo that polls forever with nothing to debug is the worse failure.
+>
+> **Still owed in step 2: long-poll.** The pull is a poll today; the post-fsync
+> notification it should wait on already exists (ADR-0005). It is deliberately
+> separate because a long-poll must wait *outside* `Loop.Do` — a request holding
+> the run loop while it waits is the very stall this whole sequence is about.
+
 ## Context and problem statement
 
 [ADR-0156](0156-in-process-vs-out-of-process-service-tasks.md) established what the
