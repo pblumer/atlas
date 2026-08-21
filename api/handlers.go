@@ -3497,6 +3497,10 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.failed(worker, name)
 			}
+			// The worker's own message, on the row for this job. Without it a
+			// failure that still has retries left says nothing anywhere: no
+			// incident is raised until they run out.
+			s.workers.recordOutcome(worker, key, jobRunFailed, req.Message, req.Retries, nil)
 		}
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
@@ -3618,6 +3622,8 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.completed(worker, name)
 			}
+			// What the worker actually sent back, on the row its lease opened.
+			s.workers.recordOutcome(worker, key, jobRunCompleted, "", jv.Retries, vars)
 		} else {
 			s.proc.CompleteJobManually(key, actor, reason, vars...)
 		}
@@ -4355,6 +4361,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				jobs = append(jobs, j)
 			}
 			s.workers.leased(body.Worker, body.Type, len(jobs))
+			// The variables as they stood at lease time are the half an operator
+			// cannot reconstruct later: the instance moves on, and this is what the
+			// worker was actually given.
+			s.workers.recordLease(body.Worker, jobs)
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its connectors, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
