@@ -5207,7 +5207,7 @@ async function viewDmnViewer(refId) {
       <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· DMN view</span></h1>
       <div class="row">${editBtn}</div>
     </div>
-    <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;padding:8px">${renderDrgSvg(g)}</div>
+    <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
     <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
   wireEdit();
 }
