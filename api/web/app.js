@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { copyText } from "./clipboard.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
   incidentConnectorChip,
@@ -864,6 +865,7 @@ async function viewConsoleLogs() {
         <h1>Server logs</h1>
         <div class="row" style="gap:12px; align-items:center">
           <label class="field inline" style="margin:0"><input type="checkbox" id="log-follow" checked> Auto-refresh</label>
+          <button class="btn neutral" id="log-copy" title="Copy the whole visible log to the clipboard">Copy</button>
           <button class="btn neutral" id="log-refresh" title="Reload the latest log lines now">Refresh</button>
         </div>
       </div>
@@ -890,6 +892,23 @@ async function viewConsoleLogs() {
   // now writes into a detached node, and don't overwrite the new view's cleanup.
   if (superseded(gen)) return;
   document.getElementById("log-refresh").addEventListener("click", load);
+  // Copying beats selecting here: the tail repaints every two seconds, so a
+  // hand-made selection is gone before it can be dragged to the end. The whole
+  // visible tail goes at once, which is also what someone pasting into an issue or
+  // a chat actually wants.
+  document.getElementById("log-copy").addEventListener("click", async () => {
+    const text = out.textContent || "";
+    if (!text.trim()) {
+      toast("Nothing to copy yet", "err");
+      return;
+    }
+    const lines = text.split("\n").length;
+    if (await copyText(text)) {
+      toast(`Copied ${lines} log line${lines === 1 ? "" : "s"}`);
+    } else {
+      toast("Could not copy \u2014 select the text and copy it by hand", "err");
+    }
+  });
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
 }
