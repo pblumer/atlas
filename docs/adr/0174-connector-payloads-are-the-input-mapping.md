@@ -1,4 +1,4 @@
-# ADR-DRAFT: A connector task's input mappings are its outbound payload
+# ADR-0174: A connector task's input mappings are its outbound payload
 
 - **Status:** Proposed
 - **Date:** 2026-08-21

@@ -134,7 +134,7 @@ func (r failingReader) GetElementInstance(key uint64) (*model.ElementInstanceVal
 // TestVisibleVariablesMapAndLocals covers the two map-shaped reads every connector
 // worker uses: the scope-chain one a worker binds FEEL against (nearest scope wins),
 // and the single-scope one an outbound body uses when its task maps its inputs
-// (ADR-draft-connector-payloads-are-the-input-mapping) — which must inherit nothing.
+// (ADR-0174) — which must inherit nothing.
 func TestVisibleVariablesMapAndLocals(t *testing.T) {
 	root := model.NewKey(1, 1)
 	leaf := model.NewKey(1, 20)

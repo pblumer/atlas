@@ -175,7 +175,7 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 // the body is exactly its activity-local scope, which at this point holds the mapped
 // values and nothing else (a job's result is written there only on completion). That
 // is the "payload mapping" ADR-0036 planned, expressed with the ADR-0068 mappings
-// that arrived later (ADR-draft-connector-payloads-are-the-input-mapping) — a model
+// that arrived later (ADR-0174) — a model
 // states what leaves it rather than spilling every process variable, including
 // scratch and internal ones, into an external event store.
 //

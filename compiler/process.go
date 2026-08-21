@@ -428,7 +428,7 @@ type UserTaskDetail struct {
 //     server-registered clio instance; Subject and EventType are the interned clio
 //     coordinates the appended event lands under. The event body is what the task's
 //     zeebe:ioMapping inputs map, or — for a task with none — every variable it sees
-//     (ADR-draft-connector-payloads-are-the-input-mapping).
+//     (ADR-0174).
 //   - clio "query" (JobType == ClioQueryJobType): Connector names the clio
 //     instance; the task reads projected state or runs a stored query and writes
 //     the result into ResultVar. Either ClioQuery (a run_query query string) is set
@@ -460,7 +460,7 @@ type UserTaskDetail struct {
 // when unset. No kind carries its body in the detail: where a payload is a variable
 // scope — the clio event body, the REST request body, the SCIM body with no body
 // variable named — it is the task's zeebe:ioMapping inputs, or everything the task
-// sees when it maps none (ADR-draft-connector-payloads-are-the-input-mapping).
+// sees when it maps none (ADR-0174).
 type ConnectorTaskDetail struct {
 	JobType    int32 // interned reserved connector job type → index
 	Connector  int32 // interned connector name → index, -1 if not a clio task

@@ -210,6 +210,7 @@ comment safe to write.
 | [0171](0171-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Proposed |
 | [0172](0172-entra-id-connector.md) | A Microsoft Entra ID connector | Proposed |
 | [0173](0173-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Proposed |
+| [0174](0174-connector-payloads-are-the-input-mapping.md) | A connector task's input mappings are its outbound payload | Proposed |
 
 ## Status values
 

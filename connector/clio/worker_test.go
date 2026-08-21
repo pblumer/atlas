@@ -648,7 +648,7 @@ func driveClio(t *testing.T, cp *compiler.CompiledProcess, jobType int32, vars .
 // TestWriteEventBodyIsTheInputMappings proves a write-events task's zeebe:ioMapping
 // inputs *are* the event body: the mapped locals are sent, and the process variables
 // they were computed from are not — the model says exactly what leaves the process
-// (ADR-draft-connector-payloads-are-the-input-mapping). Before this, the worker read
+// (ADR-0174). Before this, the worker read
 // the process-instance scope only, so a task whose payload came from input mappings
 // wrote an empty body.
 func TestWriteEventBodyIsTheInputMappings(t *testing.T) {

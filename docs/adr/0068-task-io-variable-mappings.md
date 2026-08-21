@@ -20,7 +20,7 @@
 > own task's input mappings. Where a connector's payload *is* a variable scope (the
 > clio event body, the REST request body, the SCIM body with no body variable named),
 > a task's input mappings are that payload
-> (ADR-draft-connector-payloads-are-the-input-mapping).
+> (ADR-0174).
 
 ## Context and problem statement
 

@@ -696,7 +696,7 @@ func TestRestConnectorOAuth2SecretMissing(t *testing.T) {
 // inputs *are* its request body, and that its FEEL fields see those mapped locals:
 // the url interpolates one, the body is exactly the two mapped values, and the
 // process variable they were computed from does not travel
-// (ADR-draft-connector-payloads-are-the-input-mapping). Before this the worker read
+// (ADR-0174). Before this the worker read
 // the process-instance scope flat, so the mapped locals were invisible to both.
 func TestRestConnectorBodyIsTheInputMappings(t *testing.T) {
 	log, store := openStore(t)

@@ -83,7 +83,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		bodyVars := scopeVars
 		if len(cp.IOInputs(ei.ElementId)) > 0 {
 			// The mappings are the body: exactly the activity-local scope they wrote,
-			// inheriting nothing (ADR-draft-connector-payloads-are-the-input-mapping).
+			// inheriting nothing (ADR-0174).
 			if bodyVars, err = state.LocalVariablesMap(store, elementInstanceKey); err != nil {
 				return Job{}, fmt.Errorf("rest: read mapped inputs for element %d: %w", elementInstanceKey, err)
 			}

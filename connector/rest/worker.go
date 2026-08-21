@@ -34,7 +34,7 @@ type SecretResolver func(ref string) string
 // url/header/query values over the variables the task sees, up its scope chain (the
 // fx toggle, ADR-0067/0068), and sending as the JSON request body, for methods that
 // carry one, what the task's input mappings map — or, with none, every variable it
-// sees (ADR-draft-connector-payloads-are-the-input-mapping) — keyed by the job key so
+// sees (ADR-0174) — keyed by the job key so
 // an at-least-once retry de-duplicates. Authentication
 // (basic/bearer/apiKey) is resolved through secret, which turns the model's secret
 // *reference* into the credential at call time (ADR-0041); the token never lives in
@@ -281,7 +281,7 @@ func methodHasBody(method string) bool {
 // body a connector task sends. Which variables those are is [Resolve]'s decision:
 // the task's input mappings when it has them, else everything it sees — the same
 // rule the clio connector's event body follows
-// (ADR-draft-connector-payloads-are-the-input-mapping).
+// (ADR-0174).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))
 	for name, v := range scopeVars {

@@ -45,7 +45,7 @@
 > resolved up its scope chain (ADR-0068). The same rule now governs the REST request
 > body this record introduced, and every connector worker resolves its variables up
 > the chain. See
-> [ADR-draft-connector-payloads-are-the-input-mapping](draft-connector-payloads-are-the-input-mapping.md);
+> [ADR-0174](0174-connector-payloads-are-the-input-mapping.md);
 > the interim "the whole variable scope is the payload" is retired for all of them.
 
 ## Context and problem statement

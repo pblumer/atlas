@@ -93,7 +93,7 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 			if cp.Intern(detail.ScimBody) == "" && len(cp.IOInputs(ei.ElementId)) > 0 {
 				// No body variable named, but the task maps its inputs: those mappings
 				// are the body — exactly the activity-local scope they wrote, inheriting
-				// nothing (ADR-draft-connector-payloads-are-the-input-mapping).
+				// nothing (ADR-0174).
 				if bodyVars, err = state.LocalVariablesMap(store, j.ElementInstanceKey); err != nil {
 					return nil, fmt.Errorf("scim: read mapped inputs for element %d: %w", j.ElementInstanceKey, err)
 				}
@@ -167,7 +167,7 @@ func resourceURL(op, baseURL, resource, id string) (string, error) {
 // is sent verbatim; otherwise the variables handed in are the payload — the task's
 // input mappings when it has them, else everything it sees, mirroring the REST
 // connector's body rule (ADR-0067/0152,
-// ADR-draft-connector-payloads-are-the-input-mapping).
+// ADR-0174).
 func requestBody(bodyVar string, scopeVars map[string]model.VariableValue) (map[string]any, error) {
 	if bodyVar == "" {
 		return bodyFromVars(scopeVars), nil
@@ -325,7 +325,7 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 // body a SCIM task sends when it names no body variable. Which variables those are is
 // the handler's decision: the task's input mappings when it has them, else everything
 // it sees — the same rule the REST connector's body follows (ADR-0067/0152,
-// ADR-draft-connector-payloads-are-the-input-mapping).
+// ADR-0174).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))
 	for name, v := range scopeVars {

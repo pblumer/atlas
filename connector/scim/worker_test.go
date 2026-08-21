@@ -442,7 +442,7 @@ func TestScimRecoversAcrossRestart(t *testing.T) {
 // TestScimBodyIsTheInputMappings proves a SCIM task's zeebe:ioMapping inputs *are*
 // its request body when it names no body variable: the mapped values are sent and the
 // process variables they came from are not
-// (ADR-draft-connector-payloads-are-the-input-mapping).
+// (ADR-0174).
 func TestScimBodyIsTheInputMappings(t *testing.T) {
 	log, store := openStore(t)
 	compile := func(src string) *expr.Compiled {

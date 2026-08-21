@@ -266,7 +266,7 @@ _Changed_ / _Removed_ for each version.
   is unchanged and still sends everything it sees, so existing models keep working; a
   mapped clio/REST/SCIM task's payload does change, from "everything" (or, for clio,
   nothing) to "what you mapped". See
-  [ADR-draft-connector-payloads-are-the-input-mapping](docs/adr/draft-connector-payloads-are-the-input-mapping.md);
+  [ADR-0174](docs/adr/0174-connector-payloads-are-the-input-mapping.md);
   the Event type, Method and Payload variable fields in the Modeler say which rule
   applies.
 

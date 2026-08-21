@@ -9,7 +9,7 @@
 > request body (a named body variable still wins), and every FEEL field — and the body
 > variable itself — now resolves up the task's scope chain, so an input mapping can
 > build the SCIM resource. See
-> [ADR-draft-connector-payloads-are-the-input-mapping](draft-connector-payloads-are-the-input-mapping.md).
+> [ADR-0174](0174-connector-payloads-are-the-input-mapping.md).
 
 ## Context and problem statement
 

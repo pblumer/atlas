@@ -121,7 +121,7 @@ func VisibleVariablesMap(r Reader, elementInstanceKey uint64) (map[string]model.
 // mappings: at activation the activity-local scope holds exactly what those mappings
 // wrote (a job's result is written there only on completion), so the model states
 // what leaves the process rather than spilling every variable it can see
-// (ADR-draft-connector-payloads-are-the-input-mapping).
+// (ADR-0174).
 func LocalVariablesMap(r Reader, scope uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
 	if err := r.VariablesOfScope(scope, func(v *model.VariableValue) error {
