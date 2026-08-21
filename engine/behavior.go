@@ -428,7 +428,17 @@ func handleElementCompleting(c *ProcessingContext) {
 		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity {
 			applyOutputMappings(c, c.cmd.Key, ei)
 		}
-		dropLocalScope(c, c.cmd.Key)
+		// A loop's element instances drop their own scope further down this same
+		// command, and it must not happen before the loop has read it: an iteration's
+		// scope carries the engine's loopCounter (and its bound item), which
+		// finishMultiInstanceIteration reads to know which run just finished — drop it
+		// here and every run looks like the first, so a sequential loop repeats one
+		// item forever and a standard loop never reaches its loopMaximum. The body's
+		// scope carries what the loop produced, which promoteMultiInstanceOutput lifts
+		// into the enclosing scope (ADR-0068 with ADR-0077/ADR-0133).
+		if ei.MultiInstance == miNone {
+			dropLocalScope(c, c.cmd.Key)
+		}
 	}
 	// An inner multi-instance iteration does not take the node's outgoing flow (the
 	// body owns it): it completes, decrementing the body's active-child counter, and

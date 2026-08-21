@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A looping activity that also has an I/O mapping no longer loops forever**
+  (ADR-0068 with ADR-0077/ADR-0133). A `zeebe:ioMapping` gives an activity a local
+  scope, dropped when it completes — and that is the same scope the engine binds a
+  loop's own `loopCounter` (and a multi-instance iteration's `item`) into. The drop
+  ran first, so the loop then looked for a counter that was no longer there and every
+  run read as the first one: a standard loop never reached its `loopMaximum` — a model
+  that said "at most 9" ran until someone terminated it, each run reporting
+  `loopCounter` 2 — and a sequential multi-instance re-ran its second element forever
+  instead of walking the collection. The same early drop emptied a loop *body*'s scope
+  before it was promoted, so the output collection an ∥/≡ activity had assembled, and
+  everything a ↻ activity's runs wrote — which is a standard loop's whole result —
+  were dropped instead of escaping into the process. The loop's element instances now
+  drop their scope where they always did, after the loop has read what it keeps there.
+  An activity without a loop marker is unchanged.
+
 ## [0.3.0] — 2026-08-21
 
 This release moves the work that can be slow out of the engine. `atlas worker` makes
