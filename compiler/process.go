@@ -647,6 +647,22 @@ type ConnectorTaskDetail struct {
 	SqlStatement int32
 	SqlParamsVar int32
 	SqlMaxRows   int32
+	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0171).
+	// Connector (above) names the tenant the *worker* is configured for; a task
+	// carries no tenant id and no client secret, because they never enter the engine.
+	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
+	// "update-user"|"delete-user"|"enable"|"disable"|"add-group-member"|
+	// "remove-group-member"). EntraUserID and EntraGroupID are literal-or-FEEL values
+	// addressing the user (a UPN or object id) and the group. EntraAttributesVar is
+	// the interned name of the process variable holding the directory properties for
+	// create-user and update-user; ResultVar (above) receives what Graph returned.
+	//
+	// Each is the zero value for a non-Entra task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	EntraOp            int32
+	EntraUserID        RestExpr
+	EntraGroupID       RestExpr
+	EntraAttributesVar int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

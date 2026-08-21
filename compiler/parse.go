@@ -1817,6 +1817,10 @@ type xmlServiceTask struct {
 	MsSql    *xmlSqlConnector `xml:"extensionElements>mssqlConnector"`
 	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
 	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
+	// Entra, when present, marks this service task a Microsoft Entra ID connector
+	// task (ADR-0171): one directory lifecycle operation through Graph, against a
+	// tenant a *worker* holds the app credential for.
+	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1984,6 +1988,25 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlEntraConnector is the <atlas:entraConnector> extension on a service task
+// (ADR-0171). connector names the tenant the worker holds the app credential for —
+// there is deliberately no tenantId, clientId or secret attribute, because none of
+// them enters the engine. operation is the lifecycle step; userId and groupId address
+// the objects (literal-or-FEEL); attributesVariable names the variable holding the
+// directory properties for create-user and update-user; resultVariable receives what
+// Graph returned.
+type xmlEntraConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	UserID             string `xml:"userId,attr"`
+	GroupID            string `xml:"groupId,attr"`
+	AttributesVariable string `xml:"attributesVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

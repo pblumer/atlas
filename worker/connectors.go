@@ -60,6 +60,15 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
 			})
+		case "entra":
+			reg, names, err := entraRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunEntraJob(ctx, j, reg)
+			})
 		default:
 			// The three SQL products (ADR-0170). Unlike every kind above them they
 			// have no in-process counterpart to fall back to, so a worker is the only

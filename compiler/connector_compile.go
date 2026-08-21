@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -110,6 +111,87 @@ var connectorCompilers = []connectorCompiler{
 			return compileSqlConnectorTask(b, st, retries, sqlProducts[PostgresJobType])
 		},
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Entra != nil },
+		retries: func(st xmlServiceTask) string { return st.Entra.Retries },
+		compile: compileEntraConnectorTask,
+	},
+}
+
+// entraOp describes what one Entra lifecycle operation requires of a model. The
+// table is the compiler's half of connector/entra's Ops table; the drift test
+// TestEntraOpsMatchTheConnector keeps the two from disagreeing about the operation
+// set, which is the failure this shape exists to prevent.
+type entraOp struct {
+	needsUser       bool
+	needsGroup      bool
+	needsAttributes bool
+}
+
+var entraOps = map[string]entraOp{
+	"create-user":         {needsAttributes: true},
+	"get-user":            {needsUser: true},
+	"update-user":         {needsUser: true, needsAttributes: true},
+	"delete-user":         {needsUser: true},
+	"enable":              {needsUser: true},
+	"disable":             {needsUser: true},
+	"add-group-member":    {needsUser: true, needsGroup: true},
+	"remove-group-member": {needsUser: true, needsGroup: true},
+}
+
+// entraOpNames lists the operations, sorted, for the error messages.
+func entraOpNames() []string {
+	out := make([]string, 0, len(entraOps))
+	for n := range entraOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileEntraConnectorTask compiles an <atlas:entraConnector> task: one Microsoft
+// Entra ID lifecycle operation through Graph (ADR-0171). The model names a tenant
+// connector and the operation; the tenant id, client id and client secret live on the
+// worker, so there is nothing here to validate about a credential.
+func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Entra
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q needs a connector (the name the worker holds the tenant credential under)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q needs an operation (%s)", st.Id, strings.Join(entraOpNames(), ", "))
+	}
+	spec, ok := entraOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: entra connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(entraOpNames(), ", "))
+	}
+	if spec.needsUser && strings.TrimSpace(cn.UserID) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a userId (a user principal name or object id)", st.Id, op)
+	}
+	if spec.needsGroup && strings.TrimSpace(cn.GroupID) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a groupId", st.Id, op)
+	}
+	if spec.needsAttributes && strings.TrimSpace(cn.AttributesVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs an attributesVariable naming the directory properties", st.Id, op)
+	}
+	userID, err := connectorValue(st.Id, "entra connector", "userId", cn.UserID)
+	if err != nil {
+		return 0, err
+	}
+	groupID, err := connectorValue(st.Id, "entra connector", "groupId", cn.GroupID)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddEntraConnectorTask(EntraConfig{
+		Connector:     strings.TrimSpace(cn.Connector),
+		Op:            op,
+		UserID:        userID,
+		GroupID:       groupID,
+		AttributesVar: strings.TrimSpace(cn.AttributesVariable),
+		ResultVar:     strings.TrimSpace(cn.ResultVariable),
+		Retries:       retries,
+	}), nil
 }
 
 // sqlProduct is one of the three SQL connector products: how a task of it is named

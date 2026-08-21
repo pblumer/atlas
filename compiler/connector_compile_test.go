@@ -32,6 +32,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{MsSql: &xmlSqlConnector{}},
 		{MariaDB: &xmlSqlConnector{}},
 		{Postgres: &xmlSqlConnector{}},
+		{Entra: &xmlEntraConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))

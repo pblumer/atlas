@@ -1,0 +1,171 @@
+# ADR-0171: A Microsoft Entra ID connector
+
+- **Status:** Proposed
+- **Date:** 2026-08-21
+- **Deciders:** Atlas maintainers
+
+## Context and problem statement
+
+[`docs/comparisons/mim.md`](../comparisons/mim.md) names the Microsoft Graph
+connector as the second-largest gap against Microsoft Identity Manager, and the row
+carries more weight than one line suggests. MIM's own *Microsoft Azure Active
+Directory* management agent is out of support, and Microsoft's answer is the Graph
+connector — so for any organization whose directory has moved to the cloud, Graph is
+not one MIM row among many, it is *the* directory.
+
+Atlas already speaks Graph twice: the mail connector sends through it (ADR-0093) and
+the SharePoint connector creates list items with it (ADR-0141). Neither exposes the
+directory. Nothing in Atlas can create, disable, or delete a cloud account.
+
+So: how should a BPMN process provision an identity in Entra ID?
+
+## Decision drivers
+
+- **Cover the joiner/mover/leaver lifecycle** an identity process actually performs.
+- **The AD connector's argument applies again.** [ADR-0166](0166-active-directory-connector.md)
+  rejected "just use the generic LDAP connector" because AD's primitives are
+  encodings a modeler should not hand-author. Entra's are the same shape.
+- **[ADR-0164](0164-no-in-process-service-tasks.md) decides where it runs.** New
+  connector kinds are built worker-first; [ADR-0170](0170-generic-sql-connector.md)
+  took that to its conclusion for the first time.
+- **Don't write the OAuth2 token flow a third time.**
+- **Testable without a tenant.**
+
+## Considered options
+
+1. **Use the generic REST connector.** Graph is HTTP and JSON, and ADR-0152 gave REST
+   an OAuth2 client-credentials grant, so a process could author the URLs itself.
+2. **Extend the SharePoint connector**, which already holds a Graph client and a
+   tenant credential, with directory operations.
+3. **A dedicated Entra connector** with lifecycle-named operations, worker-only.
+
+## Decision outcome
+
+Chosen option: **a dedicated Entra connector** (option 3).
+
+Option 1 is the one worth answering carefully, because it is not obviously wrong:
+everything this connector does *is* a REST call, and Atlas can already make an
+authenticated one. What a REST task cannot do is say what the call means. In Graph,
+disabling an account is `PATCH /users/{id}` with `{"accountEnabled": false}`, and
+removing a group member is `DELETE /groups/{id}/members/{userId}/$ref` — a URL whose
+`$ref` suffix is easy to get wrong and whose failure mode is a 404 that looks like a
+missing user. Adding a member is worse: a `POST` to a `$ref` collection whose *body*
+carries an absolute `@odata.id` URL that has to name the right cloud.
+
+Those are encodings, not business decisions, and a modeler should pick "Disable
+account". This is exactly the argument ADR-0166 made for AD over generic LDAP, and it
+lands the same way here. The generic REST connector remains right for the Graph calls
+this connector does not cover.
+
+Option 2 is rejected because "the SharePoint connector" would stop being about
+SharePoint. The two share a transport, not a purpose, and the shared part is already
+factored out (see below).
+
+### Worker-only, and why it matters more here
+
+Like the SQL connectors (ADR-0170) and unlike everything built before them, this kind
+has **no in-process handler**. Reserved job type `io.atlas.entra` at index 23; the
+engine resolves the task (`entra.Resolve`) and a worker performs it (`entra.Run`)
+with a tenant credential from its own environment — `ATLAS_ENTRA_CONNECTORS` names
+them, each contributing `ATLAS_ENTRA_<NAME>_TENANT_ID`, `_CLIENT_ID` and
+`_CLIENT_SECRET`, plus an optional `_BASE_URL` for a national cloud.
+
+The general argument is [ADR-0168](0168-connector-work-on-a-worker.md)'s. The specific
+one is that an app registration with `User.ReadWrite.All` and `Group.ReadWrite.All`
+can create and disable accounts across an entire directory. That is plausibly the
+most valuable secret an Atlas installation touches, and there is no reason for the
+engine to be able to read it. `entra.Job` has nowhere to put one.
+
+Only the client-credentials grant is offered. Mail and SharePoint support a
+refresh-token grant because a person's mailbox is a legitimate thing to act as;
+unattended directory provisioning is not, and offering a delegated grant here would
+mostly be a way to build something that stops working when someone leaves.
+
+### The operation set
+
+`create-user`, `get-user`, `update-user`, `delete-user`, `enable`, `disable`,
+`add-group-member`, `remove-group-member` — a full joiner/mover/leaver lifecycle,
+and deliberately more than the AD connector covers today (AD has no read, update, or
+delete; that is recorded as a gap in the MIM comparison).
+
+The rules live in a table — which operation needs a user, a group, an attributes
+object — because they are needed in two places. The compiler validates a model at
+deploy, and the worker re-checks a job it was handed, so an under-specified task
+fails with a named missing field instead of a Graph 404. The compiler cannot import
+the connector (the dependency runs the other way), so the table exists twice and
+`TestEntraOpsMatchTheConnector` is a behavioural drift guard between them: for every
+operation, a model supplying exactly what the connector requires must compile, and
+one missing any required field must not.
+
+A password is set through `create-user`/`update-user`'s attributes variable
+(Graph's `passwordProfile`), so it reaches Graph as a process value and never appears
+in the model — the same shape the AD connector uses for `newPassword`.
+
+### The OAuth2 token flow, lifted
+
+This would have been the third copy of the same hundred lines: an expiry-aware cache,
+the form-grant exchange, and the client-credentials and refresh-token grants, written
+for mail (ADR-0093) and copied for SharePoint (ADR-0141). `connector/oauth2` now holds
+the mechanism, and the three connectors hold their own policy — which grants they
+accept, what their credential bundle looks like, what their endpoint defaults are.
+The mail connector's Google service-account grant stays with mail, implementing the
+shared `Fetcher` interface, because it is Google-specific and nobody else wants it.
+
+Both existing suites pass unchanged against the lifted code, which is the evidence the
+move did not alter behaviour.
+
+### Consequences
+
+- **Positive:** the Graph/Entra row closes, and with it the practical successor to
+  MIM's retired Azure AD agent. A cloud joiner/mover/leaver process is modelable
+  without hand-authored URLs. The engine holds no credential that can disable
+  accounts. And one token flow exists where there were two and nearly three.
+- **Negative / trade-offs accepted:**
+  - **A second worker-only kind, and the same cost.** `atlas serve --supervise` keeps
+    it to one flag, but a modeler can author a task the default single-process install
+    will not execute.
+  - Connector configuration for this kind is not in the Console (ADR-0168 accepted
+    this cost); the Workers view showing which names are served is what recovers it.
+  - **The operation set is a subset of Graph and always will be.** Licences,
+    administrative units, directory roles, and application role assignments are not
+    covered; a process needing one uses the REST connector. Growing the table is
+    cheap, growing it without a use case is not.
+  - **The rules live in two tables.** The dependency direction forbids sharing them,
+    so a drift test stands in for a compiler check. It is a real seam, and it is
+    guarded rather than pretended away.
+  - At-least-once delivery means a replayed `create-user` can attempt a duplicate.
+    Graph rejects a duplicate `userPrincipalName`, so the failure is safe and visible
+    rather than silent — but it is a failed job, not an idempotent retry.
+
+## Pros and cons of the options
+
+### Option 1 — the generic REST connector
+- Good: exists today; covers all of Graph, not a subset.
+- Bad: the model carries Graph's URL and body encodings, including a `$ref` body with
+  an absolute `@odata.id`; nothing checks them until a token hits a 404.
+
+### Option 2 — extend the SharePoint connector
+- Good: reuses a Graph client and a tenant credential that already exist.
+- Bad: a SharePoint connector that provisions accounts is no longer about SharePoint;
+  the two share a transport, not a purpose.
+
+### Option 3 — a dedicated Entra connector (chosen)
+- Good: lifecycle-named operations; validated at deploy; the credential lives where
+  it is used.
+- Bad: a subset of Graph; a second place that knows the operation rules.
+
+## Relationship to other records
+
+- repeats [ADR-0166](0166-active-directory-connector.md)'s argument — a vendor's
+  primitives deserve named operations — for the cloud directory
+- follows [ADR-0164](0164-no-in-process-service-tasks.md) and
+  [ADR-0170](0170-generic-sql-connector.md): built worker-first, with no in-process half
+- uses [ADR-0168](0168-connector-work-on-a-worker.md)'s resolved-detail-on-the-job
+  mechanism and its environment-held worker credentials
+- factors out the token flow shared with [ADR-0093](0093-native-mail-providers.md)
+  and [ADR-0141](0141-sharepoint-connector.md)
+- bounds its calls with [ADR-0149](0149-bounded-connector-call-budget.md)'s budget
+- honors [ADR-0041](0041-connector-management-and-secret-store.md)'s promise that a
+  model never carries a secret — here by keeping the credential out of the engine
+- rides the connector seam of [ADR-0007](0007-job-worker-protocol.md)/[ADR-0067](0067-service-task-connector-catalog.md)
+- answers the second gap named in [`docs/comparisons/mim.md`](../comparisons/mim.md)

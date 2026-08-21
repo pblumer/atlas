@@ -59,6 +59,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 | MIM connector | Atlas | Status |
 |---|---|---|
 | Active Directory Domain Services | `ad` (ADR-0166) | **Partial** — create-user, set-password, enable/disable, add/remove-group-member. No search (delegated to `ldap`), no attribute modify, move/rename, delete, or group creation. Simple bind over TLS only; no Kerberos/NTLM, no DirSync. |
+| *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0171) | **Implemented** — the on-premises connector's gaps (read, update, delete) are covered on the cloud side; closing them for `ad` is Wave 1 item 3 below. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
 | Active Directory Global Address List (GAL) | — | **Missing** — cross-forest GALSync (contact provisioning + mail-attribute stitching). |
 | Generic LDAP Connector | `ldap` (ADR-0154) | **Partial** — search / add / modify / delete / modify-password. No paged results, no delta/sync cookie, modify is whole-attribute replace, no connection pooling, no mTLS bind. |
@@ -84,8 +85,8 @@ on a worker, so a database credential never enters the engine (ADR-0164/0170).
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Microsoft Graph Connector | — | **Missing** as a connector kind. Graph is used *internally* by `mail` (ADR-0093) and `sharepoint` (ADR-0141), including an OAuth2 client-credentials path, but no kind exposes Graph/Entra ID objects to a model. |
-| Microsoft Azure Active Directory Connector | — | Out of support in MIM itself; superseded by Graph. |
+| Microsoft Graph Connector | `entra` (ADR-0171) | **Partial** — the directory surface: create / read / update / delete a user, enable, disable, and group membership. Other Graph areas (licences, directory roles, administrative units) go through the `rest` connector. |
+| Microsoft Azure Active Directory Connector | `entra` (ADR-0171) | Out of support in MIM itself; superseded by Graph, which is what this connector speaks. |
 | Connector for Web Services | `soap` (ADR-0165) | **Implemented** |
 | SharePoint Services Connector UPA | `sharepoint` (ADR-0141) | **Partial** — Graph list items, not the SharePoint User Profile Application. |
 | Connector for Lotus Domino | — | **Missing** — legacy; recommend not building. |
@@ -123,9 +124,10 @@ particular is the modern replacement for several MIM target-system MAs.
    as three product connectors — `mssql`, `mariadb`, `postgres` — worker-only, with
    the DSN held in the worker's environment and the statement literal by
    construction. Oracle is the remaining database follow-up.
-2. **Microsoft Graph / Entra ID connector.** Covers the Graph connector row and the
-   retired Azure AD MA. The OAuth2 client-credentials plumbing already exists twice
-   (`mail`, `sharepoint`) and should be lifted rather than written a third time.
+2. ~~**Microsoft Graph / Entra ID connector.**~~ **Done**
+   ([ADR-0171](../adr/0171-entra-id-connector.md)) as `entra`, worker-only, with the
+   tenant's app credential held only on the worker. The OAuth2 client-credentials
+   plumbing was lifted into `connector/oauth2` rather than written a third time.
 3. **Complete the AD connector.** Today's five operations do not cover a
    joiner/mover/leaver process: attribute modify, move/rename (a mover is a DN
    change), delete, and group create/delete are all absent.

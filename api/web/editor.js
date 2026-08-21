@@ -2192,6 +2192,54 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    // A person mark inside a cloud on Microsoft blue: the directory account of the
+    // AD connector, moved to the cloud — the pair should read as siblings.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
+    ext: "atlas:EntraConnector",
+    fields: [
+      { group: "Tenant" },
+      {
+        key: "connector", label: "Connector", placeholder: "contoso",
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0171).",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-user", l: "Create user" },
+          { v: "get-user", l: "Read user" },
+          { v: "update-user", l: "Update user" },
+          { v: "enable", l: "Enable account" },
+          { v: "disable", l: "Disable account" },
+          { v: "delete-user", l: "Delete user" },
+          { v: "add-group-member", l: "Add group member" },
+          { v: "remove-group-member", l: "Remove group member" },
+        ],
+      },
+      {
+        key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
+        showIf: (v) => v.operation && v.operation !== "create-user",
+        hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "groupId", label: "Group", placeholder: "8f9a…-object-id", fx: true,
+        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
+        hint: "The group's object id. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+      },
+      {
+        key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
+        showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
+        hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "konto",
+        hint: "Receives what Graph returned — the created or read user for those operations, and nothing for the ones Graph answers with no content. Leave empty to discard it.",
+      },
+    ],
+  },
+  {
     id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
     ext: "atlas:MssqlConnector",

@@ -308,6 +308,20 @@ const PostgresJobType = "io.atlas.postgres"
 // in every compiled process: NewBuilder reserves it twenty-third, so it is always 22.
 const PostgresJobTypeIndex int32 = 22
 
+// EntraJobType is the reserved job type a Microsoft Entra ID connector task carries.
+// Entra is Graph, so a process could in principle reach it with the REST connector;
+// what this type marks is a task that names a *lifecycle operation* instead of a URL
+// and a JSON fragment, the same argument the AD connector makes against generic LDAP
+// (ADR-0166/0171).
+//
+// Like the SQL types above it, no in-process handler subscribes to it: the kind is
+// worker-only, so the tenant's client secret never enters the engine.
+const EntraJobType = "io.atlas.entra"
+
+// EntraJobTypeIndex is the interned index EntraJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-fourth, so it is always 23.
+const EntraJobTypeIndex int32 = 23
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -338,6 +352,7 @@ var reservedJobTypes = []string{
 	MsSqlJobType,         // 20
 	MariaDBJobType,       // 21
 	PostgresJobType,      // 22
+	EntraJobType,         // 23
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1216,6 +1231,49 @@ func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 		SqlStatement: b.intern(cfg.Statement),
 		SqlParamsVar: b.intern(cfg.ParamsVar),
 		SqlMaxRows:   cfg.MaxRows,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// EntraConfig is the deploy-time configuration of a Microsoft Entra ID connector
+// task (ADR-0171). Connector names the tenant the worker is configured for — a task
+// carries no tenant id and no client secret, because they never enter the engine. Op
+// is the lifecycle operation. UserID and GroupID are literal-or-FEEL values
+// addressing the user (a UPN or object id) and the group; AttributesVar names the
+// process variable holding the directory properties for create-user and update-user;
+// ResultVar receives what Graph returned (empty = discard).
+type EntraConfig struct {
+	Connector     string
+	Op            string
+	UserID        RestExpr
+	GroupID       RestExpr
+	AttributesVar string
+	ResultVar     string
+	Retries       int32
+}
+
+// AddEntraConnectorTask adds an Entra ID connector task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved EntraJobType, which nothing in the engine subscribes to — the kind is
+// worker-only (ADR-0164/0171), so the job waits for a worker that holds the tenant's
+// app credential.
+func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:            b.intern(EntraJobType),
+		Connector:          b.intern(cfg.Connector),
+		Subject:            -1, // not a clio task
+		EventType:          -1,
+		ClioQuery:          -1,
+		ReduceSpec:         -1,
+		Method:             -1, // an Entra operation, not an HTTP method, is authored
+		Auth:               -1, // the app credential lives on the worker
+		ResultVar:          b.intern(cfg.ResultVar),
+		Retries:            cfg.Retries,
+		EntraOp:            b.intern(cfg.Op),
+		EntraUserID:        cfg.UserID,
+		EntraGroupID:       cfg.GroupID,
+		EntraAttributesVar: b.intern(cfg.AttributesVar),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

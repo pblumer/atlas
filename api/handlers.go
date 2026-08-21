@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/expr"
@@ -4346,6 +4347,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
 			"statement": j.Statement, "params": j.Params, "named": j.Named,
 			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.EntraJobTypeIndex:
+		// The operation and the ids travel; the tenant's app credential does not
+		// exist here to travel. Worker-only, like the SQL kinds (ADR-0171).
+		j, err := entra.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "entra", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "userId": j.UserID,
+			"groupId": j.GroupID, "attributes": j.Attributes, "resultVariable": j.ResultVariable,
 		}}
 	}
 	return nil
