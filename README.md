@@ -31,8 +31,8 @@ and replay any instance step by step — with no database, no message broker, an
 Atlas is a single self-contained binary — engine, HTTP API, and the whole web UI in one file. Grab it from the [releases](https://github.com/pblumer/atlas/releases), verify it against `SHA256SUMS`, and run it:
 
 ```bash
-tar -xzf atlas_0.1.0_linux_amd64.tar.gz
-./atlas_0.1.0_linux_amd64/atlas serve --data-dir ./atlas-data
+tar -xzf atlas_0.3.0_linux_amd64.tar.gz
+./atlas_0.3.0_linux_amd64/atlas serve --data-dir ./atlas-data
 # open http://127.0.0.1:8080/
 ```
 

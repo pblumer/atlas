@@ -12,7 +12,380 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-21
+
+This release moves the work that can be slow out of the engine. `atlas worker` makes
+the same binary a worker process, `atlas serve --supervise` runs one for you, and the
+**Workers view** says what is queued, what is in flight and who is doing it. The rule
+behind it ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)) is that Atlas's
+own process runs the engine and not somebody else's integrations: with no flags at
+all, `atlas serve` now offloads the csv, mail, script and webscrape connectors to a
+worker it starts and supervises itself, and every remaining in-process kind is
+deprecated.
+
+Around that, the **connector catalogue roughly doubled**: Active Directory (with a
+DirSync delta), Microsoft Entra ID, generic LDAP, LDIF and DSML files, SCIM 2.0,
+SOAP, and SQL Server, MariaDB and PostgreSQL — the last two families with no
+in-process half at all, so a database or directory credential never enters the
+engine's address space at all. The REST connector gained an OAuth2 client-credentials
+grant, and the text-file connector two more formats and a write direction.
+
+For the people who run processes rather than author them, this is the release where a
+**stuck instance stops being a dead end**. Incidents show up on the live diagram, in
+the replay and in a list that can be scoped; the connector behind one can be
+reconfigured from the incident itself; a task can carry a repair form, so a park is
+fixed through named fields instead of raw JSON; a step can be completed by hand with a
+mandatory, audited reason; and a running instance can be **migrated** onto a corrected
+version, with a dry run that shows what the move would do before anything is written.
+
 ### Added
+
+- **`atlas worker`: the same binary, working jobs outside the engine**
+  ([ADR-0157](docs/adr/0157-worker-processes-supervision-and-console.md)): a service task's
+  work no longer has to run in the engine's process. `atlas worker --server
+  http://localhost:8080 --handle send-email=/opt/send.sh` leases jobs of the types it names
+  and runs a command per job — whatever JSON object the command prints becomes the variables
+  the job completes with, a non-zero exit fails it with stderr as the message. Three pieces
+  ADR-0007 designed and could not finish make it possible. An **engine-wide job-type table**
+  (`jobtype.Registry`), resolved at every deploy and reload, so `send-email` means the same
+  index in every definition — indices were interned per compiled process, so a type-keyed
+  pull would have handed one process's jobs to another process's worker.
+  **`POST /api/v1/jobs/activate`**, which leases the next jobs of a *named* type and answers
+  with everything the worker needs in one call, including the variables visible **at the
+  task** — the element instance's scope chain, so an activity-local input mapping shadows the
+  instance value exactly as it does in-process, rather than making the worker fetch variables
+  separately and race a concurrent write. And a **long poll**, so an idle worker costs one
+  parked request instead of a spin. A lease is **fenced** with a token the worker presents on
+  completion: a worker that stalls past its lease, has its job handed to someone else and
+  then comes back cannot complete work that is no longer its own. Jobs written before the
+  table are a declared discontinuity, not a migration (pre-1.0, as `checkpoint/manifest.go`
+  already states): they stay listed, leasable by key and completable, and the set drains as
+  those instances finish.
+
+- **Atlas supervises its own worker processes**
+  ([ADR-0157](docs/adr/0157-worker-processes-supervision-and-console.md)): `atlas serve
+  --supervise mailer-1=send-email=/opt/send.sh` runs that worker as a child and keeps it
+  running — restart with a doubling backoff capped at thirty seconds, output captured to a
+  bounded tail, everything stopped with the server — so moving work out of the engine costs
+  a flag rather than a second deployment, and the one-binary, one-command install (ADR-0011)
+  survives it. The child is the same `atlas worker` an operator could start by hand, speaking
+  the same HTTP protocol: a private path between parent and child would quietly become the
+  only tested one, which is how out-of-process work became second-class in the first place.
+  Nothing from a request ever becomes a command — the supervisor spawns `os.Executable` and
+  only that, with an argv built from typed configuration read off the server's own command
+  line, so the API can restart a worker the operator already configured and can do nothing
+  else to it: it cannot introduce one, and it cannot name a command. Off unless asked for;
+  under systemd or Kubernetes the platform owns process lifecycle. A supervised worker is
+  handed this server's own internal token, so it can still poll on a server started with
+  `--auth`, and one with nothing to serve parks itself with its own exit status instead of
+  being restarted forever into the same emptiness.
+
+- **The Workers view: what is queued, what is in flight, and who is doing it**
+  ([ADR-0157](docs/adr/0157-worker-processes-supervision-and-console.md)): an external worker
+  used to be invisible — an operator saw jobs not moving and had no way to tell whether a
+  worker was absent, wedged, or failing. This is why the console came before supervision: a
+  restart button on something nobody can see the state of is a worse product than a view with
+  no buttons at all. `GET /api/v1/workers` answers in two halves and Operations draws both.
+  Every **job type** carries its queue depth, how much of it is leased right now, its
+  incidents, and whether Atlas serves it in-process (in which case no external worker can
+  lease it). Every **worker** seen this run carries the types it pulls, what it holds in
+  flight, and its pulled/completed/failed counts. The state worth catching is the join of the
+  two — a type with a growing queue, nothing in flight and no worker against it. Opening a
+  worker lists the jobs it ran; a supervised one can be restarted from there
+  (`POST /api/v1/workers/{id}/restart`). The view also names the processes each job type
+  belongs to, flags a stored type sitting on an index a newer build has since reserved, and
+  lists the connector kinds nothing is configured to serve.
+
+- **A connector task runs on a worker, credential and all**
+  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)): moving connector work out of the
+  engine was blocked on two things, and only one of them was plumbing. The engine now
+  **resolves the task's detail into plain values** — which connector, and the literal-or-FEEL
+  recipients, URLs and bodies evaluated against the instance's variables — and those travel
+  with the leased job, because FEEL is compiled at deploy (ADR-0008/0015) and a worker has
+  neither the compiled process nor the scope chain to evaluate it against. The second
+  question is where the credential lives, and it is the one that shapes the product: it lives
+  **on the worker**. A model still names a connector and never a secret (ADR-0041); what
+  changes is which process holds the value behind that name — so the worker that sits next to
+  the mail relay or the ERP holds the credential for it, it crosses no boundary at all, and
+  the engine stops being worth attacking for someone else's integrations. Configuration
+  leaving the Console is a real loss, and the answer is that a worker reports the connector
+  names it is configured for when it announces itself, so the Workers view still says which
+  names are served, by whom, and which are configured nowhere. A **supervised** worker is the
+  exception that keeps the single-node install simple: it is this process's own child, on
+  this host, under this user, so Atlas writes the connector's configuration into the child's
+  environment at spawn — the same variables an external worker's operator would set by hand,
+  never a private channel — which is what lets a kind whose credentials live in the server's
+  connector store be offloaded by default at all.
+
+- **An Active Directory connector that speaks AD, not LDAP**
+  ([ADR-0166](docs/adr/0166-active-directory-connector.md)): `<atlas:adConnector>` on a
+  service task offers the operations a modeler should be picking from — create-user,
+  create-group, update-attributes, set-password, enable, disable, move, delete, and add or
+  remove a group member — instead of making every process re-encode AD's rules. Those rules
+  are the whole point: a password is `unicodePwd` written as quote-wrapped UTF-16LE over TLS,
+  disabling an account is the `ACCOUNTDISABLE` bit flipped inside `userAccountControl` with
+  every other flag preserved, and a membership change is an incremental add or delete of one
+  `member` value. Each is a foot-gun a generic LDAP task would push into the model, where it
+  is written once by someone who read it up that morning. A **`sync` operation reads a
+  DirSync delta** — one pass per run, presenting the cookie it finds and writing back the one
+  the server returns — so a process can ask a directory what changed instead of re-reading it
+  whole; it is the only AD operation that reads rather than writes, and the only one that
+  needs the replication right, which the connector says plainly rather than failing
+  obscurely. The bind password is a secret reference (ADR-0041), and the connector runs on a
+  worker (ADR-0168). `examples/` gains GALSync as a process built from it.
+
+- **A Microsoft Entra ID connector** ([ADR-0172](docs/adr/0172-entra-id-connector.md)):
+  identity lifecycle in Entra ID (formerly Azure AD) through Microsoft Graph — create-user,
+  get-user, update-user, delete-user, enable, disable, and adding or removing a group member.
+  A process *could* already reach Graph with the REST connector, which speaks HTTP and JSON
+  and now holds an OAuth2 grant; what it cannot do is say what a call *means*. Disabling an
+  account is a `PATCH` of `accountEnabled`, removing a member is a `DELETE` of a `$ref`
+  sub-resource, and adding one is a `POST` to a `$ref` collection whose body carries an
+  absolute `@odata.id` URL that has to name the right cloud. Those are encodings, not
+  business decisions, and their failure mode is a 404 that reads like a missing user. Like
+  the SQL connectors this kind is **worker-only** — the tenant id, client id and client
+  secret live in the worker's environment and the engine holds no Entra credential at all,
+  which matters more here than almost anywhere: an app registration with `User.ReadWrite.All`
+  and `Group.ReadWrite.All` can create and disable accounts across the whole directory.
+
+- **A generic LDAP connector** ([ADR-0154](docs/adr/0154-ldap-connector.md)):
+  `<atlas:ldapConnector>` with search, add, modify, delete and RFC 3062 modify-password
+  against any directory. A search writes its entries — DN plus multi-valued attributes — into
+  a result variable as a JSON array; add and modify take the entry's attributes from a named
+  JSON-object variable, coercing scalars and arrays into LDAP's multi-valued form. Bind is
+  anonymous, by password from a secret reference, or **by client certificate**; searches are
+  **paged and bounded**, so a directory that answers with fifty thousand entries neither
+  truncates silently nor exhausts the worker; a modify can change **individual values**
+  rather than replacing an attribute wholesale; and bound connections are **pooled** rather
+  than dialled per job. go-ldap is vendored behind a `Dialer`/`Conn` interface — hand-writing
+  LDAP/BER is a large, security-sensitive surface for no benefit, and shelling out to the CLI
+  tools would need them present on the host and would pass credentials through argv — so the
+  pure-Go, single-binary posture (ADR-0011) holds.
+
+- **Directory files: LDIF and DSML** ([ADR-0171](docs/adr/0171-directory-file-connector.md)):
+  a separate `ldif` kind reads and writes directory entries as files, in either format. It is
+  deliberately not a format on the text-file connector: LDIF and DSML produce
+  `{"dn": …, "attributes": {…}}` — the shape an `ldap` search and an `ad` sync return — and
+  folding them in would have made **the result shape depend on a dropdown**, so a process
+  downstream of that task could no longer be written against a known shape. Keeping them
+  apart is what lets a file read feed exactly the handling a live directory read does. It is
+  not part of the LDAP connector either: a file is not a server, and needs no endpoint, no
+  bind and no credential.
+
+- **Three SQL connectors — SQL Server, MariaDB, PostgreSQL**
+  ([ADR-0173](docs/adr/0173-generic-sql-connector.md)): `query` (rows into a variable),
+  `query-one` (a single row, or nothing) and `execute` (rows affected), with parameters bound
+  positionally rather than pasted into the statement. One kind per product rather than one
+  with a dialect field, because a statement written with `$1` is a PostgreSQL statement and
+  pointing it at SQL Server is a mismatch a model would otherwise express silently; each kind
+  carries its own placeholder form. These are **the first kinds with no in-process half at
+  all**: the DSN lives in the worker's environment (`ATLAS_<KIND>_CONNECTORS` plus
+  `ATLAS_<KIND>_<NAME>_DSN`), never in the model and never in the engine. That is the
+  ADR-0164 rule applied to the credential an organization usually values most, and it is also
+  why a DSN is not model data — keeping a password out of a model-authored connection string
+  would mean parsing and rewriting each vendor's connection-string grammar, which is a
+  credential-handling path invented for the convenience of putting an address in a model.
+
+- **A SCIM 2.0 provisioning connector** ([ADR-0153](docs/adr/0153-scim-connector.md)):
+  `<atlas:scimConnector>` with create, get, replace, patch, delete and search against any
+  SCIM endpoint — the base URL, resource, resource id and filter as literal-or-FEEL values,
+  the body from a named variable. It sends and accepts `application/scim+json`, carries the
+  job key as an `Idempotency-Key`, and turns a SCIM error object's `detail`/`scimType` into
+  the job's failure message instead of a bare status code.
+
+- **A SOAP / Web Services connector** ([ADR-0165](docs/adr/0165-soap-connector.md)):
+  `<atlas:soapConnector>` wraps an authored body in the envelope, sets the
+  version-appropriate `Content-Type` and `SOAPAction` (1.1 or 1.2), and turns a `Fault` into
+  a job failure that names it. It is model-authored rather than WSDL-bound: binding at deploy
+  time buys little for the legacy services that still speak SOAP, whose WSDLs are frequently
+  incomplete or non-conformant, and an endpoint is naturally model data.
+
+- **OAuth2 client-credentials for the REST connector**
+  ([ADR-0152](docs/adr/0152-rest-connector-oauth2.md)): `authType="oauth2"` with a token URL,
+  client id, scope and a client-secret **reference** — so the exchange is a mechanism of the
+  connector rather than modeling homework nobody should be doing by hand. Tokens are cached
+  per token URL, client id and scope until thirty seconds before expiry, so a run of jobs
+  reuses one. A missing secret or a token endpoint that refuses fails the job — retry, then
+  incident (ADR-0061) — rather than calling the API unauthenticated and reporting whatever
+  the API says about that.
+
+- **The text-file connector reads two more formats, and writes**
+  ([ADR-0139](docs/adr/0139-csv-to-json-connector.md), amended): fixed-width and
+  attribute-value-pair files join delimited ones, and the connector gained a **write**
+  direction. All three describe a table of records and produce the same rows, so they are
+  formats of one kind rather than three kinds — unlike the SQL split above, a fixed-width
+  layout applied to a delimited file does not quietly produce plausible rows, it fails on the
+  first record. A fixed-width column carries its width as `name:width` in the same `columns`
+  attribute: required for that format, since a positional field has nothing else to find it
+  by, and rejected for the others, because an authored width the connector would ignore is an
+  author believing something untrue. Widths count runes, so an umlaut does not shift every
+  column after it.
+
+- **The Repository ships connector templates**
+  ([ADR-0081](docs/adr/0081-community-marketplace-for-connectors-and-tasks.md),
+  [ADR-0167](docs/adr/0167-released-connectors-ship-in-the-marketplace.md)): the SCIM and
+  LDAP connectors arrive as installable templates, and the Modeler catalogs every registered
+  kind — so a connector that exists in the binary is also a thing you can find without
+  reading the changelog.
+
+- **The Modeler offers the registered connectors as a dropdown**: a connector field on a
+  service task used to be a name typed from memory, which is a deploy-time failure written at
+  authoring time. It now lists what the server actually has, and says when a kind still runs
+  inside the engine (ADR-0164) rather than on a worker.
+
+- **A step can be completed by hand, and the record says who and why**
+  ([ADR-0159](docs/adr/0159-manual-task-completion-audit.md)): an instance can park on a task
+  that will never succeed here — a connector refuses the call, the far system is unreachable,
+  or the work was simply done out of band and the account really was created. *Resolve &
+  retry* only repeats what cannot work. Every incident row now offers **✓ Complete
+  manually…**, with optional output variables and a **mandatory reason**:
+  `POST /api/v1/jobs/{key}/complete` refuses a blank one with 400, and the dialog says so
+  before the request rather than after it. What makes it safe is that the intervention is a
+  durable fact rather than an invisible shortcut — a new `OperatorActionValue` history
+  record, keyed under its instance exactly like the variable audit (ADR-0098), carrying who,
+  when, which element, which job and why. It is minted only behind an explicit `Manual` flag
+  on the command, never inferred from a non-empty reason, so a worker completing its own
+  leased job can never mint one. The timeline attaches it to the step and the replay renders
+  it as a *Completed manually* block, so a step a person forced never reads as one the engine
+  drove. The action kind is a byte with a closed vocabulary, leaving room for cancel and
+  resolve to join the same record rather than inventing a second mechanism.
+
+- **Variables before *and* after a step** ([ADR-0159](docs/adr/0159-manual-task-completion-audit.md)):
+  a timeline step gains `variablesAfter`, the variable fold at the element's *completion*
+  position, where `variables` has always been the fold at its activation. A task that writes
+  its result on completion — a job's outputs, an output mapping — showed nothing under "as of
+  activation", so the replay reported that an element which had plainly produced values had
+  none. The Variables tab now offers **Input** and **Output** for a finished element and
+  marks what the element itself wrote. It is what makes a forced step reviewable: the reason
+  says why it was forced, the output says what was asserted.
+
+- **What an element was handed, on the diagram**
+  ([ADR-0161](docs/adr/0161-element-io-on-the-diagram.md)): selecting an element in the replay
+  hangs a small card under it — **in**, the step's input-mapping locals as they actually
+  evaluated, and **out**, what the element itself wrote, being the difference between the
+  variables it saw on entry and the ones it left behind. *still running* is a different
+  statement from *wrote nothing*, and the card makes both. A mapping source is the model's
+  intent; the evaluated local is the fact, and only the fact is worth putting on a canvas.
+  The card is capped at six rows a side, takes no pointer events so a click always reaches
+  the element underneath, and is toggleable from the transport bar with the preference
+  remembered — it is about how a person reads a diagram, not about one instance. `inputs` is
+  deliberately not folded into `variables`: a local belongs to one element instance, and
+  merging it into the shared running set would leak it onto every concurrent step's snapshot.
+  Nothing new is persisted; these values were already on the log.
+
+- **A loop's rounds are told apart** ([ADR-0161](docs/adr/0161-element-io-on-the-diagram.md),
+  amended): a loop runs the same node again and again, so its history was a column of
+  identical rows, and the one value that distinguishes them — which round this is — was
+  being filtered out as "not an input". `loopCounter` and, for a collection loop, the round's
+  item now join `inputs`, and the counter is surfaced as `iteration` on the step, so the
+  history can label a row without the frontend fishing a known variable name out of a list.
+  **A loop body is a scope, and is now folded like one:** a standard loop holds what its
+  iterations write at the body scope so each round can read the last one's result (ADR-0133),
+  and a multi-instance loop assembles its output collection there (ADR-0077). Neither was
+  folded, so a finished round truthfully reported that nothing in the process scope had
+  changed — which the diagram card stated as *wrote nothing* about a round that had plainly
+  done work. Bodies are identified from the log (an iteration is activated carrying its
+  body's token as `ParentTokenID`), not guessed.
+
+- **An org-wide logo, beside the theme** ([ADR-0148](docs/adr/0148-org-wide-brand-logo.md)):
+  `PUT /api/v1/settings/logo` replaces the built-in mark everywhere the Console draws one,
+  so an installation can look like the organization running it; a CD Bund colour template
+  ships alongside it. `GET` is public, because the login screen shows the mark before anyone
+  is authenticated; `PUT` and `DELETE` are admin-gated, because they change what everyone
+  sees. Only PNG and SVG are accepted, up to 512 KiB, and the server re-validates the bytes
+  against the declared type — the PNG signature, or well-formed UTF-8 with an `<svg` root —
+  so a mislabelled upload is never persisted. An uploaded SVG is untrusted markup and is
+  therefore never inlined: it is rendered through `<img>`, where SVG script does not run, and
+  served with `nosniff` and a strict sandboxing CSP. That is a serving-time guarantee rather
+  than sanitisation that has to stay ahead of the next trick. The file lives in the settings
+  directory under the shared atomic-write discipline, so the design-time backup (ADR-0107)
+  captures it with no extra wiring.
+
+- **"What's New" on the Console landing page**: the Welcome view gains a compact,
+  collapsible feed of the newest user-facing changes in plain language — bilingual (DE/EN,
+  per-visitor toggle), each entry linking to its ADR or PR and, where the UI is involved,
+  carrying a short step-by-step tutorial and a **Try it** deep link into the screen it talks
+  about. `CHANGELOG.md` stays the single source of truth: `scripts/whats-new/gen.mjs` derives
+  each entry's structure from it and merges `scripts/whats-new/overrides.json`, which
+  supplies the layman-friendly summaries and can hide a dev-only bullet. The generated
+  `whats-new.json` is committed and served off the embedded FS, so the web UI stays buildless
+  (ADR-0012) — and CI regenerates it and fails on the diff, so a changelog entry cannot
+  silently leave the feed stale.
+
+- **Job leases: a worker can hold work, and a dead worker's work comes back** (v0.2.0
+  programme F, [ADR-0007](docs/adr/0007-job-worker-protocol.md), amended): activating a job
+  takes it off the activatable index for a bounded time and records who holds it, so two
+  workers pulling the same type are not handed the same job. When the lease elapses the job
+  is offered again — which is what makes a worker crash recoverable with no operator
+  involved. `POST /api/v1/jobs/{key}/activate` grants one (409 while someone else holds it),
+  and the lease survives a restart: it is durable state rebuilt from the log, expiry timer
+  and all.
+
+  The mechanism is the one ADR-0111 already proved for retry backoff — hold the job off the
+  index, arm a timer, let the timer put it back — rather than a second one. Both holds can
+  sit on one job at once (a worker leases it, then fails it with a backoff), so each timer
+  releases **only its own hold** and the job returns when nothing holds it; otherwise a
+  lease expiring mid-backoff would hand out a job the worker asked to defer.
+
+  **Two findings came out of building it, both recorded in the ADR.** The lease is not
+  stored in `JobValue.Deadline` because that field already means the *user task due date* —
+  conflating them took every user task with a due date off the worker-visible index, which
+  is how it was noticed. And the type-keyed pull a worker really wants ("give me the next
+  `send-email` job") is **blocked, not merely unbuilt**: job type indices are interned per
+  compiled process while the activatable index is global, so `send-email` in one process and
+  `charge-card` in another both intern to index 16 and a subscriber would be handed the
+  wrong jobs. That needs a global job-type registry first. Leasing by key is unambiguous and
+  works today.
+
+- **Distributed traces, opt-in** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
+  collector — `--trace-endpoint http://collector:4318`, or the standard
+  `OTEL_EXPORTER_OTLP_ENDPOINT` — and every `/api/v1` request is exported as an
+  OpenTelemetry server span. Off unless configured. Metrics say *that* a request was
+  slow; a trace says *where* the time went, and an incoming W3C `traceparent` is
+  continued, so a request arriving from another traced service lands in that trace
+  instead of starting an island.
+
+  **The engine is not traced, and a test enforces it.** A span costs an allocation, a
+  clock read and a lock — nothing next to an HTTP request, all three per batch on the
+  goroutine that owns the partition. `TestTheWriterIsNeverInstrumented` fails if
+  `engine`, `state`, `wal`, `model`, `compiler` or `checkpoint` ever imports a tracing
+  package. Probes and the metrics scrape are not traced either: they run forever on a
+  timer and would bury the spans someone is looking for.
+
+  **Span names are bounded by the code, not by traffic** — the same rule the metric
+  labels are under. A span is named for the route *pattern*
+  (`GET /api/v1/instances/{key}`), never the URL that matched it, and the attributes are
+  method, route and status; the raw target and query string are not recorded, so a key
+  cannot ride along into a backend's index.
+
+  The exporter is written here rather than taken off the shelf, and that is the
+  dependency decision: the official OTLP exporter pulls in protobuf and — even in its
+  HTTP form — gRPC, 66 gRPC packages and about 13MB of binary, for a service that speaks
+  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so Atlas takes
+  the OpenTelemetry API and SDK for the parts that are spec-bound and subtle (span model,
+  sampling, batching, W3C propagation) and writes the serializer. Measured: **+1.7MB and
+  five modules, no protobuf, no gRPC.**
+
+  Three deliberate limits: a 4xx is not an error (it is the caller being told no, and
+  counting it as a server failure makes the error rate meaningless), a caller that
+  already sampled is always honored whatever `--trace-sample-ratio` says (a
+  half-recorded distributed trace is worse than none), and a collector that is down
+  cannot take the server with it — export runs on its own goroutine after the response.
+
+- **Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN**: the new
+  `atlas import-mim` command converts a MIM/FIM XOML workflow — or an
+  `Export-FIMConfig` XML that embeds one — into deployable BPMN 2.0. Control flow
+  (Sequence, IfElse, Parallel, While) maps to native flow nodes and gateways, and
+  leaf activities map by intent (Approval → user task, Notification → service
+  task, and so on). The translation is loss-aware: any construct without a
+  faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
+  extension element and listed, with a `native`/`preserved`/`manual-review`
+  status, in a per-node report. Every generated model is checked against the
+  compiler so it always deploys. Library: `mimimport`. The Modeler exposes it too
+  — **Create new → Import MIM workflow (XOML)…** uploads a workflow, opens the
+  converted diagram as a draft, and shows the conversion report (status badge and
+  note per node) with a shortcut into the Modeler (`POST /api/v1/imports/mim`).
 
 - **A form on the incident — repairing an instance with named fields instead of raw JSON**
   ([ADR-0169](docs/adr/0169-incident-repair-forms.md)): a service, send or business rule
@@ -248,6 +621,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Breaking (default behaviour): connectors run outside the engine now, and `atlas serve`
+  starts the worker itself** ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)). The rule is that the engine's
+  process runs the engine — the compiler, the processor, the log, the state store, the API —
+  and does not run anybody's integrations, because the core loop cannot be guaranteed fast
+  while something that can be slow is allowed to live in it. In-process execution rested on a
+  promise the model cannot make and the engine cannot check: that a given endpoint is quick.
+  Nothing rejects a slow one at deploy, and the endpoint that was fast when the model was
+  authored is the same endpoint that is down at 3am. So `atlas serve` with no flags at all
+  now offloads **csv, mail, script and webscrape** to a worker it supervises itself, rather
+  than running them on the engine's goroutine. `--offload-connectors kind,…` adds more kinds,
+  and **`--in-process-connectors` returns to the previous arrangement wholesale**. The
+  boundary of the default set is a design, not a shortlist: a kind is defaulted only when
+  Atlas can hand its configuration to the child at spawn, so no task is ever routed to a
+  worker that lacks what the call needs — a test walks the default set against the managed
+  kinds so nobody can quietly add one that isn't. Every other kind keeps its in-process
+  handler and is **deprecated**: supported, documented as transitional, and not the shape a
+  new model should take. New connector kinds are built worker-first, and the SQL and Entra
+  kinds in this release have no in-process half at all.
+
+- **In-process job handlers run off the run loop**
+  ([ADR-0149](docs/adr/0149-bounded-connector-call-budget.md),
+  [ADR-0157](docs/adr/0157-worker-processes-supervision-and-console.md)): a round of work is
+  now three steps — *claim* collects activatable jobs on the loop, *work* runs the handlers
+  off it, *submit* applies the outcomes back on the loop. Until now the whole drive happened
+  inside the single writer, so every in-process connector's outbound call held it for the
+  call's duration, and a burst amplified that: fifty parked jobs against a dead host cost
+  fifty consecutive timeouts, serially, on the goroutine everything else needs. The caller
+  still waits for quiescence — every request path and every test would otherwise change
+  meaning — but the waiting happens on the goroutine that asked for the work. Drivers are
+  serialized, so two callers never claim the same job twice, and a round runs a bounded
+  number of handlers at once, because trading a serial stall for a thousand simultaneous
+  outbound calls would only move the failure.
+
+- **Dynamic job-type indices are issued from a fixed floor of 1000**
+  ([ADR-0157](docs/adr/0157-worker-processes-supervision-and-console.md)): they used to be
+  issued from one past the reserved range, so adding a built-in connector walked that range
+  over indices already handed out — SOAP and AD did exactly that — and jobs parked under an
+  index kept a number that had come to mean something else. The gap is dead space in an
+  int32 and costs nothing. Stores written before the floor hold good assignments between the
+  old reserved count and 1000, and those are *not* treated as built-in: "below the floor"
+  must not come to mean "reserved", or a load would drop every one of them. The Workers view
+  flags a stored type that now sits on a reserved index instead of silently mis-resolving it.
+
 - **A connector task's input mappings now reach its worker — and shape what it sends.**
   Input mappings write an activity-local variable scope (ADR-0068), but every connector
   worker read the process-instance scope flat, so none of them could see its own task's
@@ -319,6 +736,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Every outbound call a connector makes is bounded**
+  ([ADR-0149](docs/adr/0149-bounded-connector-call-budget.md)): a connector built on
+  `http.DefaultClient` waits forever by default, and because connector handlers ran on the
+  run-loop goroutine, one hung host parked the entire engine — the API kept answering
+  `/info` while every request that touched the loop hung. Each connector now carries a
+  bounded budget (ten seconds by default) covering the whole call, and a test parses the
+  `connector` and `dmn` trees to an AST and fails if an unbounded client is ever
+  reintroduced, so the hazard is caught when it is written rather than when someone
+  remembers to look. ADR-0164 and the change above take the handlers off the loop entirely;
+  this remains the safety net for what still runs there.
+
 - **A wide table no longer draws outside its card** (ADR-0163). A cell that cannot
   wrap makes a table's minimum width larger than the card holding it, and a table
   cannot be laid out narrower than that — so it was drawn past the card's right edge,
@@ -350,19 +778,6 @@ _Changed_ / _Removed_ for each version.
   never reached the create validator at all), and when the client is built, so a
   connector already stored in the old shape starts working instead of parking one token
   per attempt behind `dial tcp: missing port in address`.
-- **Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN**: the new
-  `atlas import-mim` command converts a MIM/FIM XOML workflow — or an
-  `Export-FIMConfig` XML that embeds one — into deployable BPMN 2.0. Control flow
-  (Sequence, IfElse, Parallel, While) maps to native flow nodes and gateways, and
-  leaf activities map by intent (Approval → user task, Notification → service
-  task, and so on). The translation is loss-aware: any construct without a
-  faithful BPMN counterpart is preserved verbatim in an `<atlas:mimSource>`
-  extension element and listed, with a `native`/`preserved`/`manual-review`
-  status, in a per-node report. Every generated model is checked against the
-  compiler so it always deploys. Library: `mimimport`. The Modeler exposes it too
-  — **Create new → Import MIM workflow (XOML)…** uploads a workflow, opens the
-  converted diagram as a draft, and shows the conversion report (status badge and
-  note per node) with a shortcut into the Modeler (`POST /api/v1/imports/mim`).
 
 ## [0.2.0] — 2026-08-19
 
@@ -462,67 +877,6 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   guessed from the name. **Which** instance is a picker in the pane, since the one that took the
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
-
-- **Job leases: a worker can hold work, and a dead worker's work comes back** (v0.2.0
-  programme F, [ADR-0007](docs/adr/0007-job-worker-protocol.md), amended): activating a job
-  takes it off the activatable index for a bounded time and records who holds it, so two
-  workers pulling the same type are not handed the same job. When the lease elapses the job
-  is offered again — which is what makes a worker crash recoverable with no operator
-  involved. `POST /api/v1/jobs/{key}/activate` grants one (409 while someone else holds it),
-  and the lease survives a restart: it is durable state rebuilt from the log, expiry timer
-  and all.
-
-  The mechanism is the one ADR-0111 already proved for retry backoff — hold the job off the
-  index, arm a timer, let the timer put it back — rather than a second one. Both holds can
-  sit on one job at once (a worker leases it, then fails it with a backoff), so each timer
-  releases **only its own hold** and the job returns when nothing holds it; otherwise a
-  lease expiring mid-backoff would hand out a job the worker asked to defer.
-
-  **Two findings came out of building it, both recorded in the ADR.** The lease is not
-  stored in `JobValue.Deadline` because that field already means the *user task due date* —
-  conflating them took every user task with a due date off the worker-visible index, which
-  is how it was noticed. And the type-keyed pull a worker really wants ("give me the next
-  `send-email` job") is **blocked, not merely unbuilt**: job type indices are interned per
-  compiled process while the activatable index is global, so `send-email` in one process and
-  `charge-card` in another both intern to index 16 and a subscriber would be handed the
-  wrong jobs. That needs a global job-type registry first. Leasing by key is unambiguous and
-  works today.
-
-- **Distributed traces, opt-in** (v0.2.0 programme E,
-  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
-  collector — `--trace-endpoint http://collector:4318`, or the standard
-  `OTEL_EXPORTER_OTLP_ENDPOINT` — and every `/api/v1` request is exported as an
-  OpenTelemetry server span. Off unless configured. Metrics say *that* a request was
-  slow; a trace says *where* the time went, and an incoming W3C `traceparent` is
-  continued, so a request arriving from another traced service lands in that trace
-  instead of starting an island.
-
-  **The engine is not traced, and a test enforces it.** A span costs an allocation, a
-  clock read and a lock — nothing next to an HTTP request, all three per batch on the
-  goroutine that owns the partition. `TestTheWriterIsNeverInstrumented` fails if
-  `engine`, `state`, `wal`, `model`, `compiler` or `checkpoint` ever imports a tracing
-  package. Probes and the metrics scrape are not traced either: they run forever on a
-  timer and would bury the spans someone is looking for.
-
-  **Span names are bounded by the code, not by traffic** — the same rule the metric
-  labels are under. A span is named for the route *pattern*
-  (`GET /api/v1/instances/{key}`), never the URL that matched it, and the attributes are
-  method, route and status; the raw target and query string are not recorded, so a key
-  cannot ride along into a backend's index.
-
-  The exporter is written here rather than taken off the shelf, and that is the
-  dependency decision: the official OTLP exporter pulls in protobuf and — even in its
-  HTTP form — gRPC, 66 gRPC packages and about 13MB of binary, for a service that speaks
-  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so Atlas takes
-  the OpenTelemetry API and SDK for the parts that are spec-bound and subtle (span model,
-  sampling, batching, W3C propagation) and writes the serializer. Measured: **+1.7MB and
-  five modules, no protobuf, no gRPC.**
-
-  Three deliberate limits: a 4xx is not an error (it is the caller being told no, and
-  counting it as a server failure makes the error rate meaningless), a caller that
-  already sampled is always honored whatever `--trace-sample-ratio` says (a
-  half-recorded distributed trace is worse than none), and a collector that is down
-  cannot take the server with it — export runs on its own goroutine after the response.
 
 - **Logs with names you can alert on** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line Atlas
@@ -1335,6 +1689,7 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pblumer/atlas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pblumer/atlas/releases/tag/v0.1.0

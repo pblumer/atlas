@@ -1,5 +1,255 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "atlas-worker-the-same-binary-working-jobs-outside-the-engine": {
+    "tags": [
+      "Operations",
+      "Connectors"
+    ],
+    "title": {
+      "en": "A task's work can run outside the engine",
+      "de": "Die Arbeit einer Aufgabe kann außerhalb der Engine laufen"
+    },
+    "summary": {
+      "en": "The work behind a service task no longer has to run inside Atlas itself. The same binary, started as a worker, asks Atlas for the jobs it was told to handle, does them and reports back — so a slow or unreachable system occupies the worker instead of the engine. A worker that dies mid-job does not lose it: the job is offered again once its hold expires, and a worker that comes back too late can no longer complete work that has been given to someone else.",
+      "de": "Die Arbeit hinter einer Service-Aufgabe muss nicht mehr in Atlas selbst laufen. Dieselbe Binärdatei, als Worker gestartet, fragt Atlas nach den Aufgabentypen, für die sie zuständig ist, erledigt sie und meldet das Ergebnis zurück — ein langsames oder nicht erreichbares System blockiert damit den Worker statt die Engine. Stirbt ein Worker mitten in der Arbeit, geht sie nicht verloren: Der Job wird nach Ablauf seiner Reservierung erneut angeboten, und ein zu spät zurückkehrender Worker kann Arbeit, die inzwischen jemand anderem gehört, nicht mehr abschließen."
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
+  "atlas-supervises-its-own-worker-processes": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "Atlas starts and restarts its workers itself",
+      "de": "Atlas startet und überwacht seine Worker selbst"
+    },
+    "summary": {
+      "en": "Running work outside the engine does not mean running a second deployment. Started with --supervise, Atlas launches the worker as its own child process, restarts it if it stops, captures its output and shuts it down with the server — so the install stays one binary and one command. It is off unless you ask for it, because under systemd or Kubernetes the platform should own that.",
+      "de": "Arbeit außerhalb der Engine bedeutet nicht, ein zweites Deployment zu betreiben. Mit --supervise startet Atlas den Worker als eigenen Kindprozess, startet ihn nach einem Abbruch neu, fängt seine Ausgabe auf und beendet ihn zusammen mit dem Server — die Installation bleibt eine Datei und ein Befehl. Standardmäßig aus, denn unter systemd oder Kubernetes gehört der Prozess-Lebenszyklus der Plattform."
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
+  "the-workers-view-what-is-queued-what-is-in-flight-and-who-is": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "See what is queued, and who is working on it",
+      "de": "Sehen, was wartet — und wer daran arbeitet"
+    },
+    "summary": {
+      "en": "A new Workers view in Operations shows every job type with how much is waiting, how much is being worked on right now, and which workers are doing it. The case it is built to make obvious is the one that used to be invisible: a queue that keeps growing with nothing in flight and no worker behind it. Open a worker to see the jobs it ran, and restart one Atlas supervises.",
+      "de": "Die neue Ansicht „Workers“ in Operations zeigt zu jedem Aufgabentyp, wie viel wartet, wie viel gerade bearbeitet wird und welche Worker das tun. Sichtbar werden soll vor allem der Fall, den man bisher gar nicht sehen konnte: eine wachsende Warteschlange, an der nichts in Arbeit ist und hinter der kein Worker steht. Ein Klick auf einen Worker zeigt die Jobs, die er ausgeführt hat; einen von Atlas überwachten Worker können Sie dort neu starten."
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
+  "a-connector-task-runs-on-a-worker-credential-and-all": {
+    "tags": [
+      "Connectors",
+      "Secrets"
+    ],
+    "title": {
+      "en": "A connector's credential can live where the system is",
+      "de": "Die Zugangsdaten eines Konnektors können dort liegen, wo das System steht"
+    },
+    "summary": {
+      "en": "Connector tasks can now run on a worker, and the password goes with them: the worker that sits next to your mail relay or your ERP holds the credential for it, and Atlas never stores it. A model still names a connector and never a secret, exactly as before — what changed is which process holds the value behind the name. Workers that Atlas starts itself are handed their configuration automatically, so a single-server install needs no extra setup.",
+      "de": "Konnektor-Aufgaben können jetzt auf einem Worker laufen — und das Passwort wandert mit: Der Worker, der neben Ihrem Mailrelay oder Ihrem ERP steht, hält die Zugangsdaten dafür, Atlas speichert sie nicht. Ein Modell benennt weiterhin nur einen Konnektor und nie ein Geheimnis; geändert hat sich lediglich, welcher Prozess den Wert hinter dem Namen hält. Worker, die Atlas selbst startet, bekommen ihre Konfiguration automatisch mit, eine Einzelserver-Installation braucht also keine zusätzliche Einrichtung."
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
+  "an-active-directory-connector-that-speaks-ad-not-ldap": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Active Directory as ready-made process steps",
+      "de": "Active Directory als fertige Prozessschritte"
+    },
+    "summary": {
+      "en": "A process can now create a user or a group in Active Directory, set a password, enable, disable, move or delete an account, and add or remove a group member — picked from a list instead of hand-built from LDAP rules that are easy to get subtly wrong. A sync step reads only what has changed since the last run, so a process can react to the directory instead of re-reading all of it.",
+      "de": "Ein Prozess kann jetzt in Active Directory Benutzer oder Gruppen anlegen, Passwörter setzen, Konten aktivieren, deaktivieren, verschieben oder löschen und Gruppenmitglieder hinzufügen oder entfernen — auswählbar aus einer Liste statt zusammengebaut aus LDAP-Regeln, bei denen sich leicht unbemerkt Fehler einschleichen. Ein Sync-Schritt liest nur, was sich seit dem letzten Lauf geändert hat, sodass ein Prozess auf das Verzeichnis reagieren kann, statt es jedes Mal komplett zu lesen."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "a-microsoft-entra-id-connector": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Microsoft Entra ID as ready-made process steps",
+      "de": "Microsoft Entra ID als fertige Prozessschritte"
+    },
+    "summary": {
+      "en": "The same idea for the cloud directory: create, read, update or delete a user, enable or disable an account, and add or remove a group member in Entra ID (formerly Azure AD) — you pick the operation, and the connector knows the Graph call behind it. The credentials for it live on the worker, so Atlas itself never holds an app registration that could disable accounts across your whole tenant.",
+      "de": "Dasselbe Prinzip für das Cloud-Verzeichnis: Benutzer anlegen, lesen, ändern oder löschen, Konten aktivieren oder deaktivieren und Gruppenmitglieder hinzufügen oder entfernen in Entra ID (früher Azure AD) — Sie wählen die Operation, den passenden Graph-Aufruf kennt der Konnektor. Die Zugangsdaten liegen auf dem Worker; Atlas selbst hält also keine App-Registrierung, mit der sich Konten im gesamten Tenant deaktivieren ließen."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "a-generic-ldap-connector": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Any LDAP directory, from a process",
+      "de": "Jedes LDAP-Verzeichnis, direkt aus einem Prozess"
+    },
+    "summary": {
+      "en": "Search, add, modify and delete entries, or change a password, in any LDAP directory. Searches are paged and bounded, so a directory answering with fifty thousand entries neither overwhelms the worker nor quietly returns half an answer, and a modify can change a single value instead of replacing a whole attribute. Sign in anonymously, with a stored password, or with a client certificate.",
+      "de": "Einträge in beliebigen LDAP-Verzeichnissen suchen, anlegen, ändern und löschen oder ein Passwort setzen. Suchen laufen seitenweise und begrenzt, damit ein Verzeichnis mit fünfzigtausend Treffern den Worker weder überlastet noch stillschweigend nur die Hälfte liefert, und eine Änderung kann einen einzelnen Wert betreffen statt ein ganzes Attribut zu ersetzen. Die Anmeldung erfolgt anonym, mit hinterlegtem Passwort oder per Client-Zertifikat."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "directory-files-ldif-and-dsml": {
+    "tags": [
+      "Connectors",
+      "Import"
+    ],
+    "title": {
+      "en": "Read and write directory files (LDIF, DSML)",
+      "de": "Verzeichnisdateien lesen und schreiben (LDIF, DSML)"
+    },
+    "summary": {
+      "en": "Directory entries exported to a file can be read into a process, and written back out, in either LDIF or DSML. They arrive in exactly the shape a live directory search returns, so the same process steps handle a file export and a real directory without being written twice.",
+      "de": "In eine Datei exportierte Verzeichniseinträge lassen sich in einen Prozess einlesen und wieder herausschreiben — wahlweise als LDIF oder DSML. Sie kommen in genau der Form an, die auch eine Suche im laufenden Verzeichnis liefert; dieselben Prozessschritte verarbeiten damit einen Dateiexport und ein echtes Verzeichnis, ohne zweimal geschrieben werden zu müssen."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "three-sql-connectors-sql-server-mariadb-postgresql": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Query a database from a process",
+      "de": "Aus einem Prozess eine Datenbank abfragen"
+    },
+    "summary": {
+      "en": "Microsoft SQL Server, MariaDB and PostgreSQL each get their own connector: read rows into a variable, read a single row, or run a statement and get back how many rows it changed. Values are passed as parameters rather than pasted into the statement. The connection details live on the worker, so a database password never reaches the model or the engine.",
+      "de": "Microsoft SQL Server, MariaDB und PostgreSQL bekommen jeweils einen eigenen Konnektor: Zeilen in eine Variable lesen, eine einzelne Zeile lesen oder eine Anweisung ausführen und die Zahl der geänderten Zeilen zurückbekommen. Werte werden als Parameter übergeben und nicht in die Anweisung hineingeschrieben. Die Verbindungsdaten liegen auf dem Worker, ein Datenbankpasswort erreicht also weder das Modell noch die Engine."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "a-scim-2-0-provisioning-connector": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Provision users over SCIM 2.0",
+      "de": "Benutzer über SCIM 2.0 bereitstellen"
+    },
+    "summary": {
+      "en": "A process can create, read, replace, patch, delete and search users or groups in any system that speaks SCIM 2.0 — the standard most cloud applications offer for user provisioning. When the far side refuses, its own explanation becomes the reason on the task instead of a bare error code.",
+      "de": "Ein Prozess kann Benutzer oder Gruppen in jedem System anlegen, lesen, ersetzen, ändern, löschen und suchen, das SCIM 2.0 spricht — den Standard, den die meisten Cloud-Anwendungen für die Benutzerbereitstellung anbieten. Lehnt die Gegenstelle ab, erscheint ihre eigene Begründung an der Aufgabe statt eines nackten Fehlercodes."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "a-soap-web-services-connector": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Call a SOAP web service",
+      "de": "Einen SOAP-Webservice aufrufen"
+    },
+    "summary": {
+      "en": "Older systems that only offer SOAP can now be called directly from a process: you author the request, and the connector handles the envelope, the version-specific headers and the fault handling. A fault comes back as the task's failure reason, so it is visible where every other problem is.",
+      "de": "Ältere Systeme, die nur SOAP anbieten, lassen sich jetzt direkt aus einem Prozess aufrufen: Sie formulieren die Anfrage, um Envelope, versionsabhängige Header und Fehlerbehandlung kümmert sich der Konnektor. Ein Fault erscheint als Fehlergrund der Aufgabe — also dort, wo auch jedes andere Problem sichtbar wird."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "oauth2-client-credentials-for-the-rest-connector": {
+    "tags": [
+      "Connectors",
+      "Secrets"
+    ],
+    "title": {
+      "en": "REST calls that sign in with OAuth2",
+      "de": "REST-Aufrufe, die sich per OAuth2 anmelden"
+    },
+    "summary": {
+      "en": "An API that expects an OAuth2 token no longer needs a token step modelled by hand. Give the REST connector the token URL, the client id and the stored client secret, and it fetches the token, reuses it until shortly before it expires, and refuses to call the API unauthenticated if the exchange fails.",
+      "de": "Für eine API, die ein OAuth2-Token erwartet, muss der Tokenschritt nicht mehr von Hand modelliert werden. Geben Sie dem REST-Konnektor Token-URL, Client-ID und das hinterlegte Client-Secret — er holt das Token, verwendet es bis kurz vor Ablauf weiter und ruft die API nicht ohne Anmeldung auf, wenn der Tausch fehlschlägt."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
   "a-form-on-the-incident-repairing-an-instance-with-named-fiel": {
     "tags": [
       "Operations",

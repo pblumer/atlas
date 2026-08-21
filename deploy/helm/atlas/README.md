@@ -4,7 +4,7 @@ Deploys the single-binary [Atlas](https://github.com/pblumer/atlas) BPMN workflo
 engine — the engine, HTTP API, web UI and MCP endpoint in one container.
 
 > ⚠️ Atlas is in early development (`0.x`) — APIs and on-disk formats are
-> unstable. By default this chart deploys the pinned `0.1.0` release image; set
+> unstable. By default this chart deploys the pinned `0.3.0` release image; set
 > `image.tag` to move to another release (or to the rolling `main` tag).
 
 ## Why a StatefulSet with one replica
@@ -21,14 +21,14 @@ not pods.
 
 ```bash
 # From the OCI registry (no checkout needed):
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.1.1
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.3.0
 
 # ...or from a checkout of the repo:
 helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.1.1 \
-  --set image.tag=0.1.0 \
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.3.0 \
+  --set image.tag=0.3.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
