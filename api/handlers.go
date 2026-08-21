@@ -15,6 +15,7 @@ import (
 
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/mail"
@@ -4347,6 +4348,21 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
 			"statement": j.Statement, "params": j.Params, "named": j.Named,
 			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.AdJobTypeIndex:
+		// AD authors its own server (ADR-0166), so unlike mail the endpoint travels.
+		// What does not is the bind password: the *reference* travels and whoever runs
+		// the job resolves it, so an offloaded AD task never reads the engine's vault
+		// (ADR-0168).
+		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ad", Fields: map[string]any{
+			"url": j.URL, "bindDN": j.BindDN, "bindSecretRef": j.BindSecret,
+			"startTLS": j.StartTLS, "operation": j.Operation, "dn": j.DN,
+			"memberDN": j.MemberDN, "newDN": j.NewDN, "newPassword": j.NewPassword,
+			"attributes": j.Attributes,
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not

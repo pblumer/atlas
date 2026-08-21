@@ -1,6 +1,7 @@
 package ad
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -69,42 +70,23 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("ad: %w", err)
 		}
-		op := cp.Intern(detail.AdOp)
-		scope := ei.ProcessInstanceKey
-		scopeVars, err := readScopeVars(store, scope)
-		if err != nil {
-			return nil, fmt.Errorf("ad: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		serverURL := resolveValue(detail.AdURL, scope, scopeVars)
-		if serverURL == "" {
-			return nil, fmt.Errorf("ad: %s has an empty url", op)
-		}
-		bindDN := resolveValue(detail.AdBindDN, scope, scopeVars)
-		bindPassword := ""
-		if ref := cp.Intern(detail.AdBindSecret); ref != "" {
-			bindPassword = resolveSecret(secret, ref)
-			if bindPassword == "" {
-				return nil, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
-			}
-		}
-		conn, err := dialer.Dial(serverURL, bindDN, bindPassword, detail.AdStartTLS)
+		task, err := Resolve(store, cp, detail, ei.ProcessInstanceKey)
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close()
-		return nil, dispatch(cp, detail, op, scope, scopeVars, conn)
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved AD task means — only which process holds the
+		// bind password behind the reference.
+		return nil, Run(context.Background(), task, dialer, secret)
 	}
 }
 
-// dispatch performs the authored AD operation over the bound connection.
-func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, scope uint64, scopeVars map[string]model.VariableValue, conn Conn) error {
-	dn := resolveValue(detail.AdDN, scope, scopeVars)
+// dispatch performs the resolved AD operation over the bound connection.
+func dispatch(j Job, conn Conn) error {
+	dn, op := j.DN, j.Operation
 	switch op {
 	case "create-user", "create-group":
-		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
-		if err != nil {
-			return err
-		}
+		attrs := j.Attributes
 		defaultClass := userObjectClass
 		if op == "create-group" {
 			defaultClass = groupObjectClass
@@ -114,10 +96,7 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Add(dn, attrs)
 	case "update-attributes":
-		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
-		if err != nil {
-			return err
-		}
+		attrs := j.Attributes
 		if len(attrs) == 0 {
 			return fmt.Errorf("ad: update-attributes resolved no attributes to change")
 		}
@@ -130,7 +109,7 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Modify(dn, mods)
 	case "move":
-		newDN := resolveValue(detail.AdNewDN, scope, scopeVars)
+		newDN := j.NewDN
 		if newDN == "" {
 			return fmt.Errorf("ad: move resolved an empty newDN")
 		}
@@ -142,7 +121,7 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 	case "delete":
 		return conn.Delete(dn)
 	case "set-password":
-		newPassword := resolveValue(detail.AdNewPassword, scope, scopeVars)
+		newPassword := j.NewPassword
 		if newPassword == "" {
 			return fmt.Errorf("ad: set-password resolved an empty newPassword")
 		}
@@ -154,9 +133,9 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Modify(dn, []Mod{{Op: modReplace, Attr: attrUserAccountCtl, Vals: []string{accountControl(current, op == "disable")}}})
 	case "add-group-member":
-		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, scope, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{j.MemberDN}}})
 	case "remove-group-member":
-		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, scope, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{j.MemberDN}}})
 	default:
 		return fmt.Errorf("ad: unknown operation %q", op)
 	}

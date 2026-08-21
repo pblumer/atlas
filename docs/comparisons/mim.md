@@ -58,7 +58,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no DirSync delta read. |
+| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Runs on a worker (`--offload-connectors ad`). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no DirSync delta read. |
 | *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0171) | **Implemented** — the same lifecycle against Entra ID over Graph. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
 | Active Directory Global Address List (GAL) | — | **Missing** — cross-forest GALSync (contact provisioning + mail-attribute stitching). |
@@ -130,9 +130,9 @@ particular is the modern replacement for several MIM target-system MAs.
    plumbing was lifted into `connector/oauth2` rather than written a third time.
 3. ~~**Complete the AD connector.**~~ **Done** (ADR-0166, amended 2026-08-21):
    update-attributes, move/rename, delete and create-group close the
-   joiner/mover/leaver gap. Kerberos/NTLM bind and a DirSync delta read remain, and
-   the connector still runs in process — moving it onto a worker (ADR-0164) is the
-   obvious follow-up.
+   joiner/mover/leaver gap, and the connector now runs on a worker (ADR-0168) with the
+   bind password read from the worker's own environment. Kerberos/NTLM bind and a
+   DirSync delta read remain.
 
 ### Wave 2 — depth on what exists
 

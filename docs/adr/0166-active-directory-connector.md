@@ -1,7 +1,7 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Proposed (amended 2026-08-21 — the operation set now covers the whole
-  lifecycle; see the amendment note below)
+- **Status:** Proposed (amended 2026-08-21 twice — the operation set now covers the
+  whole lifecycle, and the connector runs on a worker; see the amendment notes below)
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -43,9 +43,47 @@
 > connector (ADR-0154), as the *Negative* note below says. The follow-ups below are
 > unchanged — Kerberos/NTLM bind, userAccountControl helpers beyond enable/disable
 > (unlock, must-change-password-at-next-logon), a delta/DirSync read, and a marketplace
-> element-template — as is the fact that this connector still runs **in process**,
-> which [ADR-0164](0164-no-in-process-service-tasks.md) deprecates. Moving it onto a
-> worker is a migration in its own right and is not part of this amendment.
+> element-template.
+>
+> **Amendment (2026-08-21, second): the connector runs on a worker.** The kind now has
+> a worker half, following [ADR-0168](0168-connector-work-on-a-worker.md), and AD's
+> shape puts the boundary in a different place than mail's.
+>
+> A mail task names a connector and nothing else, so both the endpoint and the
+> credential moved. An AD task authors its own server URL and bind DN — this record
+> decided the directory is model data — so those keep travelling with the job. **The
+> only thing that moves is where the bind password behind the reference is read.**
+> `ad.Job` carries the reference the model authored, never a value, and the process
+> running the job resolves it: the engine from its vault or environment as before, an
+> `atlas worker --connector ad` from `ATLAS_CONNECTOR_<REF>_TOKEN` in *its* own
+> environment. Offloading the kind therefore moves one variable and changes nothing
+> about any model.
+>
+> What that buys is that a compromised engine no longer yields a bind credential with
+> write access to the directory — which, now that the operation set includes delete
+> and move, is worth more than it was when the connector could only create and
+> disable.
+>
+> Two consequences worth stating plainly:
+>
+> - **An offloaded AD task cannot use the engine's vault** (ADR-0069/0070). The vault
+>   is server-side and a worker has none, so a deployment that keeps bind passwords
+>   there trades that for the worker's environment when it offloads. That is the same
+>   trade ADR-0168 accepted for every kind that moves; it is called out here because
+>   AD is the first kind whose secret was a *vault-backed reference* rather than a
+>   connector-record credential.
+> - **The new password a set-password writes does travel** on the job. It is the
+>   operation's own data and always was a process variable, and a worker leasing the
+>   job already receives the task's variables — so carrying it on the payload adds no
+>   exposure the lease did not already have. It is not a *bind* credential, and the
+>   distinction is the point.
+>
+> As with mail, the in-process handler now calls the same `Resolve`/`Run` pair the
+> worker does, so there is one definition of what a resolved AD task means rather than
+> two that drift; the existing suite passes unchanged against it, which is the evidence
+> the relocation did not alter behaviour. The kind stays registered in process by
+> default and is turned off per ADR-0157's switch — `--offload-connectors ad` — so no
+> running installation is disturbed.
 
 ## Context and problem statement
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/sqldb"
@@ -59,6 +60,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
+			})
+		case "ad":
+			// AD needs no startup configuration: its server is model-authored and its
+			// bind password is a per-task reference, so there is nothing here a
+			// misconfiguration could be caught in (see adSecretFromEnv).
+			secret := adSecretFromEnv(env)
+			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunADJob(ctx, j, ad.NewDialer(), secret)
 			})
 		case "entra":
 			reg, names, err := entraRegistryFromEnv(env)
