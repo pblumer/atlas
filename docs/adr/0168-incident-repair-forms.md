@@ -1,4 +1,4 @@
-# ADR-0167: A form on the incident — repairing an instance with named fields instead of raw JSON
+# ADR-0168: A form on the incident — repairing an instance with named fields instead of raw JSON
 
 - **Status:** Proposed
 - **Date:** 2026-08-20
