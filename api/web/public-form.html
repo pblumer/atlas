@@ -48,7 +48,7 @@
       }
       card.innerHTML = `<h1>${esc(def.processName || "Start a process")}</h1>
         <div id="form"></div>
-        <div class="actions"><button class="submit" id="submit">Submit</button></div>`;
+        <div class="actions"><button class="submit" id="submit" title="Submit this form and start the process">Submit</button></div>`;
       const form = new Form({ container: document.getElementById("form") });
       await form.importSchema(def.schema, {});
       document.getElementById("submit").addEventListener("click", async (e) => {

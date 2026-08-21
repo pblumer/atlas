@@ -107,7 +107,7 @@ function updateAccount() {
     btn.title = label;
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
-      `<button type="button" data-act="logout">Log out</button>`;
+      `<button type="button" data-act="logout" title="Sign out of Atlas">Log out</button>`;
   } else {
     btn.textContent = "A";
     btn.title = AUTH.enabled ? "Account" : "Single-user mode";
@@ -134,11 +134,11 @@ function viewLogin() {
           <input name="username" autocomplete="username" autofocus required></label>
         <label class="field">Password
           <input name="password" type="password" autocomplete="current-password" required></label>
-        <div class="row" style="margin-top:6px"><button class="btn" type="submit">Sign in</button></div>
+        <div class="row" style="margin-top:6px"><button class="btn" type="submit" title="Sign in with the username and password above">Sign in</button></div>
         <p id="login-error" class="muted" hidden></p>
       </form>
       <div style="margin-top:10px">
-        <button type="button" id="forgot-password" class="linklike">Forgot password?</button>
+        <button type="button" id="forgot-password" class="linklike" title="Show how to recover your password">Forgot password?</button>
         <p id="forgot-help" class="muted" style="margin-top:6px" hidden>
           Atlas doesn't send password-reset emails. An administrator resets
           passwords for this instance &mdash; ask yours to set a new one for your
@@ -726,14 +726,14 @@ function paintWhatsNew(slot, entries, lang) {
   const rest = entries.slice(WN_INITIAL);
   const restHTML = rest.length
     ? `<div class="wn-rest" hidden>${rest.map((e) => wnEntryHTML(e, lang, t)).join("")}</div>` +
-      `<button type="button" class="wn-more">${esc(t.more)} (${rest.length})</button>`
+      `<button type="button" class="wn-more" title="Show older What’s-new entries">${esc(t.more)} (${rest.length})</button>`
     : "";
   slot.innerHTML =
     `<div class="card whats-new"><details class="wn-root" open>` +
     `<summary class="wn-head"><span class="wn-title">${esc(t.title)}</span>` +
     `<span class="wn-lang">` +
-    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}">EN</button>` +
-    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}">DE</button>` +
+    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}" title="Show these notes in English">EN</button>` +
+    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}" title="Show these notes in German">DE</button>` +
     `</span></summary>` +
     `<div class="wn-list">${head}${restHTML}</div>` +
     `</details></div>`;
@@ -863,7 +863,7 @@ async function viewConsoleLogs() {
         <h1>Server logs</h1>
         <div class="row" style="gap:12px; align-items:center">
           <label class="field inline" style="margin:0"><input type="checkbox" id="log-follow" checked> Auto-refresh</label>
-          <button class="btn neutral" id="log-refresh">Refresh</button>
+          <button class="btn neutral" id="log-refresh" title="Reload the latest log lines now">Refresh</button>
         </div>
       </div>
       <p class="muted">The most recent server log lines (an in-memory tail). Look here for the
@@ -916,7 +916,7 @@ async function viewConsoleBackup() {
       next server restart</strong>. Connectors keep their configuration but need their secrets re-entered.</p>
       <div class="row" style="gap:12px; align-items:center">
         <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip">
-        <button class="btn neutral" id="restore-btn">Restore from file</button>
+        <button class="btn neutral" id="restore-btn" title="Upload the chosen backup archive and restore its artifacts">Restore from file</button>
       </div>
       <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
     </div>
@@ -938,7 +938,7 @@ async function viewConsoleBackup() {
       <strong>next server restart</strong>, which then rebuilds state from the restored WAL.</p>
       <div class="row" style="gap:12px; align-items:center">
         <input type="file" id="restore-full-file" accept=".gz,.tgz,application/gzip">
-        <button class="btn neutral" id="restore-full-btn">Stage full restore</button>
+        <button class="btn neutral" id="restore-full-btn" title="Upload a full snapshot; it is applied on the next server restart">Stage full restore</button>
       </div>
       <p id="restore-full-status" class="muted" style="margin-top:10px" hidden></p>
     </div>`;
@@ -994,7 +994,7 @@ function userForm(u) {
       ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
       <label class="field inline"><input type="checkbox" name="admin"${admin ? " checked" : ""}> Administrator</label>
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
-      <div class="row" style="margin-top:4px"><button class="btn" type="submit">${isEdit ? "Save changes" : "Create user"}</button></div>
+      <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
     </form></div>`;
 }
 
@@ -1105,16 +1105,16 @@ async function viewConsoleOrg() {
              <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
           : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
-        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button><button class="btn ghost" data-cact="subs" title="Manage inbound event subscriptions for this connector">Events</button>' : ""}
         ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
-        <button class="btn ghost" data-cact="edit">Edit</button>
-        <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
-        <button class="btn ghost danger" data-cact="delete">Delete</button>
+        <button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
+        <button class="btn ghost" data-cact="toggle" title="${c.enabled ? "Disable this connector (its tasks will park)" : "Enable this connector"}">${c.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost danger" data-cact="delete" title="Delete this connector">Delete</button>
       </td></tr>`;
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0">
-        <h2>Configured connectors</h2><button class="btn" id="new-connector">New connector</button>
+        <h2>Configured connectors</h2><button class="btn" id="new-connector" title="Configure a new connector">New connector</button>
       </div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed <b>temis</b> decision
       and <b>clio</b> event-store connectors a task references by name (ADR-0036/0041/0050). The
@@ -1151,8 +1151,8 @@ async function viewConsoleOrg() {
         <div class="muted" style="font-size:12px; margin-top:3px">used by ${usedBy}</div>
         <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
       <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-sact="set">Set value</button>
-        <button class="btn ghost danger" data-sact="delete">Delete</button>
+        <button class="btn ghost" data-sact="set" title="Set or rotate this secret’s value">Set value</button>
+        <button class="btn ghost danger" data-sact="delete" title="Delete this secret from the vault">Delete</button>
       </td></tr>`;
   };
   const secretsCard = secretsState === "denied"
@@ -1164,7 +1164,7 @@ async function viewConsoleOrg() {
         credentials here, encrypted at rest (ADR-0069).</p></div>`
     : `<div class="card" style="padding:0; margin-top:18px">
         <div class="between" style="padding:16px 18px 0">
-          <h2>Secrets</h2><button class="btn" id="new-secret">New secret</button>
+          <h2>Secrets</h2><button class="btn" id="new-secret" title="Store a new secret in the encrypted vault">New secret</button>
         </div>
         <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a connector's
         <b>token reference</b> resolves to, sealed at rest with AES-256-GCM (ADR-0069). The value
@@ -1190,17 +1190,17 @@ async function viewConsoleOrg() {
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
       <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-act="edit">Edit</button>
-        <button class="btn ghost" data-act="password">Password</button>
-        <button class="btn ghost" data-act="toggle">${u.disabled ? "Enable" : "Disable"}</button>
-        <button class="btn ghost danger" data-act="delete">Delete</button>
+        <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
+        <button class="btn ghost" data-act="password" title="Set a new password for this user">Password</button>
+        <button class="btn ghost" data-act="toggle" title="${u.disabled ? "Re-enable this account" : "Disable this account (blocks sign-in)"}">${u.disabled ? "Enable" : "Disable"}</button>
+        <button class="btn ghost danger" data-act="delete" title="Delete this user account">Delete</button>
       </td></tr>`;
 
   const usersCard = denied
     ? `<div class="card"><h2>Users</h2><p class="muted">Managing users requires the admin role.</p></div>`
     : `<div class="card" style="padding:0">
         <div class="between" style="padding:16px 18px 0">
-          <h2>Users</h2><button class="btn" id="new-user">New user</button>
+          <h2>Users</h2><button class="btn" id="new-user" title="Create a new user account">New user</button>
         </div>
         <p class="muted" style="padding:0 18px; margin:6px 0 12px">${AUTH.enabled
           ? "Login is enforced for this instance."
@@ -1288,7 +1288,7 @@ function appearanceCard() {
   return `
     <div class="card" style="margin-top:18px">
       <div class="between"><h2>Appearance</h2>
-        <button type="button" class="btn ghost sm" id="theme-reset">Reset to default</button></div>
+        <button type="button" class="btn ghost sm" id="theme-reset" title="Clear the custom brand colour and restore the default accent">Reset to default</button></div>
       <p class="muted" style="margin:6px 0 14px">Tint the interface with your organisation's brand
       colour. The accent recolours buttons, links, the active navigation and highlights across every
       view — applied for everyone on this instance.</p>
@@ -1309,7 +1309,7 @@ function appearanceCard() {
 
       <div class="logo-row">
         <div class="between"><h3 style="margin:0">Logo</h3>
-          <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"}>Remove logo</button></div>
+          <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
         <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
         a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
         <div class="logo-controls">
@@ -1511,7 +1511,7 @@ async function viewModelerHome() {
         <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
-    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
+    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="Show or hide the deployed processes">Deployed</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
       <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
     </div>`;
@@ -1601,7 +1601,7 @@ async function viewModelerHome() {
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
         <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-        <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="Delete this deployed process and all its versions">Delete</button>
       </td>
     </tr>`;
   };
@@ -1795,14 +1795,14 @@ async function viewProjectDetail(id) {
       <div class="between">
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Publish</button>` : ""}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy" title="Publish this application as a new release and deploy it">Publish</button>` : ""}
           ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
       ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
-        <button data-pane="artifacts" class="active">Artifacts</button>
-        <button data-pane="deployments">Deployments</button>
+        <button data-pane="artifacts" class="active" title="Show this application’s design-time artifacts">Artifacts</button>
+        <button data-pane="deployments" title="Show what this application currently has deployed">Deployments</button>
       </div>`}
       <div id="pane-artifacts">
         <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
@@ -1965,7 +1965,7 @@ async function renderAppDeployments(id) {
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
     <td class="row-actions">${targets.length
-      ? `<button class="btn ghost sm" data-promote="${r.version}">Promote…</button>`
+      ? `<button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
       : ""}</td>
   </tr>`;
 
@@ -2155,8 +2155,8 @@ function confirmTerminateAll(name, count) {
             <input id="term-all-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-cancel>Cancel</button>
-          <button class="btn danger" data-confirm ${gated ? "disabled" : ""}>Terminate ${count}</button>
+          <button class="btn neutral" data-cancel title="Cancel without terminating any instances">Cancel</button>
+          <button class="btn danger" data-confirm ${gated ? "disabled" : ""} title="Terminate every running instance of this process">Terminate ${count}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -2189,12 +2189,12 @@ function openShareModal(proj, users, degraded, reload) {
     <div class="modal share-modal" role="dialog" aria-modal="true" aria-label="Share project">
       <div class="modal-head">
         <h2>Share “${esc(p.name)}”</h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close">✕</button>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
       </div>
       <div class="modal-body" id="share-body"></div>
       <div class="modal-foot">
         <span class="muted small">Sharing controls who can view and edit this project’s diagrams. Running instances are not affected.</span>
-        <button type="button" class="btn" data-done>Done</button>
+        <button type="button" class="btn" data-done title="Close this dialog">Done</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -2237,7 +2237,7 @@ function openShareModal(proj, users, degraded, reload) {
       ? `<div class="add-row">
            <input class="field" id="add-uid" placeholder="User ID (usr_…)" autocomplete="off">
            ${roleSelect("viewer", 'id="add-role"')}
-           <button type="button" class="btn" id="add-btn">Add</button>
+           <button type="button" class="btn" id="add-btn" title="Give this person access">Add</button>
          </div>
          <p class="muted small">Could not load the directory — add by user ID for now.</p>`
       : eligible.length
@@ -2246,7 +2246,7 @@ function openShareModal(proj, users, degraded, reload) {
                ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
              </select>
              ${roleSelect("viewer", 'id="add-role"')}
-             <button type="button" class="btn" id="add-btn">Add</button>
+             <button type="button" class="btn" id="add-btn" title="Give this person access">Add</button>
            </div>`
         : `<p class="muted small">Everyone already has access.</p>`;
 
@@ -2257,8 +2257,8 @@ function openShareModal(proj, users, degraded, reload) {
     body.innerHTML = `
       <div class="share-sec">
         <div class="seg" role="group" aria-label="Visibility">
-          <button type="button" data-vis="private" class="${p.visibility !== "shared" ? "active" : ""}">Private</button>
-          <button type="button" data-vis="shared" class="${p.visibility === "shared" ? "active" : ""}">Shared</button>
+          <button type="button" data-vis="private" class="${p.visibility !== "shared" ? "active" : ""}" title="Keep this project private to its owner and members">Private</button>
+          <button type="button" data-vis="shared" class="${p.visibility === "shared" ? "active" : ""}" title="Make this project visible to the people you add below">Shared</button>
         </div>
         ${privateHint}
       </div>
@@ -2457,8 +2457,8 @@ function showMIMReport(res) {
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn neutral" data-close>Close</button>
-        <button class="btn" data-open>Open in Modeler</button>
+        <button class="btn neutral" data-close title="Close this report">Close</button>
+        <button class="btn" data-open title="Open the imported draft in the Modeler">Open in Modeler</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -2492,7 +2492,7 @@ function wireConnectorManagement(connectors) {
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
-        <button class="btn" type="submit">Add</button>
+        <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
         <p class="muted mail-only conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
@@ -2653,7 +2653,7 @@ function toggleProvisionClio(row, connectorId, connectorName) {
     <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
       <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
       <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
-      <button class="btn" type="submit">Provision</button>
+      <button class="btn" type="submit" title="Mint the scoped key and store it as this connector’s credential">Provision</button>
       <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
         <input type="checkbox" name="recursive" checked/>
         <span>Recursive — grant read on the whole subtree (<code>read:/employees/*</code>), needed to watch child subjects.</span>
@@ -2693,7 +2693,7 @@ async function toggleInboundSubs(row, connectorId) {
       <td><code>${esc(s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled ? '<span class="pill ok"><span class="dot"></span>on</span>' : '<span class="pill warn"><span class="dot"></span>off</span>'}</td>
-      <td style="text-align:right"><button class="btn ghost danger" data-sdel>Delete</button></td>
+      <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const panel = document.createElement("tr");
   panel.className = "subs-row";
@@ -2704,7 +2704,7 @@ async function toggleInboundSubs(row, connectorId) {
       <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>
       <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="employee.created" required/></label>
       <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="= subjectTail"/></label>
-      <button class="btn" type="submit">Add</button>
+      <button class="btn" type="submit" title="Add this inbound event subscription">Add</button>
       <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
         <input type="checkbox" name="recursive"/>
         <span>Recursive — also watch the subject's subtree (a watch on <code>/employees</code> catches an event written to <code>/employees/E-123456</code>).</span>
@@ -2758,7 +2758,7 @@ function wireSecretsManagement(secrets, state, connectors) {
         <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
           <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk_token" required/></label>
           <div id="secret-value-slot">${secretValueFieldHTML(null)}</div>
-          <button class="btn" type="submit">Save</button>
+          <button class="btn" type="submit" title="Save this secret to the vault">Save</button>
         </div>
         <div id="secret-hint-slot"></div>
         <p class="secret-error" hidden></p></form>`;
@@ -2844,8 +2844,8 @@ function toggleSetSecret(row, name, connectors, put, reload) {
         <span class="chip">${esc(name)}</span>. It is sealed at rest and never shown again.</p>
       <p class="secret-error" hidden></p>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn" type="submit">Save value</button>
-        <button class="btn neutral" type="button" data-cancel>Cancel</button>
+        <button class="btn" type="submit" title="Save the new value for this secret">Save value</button>
+        <button class="btn neutral" type="button" data-cancel title="Cancel without changing the secret">Cancel</button>
       </div>
     </form></td>`;
   row.after(panel);
@@ -3109,8 +3109,8 @@ async function viewInstances() {
     <div class="between">
       <h1>Instances</h1>
       <div class="row">
-        <button class="btn" id="demo">Deploy demo</button>
-        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn" id="demo" title="Deploy a ready-made demo process with a task that parks a token">Deploy demo</button>
+        <button class="btn neutral" id="refresh" title="Reload the instance list now">Refresh</button>
       </div>
     </div>
     <p class="muted">One row per deployed process. Open a process to pick a version, then
@@ -3134,8 +3134,8 @@ async function viewInstances() {
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
         <input id="var-q" type="text" placeholder="Search instances by variable — e.g. customerType=Business" aria-label="Search instances by variable" spellcheck="false" autocomplete="off"/>
       </span>
-      <button class="btn" type="submit">Search variables</button>
-      <button class="btn ghost" type="button" id="var-clear" hidden>Clear</button>
+      <button class="btn" type="submit" title="Find instances whose process variables match">Search variables</button>
+      <button class="btn ghost" type="button" id="var-clear" hidden title="Clear the variable search and its results">Clear</button>
     </form>
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
@@ -3441,7 +3441,7 @@ async function viewDecisions() {
   view.innerHTML = `
     <div class="between">
       <h1>Decisions</h1>
-      <button class="btn neutral" id="refresh">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the deployed decisions">Refresh</button>
     </div>
     <p class="muted">One row per deployed DMN decision. A decision appears once any
     deployed process references it — even before it has run — and its usage grows as
@@ -3510,7 +3510,7 @@ async function viewCallActivities() {
   view.innerHTML = `
     <div class="between">
       <h1>Call activities</h1>
-      <button class="btn neutral" id="refresh">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the call-activity list">Refresh</button>
     </div>
     <p class="muted">One row per call activity across the processes deployed on this
     server. A call activity starts another deployed process as a child instance; it
@@ -3661,7 +3661,7 @@ async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
       <h1>Incidents</h1>
-      <button class="btn neutral" id="refresh">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the incident list">Refresh</button>
     </div>
     <p class="muted">Every unresolved incident on this server — where a token is
     stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
@@ -3712,7 +3712,7 @@ async function viewIncidents() {
           <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
           <td>${esc(r.message || "—")}${incidentConnectorChip(r)}</td>
           <td class="row-actions">
-            <button class="btn sm" data-resolve="${i}">Resolve…</button>
+            <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
             ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
         </tr>`;
       }).join("");
@@ -3776,7 +3776,7 @@ async function viewWorkers() {
   view.innerHTML = `
     <div class="between">
       <h1>Workers</h1>
-      <span><button class="btn neutral" id="refresh">Refresh</button></span>
+      <span><button class="btn neutral" id="refresh" title="Reload the workers and queue depths now">Refresh</button></span>
     </div>
     <p class="muted">Who is doing the engine&rsquo;s work. A job type with a growing queue and no worker
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
@@ -3928,8 +3928,8 @@ async function viewWorkers() {
             <td class="wk-num">${c.pid || "&mdash;"}</td>
             <td class="wk-num">${c.starts}</td>
             <td class="row-actions">
-              ${(c.log || []).length ? `<button class="btn neutral sm" data-log="${esc(c.id)}">Log</button>` : ""}
-              <button class="btn neutral sm" data-restart="${esc(c.id)}">&#8635; Restart</button></td>
+              ${(c.log || []).length ? `<button class="btn neutral sm" data-log="${esc(c.id)}" title="Show this worker’s recent log">Log</button>` : ""}
+              <button class="btn neutral sm" data-restart="${esc(c.id)}" title="Restart this supervised worker process">&#8635; Restart</button></td>
           </tr>${(c.log || []).length ? `<tr class="wk-log-row" data-log-for="${esc(c.id)}" hidden>
             <td colspan="6"><pre class="wk-log">${esc((c.log || []).join("\n"))}</pre></td></tr>` : ""}`).join("")}
           </tbody></table>`;
@@ -3970,8 +3970,8 @@ async function viewMailOutbox() {
     <div class="between">
       <h1>Outbox</h1>
       <span>
-        <button class="btn neutral" id="refresh">Refresh</button>
-        <button class="btn ghost danger" id="clear">Empty outbox</button>
+        <button class="btn neutral" id="refresh" title="Reload the outbox">Refresh</button>
+        <button class="btn ghost danger" id="clear" title="Delete all messages from the preview outbox">Empty outbox</button>
       </span>
     </div>
     <p class="muted">Messages a mail connector using the <b>preview</b> provider
@@ -4050,7 +4050,7 @@ async function viewDecisionDetail(id) {
         <div class="muted" style="font-size:12px"><a href="#/operations/decisions">← Decisions</a></div>
         <h1>${esc(id)}</h1>
       </div>
-      <button class="btn neutral" id="refresh">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload this decision’s evaluations">Refresh</button>
     </div>
     <p class="muted">Every evaluation of this decision, newest first — one row per
     evaluation. <b>Inputs</b> is what the decision actually saw (each value with its
@@ -4289,8 +4289,8 @@ async function viewTasks(preselectKey) {
       <section class="tasks-list-pane">
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
-          <button class="btn ghost small" id="task-select">Select</button>
-          <button class="btn ghost small" id="task-refresh">Refresh</button>
+          <button class="btn ghost small" id="task-select" title="Select multiple tasks to act on them together">Select</button>
+          <button class="btn ghost small" id="task-refresh" title="Reload the task list now">Refresh</button>
         </header>
         <div class="tasks-toolbar">
           <span class="tasks-search">
@@ -4451,11 +4451,11 @@ async function viewTasks(preselectKey) {
       <label class="tasks-bulk-all"><input type="checkbox" id="bulk-all"${allVisPicked ? " checked" : ""}/> All visible</label>
       <span class="tasks-bulk-count">${n} selected</span>
       <span class="tasks-bulk-actions">
-        <button class="btn small" id="bulk-claim"${n ? "" : " disabled"}>Claim</button>
-        <button class="btn small" id="bulk-unclaim"${n ? "" : " disabled"}>Unclaim</button>
+        <button class="btn small" id="bulk-claim"${n ? "" : " disabled"} title="Claim the selected tasks">Claim</button>
+        <button class="btn small" id="bulk-unclaim"${n ? "" : " disabled"} title="Release the selected tasks">Unclaim</button>
         ${state.assignable.length ? `<select class="tasks-assign" id="bulk-assign"${n ? "" : " disabled"}><option value="">Assign to&hellip;</option>${assignOpts}</select>` : ""}
-        <button class="btn small" id="bulk-complete"${n ? "" : " disabled"}>Complete</button>
-        <button class="btn ghost small" id="bulk-clear"${n ? "" : " disabled"}>Clear</button>
+        <button class="btn small" id="bulk-complete"${n ? "" : " disabled"} title="Complete the selected tasks">Complete</button>
+        <button class="btn ghost small" id="bulk-clear"${n ? "" : " disabled"} title="Clear the current selection">Clear</button>
       </span>`;
     bulkEl.querySelector("#bulk-all").addEventListener("change", (e) => {
       if (e.target.checked) vis.forEach((t) => state.picked.add(t.key));
@@ -4674,8 +4674,8 @@ async function viewTasks(preselectKey) {
     const tab = state.detailTab === "process" ? "process" : "form";
     const tabBar = `
       <div class="tasks-detail-tabs" id="task-dtabs" role="tablist">
-        <button type="button" role="tab" data-dtab="form"${tab === "form" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Form</button>
-        <button type="button" role="tab" data-dtab="process"${tab === "process" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Process</button>
+        <button type="button" role="tab" data-dtab="form"${tab === "form" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'} title="Show the task form">Form</button>
+        <button type="button" role="tab" data-dtab="process"${tab === "process" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'} title="Show the process diagram and variables">Process</button>
       </div>`;
     const procPane = `
       <div class="tasks-tabpane" id="pane-process"${tab === "process" ? "" : " hidden"}>
@@ -4702,7 +4702,7 @@ async function viewTasks(preselectKey) {
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
           ${assignSelect}
-          <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint}>${claimLabel}</button>
+          <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint || ` title="${mine ? "Release this task back to the queue" : "Claim this task so it is assigned to you"}"`}>${claimLabel}</button>
           <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
         </div>
       </header>
@@ -4800,7 +4800,7 @@ async function viewTasks(preselectKey) {
     el.hidden = false;
     el.innerHTML =
       `<span>Showing the newest ${state.tasks.length} tasks — more exist. Filter to narrow, or load older.</span>` +
-      `<button class="btn ghost small" id="task-older"${state.nextCursor ? "" : " disabled"}>Load older</button>`;
+      `<button class="btn ghost small" id="task-older"${state.nextCursor ? "" : " disabled"} title="Load the next page of older tasks">Load older</button>`;
     const older = document.getElementById("task-older");
     if (older) older.addEventListener("click", loadOlder);
   }
@@ -4908,7 +4908,7 @@ async function viewStartProcess() {
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
         <header class="tasks-list-head"><h2>Start a process</h2>
-          <button class="btn ghost small" id="start-refresh">Refresh</button></header>
+          <button class="btn ghost small" id="start-refresh" title="Reload the list of startable processes">Refresh</button></header>
         <ul class="tasks-list" id="start-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
       </section>
       <section class="tasks-detail" id="start-detail"></section>
@@ -4948,7 +4948,7 @@ async function viewStartProcess() {
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(p.name || p.processId)}</h1>
-        <button class="btn" id="start-go">Start process</button>
+        <button class="btn" id="start-go" title="Start a new instance with the form values above">Start process</button>
       </header>
       <div class="tasks-fields">
         <div class="tasks-field"><span class="tasks-field-label muted">Process</span><span class="chip">${esc(p.processId)}</span></div>
@@ -4986,7 +4986,7 @@ async function viewStartProcess() {
       host.innerHTML = `
         <div class="publish-head"><span class="tasks-field-label muted">Public link</span></div>
         <p class="muted publish-hint">No public link yet. Publish one to let anyone start this process from a form &mdash; no sign-in required.</p>
-        <button class="btn ghost small" id="publish-create">Publish public link</button>`;
+        <button class="btn ghost small" id="publish-create" title="Create a public, sign-in-free link to start this process">Publish public link</button>`;
       host.querySelector("#publish-create").addEventListener("click", async (e) => {
         e.currentTarget.disabled = true;
         try {
@@ -5004,10 +5004,10 @@ async function viewStartProcess() {
         <span class="chip ok">Live</span></div>
       <div class="publish-row">
         <input class="publish-url" id="publish-url" type="text" readonly value="${esc(url)}" />
-        <button class="btn ghost small" id="publish-copy">Copy</button>
+        <button class="btn ghost small" id="publish-copy" title="Copy the public link to the clipboard">Copy</button>
         <a class="btn ghost small" href="${esc(link.url)}" target="_blank" rel="noopener">Open</a>
       </div>
-      <button class="btn ghost small danger" id="publish-revoke">Revoke</button>`;
+      <button class="btn ghost small danger" id="publish-revoke" title="Revoke the public link so its URL stops working">Revoke</button>`;
     host.querySelector("#publish-url").addEventListener("focus", (e) => e.currentTarget.select());
     host.querySelector("#publish-copy").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(url); toast("Link copied"); }
@@ -5184,7 +5184,7 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit">Bearbeiten</button>` : "";
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Bearbeiten</button>` : "";
   // Re-render from the updated model once the editor closes on a save; also
   // resolves the back link's project name.
   const wireEdit = () => {
@@ -5313,7 +5313,7 @@ async function viewMarketplace() {
   view.innerHTML = `
     <div class="between">
       <h1>Marketplace</h1>
-      <button class="btn neutral" id="mkt-refresh">Refresh</button>
+      <button class="btn neutral" id="mkt-refresh" title="Reload the marketplace catalog">Refresh</button>
     </div>
     <p class="muted">Connectors, service tasks and scripts the community already built,
     packaged as element templates. Install one and it lands in your palette ready to
@@ -5323,10 +5323,10 @@ async function viewMarketplace() {
     <div class="ops-toolbar">
       <input id="mkt-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the marketplace">
       <div class="seg" id="mkt-kinds" role="tablist">
-        <button class="active" data-kind="" role="tab">All</button>
-        <button data-kind="connector" role="tab">Connectors</button>
-        <button data-kind="service-task" role="tab">Service tasks</button>
-        <button data-kind="script-task" role="tab">Script tasks</button>
+        <button class="active" data-kind="" role="tab" title="Show all packages">All</button>
+        <button data-kind="connector" role="tab" title="Show connectors only">Connectors</button>
+        <button data-kind="service-task" role="tab" title="Show service tasks only">Service tasks</button>
+        <button data-kind="script-task" role="tab" title="Show script tasks only">Script tasks</button>
       </div>
     </div>
     <div id="mkt-grid" class="mkt-grid"><div class="card empty">Loading…</div></div>`;
@@ -5354,10 +5354,10 @@ async function viewMarketplace() {
         ? '<span class="pill warn"><span class="dot"></span>Runs code</span>'
         : '<span class="pill ok"><span class="dot"></span>Data only</span>';
       const action = isInstalled
-        ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}">Remove</button>`
+        ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}" title="Remove this template from your server">Remove</button>`
         : p.carriesCode
-          ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}">Review &amp; install</button>`
-          : `<button class="btn" data-act="install" data-id="${esc(p.id)}">Install</button>`;
+          ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
+          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template into your palette">Install</button>`;
       const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
       return `<div class="mkt-card card">
         <div class="mkt-head">

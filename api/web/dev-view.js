@@ -262,10 +262,10 @@ export function openDevView(field, opts = {}) {
         <strong class="dev-title">${esc(opts.title || fieldTitle(field))}</strong>
         <span class="dev-dirty" hidden title="Unsaved changes">●</span>
         <span class="dev-head-sp"></span>
-        ${canTest ? `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false">Test</button>` : ""}
-        ${lang.format ? `<button type="button" class="btn ghost small dev-fmt">{ } Format</button>` : ""}
-        <button type="button" class="btn ghost small dev-cancel">Cancel</button>
-        <button type="button" class="btn small dev-apply">Apply</button>
+        ${canTest ? `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false" title="Show a panel to run this expression against sample variables">Test</button>` : ""}
+        ${lang.format ? `<button type="button" class="btn ghost small dev-fmt" title="Reformat the code">{ } Format</button>` : ""}
+        <button type="button" class="btn ghost small dev-cancel" title="Close without applying">Cancel</button>
+        <button type="button" class="btn small dev-apply" title="Apply the edited code to the field">Apply</button>
       </header>
       <div class="dev-body">
         <div class="dev-main">
@@ -275,8 +275,8 @@ export function openDevView(field, opts = {}) {
             <label class="dev-run-label" for="dev-run-vars">Sample variables (JSON)</label>
             <textarea id="dev-run-vars" class="dev-run-vars" rows="4" spellcheck="false" placeholder='{ "amount": 100 }'></textarea>
             <div class="dev-run-row">
-              <button type="button" class="btn neutral small dev-run-btn">Run</button>
-              <button type="button" class="btn ghost small dev-run-fill" hidden>From instance</button>
+              <button type="button" class="btn neutral small dev-run-btn" title="Evaluate the expression against the sample variables">Run</button>
+              <button type="button" class="btn ghost small dev-run-fill" hidden title="Fill the sample variables from a live instance">From instance</button>
               <span class="dev-run-out" aria-live="polite"></span>
             </div>
             <pre class="dev-run-detail" hidden></pre>
@@ -287,10 +287,10 @@ export function openDevView(field, opts = {}) {
         <aside class="dev-side">
           <div class="dev-tabs" role="tablist">
             <button type="button" class="dev-side-toggle" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true">›</button>
-            <button type="button" role="tab" class="dev-tab active" data-tab="vars" aria-selected="true">Variables</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="fns" aria-selected="false"${groups.length ? "" : " hidden"}>Functions</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="help" aria-selected="false">Help</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="snips" aria-selected="false"${snippets.length ? "" : " hidden"}>Examples</button>
+            <button type="button" role="tab" class="dev-tab active" data-tab="vars" aria-selected="true" title="Browse the variables you can insert">Variables</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="fns" aria-selected="false"${groups.length ? "" : " hidden"} title="Browse the available functions">Functions</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="help" aria-selected="false" title="Read reference help for this language">Help</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="snips" aria-selected="false"${snippets.length ? "" : " hidden"} title="Browse ready-made example snippets">Examples</button>
           </div>
           <input type="search" class="dev-filter" placeholder="Filter…" aria-label="Filter" />
           <div class="dev-pane dev-pane-vars" role="tabpanel"></div>
@@ -302,7 +302,7 @@ export function openDevView(field, opts = {}) {
       <footer class="dev-foot">
         <span class="dev-pos">Ln 1, Col 1</span>
         <span class="dev-count"></span>
-        <span class="dev-confirm" hidden>Discard your changes? <button type="button" class="linklike dev-discard">Discard</button> · <button type="button" class="linklike dev-keep">Keep editing</button></span>
+        <span class="dev-confirm" hidden>Discard your changes? <button type="button" class="linklike dev-discard" title="Discard your changes and close">Discard</button> · <button type="button" class="linklike dev-keep" title="Return to editing">Keep editing</button></span>
         <span class="dev-foot-sp"></span>
         <span class="dev-keys"><kbd>Ctrl</kbd>+<kbd>Space</kbd> completions · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply · <kbd>Esc</kbd> close</span>
       </footer>
@@ -374,7 +374,7 @@ export function openDevView(field, opts = {}) {
   // from, and a way to ask again once the process has run.
   function sampleStripHTML() {
     if (!opts.samples) return "";
-    const reload = `<button type="button" class="linklike dev-sample-reload">Reload</button>`;
+    const reload = `<button type="button" class="linklike dev-sample-reload" title="Read the latest values from a live instance">Reload</button>`;
     if (samples.state === "loading") return `<div class="dev-sample-strip">Reading a live instance…</div>`;
     if (samples.state === "error") return `<div class="dev-sample-strip">Live values unavailable · ${reload}</div>`;
     if (samples.state === "none") {
@@ -413,7 +413,7 @@ export function openDevView(field, opts = {}) {
       for (const v of rows) {
         const sample = samples.values[v.name];
         const shown = sampleText(sample);
-        html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}">
+        html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}" title="Insert this variable (or drag it into the code)">
           <span class="dev-item-head">
             <span class="dev-item-name">${esc(v.name)}</span>
             <span class="dev-item-detail">${esc(v.detail)}</span>
@@ -435,7 +435,7 @@ export function openDevView(field, opts = {}) {
         // The row reads; the "+" beside it inserts. Two targets, no ambiguity about
         // which click edits the code.
         html += `<div class="dev-row">
-          <button type="button" class="dev-item dev-fn" data-fn="${esc(it.name)}">
+          <button type="button" class="dev-item dev-fn" data-fn="${esc(it.name)}" title="Show this function’s documentation">
             <span class="dev-item-name">${esc(it.name)}</span>
             <span class="dev-item-detail">${esc(it.sig || "")}</span></button>
           <button type="button" class="dev-quick dev-ins-fn" data-fn="${esc(it.name)}" title="Insert ${esc(it.name)}" aria-label="Insert ${esc(it.name)}">+</button>
@@ -464,9 +464,9 @@ export function openDevView(field, opts = {}) {
         <p>${esc(it.doc || "")}</p>`;
       if (it.ex) {
         html += `<h5>Example</h5><pre class="dev-help-ex">${esc(it.ex)}</pre>
-          <button type="button" class="btn ghost small dev-ins-ex">Insert example</button>`;
+          <button type="button" class="btn ghost small dev-ins-ex" title="Insert this example into the code">Insert example</button>`;
       }
-      html += `<button type="button" class="btn ghost small dev-ins-fn" data-fn="${esc(it.name)}">Insert call</button></div>`;
+      html += `<button type="button" class="btn ghost small dev-ins-fn" data-fn="${esc(it.name)}" title="Insert a call to this function">Insert call</button></div>`;
     } else if (groups.length) {
       html += `<p class="dev-empty">Pick a function to read its page.</p>`;
     }
@@ -481,7 +481,7 @@ export function openDevView(field, opts = {}) {
           <h4>${esc(s.title)}</h4>
           <p>${esc(s.doc)}</p>
           <pre>${esc(s.code)}</pre>
-          <button type="button" class="btn ghost small dev-ins-snip" data-i="${i}">Insert</button>
+          <button type="button" class="btn ghost small dev-ins-snip" data-i="${i}" title="Insert this example into the code">Insert</button>
         </div>`).join("")
       : `<p class="dev-empty">No example matches the filter.</p>`;
   }
