@@ -101,6 +101,13 @@ type Options struct {
 	// MaxJobs is how many jobs one poll may lease. Keep it to what this worker can
 	// actually run: leased work nobody is running is work nobody else can take either.
 	MaxJobs int
+	// Connectors are the connector names this worker holds credentials for, reported
+	// to the engine on every poll. Only the worker knows them — once a kind is
+	// offloaded the engine holds no credential for it — and the Workers view
+	// subtracts them from what deployed models reference to show which names are
+	// configured nowhere (ADR-0168). Empty for a worker that serves only plain job
+	// types, which need no credential of their own.
+	Connectors []string
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
 }
@@ -233,6 +240,12 @@ func (w *Worker) activate(ctx context.Context, jobType string) ([]Job, error) {
 		"type": jobType, "worker": w.opts.ID,
 		"leaseMs": w.opts.Lease.Milliseconds(), "waitMs": w.opts.Wait.Milliseconds(),
 		"maxJobs": w.opts.MaxJobs,
+	}
+	// Sent on every poll, including one that returns nothing: it is the engine's only
+	// way to learn what this worker can reach, and an idle worker is exactly the case
+	// an operator is looking at when a queue is not moving (ADR-0168).
+	if len(w.opts.Connectors) > 0 {
+		body["connectors"] = w.opts.Connectors
 	}
 	var out struct {
 		Jobs []Job `json:"jobs"`

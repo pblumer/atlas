@@ -35,13 +35,17 @@ type workerStat struct {
 	Worker string `json:"worker"`
 	// Types counts jobs leased per job type, which is how an operator sees what a
 	// worker actually subscribes to rather than what it was configured for.
-	Types     map[string]int64 `json:"types"`
-	FirstSeen int64            `json:"firstSeen"`
-	LastSeen  int64            `json:"lastSeen"`
-	Leased    int64            `json:"leased"`
-	Pulled    int64            `json:"pulled"`
-	Completed int64            `json:"completed"`
-	Failed    int64            `json:"failed"`
+	Types map[string]int64 `json:"types"`
+	// Connectors are the connector configurations this worker reports holding —
+	// the providers it can reach. Empty for a worker that serves only plain job
+	// types, which need no credential of their own.
+	Connectors []string `json:"connectors,omitempty"`
+	FirstSeen  int64    `json:"firstSeen"`
+	LastSeen   int64    `json:"lastSeen"`
+	Leased     int64    `json:"leased"`
+	Pulled     int64    `json:"pulled"`
+	Completed  int64    `json:"completed"`
+	Failed     int64    `json:"failed"`
 }
 
 // workerRegistry accumulates what the workers endpoint reports.
@@ -75,6 +79,19 @@ func (r *workerRegistry) seen(worker string) *workerStat {
 	}
 	st.LastSeen = r.now()
 	return st
+}
+
+// holdsConnectors records the connector names a worker reports holding. It replaces
+// rather than merges: the report is that worker's current configuration, so a
+// connector removed from it should stop being counted as served rather than linger
+// from an earlier poll.
+func (r *workerRegistry) holdsConnectors(worker string, names []string) {
+	if worker == "" && len(names) == 0 {
+		return
+	}
+	st := r.seen(worker)
+	st.Connectors = append([]string(nil), names...)
+	sort.Strings(st.Connectors) // stable order, so the view does not shuffle
 }
 
 // leased records that a worker took n jobs of a type.
@@ -188,9 +205,10 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	// iterates these. Saying it here beats a nil check further down that nothing can
 	// reach, since neither list() nor All() ever returns nil.
 	var (
-		types   = []jobTypeStat{}
-		list    = []workerStat{}
-		scanErr error
+		types    = []jobTypeStat{}
+		list     = []workerStat{}
+		unserved = []unservedConnector{}
+		scanErr  error
 	)
 	s.do(func() {
 		incidents := s.incidentsByJobType()
@@ -221,6 +239,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			types = append(types, st)
 		}
 		list = s.workers.list()
+		unserved = s.unservedConnectors()
 	})
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read job queues: "+scanErr.Error())
@@ -236,7 +255,96 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"workers": list, "types": types, "supervised": supervised,
+		"unservedConnectors": unserved,
 	})
+}
+
+// unservedConnector is a connector name a deployed model references that nothing on
+// this server can currently serve.
+type unservedConnector struct {
+	Name      string     `json:"name"`
+	JobType   string     `json:"jobType"`
+	Processes []typeUser `json:"processes"`
+}
+
+// unservedConnectors names the connectors deployed models reference that neither the
+// engine nor any worker seen pulling can serve.
+//
+// This exists because moving a credential onto a worker (ADR-0168) took a check away
+// from the engine. It used to refuse an unconfigured connector at lease time, since
+// it held every credential; once a kind is offloaded it holds none and cannot read a
+// worker's environment. So the answer has to be assembled from two halves: the names
+// models reference, which only the engine knows, and the names workers hold, which
+// only they know and report on each poll.
+//
+// A kind the engine still serves itself is left out. There the engine's own registry
+// is the authority and already refuses at deploy and at lease time (ADR-0163);
+// listing it here would say "missing" about a connector that works.
+//
+// A worker that has never polled reports nothing, so a connector is listed until the
+// worker holding it is first seen. That is the honest reading — an operator looking
+// at a queue that is not moving wants to know that nothing has claimed it — and it
+// resolves itself on the first poll.
+//
+// Runs on the run-loop goroutine, over the in-memory deployment registry.
+func (s *Server) unservedConnectors() []unservedConnector {
+	held := map[string]bool{}
+	for _, st := range s.workers.byName {
+		for _, name := range st.Connectors {
+			held[name] = true
+		}
+	}
+	// name+jobType -> the processes referencing it, newest version per process id.
+	type key struct {
+		name    string
+		jobType int32
+	}
+	users := map[key]map[string]typeUser{}
+	for defKey, d := range s.deployments {
+		if d.cp == nil {
+			continue
+		}
+		for _, ref := range d.cp.ConnectorRefs() {
+			if ref.Connector == "" || held[ref.Connector] {
+				continue
+			}
+			if s.jobRunner.Handles(ref.JobType) {
+				continue // the engine serves this kind itself and holds its credentials
+			}
+			k := key{ref.Connector, ref.JobType}
+			byID, ok := users[k]
+			if !ok {
+				byID = map[string]typeUser{}
+				users[k] = byID
+			}
+			if prev, seen := byID[d.ProcessID]; seen && prev.Version >= d.Version {
+				continue
+			}
+			byID[d.ProcessID] = typeUser{
+				ProcessDefKey: defKey, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
+			}
+		}
+	}
+	out := make([]unservedConnector, 0, len(users))
+	for k, byID := range users {
+		procs := make([]typeUser, 0, len(byID))
+		for _, u := range byID {
+			procs = append(procs, u)
+		}
+		sort.Slice(procs, func(i, j int) bool { return procs[i].ProcessID < procs[j].ProcessID })
+		out = append(out, unservedConnector{
+			Name:      k.name,
+			JobType:   s.jobTypeName(nil, k.jobType),
+			Processes: procs,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].JobType < out[j].JobType
+	})
+	return out
 }
 
 // incidentsByJobType counts unresolved incidents per job-type index, so a stalled
