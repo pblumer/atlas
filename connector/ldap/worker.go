@@ -3,6 +3,7 @@ package ldap
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -67,7 +68,20 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 				return nil, fmt.Errorf("ldap: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
 			}
 		}
-		conn, err := dialer.Dial(serverURL, bindDN, bindPassword, detail.LdapStartTLS)
+		clientCert := ""
+		if ref := cp.Intern(detail.LdapClientCertSecret); ref != "" {
+			clientCert = resolveSecret(secret, ref)
+			if clientCert == "" {
+				return nil, fmt.Errorf("ldap: client certificate secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
+			}
+		}
+		conn, err := dialer.Dial(DialOptions{
+			URL:          serverURL,
+			StartTLS:     detail.LdapStartTLS,
+			BindDN:       bindDN,
+			BindPassword: bindPassword,
+			ClientCert:   clientCert,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -83,9 +97,11 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 	switch op {
 	case "search":
 		entries, err := conn.Search(SearchRequest{
-			BaseDN: resolveValue(detail.LdapBaseDN, scope, scopeVars),
-			Scope:  cp.Intern(detail.LdapScope),
-			Filter: resolveValue(detail.LdapFilter, scope, scopeVars),
+			BaseDN:     resolveValue(detail.LdapBaseDN, scope, scopeVars),
+			Scope:      cp.Intern(detail.LdapScope),
+			Filter:     resolveValue(detail.LdapFilter, scope, scopeVars),
+			PageSize:   detail.LdapPageSize,
+			MaxEntries: detail.LdapMaxEntries,
 		})
 		if err != nil {
 			return nil, err
@@ -101,12 +117,15 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 			return nil, err
 		}
 		return nil, conn.Add(resolveValue(detail.LdapDN, scope, scopeVars), attrs)
-	case "modify":
+	case "modify", "add-values", "delete-values":
 		attrs, err := attrsFromVar(cp.Intern(detail.LdapEntryVar), scopeVars)
 		if err != nil {
 			return nil, err
 		}
-		return nil, conn.Modify(resolveValue(detail.LdapDN, scope, scopeVars), attrs)
+		if len(attrs) == 0 {
+			return nil, fmt.Errorf("ldap: %s resolved no attributes to change", op)
+		}
+		return nil, conn.Modify(resolveValue(detail.LdapDN, scope, scopeVars), modsFor(op, attrs))
 	case "delete":
 		return nil, conn.Delete(resolveValue(detail.LdapDN, scope, scopeVars))
 	case "modify-password":
@@ -118,6 +137,37 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 	default:
 		return nil, fmt.Errorf("ldap: unknown operation %q", op)
 	}
+}
+
+// modsFor turns the authored attribute object into the change operations one of the
+// three modify flavours applies.
+//
+// modify replaces each named attribute wholesale, which is what ADR-0154 shipped and
+// what a single-writer attribute wants. add-values and delete-values change
+// individual values instead, which is what a *multi*-valued attribute wants when more
+// than one process writes it: adding a member to a group is not a statement about
+// everyone else's membership.
+//
+// The changes are ordered, so a replayed job (delivery is at-least-once) sends an
+// identical request rather than one that merely means the same thing.
+func modsFor(op string, attrs map[string][]string) []Mod {
+	change := ModReplace
+	switch op {
+	case "add-values":
+		change = ModAdd
+	case "delete-values":
+		change = ModDelete
+	}
+	names := make([]string, 0, len(attrs))
+	for name := range attrs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	mods := make([]Mod, 0, len(names))
+	for _, name := range names {
+		mods = append(mods, Mod{Op: change, Attr: name, Vals: attrs[name]})
+	}
+	return mods
 }
 
 // entriesToJSON turns search entries into a JSON-ready slice: each entry is

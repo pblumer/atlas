@@ -509,6 +509,14 @@ type ConnectorTaskDetail struct {
 	CsvDelimiter int32
 	CsvHasHeader bool
 	CsvColumns   []int32
+	// CsvFormat is the interned file format ("csv" | "fixed-width" | "avp"; interned
+	// "" is csv, which is what every model authored before formats existed) and
+	// CsvOperation the direction ("read" | "write"; interned "" is read). CsvWidths
+	// holds each column's character width for a fixed-width file, positionally
+	// alongside CsvColumns (ADR-0139, amended).
+	CsvFormat    int32
+	CsvOperation int32
+	CsvWidths    []int32
 	// SharePoint connector fields (JobType == SharePointJobType, ADR-0141). Connector
 	// (above) names the server-registered SharePoint provider (its Graph base and
 	// OAuth credential live server-side). Site and List address the target list (a
@@ -572,7 +580,8 @@ type ConnectorTaskDetail struct {
 	// LdapBindSecret is the interned name of the server-side secret holding the bind
 	// password (interned "" → an anonymous bind); LdapStartTLS upgrades a plain
 	// connection with STARTTLS. LdapOp is the interned operation
-	// ("search"|"add"|"modify"|"delete"|"modify-password"). LdapDN is the target entry
+	// ("search"|"add"|"modify"|"add-values"|"delete-values"|"delete"|
+	// "modify-password"). LdapDN is the target entry
 	// (add/modify/delete/modify-password); LdapBaseDN/LdapFilter/LdapScope (interned
 	// "base"|"one"|"sub") address a search. LdapEntryVar is the interned name of the
 	// process variable holding the add/modify attribute object; LdapNewPassword is the
@@ -590,6 +599,15 @@ type ConnectorTaskDetail struct {
 	LdapScope       int32
 	LdapEntryVar    int32
 	LdapNewPassword RestExpr
+	// LdapPageSize and LdapMaxEntries bound a search (ADR-0154, amended). The compiler
+	// writes the effective value here — the default when the model authored none — so
+	// the runtime interprets nothing (I5); 0 means unbounded, which a model asks for
+	// explicitly. LdapClientCertSecret is the interned name of the secret holding a
+	// PEM certificate+key bundle for a TLS client-certificate bind (interned "" →
+	// none); with no bind DN it authenticates by SASL EXTERNAL.
+	LdapPageSize         int32
+	LdapMaxEntries       int32
+	LdapClientCertSecret int32
 	// SOAP connector fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
 	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
 	// over the instance's variables at call time. SoapOp is the interned operation name,
@@ -612,7 +630,8 @@ type ConnectorTaskDetail struct {
 	// AdBindSecret is the interned name of the server-side bind-password secret (interned
 	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
 	// operation ("create-user"|"set-password"|"enable"|"disable"|"add-group-member"|
-	// "remove-group-member"). AdDN is the target user or group entry; AdMemberDN is the
+	// "remove-group-member", "update-attributes", "move", "delete", "create-group").
+	// AdDN is the target user or group entry; AdMemberDN is the
 	// member added/removed for the group operations; AdEntryVar is the interned name of
 	// the process variable holding the create-user attribute object; AdNewPassword is the
 	// set-password value. Each is the zero value for a non-AD task. Read only by the
@@ -626,6 +645,72 @@ type ConnectorTaskDetail struct {
 	AdMemberDN    RestExpr
 	AdEntryVar    int32
 	AdNewPassword RestExpr
+	// AdNewDN is the move operation's target distinguished name (literal-or-FEEL): the
+	// entry's new place in the tree, new relative name, or both — a mover in a
+	// directory *is* a DN change, so one value expresses all three.
+	AdNewDN RestExpr
+	// DirSync fields (AdOp == "sync", ADR-0166 amended). AdBaseDN is the naming
+	// context the delta is read from and AdFilter narrows it — literal-or-FEEL values.
+	// AdCookieVar is the interned name of the variable holding the opaque resume
+	// cookie, which the operation reads *and writes back* so a loop carries itself
+	// forward. AdMaxEntries caps one pass (0 = the connector's default), and
+	// AdObjectSecurity sets the DirSync flag that lets an account without the
+	// replication right read the changes it can see.
+	AdBaseDN         RestExpr
+	AdFilter         RestExpr
+	AdCookieVar      int32
+	AdMaxEntries     int32
+	AdObjectSecurity bool
+	// Generic SQL connector fields (JobType == SqlJobType, ADR-draft-generic-sql-connector). Connector
+	// (above) names the database the *worker* is configured for — a SQL task carries
+	// no address and no credential, because the DSN never enters the engine. SqlOp is
+	// the interned operation ("query"|"query-one"|"execute").
+	//
+	// SqlStatement is the interned SQL text, and it is an interned string rather than
+	// a RestExpr on purpose: a RestExpr could hold a FEEL expression, and a statement
+	// assembled from process data is an injection with no quoting bug required. Data
+	// reaches the statement only through SqlParamsVar — the interned name of the
+	// process variable whose value is bound to the statement's placeholders (a JSON
+	// array binds positionally, an object binds by name). SqlMaxRows caps a query's
+	// result set (0 = the worker's default); exceeding it fails the job rather than
+	// truncating, since a short result set is a wrong answer. ResultVar (above)
+	// receives the rows, the single row, or the affected count.
+	//
+	// Each is the zero value for a non-SQL task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	SqlOp        int32
+	SqlStatement int32
+	SqlParamsVar int32
+	SqlMaxRows   int32
+	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-draft-entra-id-connector).
+	// Connector (above) names the tenant the *worker* is configured for; a task
+	// carries no tenant id and no client secret, because they never enter the engine.
+	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
+	// "update-user"|"delete-user"|"enable"|"disable"|"add-group-member"|
+	// "remove-group-member"). EntraUserID and EntraGroupID are literal-or-FEEL values
+	// addressing the user (a UPN or object id) and the group. EntraAttributesVar is
+	// the interned name of the process variable holding the directory properties for
+	// create-user and update-user; ResultVar (above) receives what Graph returned.
+	//
+	// Each is the zero value for a non-Entra task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	EntraOp            int32
+	EntraUserID        RestExpr
+	EntraGroupID       RestExpr
+	EntraAttributesVar int32
+	// Directory-file connector fields (JobType == LdifJobType, ADR-draft-directory-file-connector). LdifFormat
+	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
+	// ("read" | "write"). LdifSource is the interned name of the variable holding the
+	// file text (read) or the entries (write); LdifResult the variable receiving the
+	// entries (read) or the rendered file (write).
+	//
+	// Unlike the text-file connector there is no default format: a file is LDIF or it
+	// is DSML, and guessing from the bytes is how a malformed file becomes a
+	// plausible-looking empty result.
+	LdifFormat    int32
+	LdifOperation int32
+	LdifSource    int32
+	LdifResult    int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

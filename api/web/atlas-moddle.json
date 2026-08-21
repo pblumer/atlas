@@ -117,6 +117,9 @@
         { "name": "entryVariable", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "pageSize", "type": "String", "isAttr": true },
+        { "name": "maxEntries", "type": "String", "isAttr": true },
+        { "name": "clientCertSecret", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -152,6 +155,81 @@
         { "name": "memberDN", "type": "String", "isAttr": true },
         { "name": "entryVariable", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
+        { "name": "newDN", "type": "String", "isAttr": true },
+        { "name": "baseDN", "type": "String", "isAttr": true },
+        { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "cookieVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "maxEntries", "type": "String", "isAttr": true },
+        { "name": "objectSecurity", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "LdifConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "format", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "source", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "EntraConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "userId", "type": "String", "isAttr": true },
+        { "name": "groupId", "type": "String", "isAttr": true },
+        { "name": "attributesVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "MssqlConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "statement", "type": "String", "isAttr": true },
+        { "name": "parametersVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "maxRows", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "MariadbConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "statement", "type": "String", "isAttr": true },
+        { "name": "parametersVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "maxRows", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "PostgresConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "statement", "type": "String", "isAttr": true },
+        { "name": "parametersVariable", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "maxRows", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
@@ -181,6 +259,8 @@
         { "name": "hasHeader", "type": "String", "isAttr": true },
         { "name": "columns", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "format", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

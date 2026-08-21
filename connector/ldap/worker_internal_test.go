@@ -134,3 +134,69 @@ func TestBindVars(t *testing.T) {
 		t.Error("bindVars(no names) should be nil")
 	}
 }
+
+// The cap fails rather than truncates, for the same reason the SQL connectors'
+// row cap does: a short result set is a wrong answer, not a partial one.
+func TestSearchEntryCap(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		got     int
+		cap     int32
+		wantErr bool
+	}{
+		{"under the cap", 3, 5, false},
+		{"exactly the cap", 5, 5, false},
+		{"over the cap", 6, 5, true},
+		{"unbounded", 10_000, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := capExceeded(tc.got, tc.cap, "dc=x")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("capExceeded(%d, %d) = %v, wantErr %v", tc.got, tc.cap, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// modsFor turns the authored object into the change operations each flavour applies,
+// in a stable order so a replayed job sends an identical request.
+func TestModsFor(t *testing.T) {
+	attrs := map[string][]string{"member": {"uid=b"}, "cn": {"Team"}}
+	for _, tc := range []struct {
+		op   string
+		want modOp
+	}{
+		{"modify", ModReplace},
+		{"add-values", ModAdd},
+		{"delete-values", ModDelete},
+	} {
+		mods := modsFor(tc.op, attrs)
+		if len(mods) != 2 {
+			t.Fatalf("%s: mods = %+v, want one per attribute", tc.op, mods)
+		}
+		if mods[0].Attr != "cn" || mods[1].Attr != "member" {
+			t.Errorf("%s: mods = %+v, want them sorted", tc.op, mods)
+		}
+		for _, m := range mods {
+			if m.Op != tc.want {
+				t.Errorf("%s: mod %q op = %v, want %v", tc.op, m.Attr, m.Op, tc.want)
+			}
+		}
+	}
+}
+
+// A client certificate secret that is not a PEM pair is refused before any dial, so a
+// misconfiguration reads as itself rather than as a TLS handshake failure.
+func TestTLSConfigForRejectsABadCertificate(t *testing.T) {
+	if _, err := tlsConfigFor(DialOptions{URL: "ldaps://dc", ClientCert: "not a pem"}); err == nil {
+		t.Error("a malformed client certificate must be refused")
+	}
+	if _, err := tlsConfigFor(DialOptions{URL: "ldaps://dc", CACert: "not a pem"}); err == nil {
+		t.Error("a malformed CA bundle must be refused")
+	}
+	// Nothing to configure means nothing configured — the default TLS handling.
+	cfg, err := tlsConfigFor(DialOptions{URL: "ldaps://dc"})
+	if err != nil || cfg != nil {
+		t.Errorf("tlsConfigFor(plain) = %v, %v; want nil, nil", cfg, err)
+	}
+}

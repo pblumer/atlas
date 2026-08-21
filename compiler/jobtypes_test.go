@@ -33,6 +33,11 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		LdapJobType:          LdapJobTypeIndex,
 		SoapJobType:          SoapJobTypeIndex,
 		AdJobType:            AdJobTypeIndex,
+		MsSqlJobType:         MsSqlJobTypeIndex,
+		MariaDBJobType:       MariaDBJobTypeIndex,
+		PostgresJobType:      PostgresJobTypeIndex,
+		EntraJobType:         EntraJobTypeIndex,
+		LdifJobType:          LdifJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

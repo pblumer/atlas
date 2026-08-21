@@ -27,6 +27,7 @@ package ldap
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
@@ -51,6 +52,36 @@ type SearchRequest struct {
 	Scope      string
 	Filter     string
 	Attributes []string
+	// PageSize drives the simple paged-results control (RFC 2696): the search is
+	// fetched in pages of this size, so a directory's administrative size limit does
+	// not refuse a legitimate search. 0 asks for one unpaged search.
+	PageSize int32
+	// MaxEntries caps how many entries may be returned. Exceeding it is an error
+	// rather than a truncation: a short result set is a wrong answer, not a partial
+	// one, and a process branching on the count would branch on it confidently
+	// (the same rule the SQL connectors apply to rows, ADR-draft-generic-sql-connector). 0 is unbounded.
+	MaxEntries int32
+}
+
+// modOp identifies an LDAP modify change operation, mirroring go-ldap's constants —
+// and the AD connector's Mod, so the two directory connectors express a change the
+// same way.
+type modOp = uint
+
+const (
+	// ModAdd adds values to an attribute, ModDelete removes them, and ModReplace
+	// replaces the attribute wholesale.
+	ModAdd     modOp = goldap.AddAttribute
+	ModDelete  modOp = goldap.DeleteAttribute
+	ModReplace modOp = goldap.ReplaceAttribute
+)
+
+// Mod is one attribute change in a modify: an operation, the attribute, and the
+// values it applies.
+type Mod struct {
+	Op   modOp
+	Attr string
+	Vals []string
 }
 
 // Conn is a bound LDAP connection the worker operates over and then closes. It is an
@@ -58,18 +89,39 @@ type SearchRequest struct {
 type Conn interface {
 	Search(req SearchRequest) ([]Entry, error)
 	Add(dn string, attrs map[string][]string) error
-	Modify(dn string, replace map[string][]string) error
+	Modify(dn string, mods []Mod) error
 	Delete(dn string) error
 	SetPassword(dn, newPassword string) error
 	Close() error
 }
 
-// Dialer opens and binds an LDAP connection. url is ldap://host:389 or
-// ldaps://host:636; startTLS upgrades a plain connection with STARTTLS; bindDN and
-// bindPassword authenticate the bind (an empty bindDN leaves the connection anonymous).
-// It is an interface so the worker is testable without a live server.
+// DialOptions is everything a connection needs. It is a struct rather than a
+// parameter list because the list had already reached four and TLS added two more;
+// past that, a call site is a row of positional booleans nobody can read.
+type DialOptions struct {
+	// URL is ldap://host:389 or ldaps://host:636; StartTLS upgrades a plain
+	// connection.
+	URL      string
+	StartTLS bool
+	// BindDN and BindPassword authenticate a simple bind. An empty BindDN leaves the
+	// connection anonymous — unless ClientCert is set, in which case the certificate
+	// is the identity and the bind is SASL EXTERNAL.
+	BindDN       string
+	BindPassword string
+	// ClientCert is a PEM bundle (certificate plus private key) presented to the
+	// server. It arrives resolved from a secret reference; the model never carries it
+	// (ADR-0041).
+	ClientCert string
+	// CACert is an optional PEM bundle of roots used to verify the server, for a
+	// directory with a private CA. Empty uses the host's trust store.
+	CACert string
+}
+
+// Dialer opens and binds an LDAP connection. It is an interface so the worker is
+// testable without a live server, and so a pooling implementation can stand in front
+// of the real one.
 type Dialer interface {
-	Dial(url, bindDN, bindPassword string, startTLS bool) (Conn, error)
+	Dial(opts DialOptions) (Conn, error)
 }
 
 // GoDialer dials a real LDAP server through github.com/go-ldap/ldap. The dial and
@@ -81,27 +133,82 @@ type GoDialer struct{}
 // NewDialer returns the production LDAP dialer.
 func NewDialer() GoDialer { return GoDialer{} }
 
-func (GoDialer) Dial(rawURL, bindDN, bindPassword string, startTLS bool) (Conn, error) {
-	conn, err := goldap.DialURL(rawURL, goldap.DialWithDialer(&net.Dialer{Timeout: nettimeout.Default}))
+func (GoDialer) Dial(opts DialOptions) (Conn, error) {
+	tlsCfg, err := tlsConfigFor(opts)
 	if err != nil {
-		return nil, fmt.Errorf("ldap: dial %s: %w", rawURL, err)
+		return nil, err
+	}
+	dialOpts := []goldap.DialOpt{goldap.DialWithDialer(&net.Dialer{Timeout: nettimeout.Default})}
+	if tlsCfg != nil {
+		dialOpts = append(dialOpts, goldap.DialWithTLSConfig(tlsCfg))
+	}
+	conn, err := goldap.DialURL(opts.URL, dialOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("ldap: dial %s: %w", opts.URL, err)
 	}
 	conn.SetTimeout(nettimeout.Default)
-	if startTLS {
-		if err := conn.StartTLS(&tls.Config{ServerName: hostOf(rawURL)}); err != nil {
+	if opts.StartTLS {
+		cfg := tlsCfg
+		if cfg == nil {
+			cfg = &tls.Config{ServerName: hostOf(opts.URL)}
+		}
+		if err := conn.StartTLS(cfg); err != nil {
 			_ = conn.Close()
-			return nil, fmt.Errorf("ldap: starttls %s: %w", rawURL, err)
+			return nil, fmt.Errorf("ldap: starttls %s: %w", opts.URL, err)
 		}
 	}
-	// An empty bind DN leaves the connection anonymous (no simple bind); a named DN
-	// authenticates with the resolved password.
-	if bindDN != "" {
-		if err := conn.Bind(bindDN, bindPassword); err != nil {
-			_ = conn.Close()
-			return nil, fmt.Errorf("ldap: bind %s: %w", bindDN, err)
-		}
+	if err := bind(conn, opts); err != nil {
+		_ = conn.Close()
+		return nil, err
 	}
 	return &goConn{conn: conn}, nil
+}
+
+// bind authenticates the connection.
+//
+// A named bind DN is a simple bind, as before. With no bind DN but a client
+// certificate the identity *is* the certificate, and the server is asked to use it
+// via SASL EXTERNAL — presenting a certificate and then staying anonymous would
+// authenticate nothing, which is the mistake this rule exists to prevent. Neither
+// leaves the connection anonymous.
+func bind(conn *goldap.Conn, opts DialOptions) error {
+	switch {
+	case opts.BindDN != "":
+		if err := conn.Bind(opts.BindDN, opts.BindPassword); err != nil {
+			return fmt.Errorf("ldap: bind %s: %w", opts.BindDN, err)
+		}
+	case opts.ClientCert != "":
+		if err := conn.ExternalBind(); err != nil {
+			return fmt.Errorf("ldap: external bind with the client certificate: %w", err)
+		}
+	}
+	return nil
+}
+
+// tlsConfigFor builds the TLS configuration a connection needs, or nil when it needs
+// none beyond the defaults.
+func tlsConfigFor(opts DialOptions) (*tls.Config, error) {
+	if opts.ClientCert == "" && opts.CACert == "" {
+		return nil, nil
+	}
+	cfg := &tls.Config{ServerName: hostOf(opts.URL), MinVersion: tls.VersionTLS12}
+	if opts.ClientCert != "" {
+		// One PEM bundle holds both halves; splitting them into two secrets would be
+		// two things to rotate together and one more way to get it half-done.
+		cert, err := tls.X509KeyPair([]byte(opts.ClientCert), []byte(opts.ClientCert))
+		if err != nil {
+			return nil, fmt.Errorf("ldap: the client certificate secret is not a PEM certificate and key: %w", err)
+		}
+		cfg.Certificates = []tls.Certificate{cert}
+	}
+	if opts.CACert != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(opts.CACert)) {
+			return nil, fmt.Errorf("ldap: the CA secret holds no PEM certificate")
+		}
+		cfg.RootCAs = pool
+	}
+	return cfg, nil
 }
 
 // hostOf extracts the host (no port) from an LDAP URL, for the STARTTLS server name.
@@ -133,15 +240,41 @@ func scopeCode(scope string) int {
 }
 
 func (c *goConn) Search(req SearchRequest) ([]Entry, error) {
-	res, err := c.conn.Search(buildSearchRequest(req))
+	sr := buildSearchRequest(req)
+	var (
+		res *goldap.SearchResult
+		err error
+	)
+	if req.PageSize > 0 {
+		res, err = c.conn.SearchWithPaging(sr, uint32(req.PageSize))
+	} else {
+		res, err = c.conn.Search(sr)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ldap: search %s: %w", req.BaseDN, err)
+	}
+	if err := capExceeded(len(res.Entries), req.MaxEntries, req.BaseDN); err != nil {
+		return nil, err
 	}
 	return entriesFrom(res), nil
 }
 
+// capExceeded reports a search that returned more entries than the model allows.
+// Exceeding the cap is an error rather than a truncation: a short result set is a
+// wrong answer, not a partial one, and a process branching on the count would branch
+// on it confidently. A cap of 0 is unbounded.
+func capExceeded(got int, max int32, baseDN string) error {
+	if max <= 0 || got <= int(max) {
+		return nil
+	}
+	return fmt.Errorf("ldap: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", baseDN, max)
+}
+
 // buildSearchRequest translates a connector search into a go-ldap request, defaulting
 // an empty filter to "(objectClass=*)" and an unknown scope to the whole subtree.
+//
+// SizeLimit stays 0 — the cap is enforced on the result rather than asked of the
+// server, because a server-side size limit *truncates* where MaxEntries must fail.
 func buildSearchRequest(req SearchRequest) *goldap.SearchRequest {
 	filter := req.Filter
 	if filter == "" {
@@ -153,8 +286,6 @@ func buildSearchRequest(req SearchRequest) *goldap.SearchRequest {
 	)
 }
 
-// entriesFrom flattens a go-ldap search result into connector entries (DN plus
-// multi-valued attributes keyed by name).
 func entriesFrom(res *goldap.SearchResult) []Entry {
 	out := make([]Entry, 0, len(res.Entries))
 	for _, e := range res.Entries {
@@ -183,19 +314,25 @@ func buildAddRequest(dn string, attrs map[string][]string) *goldap.AddRequest {
 	return req
 }
 
-func (c *goConn) Modify(dn string, replace map[string][]string) error {
-	if err := c.conn.Modify(buildModifyRequest(dn, replace)); err != nil {
+func (c *goConn) Modify(dn string, mods []Mod) error {
+	if err := c.conn.Modify(buildModifyRequest(dn, mods)); err != nil {
 		return fmt.Errorf("ldap: modify %s: %w", dn, err)
 	}
 	return nil
 }
 
-// buildModifyRequest translates a DN and replacement attribute map into a go-ldap
-// modify request that replaces each named attribute's values.
-func buildModifyRequest(dn string, replace map[string][]string) *goldap.ModifyRequest {
+// buildModifyRequest translates the change operations into a go-ldap modify request.
+func buildModifyRequest(dn string, mods []Mod) *goldap.ModifyRequest {
 	req := goldap.NewModifyRequest(dn, nil)
-	for name, vals := range replace {
-		req.Replace(name, vals)
+	for _, m := range mods {
+		switch m.Op {
+		case ModAdd:
+			req.Add(m.Attr, m.Vals)
+		case ModDelete:
+			req.Delete(m.Attr, m.Vals)
+		default:
+			req.Replace(m.Attr, m.Vals)
+		}
 	}
 	return req
 }

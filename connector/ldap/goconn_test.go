@@ -1,15 +1,22 @@
 package ldap
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"strings"
 	"testing"
+	"time"
 )
 
 // dialTest opens a real GoDialer connection against the in-process directory and
 // closes it when the test ends.
 func dialTest(t *testing.T, d *testDirectory, bindDN, password string) Conn {
 	t.Helper()
-	conn, err := NewDialer().Dial(d.URL, bindDN, password, false)
+	conn, err := NewDialer().Dial(DialOptions{URL: d.URL, BindDN: bindDN, BindPassword: password})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
@@ -84,7 +91,7 @@ func TestGoConnWriteOperations(t *testing.T) {
 	if err := conn.Add("uid=neu,dc=example,dc=com", map[string][]string{"objectClass": {"top", "person"}, "cn": {"Neu"}}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	if err := conn.Modify("uid=neu,dc=example,dc=com", map[string][]string{"mail": {"neu@example.com"}}); err != nil {
+	if err := conn.Modify("uid=neu,dc=example,dc=com", []Mod{{Op: ModReplace, Attr: "mail", Vals: []string{"neu@example.com"}}}); err != nil {
 		t.Fatalf("Modify: %v", err)
 	}
 	if err := conn.SetPassword("uid=neu,dc=example,dc=com", "geheim"); err != nil {
@@ -124,7 +131,7 @@ func TestGoConnOperationErrors(t *testing.T) {
 	cases := map[string]func() error{
 		"ldap: search":          func() error { _, err := conn.Search(SearchRequest{BaseDN: "dc=x"}); return err },
 		"ldap: add":             func() error { return conn.Add("uid=a,dc=x", map[string][]string{"cn": {"A"}}) },
-		"ldap: modify":          func() error { return conn.Modify("uid=a,dc=x", map[string][]string{"cn": {"A"}}) },
+		"ldap: modify":          func() error { return conn.Modify("uid=a,dc=x", []Mod{{Attr: "cn", Vals: []string{"A"}}}) },
 		"ldap: delete":          func() error { return conn.Delete("uid=a,dc=x") },
 		"ldap: modify-password": func() error { return conn.SetPassword("uid=a,dc=x", "pw") },
 	}
@@ -145,7 +152,7 @@ func TestGoConnOperationErrors(t *testing.T) {
 // when a service account's password was rotated.
 func TestGoDialerBindError(t *testing.T) {
 	d := startTestDirectory(t, &testDirectory{bindResult: 49}) // invalidCredentials
-	_, err := NewDialer().Dial(d.URL, "cn=svc,dc=example,dc=com", "wrong", false)
+	_, err := NewDialer().Dial(DialOptions{URL: d.URL, BindDN: "cn=svc,dc=example,dc=com", BindPassword: "wrong"})
 	if err == nil {
 		t.Fatal("Dial with a rejected bind: err = nil, want error")
 	}
@@ -159,11 +166,104 @@ func TestGoDialerBindError(t *testing.T) {
 // clear, which would send the bind password unencrypted.
 func TestGoDialerStartTLSError(t *testing.T) {
 	d := startTestDirectory(t, &testDirectory{result: 1})
-	_, err := NewDialer().Dial(d.URL, "cn=svc", "secret", true)
+	_, err := NewDialer().Dial(DialOptions{URL: d.URL, BindDN: "cn=svc", BindPassword: "secret", StartTLS: true})
 	if err == nil {
 		t.Fatal("Dial with a refused STARTTLS: err = nil, want error")
 	}
 	if !strings.Contains(err.Error(), "starttls") {
 		t.Errorf("error = %q, want it to name starttls", err)
 	}
+}
+
+// TestGoConnPagedSearch drives the real adapter's paged search against the test
+// directory, so the control a directory's admin size limit makes necessary is
+// exercised on the wire rather than assumed.
+func TestGoConnPagedSearch(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{
+		paged: true,
+		entries: []Entry{
+			{DN: "uid=ada,dc=x", Attributes: map[string][]string{"cn": {"Ada"}}},
+			{DN: "uid=bob,dc=x", Attributes: map[string][]string{"cn": {"Bob"}}},
+		},
+	})
+	conn, err := NewDialer().Dial(DialOptions{URL: d.URL})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	got, err := conn.Search(SearchRequest{BaseDN: "dc=x", Scope: "sub", PageSize: 1})
+	if err != nil {
+		t.Fatalf("paged Search: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("entries = %d, want 2", len(got))
+	}
+
+	// The cap is enforced on what came back, whatever the page size was.
+	if _, err := conn.Search(SearchRequest{BaseDN: "dc=x", Scope: "sub", PageSize: 1, MaxEntries: 1}); err == nil {
+		t.Error("a paged search over the cap must still fail")
+	}
+}
+
+// TestGoConnClientCertificateBind proves the certificate path: a valid PEM bundle
+// configures TLS, and with no bind DN the identity is the certificate, so the
+// connector asks for SASL EXTERNAL rather than leaving the connection anonymous.
+func TestGoConnClientCertificateBind(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	conn, err := NewDialer().Dial(DialOptions{URL: d.URL, ClientCert: testCertPEM(t)})
+	if err != nil {
+		t.Fatalf("Dial with a client certificate: %v", err)
+	}
+	defer conn.Close()
+	ops, _ := d.seen()
+	if len(ops) == 0 || ops[0] != "bind" {
+		t.Errorf("ops = %v, want a bind (SASL EXTERNAL) rather than an anonymous connection", ops)
+	}
+}
+
+// A malformed certificate secret is refused before any connection is made, so the
+// operator reads the misconfiguration rather than a TLS handshake failure.
+func TestGoConnRejectsABadClientCertificate(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	if _, err := NewDialer().Dial(DialOptions{URL: d.URL, ClientCert: "not a pem"}); err == nil {
+		t.Fatal("a malformed client certificate must fail the dial")
+	}
+	if _, err := NewDialer().Dial(DialOptions{URL: d.URL, CACert: "not a pem"}); err == nil {
+		t.Fatal("a malformed CA bundle must fail the dial")
+	}
+	// A well-formed CA bundle configures the roots without a client certificate.
+	if _, err := NewDialer().Dial(DialOptions{URL: d.URL, CACert: testCertPEM(t)}); err != nil {
+		t.Fatalf("a CA-only configuration should dial: %v", err)
+	}
+}
+
+// testCertPEM generates a throwaway self-signed certificate and key as one PEM
+// bundle — the shape an operator stores in the referenced secret.
+func testCertPEM(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "atlas-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		IsCA:         true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	var b strings.Builder
+	if err := pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: der}); err != nil {
+		t.Fatalf("encode certificate: %v", err)
+	}
+	if err := pem.Encode(&b, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}); err != nil {
+		t.Fatalf("encode key: %v", err)
+	}
+	return b.String()
 }

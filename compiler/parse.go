@@ -1816,6 +1816,21 @@ type xmlServiceTask struct {
 	// (ADR-0166): it performs an AD-specific provisioning operation against a
 	// model-authored server through the job path.
 	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
+	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
+	// that product (ADR-draft-generic-sql-connector): one statement against a database a *worker* is
+	// configured for. They share a shape and differ only in the driver behind them,
+	// which is what decides the placeholder syntax a statement must use. They are the
+	// first kinds with no in-process handler at all.
+	MsSql    *xmlSqlConnector `xml:"extensionElements>mssqlConnector"`
+	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
+	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
+	// Entra, when present, marks this service task a Microsoft Entra ID connector
+	// task (ADR-draft-entra-id-connector): one directory lifecycle operation through Graph, against a
+	// tenant a *worker* holds the app credential for.
+	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
+	// Ldif, when present, marks this service task a directory-file connector task
+	// (ADR-draft-directory-file-connector): LDIF or DSML entries read from, or written to, a variable.
+	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1962,6 +1977,73 @@ type xmlAdConnector struct {
 	MemberDN      string `xml:"memberDN,attr"`
 	EntryVariable string `xml:"entryVariable,attr"`
 	NewPassword   string `xml:"newPassword,attr"`
+	NewDN         string `xml:"newDN,attr"`
+	// The sync (DirSync) operation reads changes since a cookie: BaseDN is the naming
+	// context root, Filter narrows what is reported, CookieVariable names the variable
+	// the cookie is read from *and written back to*, MaxEntries caps one pass, and
+	// ObjectSecurity selects the flag a non-privileged sync account needs (ADR-0166).
+	BaseDN         string `xml:"baseDN,attr"`
+	Filter         string `xml:"filter,attr"`
+	CookieVariable string `xml:"cookieVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	MaxEntries     string `xml:"maxEntries,attr"`
+	ObjectSecurity string `xml:"objectSecurity,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSqlConnector is the extension a SQL connector task carries, under whichever of
+// <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
+// its product (ADR-draft-generic-sql-connector). The three share this shape exactly; only the element name,
+// and so the driver, differs. connector names the database the worker holds the DSN
+// for — there is deliberately no url and no credential attribute, because the
+// connection string never enters the engine. operation is query / query-one / execute. statement is the
+// SQL text and is *literal only*: it carries no fx toggle, so no process value can
+// become part of it. parametersVariable names the variable bound to the statement's
+// placeholders; resultVariable receives the result; maxRows caps a query's rows.
+type xmlSqlConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	Statement          string `xml:"statement,attr"`
+	ParametersVariable string `xml:"parametersVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
+	MaxRows            string `xml:"maxRows,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlLdifConnector is the <atlas:ldifConnector> extension on a service task
+// (ADR-draft-directory-file-connector). format is "ldif" or "dsml" — required, because guessing a directory
+// file's format from its bytes is how a malformed file becomes a plausible-looking
+// empty result. operation is "read" (the default) or "write"; source names the
+// variable holding the file text or the entries, and resultVariable the one receiving
+// the entries or the rendered file.
+type xmlLdifConnector struct {
+	Format         string `xml:"format,attr"`
+	Operation      string `xml:"operation,attr"`
+	Source         string `xml:"source,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlEntraConnector is the <atlas:entraConnector> extension on a service task
+// (ADR-draft-entra-id-connector). connector names the tenant the worker holds the app credential for —
+// there is deliberately no tenantId, clientId or secret attribute, because none of
+// them enters the engine. operation is the lifecycle step; userId and groupId address
+// the objects (literal-or-FEEL); attributesVariable names the variable holding the
+// directory properties for create-user and update-user; resultVariable receives what
+// Graph returned.
+type xmlEntraConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	UserID             string `xml:"userId,attr"`
+	GroupID            string `xml:"groupId,attr"`
+	AttributesVariable string `xml:"attributesVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -1987,6 +2069,16 @@ type xmlLdapConnector struct {
 	EntryVariable  string `xml:"entryVariable,attr"`
 	NewPassword    string `xml:"newPassword,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// PageSize and MaxEntries bound a search (ADR-0154, amended). PageSize drives the
+	// simple paged-results control so a directory's admin size limit does not truncate
+	// or refuse the search; MaxEntries caps how much may land in a process variable.
+	// Both are absent-means-default; "0" is the authored way to say unbounded.
+	PageSize   string `xml:"pageSize,attr"`
+	MaxEntries string `xml:"maxEntries,attr"`
+	// ClientCertSecret names the server-side secret holding a PEM bundle (certificate
+	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
+	// reference, never a value (ADR-0041).
+	ClientCertSecret string `xml:"clientCertSecret,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2052,25 +2144,100 @@ type xmlCsvConnector struct {
 	HasHeader      string `xml:"hasHeader,attr"`
 	Columns        string `xml:"columns,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	Retries        string `xml:"retries,attr"`
+	// Format is the file format ("csv" | "fixed-width" | "avp"; blank is csv) and
+	// Operation the direction ("read" | "write"; blank is read) — ADR-0139, amended.
+	Format    string `xml:"format,attr"`
+	Operation string `xml:"operation,attr"`
+	Retries   string `xml:"retries,attr"`
+}
+
+// The file formats and directions a csvConnector can author. They are spelled here
+// as well as in connector/csvimport because the compiler cannot import the connector
+// (the dependency runs the other way); TestCsvFormatsMatchTheConnector guards the seam.
+const (
+	csvimportFormatCSV        = "csv"
+	csvimportFormatFixedWidth = "fixed-width"
+	csvimportFormatAVP        = "avp"
+	csvimportOperationRead    = "read"
+	csvimportOperationWrite   = "write"
+)
+
+// csvFormatAndOperation reads the authored format and direction, applying the
+// defaults that keep every model written before either existed meaning exactly what
+// it meant then.
+func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, error) {
+	format := strings.ToLower(strings.TrimSpace(rawFormat))
+	if format == "" {
+		format = csvimportFormatCSV
+	}
+	switch format {
+	case csvimportFormatCSV, csvimportFormatFixedWidth, csvimportFormatAVP:
+	default:
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown format %q (want %s, %s, or %s)",
+			taskID, rawFormat, csvimportFormatAVP, csvimportFormatCSV, csvimportFormatFixedWidth)
+	}
+	op := strings.ToLower(strings.TrimSpace(rawOp))
+	if op == "" {
+		op = csvimportOperationRead
+	}
+	if op != csvimportOperationRead && op != csvimportOperationWrite {
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown operation %q (want %s or %s)",
+			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
+	}
+	return format, op, nil
 }
 
 // splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
-// trimmed list of field names, dropping empty entries so a trailing comma or an
-// unset attribute yields no phantom column. An empty result means "derive the
-// columns from the header row" (ADR-0139).
-func splitCSVColumns(s string) []string {
+// trimmed list of field names and, for a fixed-width file, their character widths.
+//
+// An entry is "name" or "name:width". The width is required for fixed-width, where a
+// field is found by position and there is nothing else to find it by, and rejected
+// for the other formats — an authored width the connector would ignore is an author
+// believing something untrue. An empty result means "derive the columns" (ADR-0139).
+func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if name := strings.TrimSpace(p); name != "" {
-			out = append(out, name)
+		if format == csvimportFormatFixedWidth {
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
 		}
+		return nil, nil, nil
 	}
-	return out
+	var (
+		names  []string
+		widths []int32
+	)
+	for _, p := range strings.Split(s, ",") {
+		entry := strings.TrimSpace(p)
+		if entry == "" {
+			continue // a trailing comma names no column
+		}
+		name, rawWidth, hasWidth := strings.Cut(entry, ":")
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		var width int32
+		switch {
+		case hasWidth && format != csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
+		case hasWidth:
+			n, err := strconv.Atoi(strings.TrimSpace(rawWidth))
+			if err != nil {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q has a non-numeric width for column %q", taskID, name)
+			}
+			if n <= 0 {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
+			}
+			width = int32(n)
+		case format == csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
+		}
+		names = append(names, name)
+		widths = append(widths, width)
+	}
+	if format != csvimportFormatFixedWidth {
+		widths = nil
+	}
+	return names, widths, nil
 }
 
 // csvHasHeader interprets a csvConnector's hasHeader attribute, defaulting to true

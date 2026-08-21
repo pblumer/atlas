@@ -2019,6 +2019,10 @@ const SERVICE_TASK_KINDS = [
         hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
       },
       {
+        key: "clientCertSecret", label: "Client certificate reference", placeholder: "LDAP_CLIENT_CERT",
+        hint: "Optional. Names a server-side secret holding one PEM bundle — certificate and private key together — presented to the directory. With no bind DN the certificate is the identity and the connector binds SASL EXTERNAL; with one it is transport only.",
+      },
+      {
         key: "startTLS", label: "STARTTLS", type: "select",
         options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
         hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
@@ -2029,7 +2033,9 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "search", l: "Search" },
           { v: "add", l: "Add entry" },
-          { v: "modify", l: "Modify entry" },
+          { v: "modify", l: "Modify entry (replace attributes)" },
+          { v: "add-values", l: "Add attribute values" },
+          { v: "delete-values", l: "Delete attribute values" },
           { v: "delete", l: "Delete entry" },
           { v: "modify-password", l: "Set password (RFC 3062)" },
         ],
@@ -2042,18 +2048,26 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "dn", label: "Entry DN", placeholder: "uid=arno,ou=users,dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "delete" || v.operation === "modify-password",
+        showIf: (v) => v.operation && v.operation !== "search",
         hint: "The entry the operation acts on. May be a FEEL expression (fx).",
       },
       {
         key: "entryVariable", label: "Attributes variable", placeholder: "ldapEntry",
-        showIf: (v) => v.operation === "add" || v.operation === "modify",
-        hint: "A process variable holding a JSON object of attribute names to values.",
+        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "add-values" || v.operation === "delete-values",
+        hint: "A process variable holding a JSON object of attribute names to values. Modify replaces each named attribute wholesale; add/delete values change individual values, which is what a multi-valued attribute two processes both write needs — adding one group member is not a statement about everyone else's.",
       },
       {
         key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
         showIf: (v) => v.operation === "modify-password",
         hint: "Usually a FEEL reference to a variable, so no password is written into the model.",
+      },
+      {
+        key: "pageSize", label: "Page size", placeholder: "500", showIf: (v) => v.operation === "search",
+        hint: "Fetches the search in pages (RFC 2696), so a directory's administrative size limit does not refuse it. Empty uses 500; 0 asks for one unpaged search.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000", showIf: (v) => v.operation === "search",
+        hint: "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
       },
       { group: "Output" },
       { key: "resultVariable", label: "Result variable", placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
@@ -2120,21 +2134,59 @@ const SERVICE_TASK_KINDS = [
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [
           { v: "create-user", l: "Create user" },
+          { v: "create-group", l: "Create group" },
+          { v: "create-contact", l: "Create contact" },
+          { v: "update-attributes", l: "Update attributes" },
           { v: "set-password", l: "Set password (unicodePwd)" },
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
+          { v: "move", l: "Move / rename" },
+          { v: "delete", l: "Delete entry" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "sync", l: "Read changes (DirSync)" },
         ],
       },
       {
+        key: "baseDN", label: "Base DN", placeholder: "dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "(objectClass=user)", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
+      },
+      {
+        key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
+        showIf: (v) => v.operation === "sync",
+        hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000",
+        showIf: (v) => v.operation === "sync",
+        hint: "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
+      },
+      {
+        key: "objectSecurity", label: "Object security", type: "select",
+        showIf: (v) => v.operation === "sync",
+        options: [{ v: "", l: "No — the account replicates directory changes" }, { v: "true", l: "Yes — report only what the account may read" }],
+        hint: "DirSync normally needs the 'Replicating Directory Changes' right. Turn this on for an account that does not have it: the pass then reports only the objects the account can read.",
+      },
+      {
         key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
-        hint: "The user entry for create/password/enable/disable, or the group entry for a membership change. May be a FEEL expression (fx).",
+        showIf: (v) => v.operation !== "sync",
+        hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user",
-        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName, objectClass).",
+        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
+      },
+      {
+        key: "newDN", label: "New DN", placeholder: "cn=Arno Meier,ou=extern,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "move",
+        hint: "Where the entry now lives. A directory has no separate move and rename — an entry's place in the tree is its name — so one target DN expresses both. May be a FEEL expression (fx).",
       },
       {
         key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
@@ -2145,6 +2197,202 @@ const SERVICE_TASK_KINDS = [
         key: "memberDN", label: "Member DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
         showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
         hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
+      },
+      { group: "Output", showIf: (v) => v.operation === "sync" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "aenderungen",
+        showIf: (v) => v.operation === "sync",
+        hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+      },
+    ],
+  },
+  {
+    id: "ldif", name: "Directory File Connector", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
+    // page — a file of entries rather than a live directory.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
+    ext: "atlas:LdifConnector",
+    fields: [
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select",
+        options: [{ v: "ldif", l: "LDIF (RFC 2849)" }, { v: "dsml", l: "DSML v1" }],
+        hint: "Required — there is deliberately no default. Guessing a directory file's format from its bytes is how a malformed file becomes a plausible-looking empty result.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to entries" }, { v: "write", l: "Write — entries to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "ldifText",
+        hint: "Reading: the variable holding the file text. Writing: the variable holding the entries, in the same {dn, attributes} shape an LDAP search or an AD sync produces — so a directory read can be written straight to a file.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "eintraege",
+        hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory connectors return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
+      },
+    ],
+  },
+  {
+    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    // A person mark inside a cloud on Microsoft blue: the directory account of the
+    // AD connector, moved to the cloud — the pair should read as siblings.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
+    ext: "atlas:EntraConnector",
+    fields: [
+      { group: "Tenant" },
+      {
+        key: "connector", label: "Connector", placeholder: "contoso",
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-draft-entra-id-connector).",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-user", l: "Create user" },
+          { v: "get-user", l: "Read user" },
+          { v: "update-user", l: "Update user" },
+          { v: "enable", l: "Enable account" },
+          { v: "disable", l: "Disable account" },
+          { v: "delete-user", l: "Delete user" },
+          { v: "add-group-member", l: "Add group member" },
+          { v: "remove-group-member", l: "Remove group member" },
+        ],
+      },
+      {
+        key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
+        showIf: (v) => v.operation && v.operation !== "create-user",
+        hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "groupId", label: "Group", placeholder: "8f9a…-object-id", fx: true,
+        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
+        hint: "The group's object id. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+      },
+      {
+        key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
+        showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
+        hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "konto",
+        hint: "Receives what Graph returned — the created or read user for those operations, and nothing for the ones Graph answers with no content. Leave empty to discard it.",
+      },
+    ],
+  },
+  {
+    id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
+    ext: "atlas:MssqlConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = @p1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. SQL Server uses @p1-style placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders: a JSON array binds in order, a JSON object binds by name (SQL Server supports named binding). Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "mariadb", name: "MariaDB Connector", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
+    ext: "atlas:MariadbConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = ?",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. MariaDB uses ?-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. MariaDB has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "postgres", name: "PostgreSQL Connector", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
+    ext: "atlas:PostgresConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = $1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. PostgreSQL uses $1-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. PostgreSQL has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
       },
     ],
   },
@@ -2196,22 +2444,56 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "csv", name: "CSV to JSON", desc: "Parse an uploaded CSV into a JSON rows array", icon: "T",
-    // A grid/table mark on a teal tile reads "tabular data → rows" at a glance — the
-    // CSV connector's counterpart to REST's globe and mail's envelope. The
+    id: "csv", name: "Text File Connector", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
+    // file connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white grid strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:CsvConnector",
     fields: [
-      { group: "Source" },
-      { key: "source", label: "Source variable", placeholder: "csvText", hint: "Name of the process variable holding the raw CSV text (e.g. from the upload task)." },
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Delimited (CSV)" },
+          { v: "fixed-width", l: "Fixed-width" },
+          { v: "avp", l: "Attribute-value pairs" },
+        ],
+        hint: "All three describe a table of records in a text file and produce the same rows; they differ only in how a record is delimited and how a field is found inside it.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to rows" }, { v: "write", l: "Write — rows to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "csvText",
+        hint: "Reading: the variable holding the raw file text. Writing: the variable holding the rows, as a JSON array of objects.",
+      },
       { group: "Layout" },
-      { key: "delimiter", label: "Delimiter", type: "select", options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }] },
-      { key: "hasHeader", label: "Header row", type: "select", options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }] },
-      { key: "columns", label: "Columns", placeholder: "email, group, license", hint: "Comma-separated field names. Leave empty to derive them from the header row; required when there is no header." },
+      {
+        key: "delimiter", label: "Delimiter", type: "select", showIf: (v) => !v.format,
+        options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }],
+      },
+      {
+        key: "hasHeader", label: "Header row", type: "select", showIf: (v) => v.format !== "avp",
+        options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }],
+      },
+      {
+        key: "columns", label: "Columns", placeholder: "email, group, license",
+        hint: "Comma-separated field names. For a delimited file leave empty to derive them from the header row (required when there is none); an attribute-value file names its own fields, so a layout only narrows what is picked out.",
+        showIf: (v) => v.format !== "fixed-width",
+      },
+      {
+        key: "columns", label: "Columns and widths", placeholder: "personalnr:8, name:30, abteilung:10",
+        hint: "Comma-separated name:width entries. A fixed-width field is found by position, so every column needs its character count — and a value wider than its column is cut on write, because the format has no way to hold it.",
+        showIf: (v) => v.format === "fixed-width",
+      },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "rows", hint: "The parsed JSON array of rows is written into this process variable (rowCount is also set)." },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "rows",
+        hint: "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set.",
+      },
     ],
   },
   {

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"unicode/utf16"
 
 	goldap "github.com/go-ldap/ldap/v3"
@@ -50,6 +51,37 @@ type Mod struct {
 	Vals []string
 }
 
+// Entry is one directory entry a delta returns: its DN and its multi-valued
+// attributes keyed by attribute name.
+type Entry struct {
+	DN         string
+	Attributes map[string][]string
+}
+
+// DirSyncRequest asks Active Directory for everything that changed under a naming
+// context since a cookie (MS-ADTS LDAP_SERVER_DIRSYNC_OID).
+//
+// Cookie is opaque and belongs to the server: empty asks for a full pass, and the
+// cookie a pass returns is the only correct input to the next one. Flags carries the
+// DirSync flags; MaxEntries caps one pass, which costs nothing because a pass is
+// resumable by construction.
+type DirSyncRequest struct {
+	BaseDN     string
+	Filter     string
+	Attributes []string
+	Cookie     []byte
+	Flags      int64
+	MaxEntries int32
+}
+
+// DirSyncResult is one pass: the entries that changed, the cookie the next pass must
+// present, and whether the server has more waiting right now.
+type DirSyncResult struct {
+	Entries []Entry
+	Cookie  []byte
+	More    bool
+}
+
 // Conn is a bound AD connection the worker operates over and then closes. It is an
 // interface so the worker is testable without a live directory.
 type Conn interface {
@@ -60,6 +92,16 @@ type Conn interface {
 	// ReadAttr returns one attribute's values for an entry (a base-object read), used
 	// for the userAccountControl read-modify-write. Missing → an empty slice, no error.
 	ReadAttr(dn, attr string) ([]string, error)
+	// ModifyDN moves and/or renames an entry. In a directory those are one operation:
+	// an entry's place in the tree *is* its name, so a mover is a DN change.
+	ModifyDN(dn, newRDN, newSuperior string) error
+	// Delete removes an entry. AD refuses to delete a container that still has
+	// children, which is the behaviour a leaver process wants.
+	Delete(dn string) error
+	// DirSync reads what changed under a naming context since a cookie. It is the one
+	// read this connector does — search stays with the generic LDAP connector — and it
+	// is here because DirSync is Active Directory's own mechanism, not LDAP's.
+	DirSync(req DirSyncRequest) (DirSyncResult, error)
 	Close() error
 }
 
@@ -171,4 +213,96 @@ func (c *goConn) ReadAttr(dn, attr string) ([]string, error) {
 	return res.Entries[0].GetAttributeValues(attr), nil
 }
 
+func (c *goConn) ModifyDN(dn, newRDN, newSuperior string) error {
+	// deleteOldRDN is true: a rename that kept the old relative name as a spare
+	// attribute value is a directory slowly filling with an entry's former names.
+	req := goldap.NewModifyDNRequest(dn, newRDN, true, newSuperior)
+	if err := c.conn.ModifyDN(req); err != nil {
+		return fmt.Errorf("ad: modifydn %s: %w", dn, err)
+	}
+	return nil
+}
+
+func (c *goConn) Delete(dn string) error {
+	if err := c.conn.Del(goldap.NewDelRequest(dn, nil)); err != nil {
+		return fmt.Errorf("ad: delete %s: %w", dn, err)
+	}
+	return nil
+}
+
+// dirSyncOID is Active Directory's DirSync control.
+const dirSyncOID = goldap.ControlTypeDirSync
+
+func (c *goConn) DirSync(req DirSyncRequest) (DirSyncResult, error) {
+	filter := req.Filter
+	if filter == "" {
+		filter = "(objectClass=*)"
+	}
+	// DirSync is always a subtree read from a naming context root; AD refuses any
+	// other scope, so the model does not get to author one.
+	sr := goldap.NewSearchRequest(
+		req.BaseDN, goldap.ScopeWholeSubtree, goldap.NeverDerefAliases,
+		0, 0, false, filter, req.Attributes,
+		[]goldap.Control{goldap.NewRequestControlDirSync(req.Flags, 0, req.Cookie)},
+	)
+	res, err := c.conn.Search(sr)
+	if err != nil {
+		return DirSyncResult{}, fmt.Errorf("ad: dirsync %s: %w", req.BaseDN, err)
+	}
+	if req.MaxEntries > 0 && len(res.Entries) > int(req.MaxEntries) {
+		return DirSyncResult{}, fmt.Errorf("ad: the sync pass under %s returned more than the %d-entry cap; raise maxEntries or narrow the filter", req.BaseDN, req.MaxEntries)
+	}
+	out := DirSyncResult{Entries: dirSyncEntries(res)}
+	ctrl := goldap.FindControl(res.Controls, dirSyncOID)
+	if ctrl == nil {
+		// No control back means the server did not honour DirSync — most often the
+		// bind account lacks the replication right, or the base is not a naming
+		// context root. Returning the entries as if they were a delta would hand the
+		// process a full directory it believes to be a change set.
+		return DirSyncResult{}, fmt.Errorf("ad: the server returned no DirSync control for %s; check that the base is a naming context root and that the bind account may replicate directory changes (or set objectSecurity)", req.BaseDN)
+	}
+	ds := ctrl.(*goldap.ControlDirSync)
+	// In a DirSync *response* the control's fields do not mean what they are named:
+	// go-ldap reuses the request struct, and the first field is MS-ADTS's MoreResults
+	// rather than the request flags.
+	out.More = ds.Flags != 0
+	out.Cookie = ds.Cookie
+	return out, nil
+}
+
+// dirSyncEntries converts a search result into the connector's entry shape.
+func dirSyncEntries(res *goldap.SearchResult) []Entry {
+	out := make([]Entry, 0, len(res.Entries))
+	for _, e := range res.Entries {
+		attrs := make(map[string][]string, len(e.Attributes))
+		for _, a := range e.Attributes {
+			attrs[a.Name] = a.Values
+		}
+		out = append(out, Entry{DN: e.DN, Attributes: attrs})
+	}
+	return out
+}
+
 func (c *goConn) Close() error { return c.conn.Close() }
+
+// splitDN separates a distinguished name into its relative name and its parent,
+// respecting backslash escapes so a comma *inside* a value — "cn=Meier\, Arno,ou=…" —
+// does not split the name in the wrong place.
+//
+// It exists because the model authors a move as one target DN, which is how a person
+// thinks about it ("this entry now lives here"), while LDAP's ModifyDN wants the two
+// halves separately.
+func splitDN(dn string) (rdn, superior string) {
+	escaped := false
+	for i, r := range dn {
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case r == ',':
+			return strings.TrimSpace(dn[:i]), strings.TrimSpace(dn[i+1:])
+		}
+	}
+	return strings.TrimSpace(dn), ""
+}
