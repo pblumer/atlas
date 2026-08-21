@@ -438,3 +438,86 @@ func TestScimRecoversAcrossRestart(t *testing.T) {
 		t.Fatalf("after recovery Drive: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
+
+// TestScimBodyIsTheInputMappings proves a SCIM task's zeebe:ioMapping inputs *are*
+// its request body when it names no body variable: the mapped values are sent and the
+// process variables they came from are not
+// (ADR-draft-connector-payloads-are-the-input-mapping).
+func TestScimBodyIsTheInputMappings(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(scimDefKey, "identities", 1)
+	start := b.AddStartEvent()
+	call := b.AddScimConnectorTask(compiler.ScimConfig{
+		BaseURL: lit(scimBase), Resource: lit("Users"), Op: "create", Retries: 3,
+	})
+	b.AddInputMapping(call, "userName", compile(`login`))
+	b.AddInputMapping(call, "active", compile(`true`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{resp: scim.Response{Status: 201, Body: map[string]any{"id": "u-7"}}}
+	drive(t, cp, jobType, rc, noSecret, store, log,
+		model.VariableValue{Name: "login", Kind: model.VarString, Text: "ada"},
+		model.VariableValue{Name: "internalNote", Kind: model.VarString, Text: "do not sync"})
+
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	body := rc.requests[0].Body
+	if body["userName"] != "ada" || body["active"] != true {
+		t.Errorf("body = %#v, want the two input-mapped values", body)
+	}
+	if len(body) != 2 {
+		t.Errorf("body = %#v, want exactly the mapped inputs (no process variables)", body)
+	}
+}
+
+// TestScimBodyVarFromInputMapping proves a named body variable is resolved up the
+// scope chain too: an input mapping builds the SCIM resource, and the task sends it
+// (ADR-0068). Reading the process-instance scope flat made the local invisible, so
+// the worker failed the job as "body variable is not set on the instance".
+func TestScimBodyVarFromInputMapping(t *testing.T) {
+	log, store := openStore(t)
+	src, err := expr.CompileAuto(`{userName: login, active: true}`)
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b := compiler.NewBuilder(scimDefKey, "identities", 1)
+	start := b.AddStartEvent()
+	call := b.AddScimConnectorTask(compiler.ScimConfig{
+		BaseURL: lit(scimBase), Resource: lit("Users"), Op: "create", BodyVar: "resource", Retries: 3,
+	})
+	b.AddInputMapping(call, "resource", src)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{resp: scim.Response{Status: 201, Body: map[string]any{"id": "u-7"}}}
+	drive(t, cp, jobType, rc, noSecret, store, log,
+		model.VariableValue{Name: "login", Kind: model.VarString, Text: "ada"})
+
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	if body := rc.requests[0].Body; body["userName"] != "ada" {
+		t.Errorf("body = %#v, want the resource the input mapping built", body)
+	}
+}

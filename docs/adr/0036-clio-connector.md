@@ -39,12 +39,14 @@
 > delivery so an at-least-once replay never double-starts a process.
 >
 > **Update (2026-08-21).** The **payload mapping** this record named — "which process
-> variables form the event body" — is delivered, as the write task's `zeebe:ioMapping`
+> variables form the event body" — is delivered, as the task's `zeebe:ioMapping`
 > inputs rather than a clio-specific field: with input mappings the event body is
 > exactly the mapped values, and with none it stays every variable the task sees,
-> resolved up its scope chain (ADR-0068). See
-> [ADR-draft-clio-event-payload-is-the-input-mapping](draft-clio-event-payload-is-the-input-mapping.md);
-> the interim "the whole variable scope is the payload" is retired.
+> resolved up its scope chain (ADR-0068). The same rule now governs the REST request
+> body this record introduced, and every connector worker resolves its variables up
+> the chain. See
+> [ADR-draft-connector-payloads-are-the-input-mapping](draft-connector-payloads-are-the-input-mapping.md);
+> the interim "the whole variable scope is the payload" is retired for all of them.
 
 ## Context and problem statement
 

@@ -291,3 +291,46 @@ func TestWebScrapeHandlerElementInstanceGone(t *testing.T) {
 		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil,nil", out, err)
 	}
 }
+
+// TestWebScrapeConnectorSeesInputMappedLocal proves the worker resolves its FEEL url
+// and selector up the scope chain, so an input-mapped local is visible to them beside
+// what the task inherits (ADR-0068).
+func TestWebScrapeConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(wsDefKey, "news", 1)
+	start := b.AddStartEvent()
+	call := b.AddWebScrapeConnectorTask(compiler.WebScrapeConfig{
+		Url:      compiler.RestExpr{Expr: compile(`page`)},
+		Selector: compiler.RestExpr{Literal: "h1"},
+		Retries:  3,
+	})
+	b.AddInputMapping(call, "page", compile(`"https://example.com/" + slug`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{values: []string{"Headline"}}
+	if err := drive(t, cp, jobType, rc, store, log,
+		model.VariableValue{Name: "slug", Kind: model.VarString, Text: "news"}); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	if got := rc.requests[0].URL; got != "https://example.com/news" {
+		t.Errorf("url = %q, want the input-mapped local", got)
+	}
+}

@@ -324,3 +324,49 @@ func TestRemedyHandlerElementInstanceGone(t *testing.T) {
 		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil nil", out, err)
 	}
 }
+
+// TestRemedyConnectorSeesInputMappedLocal proves the worker resolves its FEEL form
+// and field values up the scope chain, so an input-mapped local is visible to them
+// beside what the task inherits (ADR-0068).
+func TestRemedyConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(remedyDefKey, "ticketing", 1)
+	start := b.AddStartEvent()
+	call := b.AddRemedyConnectorTask(compiler.RemedyConfig{
+		Connector: "helix",
+		Form:      compiler.RestExpr{Literal: "HPD:Help Desk"},
+		Fields:    []compiler.RestKV{{Name: "Summary", Val: compiler.RestExpr{Expr: compile(`summary + " (" + customer + ")"`)}}},
+		Retries:   3,
+	})
+	b.AddInputMapping(call, "summary", compile(`"Ticket for " + customer`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{id: "INC1"}
+	reg := remedy.NewRegistry()
+	reg.Register("helix", rc)
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "customer", Kind: model.VarString, Text: "Ada"},
+	); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.created) != 1 {
+		t.Fatalf("entries created = %d, want 1", len(rc.created))
+	}
+	if got := rc.created[0].Values["Summary"]; got != "Ticket for Ada (Ada)" {
+		t.Errorf("Summary = %v, want the mapped local beside the inherited variable", got)
+	}
+}

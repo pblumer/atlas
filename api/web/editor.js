@@ -1931,7 +1931,7 @@ const SERVICE_TASK_KINDS = [
     ext: "atlas:RestConnector",
     fields: [
       { group: "HTTP endpoint" },
-      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], hint: "POST, PUT and PATCH carry a JSON body: the input mappings below are that body. With none, every variable the task sees is sent." },
       { key: "url", label: "URL", placeholder: "https://api.example.com/customers", fx: true },
       { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", fx: true, hint: "Sent with the request. A value may be a FEEL expression (fx)." },
       { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
@@ -1986,7 +1986,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "bodyVariable", label: "Payload variable", placeholder: "scimUser",
         showIf: (v) => v.operation === "create" || v.operation === "replace" || v.operation === "patch",
-        hint: "A process variable holding the JSON object to send. Empty sends the whole variable scope.",
+        hint: "A process variable holding the JSON object to send. Empty sends the input mappings below instead — or, with none, every variable the task sees.",
       },
       { group: "Authentication" },
       {

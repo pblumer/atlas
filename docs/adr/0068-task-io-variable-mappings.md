@@ -14,12 +14,13 @@
 > completion, and the local scope is dropped via `VariableDeleted` events; the inline
 > script task and the polyglot script worker read their inputs up the scope chain.
 > Also delivered: the modeler properties-panel I/O-mapping editor (input and output
-> mapping lists on service, script, and user tasks), and the clio write worker's body
-> read — which resolves up the scope chain, and takes the mappings alone as the event
-> payload when a task has them (ADR-draft-clio-event-payload-is-the-input-mapping).
-> Remaining: extending the worker scope-chain read to the other job workers (DMN,
-> REST, and the rest of `connector/`), which still read the process-instance scope
-> flat and so ignore input-mapped locals.
+> mapping lists on service, script, and user tasks), and the worker scope-chain read
+> across every job worker — script, DMN, CSV, and now the whole of `connector/` plus
+> the user-provisioning connector, which read a single flat scope and so ignored their
+> own task's input mappings. Where a connector's payload *is* a variable scope (the
+> clio event body, the REST request body, the SCIM body with no body variable named),
+> a task's input mappings are that payload
+> (ADR-draft-connector-payloads-are-the-input-mapping).
 
 ## Context and problem statement
 

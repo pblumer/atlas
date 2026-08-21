@@ -32,7 +32,8 @@ type SecretResolver func(ref string) string
 // HandleWithOutput; the runner then pulls activatable SCIM jobs, and for each the
 // handler resolves the task's base URL / resource / operation / resource-id /
 // filter / result-variable from the compiled process and calls the provider through
-// client — evaluating any FEEL values over the instance's variables (the fx toggle,
+// client — evaluating any FEEL values over the variables the task sees, up its scope
+// chain (the fx toggle,
 // ADR-0067) and sending the request payload for create/replace/patch, keyed by the
 // job key so an at-least-once retry de-duplicates. Authentication
 // (basic/bearer/apiKey) is resolved through secret, which turns the model's secret
@@ -60,17 +61,19 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		}
 		op := cp.Intern(detail.ScimOp)
 		method, hasBody := methodForOp(op)
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: the base-url/resource/id/filter FEEL
-		// values and the request body all evaluate against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		// Read the variables the task sees once — up its scope chain, so its own
+		// input-mapped locals shadow what it inherits (ADR-0068). The base-url,
+		// resource, id and filter FEEL values and the request body all evaluate
+		// against them, off the hot path.
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("scim: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
 		endpoint, err := resourceURL(op,
-			resolveValue(detail.ScimBaseURL, scope, scopeVars),
-			resolveValue(detail.ScimResource, scope, scopeVars),
-			resolveValue(detail.ScimResourceID, scope, scopeVars))
+			resolveValue(detail.ScimBaseURL, piKey, scopeVars),
+			resolveValue(detail.ScimResource, piKey, scopeVars),
+			resolveValue(detail.ScimResourceID, piKey, scopeVars))
 		if err != nil {
 			return nil, err
 		}
@@ -80,13 +83,22 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		}
 		var query map[string]string
 		if op == "search" {
-			if filter := resolveValue(detail.ScimFilter, scope, scopeVars); filter != "" {
+			if filter := resolveValue(detail.ScimFilter, piKey, scopeVars); filter != "" {
 				query = map[string]string{"filter": filter}
 			}
 		}
 		var body map[string]any
 		if hasBody {
-			body, err = requestBody(cp.Intern(detail.ScimBody), scopeVars)
+			bodyVars := scopeVars
+			if cp.Intern(detail.ScimBody) == "" && len(cp.IOInputs(ei.ElementId)) > 0 {
+				// No body variable named, but the task maps its inputs: those mappings
+				// are the body — exactly the activity-local scope they wrote, inheriting
+				// nothing (ADR-draft-connector-payloads-are-the-input-mapping).
+				if bodyVars, err = state.LocalVariablesMap(store, j.ElementInstanceKey); err != nil {
+					return nil, fmt.Errorf("scim: read mapped inputs for element %d: %w", j.ElementInstanceKey, err)
+				}
+			}
+			body, err = requestBody(cp.Intern(detail.ScimBody), bodyVars)
 			if err != nil {
 				return nil, err
 			}
@@ -152,8 +164,10 @@ func resourceURL(op, baseURL, resource, id string) (string, error) {
 
 // requestBody builds the create/replace/patch payload. When the task names a body
 // variable, that variable must hold a JSON object (a SCIM resource or PatchOp) and
-// is sent verbatim; otherwise the whole variable scope is the payload, mirroring the
-// REST connector until input mappings exist (ADR-0067/0152).
+// is sent verbatim; otherwise the variables handed in are the payload — the task's
+// input mappings when it has them, else everything it sees, mirroring the REST
+// connector's body rule (ADR-0067/0152,
+// ADR-draft-connector-payloads-are-the-input-mapping).
 func requestBody(bodyVar string, scopeVars map[string]model.VariableValue) (map[string]any, error) {
 	if bodyVar == "" {
 		return bodyFromVars(scopeVars), nil
@@ -178,11 +192,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // expression evaluated over the scope's variables and coerced to its string form. A
 // FEEL null — an absent variable or a failed evaluation — becomes the empty string,
 // matching the engine's null-propagating contract (as the REST worker does).
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -190,32 +204,17 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each expression reads without a per-name store lookup
-// (mirrors the REST worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name absent
-// from the scope is left unbound (FEEL null); the reserved name processInstanceKey
-// binds to the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name absent
+// from the chain is left unbound (FEEL null); the reserved name processInstanceKey
+// binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {
@@ -322,10 +321,11 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 	}
 }
 
-// bodyFromVars turns the already-read scope variables into a JSON-ready map — the
-// request body a SCIM task sends when it names no body variable. The whole variable
-// scope is the payload, exactly as the REST connector sends the instance's variables
-// (ADR-0067/0152).
+// bodyFromVars turns the already-read variables into a JSON-ready map — the request
+// body a SCIM task sends when it names no body variable. Which variables those are is
+// the handler's decision: the task's input mappings when it has them, else everything
+// it sees — the same rule the REST connector's body follows (ADR-0067/0152,
+// ADR-draft-connector-payloads-are-the-input-mapping).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))
 	for name, v := range scopeVars {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -40,21 +41,23 @@ type Result struct {
 }
 
 // Resolve turns a compiled web-scrape task into a [Job] by evaluating its authored
-// fields against the scope's variables. Engine work by necessity — FEEL is compiled
-// at deploy (ADR-0008/0015) and the scope lives in the store.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, scope uint64) (Job, error) {
+// fields against the variables the task sees. Engine work by necessity — FEEL is
+// compiled at deploy (ADR-0008/0015) and the scope lives in the store.
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("webscrape: connector task has no detail")
 	}
-	// Read the scope's variables once: both the url and the selector evaluate against
-	// the same snapshot.
-	scopeVars, err := readScopeVars(store, scope)
+	// Read the variables the task sees once — up its scope chain, so its own
+	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate both the
+	// url and the selector against that one snapshot.
+	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {
-		return Job{}, fmt.Errorf("webscrape: read variables for scope %d: %w", scope, err)
+		return Job{}, fmt.Errorf("webscrape: read variables for element %d: %w", elementInstanceKey, err)
 	}
+	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
 	return Job{
-		URL:       resolveValue(detail.Url, scope, scopeVars),
-		Selector:  resolveValue(detail.ScrapeSelector, scope, scopeVars),
+		URL:       resolveValue(detail.Url, piKey, scopeVars),
+		Selector:  resolveValue(detail.ScrapeSelector, piKey, scopeVars),
 		Attribute: cp.Intern(detail.ScrapeAttribute),
 		Result:    cp.Intern(detail.ResultVar),
 	}, nil

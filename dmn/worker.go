@@ -212,61 +212,34 @@ func buildInputs(store state.Reader, elementKey, piKey uint64, staticJSON string
 // and returns its Go value for the decision context. A failed evaluation yields
 // nil (FEEL null), matching the engine's null-propagating script-task behavior, so
 // one bad mapping does not abort the decision.
-func evalMapping(scope uint64, scopeVars map[string]model.VariableValue, source *expr.Compiled) any {
-	v, err := source.Eval(bindStoredVars(scope, scopeVars, source.Inputs()))
+func evalMapping(piKey uint64, scopeVars map[string]model.VariableValue, source *expr.Compiled) any {
+	v, err := source.Eval(bindStoredVars(piKey, scopeVars, source.Inputs()))
 	if err != nil {
 		return nil
 	}
 	return feelToInput(v)
 }
 
-// maxScopeDepth bounds the scope-chain walk, a defensive guard against a cyclic or
-// corrupt FlowScopeKey chain. Real nesting is far shallower; it mirrors the script
-// worker's guard (script/worker.go) and the engine's own.
-const maxScopeDepth = 64
-
 // readScopeChainVars reads the variables a business rule task sees into a map keyed
-// by name, resolving up the element instance's scope chain: its own scope first,
-// then each enclosing scope up to the process root, with the nearest scope winning
-// on a name clash (ADR-0068). A top-level task's chain is just the process scope, so
-// this degenerates to the previous single-scope read. The chain is walked via each
-// scope's element instance's FlowScopeKey; the process-instance root has no element
-// instance, which ends it.
+// by name, resolving up the element instance's scope chain — its own activity-local
+// scope first, then each enclosing scope to the process root, nearest winning
+// (ADR-0068). A top-level task's chain is just the process scope, so this degenerates
+// to the previous single-scope read.
 func readScopeChainVars(store state.Reader, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	scope := elementInstanceKey
-	for depth := 0; depth <= maxScopeDepth; depth++ {
-		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-			if _, seen := vars[v.Name]; !seen { // a nearer scope already bound this name; it wins
-				vars[v.Name] = *v
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		ei, ok, err := store.GetElementInstance(scope)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || ei.FlowScopeKey == 0 || ei.FlowScopeKey == scope {
-			break // reached the process-instance root (no element instance) or a chain end
-		}
-		scope = ei.FlowScopeKey
-	}
-	return vars, nil
+	return state.VisibleVariablesMap(store, elementInstanceKey)
 }
 
-// bindStoredVars turns the named variables from a scope into a FEEL binding. A
-// name absent from the scope is left unbound (FEEL null); the reserved name
-// processInstanceKey binds to the scope's own key as a string.
-func bindStoredVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindStoredVars turns the named variables the task sees into a FEEL binding. A
+// name absent from the chain is left unbound (FEEL null); the reserved name
+// processInstanceKey binds to the process instance's key as a string.
+func bindStoredVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

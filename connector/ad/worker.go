@@ -36,7 +36,8 @@ const (
 // Register it with a [job.Runner] under the reserved [compiler.AdJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable AD jobs, and for each the handler
 // resolves the task's url / bind DN / operation / DNs from the compiled process, dials
-// and binds through dialer — evaluating any FEEL values over the instance's variables
+// and binds through dialer — evaluating any FEEL values over the variables the task
+// sees, up its scope chain (ADR-0068)
 // (ADR-0067) and resolving the bind password from a secret reference (ADR-0041) — and
 // performs the operation. Returning an error fails the job (retry, then an incident,
 // ADR-0061); the runner completes it only on success.
@@ -58,16 +59,16 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 			return nil, fmt.Errorf("ad: %w", err)
 		}
 		op := cp.Intern(detail.AdOp)
-		scope := ei.ProcessInstanceKey
-		scopeVars, err := readScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("ad: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
-		serverURL := resolveValue(detail.AdURL, scope, scopeVars)
+		serverURL := resolveValue(detail.AdURL, piKey, scopeVars)
 		if serverURL == "" {
 			return nil, fmt.Errorf("ad: %s has an empty url", op)
 		}
-		bindDN := resolveValue(detail.AdBindDN, scope, scopeVars)
+		bindDN := resolveValue(detail.AdBindDN, piKey, scopeVars)
 		bindPassword := ""
 		if ref := cp.Intern(detail.AdBindSecret); ref != "" {
 			bindPassword = resolveSecret(secret, ref)
@@ -80,13 +81,13 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 			return nil, err
 		}
 		defer conn.Close()
-		return nil, dispatch(cp, detail, op, scope, scopeVars, conn)
+		return nil, dispatch(cp, detail, op, piKey, scopeVars, conn)
 	}
 }
 
 // dispatch performs the authored AD operation over the bound connection.
-func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, scope uint64, scopeVars map[string]model.VariableValue, conn Conn) error {
-	dn := resolveValue(detail.AdDN, scope, scopeVars)
+func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, piKey uint64, scopeVars map[string]model.VariableValue, conn Conn) error {
+	dn := resolveValue(detail.AdDN, piKey, scopeVars)
 	switch op {
 	case "create-user":
 		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
@@ -95,7 +96,7 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Add(dn, attrs)
 	case "set-password":
-		newPassword := resolveValue(detail.AdNewPassword, scope, scopeVars)
+		newPassword := resolveValue(detail.AdNewPassword, piKey, scopeVars)
 		if newPassword == "" {
 			return fmt.Errorf("ad: set-password resolved an empty newPassword")
 		}
@@ -107,9 +108,9 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Modify(dn, []Mod{{Op: modReplace, Attr: attrUserAccountCtl, Vals: []string{accountControl(current, op == "disable")}}})
 	case "add-group-member":
-		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, scope, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, piKey, scopeVars)}}})
 	case "remove-group-member":
-		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, scope, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, piKey, scopeVars)}}})
 	default:
 		return fmt.Errorf("ad: unknown operation %q", op)
 	}
@@ -198,11 +199,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 
 // resolveValue turns an AD field value into a string: a literal verbatim, or a FEEL
 // expression evaluated over the scope's variables. A FEEL null becomes "".
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -210,28 +211,15 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name.
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

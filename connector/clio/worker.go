@@ -169,52 +169,34 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 	}
 }
 
-// maxScopeDepth bounds the scope-chain walk, a defensive guard against a cyclic or
-// corrupt FlowScopeKey chain. Real nesting (activity-local scopes over subprocess
-// scopes over the process scope) is far shallower. It mirrors the engine's own guard
-// (engine/scope.go) and the script worker's.
-const maxScopeDepth = 64
-
 // eventBody builds the JSON-ready body a write-events task appends.
 //
 // When the task carries zeebe:ioMapping inputs, those mappings *are* the payload:
 // the body is exactly its activity-local scope, which at this point holds the mapped
 // values and nothing else (a job's result is written there only on completion). That
 // is the "payload mapping" ADR-0036 planned, expressed with the ADR-0068 mappings
-// that arrived later (ADR-draft-clio-event-payload-is-the-input-mapping) — a model
+// that arrived later (ADR-draft-connector-payloads-are-the-input-mapping) — a model
 // states what leaves it rather than spilling every process variable, including
 // scratch and internal ones, into an external event store.
 //
 // With no input mappings the body stays every variable the task *sees*, resolved up
 // its scope chain (nearest scope wins), so a task inside a subprocess also carries
 // that subprocess's variables; for a top-level task the chain is just the process
-// instance, exactly the previous behaviour (ADR-0035/0036). The chain is walked via
-// each scope's element instance's FlowScopeKey; the process-instance root has no
-// element instance, which ends it.
+// instance, exactly the previous behaviour (ADR-0035/0036).
 func eventBody(store state.Reader, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue, elementInstanceKey uint64) (map[string]any, error) {
-	mapped := len(cp.IOInputs(ei.ElementId)) > 0
 	data := map[string]any{}
-	scope := elementInstanceKey
-	for depth := 0; depth <= maxScopeDepth; depth++ {
-		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-			if _, seen := data[v.Name]; !seen { // a nearer scope already bound this name; it wins
-				data[v.Name] = varToAny(v)
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		if mapped {
-			return data, nil // the mappings are the payload; nothing is inherited
-		}
-		parent, ok, err := store.GetElementInstance(scope)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || parent.FlowScopeKey == 0 || parent.FlowScopeKey == scope {
-			break // reached the process-instance root (no element instance) or a chain end
-		}
-		scope = parent.FlowScopeKey
+	collect := func(v *model.VariableValue) error {
+		data[v.Name] = varToAny(v)
+		return nil
+	}
+	var err error
+	if len(cp.IOInputs(ei.ElementId)) > 0 {
+		err = store.VariablesOfScope(elementInstanceKey, collect) // the mappings, inheriting nothing
+	} else {
+		err = state.VisibleVariables(store, elementInstanceKey, collect)
+	}
+	if err != nil {
+		return nil, err
 	}
 	return data, nil
 }

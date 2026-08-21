@@ -445,3 +445,46 @@ func decodeUTF16LE(s string) string {
 	}
 	return string(utf16.Decode(u16))
 }
+
+// TestAdConnectorSeesInputMappedLocal proves the worker resolves both its FEEL fields
+// and its entry variable up the scope chain: an input mapping builds the DN and the
+// entry, and the create uses them (ADR-0068).
+func TestAdConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(adDefKey, "directory", 1)
+	start := b.AddStartEvent()
+	call := b.AddAdConnectorTask(compiler.AdConfig{
+		URL: lit(adURL), Op: "create-user",
+		DN:       compiler.RestExpr{Expr: compile(`dn`)},
+		EntryVar: "entry",
+		Retries:  3,
+	})
+	b.AddInputMapping(call, "dn", compile(`"cn=" + cn + ",ou=users,dc=x"`))
+	b.AddInputMapping(call, "entry", compile(`{cn: cn, objectClass: ["user"]}`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "cn", Kind: model.VarString, Text: "Arno"})
+
+	if conn.addDN != "cn=Arno,ou=users,dc=x" {
+		t.Errorf("add DN = %q, want the input-mapped DN", conn.addDN)
+	}
+	if got := conn.addAt["cn"]; len(got) != 1 || got[0] != "Arno" {
+		t.Errorf("add attrs cn = %v, want the input-mapped entry's cn", got)
+	}
+}

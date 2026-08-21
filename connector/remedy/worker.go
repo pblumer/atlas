@@ -21,7 +21,8 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // with a [job.Runner] for the reserved [compiler.RemedyJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable Remedy jobs, and for each the
 // handler resolves the task's connector/form/fields from the compiled process —
-// evaluating any FEEL field over the instance's variables (the fx toggle, ADR-0067) —
+// evaluating any FEEL field over the variables the task sees, up its scope chain (the
+// fx toggle, ADR-0067/0068) —
 // resolves the named connector's AR System client from reg, and creates the entry
 // keyed by the job key so an at-least-once retry carries the same X-Request-ID
 // (ADR-0106). When the task names a result variable, the created entry's id is
@@ -50,20 +51,21 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if !ok {
 			return nil, reg.Unresolved("remedy", name)
 		}
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: the form and every field FEEL value
-		// evaluate against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		// Read the variables the task sees once — up its scope chain, so its own
+		// input-mapped locals shadow what it inherits (ADR-0068). The form and every
+		// field FEEL value evaluates against them, off the hot path.
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("remedy: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
-		form := resolveValue(detail.RemedyForm, scope, scopeVars)
+		form := resolveValue(detail.RemedyForm, piKey, scopeVars)
 		if form == "" {
 			return nil, fmt.Errorf("remedy: task resolved no form")
 		}
 		values := make(map[string]any, len(detail.RemedyFields))
 		for _, f := range detail.RemedyFields {
-			values[f.Name] = resolveValue(f.Val, scope, scopeVars)
+			values[f.Name] = resolveValue(f.Val, piKey, scopeVars)
 		}
 		res, err := client.CreateEntry(context.Background(), Entry{
 			Form:      form,
@@ -91,11 +93,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the mail worker's
 // fields do).
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -103,32 +105,17 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each expression reads without a per-name store lookup
-// (mirrors the mail worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name absent
-// from the scope is left unbound (FEEL null); the reserved name processInstanceKey
-// binds to the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name absent
+// from the chain is left unbound (FEEL null); the reserved name processInstanceKey
+// binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

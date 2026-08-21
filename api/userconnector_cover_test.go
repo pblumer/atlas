@@ -12,6 +12,7 @@ import (
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // TestEnsureSystemProjectGetError covers ensureSystemProject's get-error branch:
@@ -87,10 +88,12 @@ func TestUserConnectorHandlerStoreBranches(t *testing.T) {
 	}
 }
 
-// TestUserReadScopeVarsError covers the read-variables error path directly.
+// TestUserReadScopeVarsError covers the read-variables error path directly — now the
+// shared scope-chain read (ADR-0068), which the worker uses so a task's input-mapped
+// locals are visible to its FEEL fields.
 func TestUserReadScopeVarsError(t *testing.T) {
-	if _, err := userReadScopeVars(fakeElemStore{varsErr: errors.New("nope")}, 1); err == nil {
-		t.Error("userReadScopeVars with a failing store: want error")
+	if _, err := state.VisibleVariablesMap(fakeElemStore{varsErr: errors.New("nope")}, 1); err == nil {
+		t.Error("the scope-chain read with a failing store: want error")
 	}
 }
 

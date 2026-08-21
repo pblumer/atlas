@@ -21,7 +21,8 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // with a [job.Runner] under the reserved [compiler.SharePointJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable SharePoint jobs, and for each
 // the handler resolves the task's connector/site/list/fields from the compiled
-// process — evaluating any FEEL value over the instance's variables (the fx toggle,
+// process — evaluating any FEEL value over the variables the task sees, up its scope
+// chain (the fx toggle,
 // ADR-0067) — resolves the named connector's Graph client from reg, creates the list
 // item, and (when the task names a result variable) returns the created item's JSON
 // as that variable to be written back on completion. Returning an error leaves the
@@ -49,17 +50,18 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if !ok {
 			return nil, reg.Unresolved("sharepoint", name)
 		}
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: every site/list/field FEEL value
-		// evaluates against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		// Read the variables the task sees once — up its scope chain, so its own
+		// input-mapped locals shadow what it inherits (ADR-0068). Every site, list
+		// and field FEEL value evaluates against them, off the hot path.
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("sharepoint: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
 		item, err := client.CreateItem(context.Background(), ItemRequest{
-			Site:      resolveValue(detail.Site, scope, scopeVars),
-			List:      resolveValue(detail.List, scope, scopeVars),
-			Fields:    resolveKVs(detail.Fields, scope, scopeVars),
+			Site:      resolveValue(detail.Site, piKey, scopeVars),
+			List:      resolveValue(detail.List, piKey, scopeVars),
+			Fields:    resolveKVs(detail.Fields, piKey, scopeVars),
 			RequestID: strconv.FormatUint(j.Key, 10),
 		})
 		if err != nil {
@@ -83,11 +85,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // form. A FEEL null — an absent variable or a failed evaluation — becomes the empty
 // string, matching the engine's null-propagating contract (as the REST worker's
 // fields do).
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -97,43 +99,28 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 
 // resolveKVs resolves a list of named connector values (item fields) into a map,
 // evaluating any FEEL values. Returns nil for an empty list.
-func resolveKVs(kvs []compiler.RestKV, scope uint64, scopeVars map[string]model.VariableValue) map[string]string {
+func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
 	if len(kvs) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(kvs))
 	for _, kv := range kvs {
-		out[kv.Name] = resolveValue(kv.Val, scope, scopeVars)
+		out[kv.Name] = resolveValue(kv.Val, piKey, scopeVars)
 	}
 	return out
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each expression reads without a per-name store lookup
-// (mirrors the REST worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name absent
-// from the scope is left unbound (FEEL null); the reserved name processInstanceKey
-// binds to the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name absent
+// from the chain is left unbound (FEEL null); the reserved name processInstanceKey
+// binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {
