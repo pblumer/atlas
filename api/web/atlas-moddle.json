@@ -139,6 +139,23 @@
       ]
     },
     {
+      "name": "AdConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "url", "type": "String", "isAttr": true },
+        { "name": "bindDN", "type": "String", "isAttr": true },
+        { "name": "bindSecret", "type": "String", "isAttr": true },
+        { "name": "startTLS", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "dn", "type": "String", "isAttr": true },
+        { "name": "memberDN", "type": "String", "isAttr": true },
+        { "name": "entryVariable", "type": "String", "isAttr": true },
+        { "name": "newPassword", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "MailConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

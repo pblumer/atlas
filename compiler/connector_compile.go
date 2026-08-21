@@ -84,6 +84,85 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Soap.Retries },
 		compile: compileSoapConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Ad != nil },
+		retries: func(st xmlServiceTask) string { return st.Ad.Retries },
+		compile: compileAdConnectorTask,
+	},
+}
+
+// adOps is the set of Active Directory provisioning operations a connector task can
+// author. Each is an AD-specific primitive the generic LDAP connector cannot express
+// directly (unicodePwd, userAccountControl, incremental group membership).
+var adOps = map[string]bool{"create-user": true, "set-password": true, "enable": true, "disable": true, "add-group-member": true, "remove-group-member": true}
+
+// compileAdConnectorTask compiles an <atlas:adConnector> task: it performs an Active
+// Directory operation against a model-authored server via the job path (ADR-0166), not
+// an external service-task worker. AD speaks LDAP, so the server URL and DNs live in
+// the model and the bind password never does (a secret reference, ADR-0041); every
+// operation targets a dn. create-user takes an attribute variable; set-password a new
+// password; the group operations a member dn.
+func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Ad
+	if strings.TrimSpace(cn.URL) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q needs a url (ldaps://host for a password set)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id)
+	}
+	if !adOps[op] {
+		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id, cn.Operation)
+	}
+	if strings.TrimSpace(cn.DN) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
+	}
+	switch op {
+	case "create-user":
+		if strings.TrimSpace(cn.EntryVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation create-user needs an entryVariable naming the attribute object", st.Id)
+		}
+	case "set-password":
+		if strings.TrimSpace(cn.NewPassword) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation set-password needs a newPassword", st.Id)
+		}
+	case "add-group-member", "remove-group-member":
+		if strings.TrimSpace(cn.MemberDN) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
+		}
+	}
+	url, err := connectorValue(st.Id, "ad connector", "url", cn.URL)
+	if err != nil {
+		return 0, err
+	}
+	bindDN, err := connectorValue(st.Id, "ad connector", "bindDN", cn.BindDN)
+	if err != nil {
+		return 0, err
+	}
+	dn, err := connectorValue(st.Id, "ad connector", "dn", cn.DN)
+	if err != nil {
+		return 0, err
+	}
+	memberDN, err := connectorValue(st.Id, "ad connector", "memberDN", cn.MemberDN)
+	if err != nil {
+		return 0, err
+	}
+	newPassword, err := connectorValue(st.Id, "ad connector", "newPassword", cn.NewPassword)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddAdConnectorTask(AdConfig{
+		URL:         url,
+		BindDN:      bindDN,
+		BindSecret:  strings.TrimSpace(cn.BindSecret),
+		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:          op,
+		DN:          dn,
+		MemberDN:    memberDN,
+		EntryVar:    strings.TrimSpace(cn.EntryVariable),
+		NewPassword: newPassword,
+		Retries:     retries,
+	}), nil
 }
 
 // soapVersions is the set of SOAP protocol versions a connector task can author. 1.1

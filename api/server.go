@@ -46,6 +46,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -1021,6 +1022,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// worker serves every process under the reserved SOAP job type.
 	s.jobRunner.HandleWithOutput(compiler.SoapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return soap.Handler(rd, s.processLookup, soap.NewHTTPClient(), s.resolveConnectorSecret)
+	})
+	// An Active Directory connector task performs an AD-specific provisioning operation
+	// (create-user, set-password via unicodePwd, enable/disable via userAccountControl,
+	// add/remove a group member) against a model-authored server (ADR-0166). AD speaks
+	// LDAP; the server URL and DNs live in the model, the bind password is a *reference*
+	// the worker resolves at call time (resolveConnectorSecret, ADR-0041). One worker
+	// serves every process under the reserved AD job type; each job dials, binds,
+	// operates, and closes.
+	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return ad.Handler(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret)
 	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
