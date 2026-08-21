@@ -1821,6 +1821,9 @@ type xmlServiceTask struct {
 	// task (ADR-0171): one directory lifecycle operation through Graph, against a
 	// tenant a *worker* holds the app credential for.
 	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
+	// Ldif, when present, marks this service task a directory-file connector task
+	// (ADR-0172): LDIF or DSML entries read from, or written to, a variable.
+	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1999,6 +2002,22 @@ type xmlSqlConnector struct {
 	ParametersVariable string `xml:"parametersVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	MaxRows            string `xml:"maxRows,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlLdifConnector is the <atlas:ldifConnector> extension on a service task
+// (ADR-0172). format is "ldif" or "dsml" — required, because guessing a directory
+// file's format from its bytes is how a malformed file becomes a plausible-looking
+// empty result. operation is "read" (the default) or "write"; source names the
+// variable holding the file text or the entries, and resultVariable the one receiving
+// the entries or the rendered file.
+type xmlLdifConnector struct {
+	Format         string `xml:"format,attr"`
+	Operation      string `xml:"operation,attr"`
+	Source         string `xml:"source,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

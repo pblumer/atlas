@@ -37,6 +37,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		MariaDBJobType:       MariaDBJobTypeIndex,
 		PostgresJobType:      PostgresJobTypeIndex,
 		EntraJobType:         EntraJobTypeIndex,
+		LdifJobType:          LdifJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

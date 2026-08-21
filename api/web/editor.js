@@ -2249,6 +2249,34 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "ldif", name: "Directory File Connector", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
+    // page — a file of entries rather than a live directory.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
+    ext: "atlas:LdifConnector",
+    fields: [
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select",
+        options: [{ v: "ldif", l: "LDIF (RFC 2849)" }, { v: "dsml", l: "DSML v1" }],
+        hint: "Required — there is deliberately no default. Guessing a directory file's format from its bytes is how a malformed file becomes a plausible-looking empty result.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to entries" }, { v: "write", l: "Write — entries to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "ldifText",
+        hint: "Reading: the variable holding the file text. Writing: the variable holding the entries, in the same {dn, attributes} shape an LDAP search or an AD sync produces — so a directory read can be written straight to a file.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "eintraege",
+        hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory connectors return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
+      },
+    ],
+  },
+  {
     id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.

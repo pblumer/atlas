@@ -698,6 +698,19 @@ type ConnectorTaskDetail struct {
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraAttributesVar int32
+	// Directory-file connector fields (JobType == LdifJobType, ADR-0172). LdifFormat
+	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
+	// ("read" | "write"). LdifSource is the interned name of the variable holding the
+	// file text (read) or the entries (write); LdifResult the variable receiving the
+	// entries (read) or the rendered file (write).
+	//
+	// Unlike the text-file connector there is no default format: a file is LDIF or it
+	// is DSML, and guessing from the bytes is how a malformed file becomes a
+	// plausible-looking empty result.
+	LdifFormat    int32
+	LdifOperation int32
+	LdifSource    int32
+	LdifResult    int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

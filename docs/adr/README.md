@@ -181,6 +181,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Proposed |
 | [0170](0170-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Proposed |
 | [0171](0171-entra-id-connector.md) | A Microsoft Entra ID connector | Proposed |
+| [0172](0172-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Proposed |
 
 ## Status values
 

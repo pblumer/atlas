@@ -11,6 +11,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/sqldb"
 )
@@ -52,6 +53,8 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		switch kind {
 		case "csv":
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
+		case "ldif":
+			built.Handlers[compiler.LdifJobType] = ExecFunc(runLdif)
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
@@ -219,4 +222,26 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	// Result decides what a job completes with, so a read's rows and a write's
 	// rendered file take the same path here as in the engine.
 	return res.Variables()
+}
+
+// runLdif reads or writes a resolved directory-file job. It shares [ldif.Run] and
+// [ldif.Result] with the in-process path, so the two cannot disagree about what a
+// read's entries or a write's file look like.
+func runLdif(_ context.Context, j Job) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("ldif: the job carried no resolved connector detail; is this server offloading the ldif kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task ldif.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("ldif: cannot read the resolved detail: %w", err)
+	}
+	res, err := ldif.Run(task)
+	if err != nil {
+		return nil, err
+	}
+	return res.Variables(), nil
 }

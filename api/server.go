@@ -50,6 +50,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/ldap"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -1058,6 +1059,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
+	})
+	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-0172).
+	// Like CSV it is a pure transform — no network, no credential — so it runs here as
+	// well as on a worker, and neither placement can block the other.
+	s.jobRunner.HandleWithOutput(compiler.LdifJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return ldif.Handler(rd, s.processLookup)
 	})
 	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
 	// run-loop-owned user store, so it is a closure over s and runs on the loop (the

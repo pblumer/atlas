@@ -98,8 +98,8 @@ on a worker, so a database credential never enters the engine (ADR-0164/0170).
 | Generic CSV Connector / Delimited text file | `csv` (ADR-0139, amended) | **Implemented** — read and write. |
 | Fixed-Width text file | `csv` format `fixed-width` | **Implemented** — read and write, columns authored as `name:width`. |
 | Attribute-Value Pair text file | `csv` format `avp` | **Implemented** — read and write. |
-| LDAP Data Interchange Format (LDIF) | — | **Missing** |
-| Directory Services Mark-up Language (DSML) | — | **Missing** |
+| LDAP Data Interchange Format (LDIF) | `ldif` (ADR-0172) | **Implemented** — read and write. Change records are read as entries, not applied. |
+| Directory Services Mark-up Language (DSML) | `ldif` format `dsml` | **Implemented** — read and write, DSML v1. |
 
 ### Platform
 
@@ -142,8 +142,10 @@ particular is the modern replacement for several MIM target-system MAs.
    it is not one feature but two vendor protocols — DirSync for AD, RFC 4533
    elsewhere — and a generic connector guessing which server it is talking to is the
    wrong shape. RFC 4533 content sync for non-AD directories remains unbuilt.
-5. **File connector family.** Fixed-width, AVP, LDIF, DSML, and a CSV *export*
-   side. Individually small and they share the `csvimport` parsing seam.
+5. ~~**File connector family.**~~ **Done.** Fixed-width, AVP and a write direction
+   joined the text-file connector (ADR-0139, amended); LDIF and DSML became their own
+   `ldif` connector (ADR-0172), because they carry directory entries rather than table
+   rows and produce the shape a live directory read produces.
 6. **GALSync.**
 
 ### Deliberately not building

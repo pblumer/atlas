@@ -116,6 +116,58 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Entra.Retries },
 		compile: compileEntraConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Ldif != nil },
+		retries: func(st xmlServiceTask) string { return st.Ldif.Retries },
+		compile: compileLdifConnectorTask,
+	},
+}
+
+// The directory-file formats and directions a model can author. They are spelled here
+// as well as in connector/ldif because the compiler cannot import the connector (the
+// dependency runs the other way); TestLdifFormatsMatchTheConnector guards the seam.
+const (
+	ldifFormatLDIF     = "ldif"
+	ldifFormatDSML     = "dsml"
+	ldifOperationRead  = "read"
+	ldifOperationWrite = "write"
+)
+
+// compileLdifConnectorTask compiles an <atlas:ldifConnector> task: directory entries
+// read from, or written to, a file held in a process variable (ADR-0172).
+func compileLdifConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Ldif
+	format := strings.ToLower(strings.TrimSpace(cn.Format))
+	// There is deliberately no default: a directory file is LDIF or it is DSML, and
+	// guessing from the bytes is how a malformed file becomes a plausible-looking
+	// empty result.
+	if format == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a format (%s or %s)", st.Id, ldifFormatDSML, ldifFormatLDIF)
+	}
+	if format != ldifFormatLDIF && format != ldifFormatDSML {
+		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown format %q (want %s or %s)", st.Id, cn.Format, ldifFormatDSML, ldifFormatLDIF)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = ldifOperationRead
+	}
+	if op != ldifOperationRead && op != ldifOperationWrite {
+		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown operation %q (want %s or %s)", st.Id, cn.Operation, ldifOperationRead, ldifOperationWrite)
+	}
+	if strings.TrimSpace(cn.Source) == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a source variable", st.Id)
+	}
+	if strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a resultVariable to receive the %s", st.Id,
+			map[string]string{ldifOperationRead: "entries", ldifOperationWrite: "rendered file"}[op])
+	}
+	return b.AddLdifConnectorTask(LdifConfig{
+		Format:    format,
+		Operation: op,
+		Source:    strings.TrimSpace(cn.Source),
+		Result:    strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}), nil
 }
 
 // entraOp describes what one Entra lifecycle operation requires of a model. The

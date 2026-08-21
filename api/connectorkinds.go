@@ -266,6 +266,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
 	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
 	"csv":                   {compiler.CsvImportJobTypeIndex},
+	"ldif":                  {compiler.LdifJobTypeIndex},
 	"rest":                  {compiler.RestJobTypeIndex},
 	"scim":                  {compiler.ScimJobTypeIndex},
 	"ldap":                  {compiler.LdapJobTypeIndex},

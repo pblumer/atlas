@@ -233,3 +233,46 @@ func TestRunADJobSync(t *testing.T) {
 		t.Errorf("more = %v, want the server's signal passed through", res["more"])
 	}
 }
+
+// The LDIF kind needs no configuration and serves a pure transform, so a worker can
+// take it without holding anything.
+func TestBuiltinConnectorsRegistersLdif(t *testing.T) {
+	got, err := BuiltinConnectors(envMap(nil), "ldif")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if _, ok := got.Handlers[compiler.LdifJobType]; !ok {
+		t.Errorf("no handler for %s; have %v", compiler.LdifJobType, got.Handlers)
+	}
+}
+
+// A resolved directory-file job round-trips through the payload and runs the same
+// transform the engine would.
+func TestRunLdifJob(t *testing.T) {
+	out, err := runLdif(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ldif",
+		Fields: map[string]any{
+			"format": "ldif", "source": "dn: uid=ada,dc=x\ncn: Ada\n", "resultVariable": "eintraege",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("runLdif: %v", err)
+	}
+	if out["entryCount"] != 1 {
+		t.Errorf("entryCount = %v", out["entryCount"])
+	}
+	if _, ok := out["eintraege"]; !ok {
+		t.Errorf("result = %#v, want the entries", out)
+	}
+}
+
+func TestRunLdifJobErrors(t *testing.T) {
+	if _, err := runLdif(context.Background(), Job{}); err == nil {
+		t.Error("a job with no connector detail must fail")
+	}
+	if _, err := runLdif(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ldif", Fields: map[string]any{"format": "ldif", "source": "kaputt", "resultVariable": "r"},
+	}}); err == nil {
+		t.Error("an unparseable file must fail the job")
+	}
+}

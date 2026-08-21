@@ -18,6 +18,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/expr"
@@ -4324,6 +4325,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
 			"format": j.Format, "operation": j.Operation,
+		}}
+	case compiler.LdifJobTypeIndex:
+		// A pure transform: what travels is the file text (or the entries) and the
+		// format, and there is no credential to leave behind.
+		j, err := ldif.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ldif", Fields: map[string]any{
+			"format": j.Format, "operation": j.Operation,
+			"source": j.Source, "resultVariable": j.Result,
 		}}
 	case compiler.MailJobTypeIndex:
 		// The message travels; the SMTP host and password do not. What names the

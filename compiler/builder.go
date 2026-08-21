@@ -322,6 +322,19 @@ const EntraJobType = "io.atlas.entra"
 // every compiled process: NewBuilder reserves it twenty-fourth, so it is always 23.
 const EntraJobTypeIndex int32 = 23
 
+// LdifJobType is the reserved job type a directory-file connector task carries: LDIF
+// (RFC 2849) or DSML v1, read or written (ADR-0172).
+//
+// It has an in-process handler as well as a worker one, and that is not a lapse from
+// ADR-0164: parsing a file is pure computation with no network and no credential, the
+// same category as a FEEL script or a local DMN evaluation, which that record
+// explicitly leaves in the engine. It is offloadable all the same.
+const LdifJobType = "io.atlas.ldif"
+
+// LdifJobTypeIndex is the interned index LdifJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it twenty-fifth, so it is always 24.
+const LdifJobTypeIndex int32 = 24
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -353,6 +366,7 @@ var reservedJobTypes = []string{
 	MariaDBJobType,       // 21
 	PostgresJobType,      // 22
 	EntraJobType,         // 23
+	LdifJobType,          // 24
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1256,6 +1270,43 @@ func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 		SqlStatement: b.intern(cfg.Statement),
 		SqlParamsVar: b.intern(cfg.ParamsVar),
 		SqlMaxRows:   cfg.MaxRows,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// LdifConfig is the deploy-time configuration of a directory-file connector task
+// (ADR-0172). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
+// names the variable holding the file text (read) or the entries (write), and Result
+// the variable receiving the entries (read) or the rendered file (write).
+type LdifConfig struct {
+	Format    string
+	Operation string
+	Source    string
+	Result    string
+	Retries   int32
+}
+
+// AddLdifConnectorTask adds a directory-file connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved LdifJobType, which an in-process worker and an `atlas worker` both
+// serve — the work is a pure transform, so neither placement can block the other.
+func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:       b.intern(LdifJobType),
+		Connector:     -1, // a file carries no endpoint and no credential
+		Subject:       -1, // not a clio task
+		EventType:     -1,
+		ClioQuery:     -1,
+		ReduceSpec:    -1,
+		Method:        -1,
+		Auth:          -1,
+		ResultVar:     -1, // LDIF uses its own LdifResult field, as CSV does
+		Retries:       cfg.Retries,
+		LdifFormat:    b.intern(cfg.Format),
+		LdifOperation: b.intern(cfg.Operation),
+		LdifSource:    b.intern(cfg.Source),
+		LdifResult:    b.intern(cfg.Result),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
