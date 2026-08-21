@@ -57,5 +57,20 @@ overrides.json ┘
 4. Re-run `make whats-new` and **commit** the regenerated `api/web/whats-new.json`.
 
 The only entries shown are the newest `MAX_ENTRIES` (see `gen.mjs`) after hidden ones
-are dropped. `api/whatsnew_test.go` guards the committed JSON (valid, non-empty,
-required fields present, newest-first).
+are dropped.
+
+## What keeps it honest
+
+Nothing regenerates the feed at build or run time, so two checks stand in for that:
+
+- **CI fails on a stale feed.** The `check` job re-runs the generator and diffs
+  `api/web/whats-new.json`; a CHANGELOG entry committed without re-running
+  `make whats-new` turns the build red with the missing diff printed. This is why
+  `generatedAt` is derived from the newest dated CHANGELOG section rather than the
+  wall clock — a today-stamp would make every CI run differ from the commit.
+- **`api/whatsnew_test.go` guards the committed JSON**: valid, non-empty, required
+  fields present, newest-first, and no summary that starts with punctuation (the
+  signature of a generator parse artifact rather than real prose).
+
+Neither check can tell that an entry *reads* well, or that a user-facing change has
+an override at all. That part stays a human step — step 3 above.

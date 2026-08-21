@@ -72,6 +72,11 @@ func TestWhatsNewJSONIsValid(t *testing.T) {
 		if strings.TrimSpace(e.Summary.En) == "" {
 			t.Errorf("entry %d (%s): empty English summary", i, e.ID)
 		}
+		// A summary opening with closing punctuation is a generator parse artifact
+		// (e.g. the leftover "): …" of a half-stripped "(ADR-nnnn):" lead-in), not prose.
+		if s := strings.TrimSpace(e.Summary.En); s != "" && strings.ContainsRune("):;,.—-", []rune(s)[0]) {
+			t.Errorf("entry %d (%s): summary %q starts with punctuation; looks like a generator parse artifact", i, e.ID, s)
+		}
 		if !strings.HasPrefix(e.Link.URL, "http://") && !strings.HasPrefix(e.Link.URL, "https://") {
 			t.Errorf("entry %d (%s): link url %q is not http(s)", i, e.ID, e.Link.URL)
 		}
