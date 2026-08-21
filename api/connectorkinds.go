@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -243,6 +245,70 @@ func (s *Server) setupManagedConnectors(store *state.Store) error {
 		k.registerHandlers(s, store)
 	}
 	return nil
+}
+
+// offloadableKinds maps an operator-facing kind name to the reserved job types its
+// in-process handler serves. It is the vocabulary of --offload-connectors, and it
+// deliberately spans more than the *managed* kinds: a kind is offloadable if Atlas
+// runs it itself, whether or not it also has a server-side registry. CSV import is
+// the clearest example — it has no registry precisely because it needs no credential
+// (ADR-0168), and it is the first kind meant to move.
+//
+// The user task is absent on purpose: it waits for a person, and the pull refuses it
+// for that reason rather than because a handler serves it. Every *other* in-process
+// handler must appear here, and TestEveryInProcessHandlerIsOffloadable fails when one
+// does not: a connector Atlas can run but an operator cannot move is a kind that can
+// only ever run on the loop, which is the thing ADR-0164 rules out.
+var offloadableKinds = map[string][]int32{
+	connectorKindTemis:      {compiler.TemisDecisionJobTypeIndex},
+	connectorKindClio:       {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
+	connectorKindMail:       {compiler.MailJobTypeIndex},
+	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
+	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
+	"csv":                   {compiler.CsvImportJobTypeIndex},
+	"rest":                  {compiler.RestJobTypeIndex},
+	"scim":                  {compiler.ScimJobTypeIndex},
+	"ldap":                  {compiler.LdapJobTypeIndex},
+	"soap":                  {compiler.SoapJobTypeIndex},
+	"ad":                    {compiler.AdJobTypeIndex},
+	"webscrape":             {compiler.WebScrapeJobTypeIndex},
+	"dmn":                   {compiler.DMNJobTypeIndex},
+	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
+}
+
+// applyOffloadedKinds removes the in-process handlers for the kinds an operator
+// moved to a worker, after every registration path has run. Doing it as a removal
+// rather than a condition at each site is what makes it impossible to miss one.
+//
+// An unknown name is an error rather than a no-op: an operator who misspells one
+// would otherwise believe they had relocated a kind while it kept running in the
+// engine, which is the single outcome this exists to prevent.
+func (s *Server) applyOffloadedKinds() error {
+	for _, name := range s.offloadedKinds {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		types, ok := offloadableKinds[name]
+		if !ok {
+			return fmt.Errorf("api: cannot offload connector kind %q: no such kind (have %s)",
+				name, strings.Join(offloadableKindNames(), ", "))
+		}
+		for _, jt := range types {
+			s.jobRunner.Unhandle(jt)
+		}
+	}
+	return nil
+}
+
+// offloadableKindNames lists every kind that can be named, for the error above.
+func offloadableKindNames() []string {
+	names := make([]string, 0, len(offloadableKinds))
+	for name := range offloadableKinds {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // lookupManagedConnectorKind returns the descriptor for a kind name, or false if the

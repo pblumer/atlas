@@ -183,9 +183,13 @@ type typeUser struct {
 // The worker counters describe *this run of the server*: the registry is runtime
 // state and is not restored on restart, which the view says rather than hides.
 func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
+	// Empty rather than nil from the start: both are overwritten below, but a reply
+	// that fell through with a nil slice would serialize as null and the console
+	// iterates these. Saying it here beats a nil check further down that nothing can
+	// reach, since neither list() nor All() ever returns nil.
 	var (
-		types   []jobTypeStat
-		list    []workerStat
+		types   = []jobTypeStat{}
+		list    = []workerStat{}
 		scanErr error
 	)
 	s.do(func() {
@@ -221,12 +225,6 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read job queues: "+scanErr.Error())
 		return
-	}
-	if list == nil {
-		list = []workerStat{}
-	}
-	if types == nil {
-		types = []jobTypeStat{}
 	}
 	// Supervised workers are reported separately from the ones seen pulling: an
 	// operator can restart and read the logs of a process Atlas launched, and can do

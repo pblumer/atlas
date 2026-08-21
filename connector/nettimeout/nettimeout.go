@@ -33,11 +33,19 @@ import (
 // covering the whole exchange (connect, TLS handshake, request, response body)
 // rather than any one phase.
 //
-// Ten seconds is deliberately short. It is generous for the API calls connectors
-// actually make — a token grant, a REST POST, a message send — while keeping a
-// hung host's hold on the run loop to a bounded blip. A connector that needs
-// longer wants an asynchronous design (a job that polls), not a longer stall of
-// the single writer.
+// **What this bounds changed.** ADR-0149 introduced it as a stall budget: handlers
+// ran on the single writer, so a hung host held the whole engine and ten seconds
+// was how long that could last. ADR-0157 step 6 moved handlers off the run loop, so
+// this no longer bounds an engine stall at all — the engine keeps serving while the
+// call hangs. What it bounds now is the *instance*: how long a token waits on a
+// call before the job fails, retries, and eventually raises an incident an operator
+// can see. Without it a hung host would leave a token parked in silence forever.
+//
+// Ten seconds stays right for that. It is generous for the calls connectors make —
+// a token grant, a REST POST, a message send — and short enough that a bad endpoint
+// becomes a visible incident quickly rather than a process that looks alive. A
+// connector that legitimately needs longer wants an asynchronous design (a job that
+// polls), not a longer wait on one call.
 const Default = 10 * time.Second
 
 // HTTPClient returns an HTTP client bounded by [Default]. Connectors use this in

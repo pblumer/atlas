@@ -332,3 +332,42 @@ func newServerWithClock(t *testing.T, clk engine.Clock) *Server {
 	})
 	return srv
 }
+
+// newServerWithOptions is newServerForErrors with Options applied, for tests that
+// need a differently configured server.
+func newServerWithOptions(t *testing.T, opts ...Option) *Server {
+	t.Helper()
+	srv, err := newServerWithOptionsErr(t, opts...)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv
+}
+
+// newServerWithOptionsErr is newServerWithOptions returning the construction error,
+// for tests about configuration that must be refused.
+func newServerWithOptionsErr(t *testing.T, opts ...Option) (*Server, error) {
+	t.Helper()
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, log, store, nil)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	srv, err := New(proc, store, dir, opts...)
+	t.Cleanup(func() {
+		if srv != nil {
+			srv.Close()
+		}
+		_ = store.Close()
+		_ = log.Close()
+	})
+	return srv, err
+}

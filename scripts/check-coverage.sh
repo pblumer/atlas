@@ -34,7 +34,16 @@ fi
 awk -v t="${total}" -v min="${threshold}" 'BEGIN { exit !(t+0 >= min+0) }' || {
   echo "FAIL: total statement coverage ${total}% is below the ${threshold}% floor (ADR-0018)." >&2
   echo "Lowest-covered functions:" >&2
-  go tool cover -func="${profile}" | awk '$3+0 < 100 && $1 !~ /^total:/' | sort -t$'\t' -k3 -n | head -20 >&2
+  # Sort on a numeric key awk emits, not on the report's own columns: those are
+  # separated by a variable number of tabs and the percentage carries a `%`, so the
+  # obvious `sort -k3 -n` silently sorted by filename and pointed at the wrong code.
+  # `head` is left out for the same reason it was a problem: it closes the pipe, and
+  # under `set -o pipefail` the resulting SIGPIPE ended the script here — with sort's
+  # status, before the exit below could give the intended one.
+  go tool cover -func="${profile}" \
+    | awk '$1 !~ /^total:/ { pct = $NF; sub(/%/, "", pct)
+                             if (pct + 0 < 100) printf "%6.1f%%  %s  %s\n", pct, $1, $2 }' \
+    | sort -n | awk 'NR <= 20' >&2
   exit 1
 }
 

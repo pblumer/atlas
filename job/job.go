@@ -85,11 +85,29 @@ type Runner struct {
 	store     *state.Store
 	engine    Engine
 	factories map[int32]func(state.Reader) CompletingHandler
+	// Concurrency bounds how many handlers a round runs at once.
+	//
+	// Serial dispatch had one virtue: a backlog could not become a thundering herd.
+	// Running handlers concurrently (ADR-0157 step 6) is what ended the amplification
+	// of a burst, but unbounded it would trade one failure for another — a thousand
+	// parked jobs becoming a thousand simultaneous outbound calls, exhausting file
+	// descriptors here and hammering whatever is on the other end. The cap keeps the
+	// throughput and drops the herd.
+	Concurrency int
 }
+
+// DefaultConcurrency is how many handlers a round runs at once when nothing says
+// otherwise. It is well above serial, so a burst still drains quickly, and well
+// below the point where the sockets and memory of one round are a problem.
+const DefaultConcurrency = 16
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
-	return &Runner{store: store, engine: engine, factories: map[int32]func(state.Reader) CompletingHandler{}}
+	return &Runner{
+		store: store, engine: engine,
+		factories:   map[int32]func(state.Reader) CompletingHandler{},
+		Concurrency: DefaultConcurrency,
+	}
 }
 
 // Handle registers an output-less worker for a job type. The type is the interned
@@ -122,6 +140,16 @@ func (r *Runner) HandleWithOutput(jobType int32, build func(state.Reader) Output
 func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) CompletingHandler) {
 	r.factories[jobType] = build
 }
+
+// Unhandle removes the in-process worker for a job type, so its jobs park for an
+// external one instead (ADR-0168).
+//
+// It exists as a removal rather than a condition at each registration site because
+// the registrations are spread across the server — a managed connector kind
+// registers through its own descriptor, the script languages through their loop,
+// the rest inline — and a switch that has to be remembered at ten places is a switch
+// that will be missed at one.
+func (r *Runner) Unhandle(jobType int32) { delete(r.factories, jobType) }
 
 // Handles reports whether an in-process worker is registered for a job type.
 //
@@ -193,11 +221,18 @@ func (r *Runner) Work(jobs []Job, reader state.Reader) []Outcome {
 		runnable = append(runnable, j)
 	}
 	outcomes := make([]Outcome, len(runnable))
+	limit := r.Concurrency
+	if limit <= 0 {
+		limit = DefaultConcurrency
+	}
+	slots := make(chan struct{}, limit)
 	var wg sync.WaitGroup
 	for i, j := range runnable {
+		slots <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { <-slots }()
 			completion, err := built[j.Type](j)
 			outcomes[i] = Outcome{Job: j, Completion: completion, Err: err}
 		}()
