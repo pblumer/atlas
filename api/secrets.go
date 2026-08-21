@@ -72,7 +72,7 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		meta    vault.Meta
 		saveErr error
 	)
-	s.do(func() {
+	s.doAndRefresh(func() {
 		if meta, saveErr = s.vault.Set(name, p.Value); saveErr != nil {
 			return
 		}
@@ -111,7 +111,7 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var delErr error
-	s.do(func() {
+	s.doAndRefresh(func() {
 		if delErr = s.vault.Delete(name); delErr != nil {
 			return
 		}

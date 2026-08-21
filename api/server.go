@@ -1133,9 +1133,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.exporter = exp
 	}
 
-	// Supervised workers, if the operator asked for any on the command line. They
-	// start before traffic is served, and stop with the server: the same `atlas
-	// worker` an operator could run by hand, just launched here (ADR-0157 step 7).
+	s.wg.Add(3)
+	go s.loop()
+
+	// Supervised workers, if the operator asked for any on the command line, or if the
+	// default opt-out set applies. They stop with the server: the same `atlas worker`
+	// an operator could run by hand, just launched here (ADR-0157 step 7).
+	//
+	// They are registered after the run loop is running because a worker's environment
+	// is read from the connector store, and the store is the loop's to read.
 	if len(s.SuperviseSpecs) > 0 {
 		s.supervisor = newSupervisor(quit)
 		for i, spec := range s.SuperviseSpecs {
@@ -1145,18 +1151,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			}
 			// A supervised worker may also serve built-in connector kinds. It is a
 			// child of this process, so it inherits the environment any of them read
-			// their configuration from — which is what makes the default set below
+			// their configuration from — and for a kind whose configuration lives in
+			// the connector store instead, the engine adds it to that environment at
+			// spawn (see superviseEnv). Together that is what makes the default set
 			// work with nothing configured at all.
 			if len(spec.Connectors) > 0 {
 				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
 			}
-			s.supervisor.add(spec, args)
+			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
 		s.supervisor.start()
 	}
-
-	s.wg.Add(3)
-	go s.loop()
 	go s.timerScheduler(time.Second)
 	// The collaboration reaper evicts idle detached session participants (MCP
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off

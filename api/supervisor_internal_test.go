@@ -26,7 +26,7 @@ func TestSupervisorRunsAndStopsAChild(t *testing.T) {
 	quit := make(chan struct{})
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
-	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "echo up; sleep 30"})
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "echo up; sleep 30"}, nil)
 	sup.start()
 
 	waitFor(t, "the child to report running", func() bool {
@@ -55,7 +55,7 @@ func TestSupervisorRestartsAChildThatExits(t *testing.T) {
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
 	sup.backoff = time.Millisecond // the policy is tested separately
-	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"})
+	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"}, nil)
 	sup.start()
 	defer func() { close(quit); sup.wait() }()
 
@@ -109,7 +109,7 @@ func TestRestartOnRequestCyclesTheChild(t *testing.T) {
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
 	sup.backoff = time.Millisecond
-	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "sleep 30"})
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "sleep 30"}, nil)
 	sup.start()
 	defer func() { close(quit); sup.wait() }()
 
@@ -136,7 +136,7 @@ func TestRestartDuringBackoffTriesAgainImmediately(t *testing.T) {
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
 	sup.backoff = 30 * time.Second // long enough that only a restart can shorten it
-	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"})
+	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"}, nil)
 	sup.start()
 	defer func() { close(quit); sup.wait() }()
 
@@ -161,7 +161,7 @@ func TestAChildThatCannotStartIsReportedWithItsReason(t *testing.T) {
 	sup := newSupervisor(quit)
 	sup.exe = filepath.Join(t.TempDir(), "no-such-binary")
 	sup.backoff = time.Millisecond
-	sup.add(SuperviseSpec{ID: "typo-1", Kinds: []string{"send-email"}}, []string{"worker"})
+	sup.add(SuperviseSpec{ID: "typo-1", Kinds: []string{"send-email"}}, []string{"worker"}, nil)
 	sup.start()
 
 	waitFor(t, "the failure to be reported", func() bool {
@@ -190,7 +190,7 @@ func TestAChildThatExitsCleanlyIsStillAFailure(t *testing.T) {
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
 	sup.backoff = time.Millisecond
-	sup.add(SuperviseSpec{ID: "quitter-1"}, []string{"-c", "exit 0"})
+	sup.add(SuperviseSpec{ID: "quitter-1"}, []string{"-c", "exit 0"}, nil)
 	sup.start()
 
 	waitFor(t, "the clean exit to be reported as a failure", func() bool {

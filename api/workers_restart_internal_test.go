@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ func supervisedServer(t *testing.T, id string, args ...string) (*Server, *superv
 	sup := newSupervisor(quit)
 	sup.exe = "sh"
 	sup.backoff = time.Millisecond
-	sup.add(SuperviseSpec{ID: id, Kinds: []string{"send-email"}}, args)
+	sup.add(SuperviseSpec{ID: id, Kinds: []string{"send-email"}}, args, nil)
 	sup.start()
 	srv.supervisor = sup
 	t.Cleanup(func() { close(quit); sup.wait() })
@@ -126,4 +127,48 @@ func TestWorkersViewReportsNoSupervisedWorkersAsAnEmptyList(t *testing.T) {
 	if string(resp["supervised"]) != "[]" {
 		t.Errorf("supervised = %s, want []", resp["supervised"])
 	}
+}
+
+// A worker holding a configuration that has since changed is restarted, because an
+// operator who edits a mail connector in the Console means for it to take effect. The
+// engine's own registries are rebuilt in place; a worker's cannot be, so cycling it
+// is what "rebuild" means out there.
+func TestAWorkerWhoseConfigurationChangedIsRestarted(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh on this machine")
+	}
+	srv := newServerForErrors(t)
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe, sup.backoff = "sh", time.Millisecond
+
+	var mu sync.Mutex
+	env := []string{"ATLAS_MAIL_CONNECTORS=post"}
+	sup.add(SuperviseSpec{ID: "connectors", Connectors: []string{connectorKindMail}},
+		[]string{"-c", "sleep 30"},
+		func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), env...) })
+	sup.start()
+	srv.supervisor = sup
+	t.Cleanup(func() { close(quit); sup.wait() })
+
+	waitFor(t, "the child to report running", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].State == "running"
+	})
+	first := sup.list()[0].Starts
+
+	// Nothing changed: refreshing must not cycle a healthy worker, or every unrelated
+	// connector edit would cost a restart.
+	srv.refreshSupervisedWorkers()
+	if got := sup.list()[0].Starts; got != first {
+		t.Errorf("starts = %d after an unchanged refresh, want %d", got, first)
+	}
+
+	mu.Lock()
+	env = []string{"ATLAS_MAIL_CONNECTORS=post,zweite"}
+	mu.Unlock()
+	srv.refreshSupervisedWorkers()
+	waitFor(t, "the child to come back with the new configuration", func() bool {
+		return sup.list()[0].Starts > first
+	})
 }

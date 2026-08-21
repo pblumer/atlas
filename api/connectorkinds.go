@@ -281,16 +281,26 @@ var offloadableKinds = map[string][]int32{
 // somebody trying Atlas gets the out-of-process architecture without configuring
 // anything, because the engine starts the worker itself.
 //
-// The set is exactly the kinds that need **no credential**. A supervised worker is a
-// child of this process and inherits its environment, but not its connector store —
-// where a managed kind's endpoint and password actually live (ADR-0036/0041). Moving
-// mail here would hand every mail task to a worker with no mailbox to send through,
-// so the credential-bearing kinds stay in the engine until an operator moves the
-// secret too, with --offload-connectors.
+// A kind belongs here when a supervised worker can actually serve it, which is true
+// two ways. Most of these need **no credential** at all: what each of them needs is
+// something a worker has by being a separate process — a CPU for a script, network
+// reach for a scrape, neither for a CSV parse.
 //
-// What each of these needs is something a worker has by being a separate process:
-// a CPU for a script, network reach for a scrape, neither for a CSV parse.
-func DefaultOffloadedKinds() []string { return []string{"csv", "script", "webscrape"} }
+// Mail is the other way, and the reason the set is not simply "the unmanaged kinds".
+// Its endpoint and password live in the connector store rather than the environment
+// (ADR-0036/0041), so for as long as a child only inherited the environment, moving
+// mail here would have handed every mail task to a worker with no mailbox. The engine
+// now writes that configuration into the child's environment at spawn (see
+// superviseEnv), which is the operator setting the worker up, done by the program —
+// so mail is served, and it is served by the process that should be waiting on an
+// SMTP handshake. Every managed kind here must be one superviseEnv provisions;
+// TestEveryDefaultOffloadedKindCanBeServedByItsWorker holds that.
+//
+// The credential-bearing kinds the engine cannot yet hand over stay in the engine
+// until an operator moves their secrets themselves, with --offload-connectors.
+func DefaultOffloadedKinds() []string {
+	return []string{"csv", connectorKindMail, "script", "webscrape"}
+}
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
 // moved to a worker, after every registration path has run. Doing it as a removal

@@ -202,8 +202,8 @@ func runServe(args []string) error {
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
-	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for a worker instead (ADR-0168). Adds to the default set unless --in-process-connectors turns that off. A kind whose credentials live in this server's connector store needs its secret moved to the worker too, so those are never defaulted. An unknown kind is refused at startup rather than ignored")
-	inProcess := fs.Bool("in-process-connectors", false, "run every connector inside the engine, as before ADR-0164. Off by default: the credential-free kinds ("+strings.Join(api.DefaultOffloadedKinds(), ", ")+") run in a worker this server starts and supervises itself, so the loop cannot stall behind them and trying Atlas still needs no configuration")
+	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. remedy,sharepoint): their jobs park for a worker instead (ADR-0168). Adds to the default set unless --in-process-connectors turns that off. A kind whose credentials live in this server's connector store and that the supervisor cannot hand over needs its secret moved to the worker by hand, so those are never defaulted. An unknown kind is refused at startup rather than ignored")
+	inProcess := fs.Bool("in-process-connectors", false, "run every connector inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying Atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
@@ -425,11 +425,14 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// can neither introduce a worker nor name a command.
 	specs, handles := supervise.build()
 
-	// ADR-0164's default, opt-out: the credential-free connector kinds run in a worker
-	// this server starts, so the engine's loop cannot stall behind them and somebody
-	// trying Atlas configures nothing to get there. --in-process-connectors returns to
-	// the old arrangement wholesale; --offload-connectors adds credential-bearing
-	// kinds on top, once their secrets have been moved to a worker.
+	// ADR-0164's default, opt-out: the connector kinds a supervised worker can serve
+	// run in a worker this server starts, so the engine's loop cannot stall behind them
+	// and somebody trying Atlas configures nothing to get there. That includes mail,
+	// whose configuration the server hands to the child at spawn out of its own
+	// connector store — the SMTP handshake being the stall an operator actually
+	// notices. --in-process-connectors returns to the old arrangement wholesale;
+	// --offload-connectors adds the remaining credential-bearing kinds on top, once
+	// their secrets have been moved to a worker by hand.
 	if !inProcessConnectors {
 		defaults := api.DefaultOffloadedKinds()
 		offloadKinds = append(defaults, offloadKinds...)
@@ -655,7 +658,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail, rest, script, webscrape). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus ATLAS_MAIL_<NAME>_ENDPOINT and the optional _USERNAME, _PASSWORD and _FROM")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail, rest, script, webscrape). The server must be offloading them (it offloads csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -689,6 +692,13 @@ func runWorker(args []string) error {
 		slog.String("server", *server), slog.String("id", *id),
 		slog.String("types", strings.Join(sortedKeys(execs), ",")),
 		slog.String("connectors", strings.Join(builtin.Names, ",")), slog.Duration("lease", *lease))
+	// A kind this worker was asked to serve and holds nothing for is not an error —
+	// it serves the rest — but it is the answer to "why is that task waiting", so it
+	// is said once, here, where the Workers console shows it.
+	for _, kind := range builtin.Unconfigured {
+		logging.Warn(logging.WorkerStarting, "not serving a connector kind: nothing is configured for it here",
+			slog.String("kind", kind))
+	}
 
 	if *once {
 		return w.RunOnce(context.Background())

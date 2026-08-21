@@ -478,7 +478,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		dupErr  bool
 		saveErr error
 	)
-	s.do(func() {
+	s.doAndRefresh(func() {
 		existing, e := s.connectors.LoadAll()
 		if e != nil {
 			saveErr = e
@@ -537,7 +537,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		saveErr    error
 		badRequest string
 	)
-	s.do(func() {
+	s.doAndRefresh(func() {
 		var e error
 		rec, found, e = s.connectors.Get(id)
 		if e != nil {
@@ -596,7 +596,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		delErr error
 		inUse  []connectorUse
 	)
-	s.do(func() {
+	s.doAndRefresh(func() {
 		// Deleting a connector deployed models still reference parks every one of their
 		// tasks, with a message that reads as if it had never been configured. A deploy
 		// has warned about a reference it cannot resolve since ADR-0158; removing the
@@ -724,7 +724,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		ref = conn.Name
 	}
 	var saveErr error
-	s.do(func() {
+	s.doAndRefresh(func() {
 		if _, saveErr = s.vault.Set(ref, token); saveErr != nil {
 			return
 		}
@@ -772,6 +772,44 @@ func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{"messages": msgs, "truncated": truncated})
 }
+
+// handleDeliverMailOutbox accepts one framed message from a preview connector that
+// ran somewhere else and appends it to this server's outbox.
+//
+// It exists because mail moved onto a worker (ADR-0168). Every other provider needs
+// only a credential to work out there, and a worker holding one is the point. The
+// preview provider needs the opposite: its whole output is a message an operator
+// reads in *this* server's Operations › Outbox, so a preview connector framing its
+// message in a child process has nowhere to put it. This is that place.
+//
+// It writes nothing durable — the outbox is memory, cleared by a restart, never an
+// event (I4/I6) — so an authenticated caller posting here can add a message to a
+// preview list and can do nothing else. Like the read, it stays off the run loop:
+// the outbox holds its own lock.
+func (s *Server) handleDeliverMailOutbox(w http.ResponseWriter, r *http.Request) {
+	var m mail.OutboxMessage
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxOutboxPost)).Decode(&m); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid outbox message: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(m.Connector) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "outbox message has no connector name")
+		return
+	}
+	// Seq and At are the outbox's to assign: a caller that could choose them could
+	// make one preview look older than another, and the view is ordered by them.
+	m.Seq, m.At = 0, 0
+	if s.mailOutbox == nil {
+		httpapi.Error(w, http.StatusServiceUnavailable, "this server has no preview outbox")
+		return
+	}
+	s.mailOutbox.Add(m)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxOutboxPost bounds one delivered preview message. The outbox clips each stored
+// field anyway; this stops a body being read into memory before that happens.
+const maxOutboxPost = 2 << 20
 
 // handleClearMailOutbox empties the preview outbox. Nothing here was ever sent and
 // nothing survives a restart, so clearing it destroys no record of anything —

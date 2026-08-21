@@ -42,16 +42,41 @@ func TestMailWorkerHoldsItsOwnCredential(t *testing.T) {
 	}
 }
 
-// A worker told to serve mail but given no mail connector would lease every mail job
-// and fail it. That is a configuration mistake, and it is caught at startup where
-// the operator is still looking, rather than in an incident an hour later.
-func TestMailWorkerWithNoConfiguredConnectorIsRefusedAtStartup(t *testing.T) {
-	_, err := worker.BuiltinConnectors(fakeEnv(nil), "mail")
-	if err == nil {
-		t.Fatal("a mail worker with no configured connector started anyway")
+// A worker told to serve mail but given no mail connector must not lease every mail
+// job and fail it. It does not subscribe to mail at all, so those tasks wait for a
+// worker that can actually send them — and it says so, because "mail is not served
+// here" is the answer to why one is waiting.
+//
+// It is not a startup error, because this worker very likely serves other kinds too:
+// a server started with nothing configured — which is the case the opt-out default
+// exists for — would otherwise come up with no worker at all, its CSV and script
+// tasks stranded because no mailbox had been configured yet.
+func TestAMailWorkerWithNoConfiguredConnectorSimplyDoesNotServeMail(t *testing.T) {
+	built, err := worker.BuiltinConnectors(fakeEnv(nil), "csv", "mail")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ATLAS_MAIL_CONNECTORS") {
-		t.Errorf("error = %v, want it to name the variable that configures this", err)
+	if _, ok := built.Handlers[compiler.MailJobType]; ok {
+		t.Error("the worker subscribed to mail with no connector to send through")
+	}
+	if _, ok := built.Handlers[compiler.CsvImportJobType]; !ok {
+		t.Error("the kinds it *can* serve were dropped along with mail")
+	}
+	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "mail" {
+		t.Errorf("unconfigured = %v, want [mail] so the startup line can say it", built.Unconfigured)
+	}
+}
+
+// A worker whose *only* kind is an unconfigured one still stops at startup: it has
+// no handler at all, and `atlas worker` refuses to run with nothing to do. That is
+// where the operator's typo is caught, which is where it always was.
+func TestAWorkerWithNothingLeftToServeHasNoHandlers(t *testing.T) {
+	built, err := worker.BuiltinConnectors(fakeEnv(nil), "mail")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Handlers) != 0 {
+		t.Errorf("handlers = %v, want none — the caller stops on that", built.Handlers)
 	}
 }
 

@@ -291,7 +291,7 @@ func TestRestartWorkerEndpoint(t *testing.T) {
 	quit := make(chan struct{})
 	defer close(quit)
 	sup := newSupervisor(quit)
-	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"worker"})
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"worker"}, nil)
 	srv.supervisor = sup
 	if n := sup.count(); n != 1 {
 		t.Fatalf("supervised worker count = %d, want 1", n)

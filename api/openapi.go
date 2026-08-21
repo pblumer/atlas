@@ -582,6 +582,9 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{
 			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Connectors", resp: jsonBody("Outbox", tObject())}},
+		{"POST", "/api/v1/mail/outbox", s.handleDeliverMailOutbox, apiOp{
+			summary: "Deliver a framed message into the preview outbox (used by a mail worker running a preview connector)", tag: "Connectors",
+			req: jsonBody("Outbox message", tObject()), status: http.StatusNoContent}},
 		{"DELETE", "/api/v1/mail/outbox", s.handleClearMailOutbox, apiOp{
 			summary: "Empty the preview mail outbox", tag: "Connectors", status: http.StatusNoContent}},
 

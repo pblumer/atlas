@@ -1,16 +1,19 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-
+	"io"
+	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/webscrape"
@@ -93,6 +96,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
+			if reg == nil {
+				// Told to serve mail, holding no connector to send through. Not an
+				// error: this worker very likely serves other kinds too, and killing
+				// those because no mailbox is configured yet is how a server started
+				// with nothing configured — the case the opt-out default is for —
+				// would come up with no worker at all. It simply does not subscribe
+				// to mail, so mail tasks wait for a worker that can serve them rather
+				// than being leased and failed. Configure one and the supervisor
+				// brings this worker back holding it.
+				//
+				// A worker serving *only* mail still stops at startup, because it
+				// then has no handler at all and `atlas worker` has nothing to do.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
@@ -118,6 +136,11 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 type Connectors struct {
 	Handlers map[string]Exec
 	Names    []string
+	// Unconfigured are kinds this worker was asked to serve and holds no
+	// configuration for, so it does not subscribe to them. It is reported at startup
+	// rather than swallowed: "mail is not being served here" is the answer to why a
+	// mail task is waiting, and the worker's log is in the Workers console.
+	Unconfigured []string
 }
 
 // KnownConnectorKinds are the kinds [BuiltinConnectors] implements, for the error a
@@ -130,30 +153,123 @@ func KnownConnectorKinds() []string {
 // mailEnvPrefix is where a mail worker's credentials live.
 const mailEnvPrefix = "ATLAS_MAIL_"
 
-// mailRegistryFromEnv builds the mail connectors this worker holds. ATLAS_MAIL_CONNECTORS
-// lists the names; each name contributes ATLAS_MAIL_<NAME>_ENDPOINT and the optional
-// _USERNAME, _PASSWORD and _FROM. The names are the ones models reference, so the
-// list is also the answer to "what can this worker actually send through".
+// mailOutboxURLEnv is where a preview connector delivers what it framed: the API of
+// the Atlas whose Operations › Outbox the operator is watching. A preview connector
+// is the one mail provider that produces something only the engine can show, so it is
+// the one that needs an address back (ADR-0150/0168).
+const mailOutboxURLEnv = mailEnvPrefix + "OUTBOX_URL"
+
+// mailRegistryFromEnv builds the mail connectors this worker holds.
+// ATLAS_MAIL_CONNECTORS lists the names, and each name contributes its own
+// configuration under ATLAS_MAIL_<NAME>_.
+//
+// There are two ways to write that configuration and both are supported on purpose.
+// _PROVIDER names one of Atlas's mail providers and is described by _ENDPOINT,
+// _SENDER and _SECRET — the same four values [mail.ProviderConfig] takes, so a worker
+// builds the identical client the engine would have, for SMTP, Gmail, Microsoft Graph
+// or preview alike. It is what an engine supervising this worker writes. Without
+// _PROVIDER the older SMTP-only form applies: _ENDPOINT plus _USERNAME, _PASSWORD and
+// _FROM, which is what an operator's hand-written worker environment says today and
+// which keeps working exactly as it did.
+//
+// The names are the ones models reference, so the list is also the answer to "what
+// can this worker actually send through".
 func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, error) {
 	names := splitAndTrim(env(mailEnvPrefix + "CONNECTORS"))
 	if len(names) == 0 {
-		return nil, nil, fmt.Errorf("worker: --connector mail needs at least one connector: set %sCONNECTORS to the names this worker sends through", mailEnvPrefix)
+		// No connector to send through. The caller decides what that means — see the
+		// "mail" arm of BuiltinConnectors — because it depends on what else this
+		// worker was asked to serve.
+		return nil, nil, nil
 	}
 	reg := mail.NewRegistry()
 	for _, name := range names {
-		key := mailEnvPrefix + envFold(name) + "_"
-		endpoint := env(key + "ENDPOINT")
-		if endpoint == "" {
-			return nil, nil, fmt.Errorf("worker: mail connector %q has no endpoint: set %sENDPOINT", name, key)
+		client, err := mailClientFromEnv(env, name)
+		if err != nil {
+			return nil, nil, err
 		}
-		reg.Register(name, mail.NewSMTPClient(mail.Connector{
-			Endpoint: endpoint,
-			Username: env(key + "USERNAME"),
-			Password: env(key + "PASSWORD"),
-			From:     env(key + "FROM"),
-		}))
+		reg.Register(name, client)
 	}
 	return reg, names, nil
+}
+
+// mailClientFromEnv builds one connector's client from its environment.
+func mailClientFromEnv(env func(string) string, name string) (mail.Client, error) {
+	key := mailEnvPrefix + envFold(name) + "_"
+	if provider := strings.TrimSpace(env(key + "PROVIDER")); provider != "" {
+		client, err := mail.NewProviderClient(mail.ProviderConfig{
+			Provider: provider,
+			Endpoint: env(key + "ENDPOINT"),
+			Sender:   env(key + "SENDER"),
+			Secret:   env(key + "SECRET"),
+			Name:     name,
+			Outbox:   previewSink(env),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("worker: mail connector %q: %w", name, err)
+		}
+		return client, nil
+	}
+	endpoint := env(key + "ENDPOINT")
+	if endpoint == "" {
+		return nil, fmt.Errorf("worker: mail connector %q has no endpoint: set %sENDPOINT", name, key)
+	}
+	return mail.NewSMTPClient(mail.Connector{
+		Endpoint: endpoint,
+		Username: env(key + "USERNAME"),
+		Password: env(key + "PASSWORD"),
+		From:     env(key + "FROM"),
+	}), nil
+}
+
+// previewSink is where this worker's preview connectors deliver, or nil when it was
+// told no address — in which case [mail.NewProviderClient] refuses the connector at
+// startup, naming it, rather than letting a preview task discover at send time that
+// its message went nowhere.
+func previewSink(env func(string) string) mail.Sink {
+	url := strings.TrimSpace(env(mailOutboxURLEnv))
+	if url == "" {
+		return nil
+	}
+	return &httpOutbox{url: url, token: strings.TrimSpace(env("ATLAS_TOKEN")), client: nettimeout.HTTPClient()}
+}
+
+// httpOutbox is a [mail.Sink] that posts a framed message to an Atlas server's
+// preview outbox. It is the whole of what a preview connector needs from out here:
+// the framing is [mail.PreviewClient]'s and is identical in both processes, so what a
+// preview run proves about a message stays true wherever it ran.
+type httpOutbox struct {
+	url    string
+	token  string
+	client *http.Client
+}
+
+// Deliver posts the message and reports whether it arrived. A preview whose outbox is
+// unreachable fails its job, which is the honest outcome: the operator went looking
+// in Operations › Outbox and the message is not there.
+func (o *httpOutbox) Deliver(m mail.OutboxMessage) error {
+	body, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("mail: preview: encode the message: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, o.url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("mail: preview: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if o.token != "" {
+		req.Header.Set("Authorization", "Bearer "+o.token)
+	}
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("mail: preview: deliver to the outbox at %s: %w", o.url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("mail: preview: the outbox at %s answered %s", o.url, resp.Status)
+	}
+	return nil
 }
 
 // envFold turns a connector name into the environment-variable form of itself:
