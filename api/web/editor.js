@@ -12,6 +12,10 @@ import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { migrateInstanceFlow } from "./migrationdialog.js";
+// Which keys a form-js schema binds — the Developer View reads it to offer a linked
+// form's fields as variables, the incident's repair form reads it to know which keys a
+// submit may write (ADR-0169). One description of it, in one place.
+import { formFieldKeys } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -1323,32 +1327,6 @@ function devViewContext(modeler, api, field) {
 // { name, fields } — the form's display name and its variable-bearing field keys.
 // collectDiagramVariables reads it synchronously; ensureFormFields fills it.
 const formFieldCache = new Map();
-
-// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
-// Every form-js input component carries a `key` — the variable it reads and writes;
-// layout-only components (text, image, spacer, separator, …) have none. A repeating
-// container (dynamic list / group with a `path`) binds an array under that path, so
-// surface the path rather than descending into its per-row template. A plain group
-// is layout only, so recurse — its fields live in the enclosing scope. Each key
-// appears once, in document order.
-function formFieldKeys(schema) {
-  const keys = [];
-  const seen = new Set();
-  const add = (k) => {
-    k = (k || "").trim();
-    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
-  };
-  const walk = (comps) => {
-    for (const c of comps || []) {
-      if (!c || typeof c !== "object") continue;
-      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
-      if (typeof c.key === "string") add(c.key);
-      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
-    }
-  };
-  if (schema && Array.isArray(schema.components)) walk(schema.components);
-  return keys;
-}
 
 // linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
 // (start forms and user-task forms). Best-effort — a registry hiccup yields none.
@@ -2787,6 +2765,42 @@ function loopMode(bo) {
   if (lc.$type === "bpmn:StandardLoopCharacteristics") return "loop";
   if (lc.$type === "bpmn:MultiInstanceLoopCharacteristics") return lc.isSequential ? "sequential" : "parallel";
   return "none";
+}
+
+// REPAIR_FORM_TYPES are the task kinds that can park behind an incident an operator
+// repairs by correcting variables — a service task and its send-task twin (both create a
+// job and wait) and a business rule task. A user task is deliberately not one: its
+// zeebe:formDefinition is its *work* form, the thing a person fills in to do the task,
+// and offering a second form binding on the same element under the same extension would
+// be ambiguous in the model as well as on screen.
+const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:BusinessRuleTask"]);
+
+// repairFormHTML is the repair-form binding on a task (ADR-0169): the form an operator
+// is shown when this task parks, instead of the instance's whole variable set as raw
+// JSON. Whoever is authoring the task is the one who knows which values its retry
+// depends on, which is why the binding is offered here rather than configured by an
+// operator later.
+//
+// It renders the same #f-form picker a user task's work form uses, and so is wired by
+// the same change handler and populated by the same forms fetch — the extension written
+// is identical (zeebe:formDefinition), only the element carrying it differs, which is
+// exactly what makes one the work form and the other the repair form. An element is one
+// type, so the two branches never both render and the id is never duplicated.
+function repairFormHTML(bo) {
+  if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
+  const fd = findExt(bo, "zeebe:FormDefinition") || {};
+  const cur = fd.formId || "";
+  return `<h3>Repair form</h3>
+    <label class="field"><span>Form</span>
+      <select id="f-form">
+        <option value="">&mdash; none &mdash;</option>
+        ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
+      </select></label>
+    <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
+      the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
+      change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
+      nothing specific to say. <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen
+      this to link it.</p>`;
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
@@ -4360,6 +4374,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
         }
+        // The repair form is offered on the task kinds that can park behind an incident
+        // an operator repairs by correcting variables (ADR-0169); repairFormHTML itself
+        // decides which those are, so the panel and the compiler agree on the set.
+        html += repairFormHTML(bo);
         // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
         // standard loop) — including the ones with no implementation of their own: an
         // undefined or manual task repeats its pass-through, a business rule task

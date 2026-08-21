@@ -10,6 +10,7 @@
 // ignores the count, something window.prompt had nowhere to put.
 
 import { editConnectorFlow } from "./connectordialog.js";
+import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -70,6 +71,16 @@ function incidentConnectorAction(inc) {
 // diagram knows its label; the raw id is the fallback), and `showInstance` adds the
 // instance it belongs to — which the live view's all-instances scope needs and a
 // single-instance panel does not.
+// incidentRepairAction is the modeler's own repair form, when the task named one
+// (ADR-0169). It leads the actions because it is the most specific thing on offer: the
+// fields whoever wrote the task said matter, rather than the whole variable set. Nothing
+// at all when no form is bound — which is most tasks, and why Fix variables… stays.
+function incidentRepairAction(inc) {
+  if (!inc.repairForm) return "";
+  return `<button class="btn neutral sm" data-repair="${esc(String(inc.elementInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+    title="Repair this instance through the fields this task's author said matter, instead of raw JSON">&#9873; Repair&hellip;</button>`;
+}
+
 export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
   const where = showInstance
     ? `<span class="muted">· instance ${esc(String(inc.processInstanceKey))}</span>`
@@ -81,6 +92,7 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
       <div class="inc-msg">${esc(inc.message || "(no message)")}</div>
       ${incidentConnectorChip(inc)}
       <div class="inc-actions">
+        ${incidentRepairAction(inc)}
         <button class="btn neutral sm" data-fix-vars="${esc(String(inc.processInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
           title="Correct the instance's variables before retrying — a retry alone repeats whatever failed">&#9998; Fix variables&hellip;</button>
         ${incidentConnectorAction(inc)}
@@ -277,6 +289,135 @@ function askVariables(inc, current) {
 // timeline and the replay surface, and any outputs entered here are written as the job's
 // result, carrying the same attribution the "Fix variables" path does. Resolves true when
 // the task was completed.
+// repairFormFlow is fixVariablesFlow with the modeler's help (ADR-0169). Same write —
+// the audited operator override, the only way variables are set on a running instance
+// (ADR-0098) — but the operator is shown the fields whoever authored the task said were
+// worth looking at, instead of the whole variable set as a JSON document.
+//
+// It submits *only the keys the form binds*. The override endpoint sets exactly the keys
+// it is given, so sending back everything the instance holds would rewrite untouched
+// variables under the operator's name and put values they never saw into the audit
+// trail. Narrowing to the form's own fields is what keeps "who changed this" true.
+//
+// A form is anticipatory and can be wrong about the failure it meets: a field naming a
+// variable the instance does not have renders empty rather than refusing to open, and
+// the raw editor is always still there for the incident nobody anticipated.
+//
+// Resolves "resolved" when the incident was also cleared, "saved" when only the
+// variables were written, and null when nothing happened.
+export async function repairFormFlow({ api, toast, incident }) {
+  const instance = incident.processInstanceKey;
+  let Form, def, current;
+  try {
+    [{ Form }, def, current] = await Promise.all([
+      loadFormViewer(),
+      api("GET", "/api/v1/forms/" + encodeURIComponent(incident.repairForm)),
+      // A blank prefill is a usable form; a failed variable read must not block the
+      // repair, which is the one thing the operator came here to do.
+      api("GET", `/api/v1/instances/${encodeURIComponent(instance)}/variables`).catch(() => ({})),
+    ]);
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    // A form id that no longer resolves is a stale binding, not a broken incident: say
+    // which form is missing and leave the raw editor as the way through.
+    toast(/404|no form/i.test(msg)
+      ? `The repair form “${incident.repairForm}” no longer exists — use Fix variables… instead`
+      : "Could not open the repair form: " + msg, "warn");
+    return null;
+  }
+
+  const choice = await askRepairForm({ Form, incident, schema: def && def.schema, name: (def && def.name) || incident.repairForm, current: current || {} });
+  if (!choice) return null;
+
+  try {
+    await api("POST", `/api/v1/instances/${encodeURIComponent(instance)}/variables`, { variables: choice.variables });
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    toast(/403|forbidden/i.test(msg) ? "Changing variables needs an admin account" : "Could not set the variables: " + msg, "warn");
+    return null;
+  }
+  if (!choice.retry) {
+    toast("Variables updated — the incident is still open", "ok");
+    return "saved";
+  }
+  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+}
+
+// askRepairForm renders the bound form prefilled from the instance's variables and
+// resolves to {variables, retry}, or null when the operator cancelled. The two confirm
+// buttons are the ones the JSON dialog beside it offers, in the same order and with the
+// same meaning — an operator learns repairing an incident once, not twice.
+function askRepairForm({ Form, incident, schema, name, current }) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal repair-modal" role="dialog" aria-modal="true" aria-labelledby="inc-repair-title">
+        <div class="modal-head"><h2 id="inc-repair-title">Repair &middot; ${esc(incident.elementId || "task")}</h2></div>
+        <div class="modal-body">
+          <p class="inc-modal-msg">${esc(incident.message || "(no message)")}</p>
+          <p class="muted" style="margin:0 0 10px">The fields below are the ones this task's author said matter when it goes
+          wrong. Only these are written; everything else the instance holds is left untouched.</p>
+          <div class="repair-form" id="inc-repair-form"></div>
+          <p class="repair-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
+        </div>
+        <div class="modal-foot">
+          <span class="muted repair-which">${esc(name)}</span>
+          <span style="flex:1"></span>
+          <button class="btn neutral" data-repair-cancel title="Close without changing anything">Cancel</button>
+          <button class="btn neutral" data-repair-save title="Save the corrected values without retrying">Save only</button>
+          <button class="btn" data-repair-go title="Save the values and retry the parked task">Save &amp; retry</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    const host = ov.querySelector("#inc-repair-form");
+    const errEl = ov.querySelector(".repair-err");
+    let form = null;
+    const close = (value) => {
+      if (form) { try { form.destroy(); } catch { /* already gone */ } }
+      ov.remove();
+      resolve(value);
+    };
+
+    // The keys this form binds — the only ones a submit is allowed to write.
+    const keys = formFieldKeys(schema);
+    const take = (data) => {
+      const out = {};
+      for (const k of keys) if (data && Object.prototype.hasOwnProperty.call(data, k)) out[k] = data[k];
+      return out;
+    };
+    const submit = (retry) => () => {
+      if (!form) return;
+      const { data, errors } = form.submit();
+      // form-js validates against the schema's own rules (required, patterns, ranges).
+      // Refusing here rather than letting the write fail server-side keeps the typed
+      // values on screen instead of losing them to a round trip.
+      if (errors && Object.keys(errors).length) {
+        errEl.textContent = "Some fields are not valid yet — correct them and try again.";
+        errEl.hidden = false;
+        return;
+      }
+      close({ variables: take(data), retry });
+    };
+
+    ov.querySelector("[data-repair-cancel]").addEventListener("click", () => close(null));
+    ov.querySelector("[data-repair-save]").addEventListener("click", submit(false));
+    ov.querySelector("[data-repair-go]").addEventListener("click", submit(true));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
+
+    (async () => {
+      try {
+        form = new Form({ container: host });
+        await form.importSchema(schema, current);
+      } catch (e) {
+        host.innerHTML = `<p class="repair-err">This form could not be rendered: ${esc(e && e.message ? e.message : String(e))}</p>`;
+      }
+    })();
+  });
+}
+
 export async function completeManuallyFlow({ api, toast, incident }) {
   // The audit record hangs off the job. An incident on a task carries its job key
   // directly; fall back to the instance's job list for one that does not.
@@ -415,7 +556,7 @@ export async function fixConnectorFlow({ api, toast, incident }) {
 // budget. onChanged runs after anything actually changed, so the caller can re-poll.
 // `incidents()` returns the rows currently on screen.
 export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
-  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-complete]"]
+  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-complete]", "[data-repair]"]
     .map((s) => (within ? `${within} ${s}` : s)).join(", ");
   root.addEventListener("click", async (ev) => {
     const btn = ev.target.closest(sel);
@@ -426,15 +567,17 @@ export function bindIncidentActions(root, { api, toast, incidents, onChanged, re
     if (!incident) return;
     btn.disabled = true;
     try {
-      const changed = btn.dataset.complete
-        ? await completeManuallyFlow({ api, toast, incident })
-        : btn.dataset.fixVars
-          ? !!(await fixVariablesFlow({ api, toast, incident }))
-          : btn.dataset.fixConn
-            ? !!(await fixConnectorFlow({ api, toast, incident }))
-            : resolve === "ask"
-              ? await resolveIncidentFlow({ api, toast, incident })
-              : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+      const changed = btn.dataset.repair
+        ? !!(await repairFormFlow({ api, toast, incident }))
+        : btn.dataset.complete
+          ? await completeManuallyFlow({ api, toast, incident })
+          : btn.dataset.fixVars
+            ? !!(await fixVariablesFlow({ api, toast, incident }))
+            : btn.dataset.fixConn
+              ? !!(await fixConnectorFlow({ api, toast, incident }))
+              : resolve === "ask"
+                ? await resolveIncidentFlow({ api, toast, incident })
+                : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
       if (changed && onChanged) await onChanged();
     } finally {
       btn.disabled = false;

@@ -354,6 +354,7 @@ type Builder struct {
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
 	elementDocs        []int32          // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
+	repairForms        []int32          // interned repair form id per node, -1 if none (ADR-0169)
 	lanes              []LaneDetail     // organizational lanes (ADR-0121)
 	documentation      int32            // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
@@ -422,6 +423,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	})
 	b.elementIds = append(b.elementIds, -1)   // kept in lockstep with nodes
 	b.elementDocs = append(b.elementDocs, -1) // likewise: -1 = undocumented
+	b.repairForms = append(b.repairForms, -1) // likewise: -1 = no repair form
 	return id
 }
 
@@ -554,6 +556,19 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 func (b *Builder) SetElementDocumentation(nodeID int32, text string) {
 	if b.validNode(nodeID) {
 		b.elementDocs[nodeID] = b.intern(text)
+	}
+}
+
+// SetRepairForm records the form an operator should be shown when a token parks on this
+// node with an incident (ADR-0169) — the modeler's answer to "if this task goes wrong,
+// these are the values worth looking at". Design-time metadata exactly like the
+// documentation above: the processor never reads it, so it changes no execution, and it
+// is carried in the compiled process so the incident surface can read it without
+// re-parsing the model (invariant I5) and so it moves with an instance that migrates
+// (ADR-0162). An empty id interns to -1, so a node without one costs nothing.
+func (b *Builder) SetRepairForm(nodeID int32, formID string) {
+	if b.validNode(nodeID) {
+		b.repairForms[nodeID] = b.intern(formID)
 	}
 }
 
@@ -2162,6 +2177,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
 		elementDocs:        b.elementDocs,
+		repairForms:        b.repairForms,
 		lanes:              b.lanes,
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,

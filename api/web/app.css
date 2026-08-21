@@ -317,6 +317,17 @@ textarea::placeholder {
 .ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-manual-reason { margin-top: 6px !important; font-style: italic; }
 
+/* The repair form on an incident (ADR-0169): the modeler's own fields, in place of the
+   raw JSON document. The form-js viewer brings its own field styling, so this only gives
+   it room to breathe and a scroll of its own — a repair form may be long, and the modal
+   must not grow past the viewport because of it. */
+.repair-modal .modal-body { max-width: 560px; }
+.repair-form { margin-top: 10px; max-height: 46vh; overflow-y: auto; }
+.repair-err { color: var(--warn); }
+/* Which form is being shown, so an operator can tell a stale binding from a wrong one
+   without leaving the dialog. */
+.repair-which { font-size: 12px; }
+
 /* Moving a running instance to another version of its process (ADR-0162). The plan is
    the dialog's centre of gravity — the refusals in particular, since a migration that
    cannot go through is the case the dry run exists for — so it reads as a block rather
