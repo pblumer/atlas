@@ -29,6 +29,9 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Ldap: &xmlLdapConnector{}},
 		{Soap: &xmlSoapConnector{}},
 		{Ad: &xmlAdConnector{}},
+		{MsSql: &xmlSqlConnector{}},
+		{MariaDB: &xmlSqlConnector{}},
+		{Postgres: &xmlSqlConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))

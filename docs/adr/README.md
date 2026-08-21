@@ -179,6 +179,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Proposed |
+| [0170](0170-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Proposed |
 
 ## Status values
 

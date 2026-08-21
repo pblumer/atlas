@@ -70,13 +70,15 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Generic SQL Connector | — | **Missing** |
-| Microsoft SQL Server | — | **Missing** |
-| Oracle Database | — | **Missing** |
-| IBM DB2 Universal Database | — | **Missing** |
+| Microsoft SQL Server | `mssql` (ADR-0170) | **Implemented** — query / query-one / execute, bound parameters, named binding. |
+| Generic SQL Connector | `mssql`, `mariadb`, `postgres` (ADR-0170) | **Partial** — three products rather than one generic kind, deliberately: placeholder syntax is per-product, so the product is part of the model. |
+| Oracle Database | — | **Missing** — servable (`sijms/go-ora` is pure Go), left as a follow-up; adding it is a row in the product table, a job type, and a blank import. |
+| IBM DB2 Universal Database | — | **Missing, and staying that way** — IBM's driver is a CGO wrapper and ADR-0010 forbids CGO. Reach DB2 through a worker of your own. |
 
-There is no database connector of any kind in `connector/`. This is the single
-largest gap: one generic SQL connector over `database/sql` covers all four rows.
+Atlas also has a **MariaDB / MySQL** connector, which MIM has no counterpart for.
+
+These are the first connector kinds with no in-process handler at all: SQL runs only
+on a worker, so a database credential never enters the engine (ADR-0164/0170).
 
 ### Cloud and web services
 
@@ -117,11 +119,10 @@ particular is the modern replacement for several MIM target-system MAs.
 
 ### Wave 1 — blocks a MIM replacement
 
-1. **Generic SQL connector.** One kind over `database/sql` (SQL Server, Oracle,
-   DB2, PostgreSQL) closes four MIM rows at once and is the most-requested MIM MA
-   after AD. Needs a decision on driver vendoring and on whether the query is
-   model-authored or connector-configured — the credentials-never-in-the-model rule
-   (ADR-0041) applies to the DSN.
+1. ~~**Generic SQL connector.**~~ **Done** ([ADR-0170](../adr/0170-generic-sql-connector.md))
+   as three product connectors — `mssql`, `mariadb`, `postgres` — worker-only, with
+   the DSN held in the worker's environment and the statement literal by
+   construction. Oracle is the remaining database follow-up.
 2. **Microsoft Graph / Entra ID connector.** Covers the Graph connector row and the
    retired Azure AD MA. The OAuth2 client-credentials plumbing already exists twice
    (`mail`, `sharepoint`) and should be lifted rather than written a third time.

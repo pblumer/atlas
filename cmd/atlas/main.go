@@ -33,6 +33,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/mcp"
@@ -634,7 +635,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus ATLAS_MAIL_<NAME>_ENDPOINT and the optional _USERNAME, _PASSWORD and _FROM")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail, mssql, mariadb, postgres). For csv and mail the server must be offloading them with --offload-connectors, or it still works them itself; the three SQL kinds have no in-process handler at all, so a worker is the only way one ever runs (ADR-0168/0170). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus ATLAS_MAIL_<NAME>_ENDPOINT and the optional _USERNAME, _PASSWORD and _FROM; each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -644,7 +645,7 @@ func runWorker(args []string) error {
 		return err
 	}
 	if len(builtin.Handlers) != len(kinds) {
-		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv, mail), got %q", *connectors)
+		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv, mail, %s), got %q", strings.Join(sqldb.ProductNames(), ", "), *connectors)
 	}
 	if len(handles) == 0 && len(builtin.Handlers) == 0 {
 		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")

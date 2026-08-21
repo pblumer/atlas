@@ -626,6 +626,27 @@ type ConnectorTaskDetail struct {
 	AdMemberDN    RestExpr
 	AdEntryVar    int32
 	AdNewPassword RestExpr
+	// Generic SQL connector fields (JobType == SqlJobType, ADR-0170). Connector
+	// (above) names the database the *worker* is configured for — a SQL task carries
+	// no address and no credential, because the DSN never enters the engine. SqlOp is
+	// the interned operation ("query"|"query-one"|"execute").
+	//
+	// SqlStatement is the interned SQL text, and it is an interned string rather than
+	// a RestExpr on purpose: a RestExpr could hold a FEEL expression, and a statement
+	// assembled from process data is an injection with no quoting bug required. Data
+	// reaches the statement only through SqlParamsVar — the interned name of the
+	// process variable whose value is bound to the statement's placeholders (a JSON
+	// array binds positionally, an object binds by name). SqlMaxRows caps a query's
+	// result set (0 = the worker's default); exceeding it fails the job rather than
+	// truncating, since a short result set is a wrong answer. ResultVar (above)
+	// receives the rows, the single row, or the affected count.
+	//
+	// Each is the zero value for a non-SQL task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	SqlOp        int32
+	SqlStatement int32
+	SqlParamsVar int32
+	SqlMaxRows   int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

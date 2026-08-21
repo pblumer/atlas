@@ -2192,6 +2192,120 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
+    ext: "atlas:MssqlConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = @p1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. SQL Server uses @p1-style placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders: a JSON array binds in order, a JSON object binds by name (SQL Server supports named binding). Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "mariadb", name: "MariaDB Connector", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
+    ext: "atlas:MariadbConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = ?",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. MariaDB uses ?-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. MariaDB has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "postgres", name: "PostgreSQL Connector", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
+    ext: "atlas:PostgresConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = $1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. PostgreSQL uses $1-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. PostgreSQL has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
     id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading

@@ -1809,6 +1809,14 @@ type xmlServiceTask struct {
 	// (ADR-0166): it performs an AD-specific provisioning operation against a
 	// model-authored server through the job path.
 	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
+	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
+	// that product (ADR-0170): one statement against a database a *worker* is
+	// configured for. They share a shape and differ only in the driver behind them,
+	// which is what decides the placeholder syntax a statement must use. They are the
+	// first kinds with no in-process handler at all.
+	MsSql    *xmlSqlConnector `xml:"extensionElements>mssqlConnector"`
+	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
+	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -1955,6 +1963,27 @@ type xmlAdConnector struct {
 	MemberDN      string `xml:"memberDN,attr"`
 	EntryVariable string `xml:"entryVariable,attr"`
 	NewPassword   string `xml:"newPassword,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSqlConnector is the extension a SQL connector task carries, under whichever of
+// <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
+// its product (ADR-0170). The three share this shape exactly; only the element name,
+// and so the driver, differs. connector names the database the worker holds the DSN
+// for — there is deliberately no url and no credential attribute, because the
+// connection string never enters the engine. operation is query / query-one / execute. statement is the
+// SQL text and is *literal only*: it carries no fx toggle, so no process value can
+// become part of it. parametersVariable names the variable bound to the statement's
+// placeholders; resultVariable receives the result; maxRows caps a query's rows.
+type xmlSqlConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	Statement          string `xml:"statement,attr"`
+	ParametersVariable string `xml:"parametersVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
+	MaxRows            string `xml:"maxRows,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

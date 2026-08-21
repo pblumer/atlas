@@ -89,6 +89,119 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ad.Retries },
 		compile: compileAdConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.MsSql != nil },
+		retries: func(st xmlServiceTask) string { return st.MsSql.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[MsSqlJobType])
+		},
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.MariaDB != nil },
+		retries: func(st xmlServiceTask) string { return st.MariaDB.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[MariaDBJobType])
+		},
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Postgres != nil },
+		retries: func(st xmlServiceTask) string { return st.Postgres.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[PostgresJobType])
+		},
+	},
+}
+
+// sqlProduct is one of the three SQL connector products: how a task of it is named
+// in errors, which extension it is read from, and which reserved job type it
+// compiles to. Everything else about the three is identical, which is why they share
+// one compile function rather than three that would drift.
+type sqlProduct struct {
+	kind    string // how the product is named in a compiler error
+	jobType string // the reserved job type a task of it carries
+	ext     func(xmlServiceTask) *xmlSqlConnector
+}
+
+// sqlProducts is the product table, keyed by reserved job type.
+var sqlProducts = map[string]sqlProduct{
+	MsSqlJobType:    {kind: "mssql connector", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
+	MariaDBJobType:  {kind: "mariadb connector", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
+	PostgresJobType: {kind: "postgres connector", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
+}
+
+// sqlOps is the set of operations a SQL connector task can author. query returns
+// rows, query-one a single row, execute an affected-row count.
+var sqlOps = map[string]bool{"query": true, "query-one": true, "execute": true}
+
+// compileSqlConnectorTask compiles a SQL connector task of one product: it runs one
+// statement against a database a *worker* is configured for (ADR-0170). The model
+// names a connector and authors the statement; the DSN and its credential never
+// enter the engine, so there is nothing here to validate about an address.
+//
+// The statement is literal by construction. A FEEL statement would let a process
+// value become part of the SQL text — an injection that needs no quoting bug, because
+// it would be the field doing what it says — so one is refused here rather than
+// guarded against later. Data reaches the statement through bound parameters, whose
+// placeholder syntax belongs to the product this task was authored for.
+func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sqlProduct) (int32, error) {
+	cn := p.ext(st)
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs a connector (the name the worker holds the DSN under)", p.kind, st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs an operation (query, query-one, or execute)", p.kind, st.Id)
+	}
+	if !sqlOps[op] {
+		return 0, fmt.Errorf("compiler: %s task %q has an unknown operation %q (want query, query-one, or execute)", p.kind, st.Id, cn.Operation)
+	}
+	stmt := strings.TrimSpace(cn.Statement)
+	if stmt == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs a statement", p.kind, st.Id)
+	}
+	if strings.HasPrefix(stmt, "=") {
+		return 0, fmt.Errorf("compiler: %s task %q has a FEEL statement; the statement must be literal SQL so no process value can become part of it — pass data through parametersVariable instead (ADR-0170)", p.kind, st.Id)
+	}
+	result := strings.TrimSpace(cn.ResultVariable)
+	if result == "" && op != "execute" {
+		return 0, fmt.Errorf("compiler: %s task %q operation %q needs a resultVariable to receive the result", p.kind, st.Id, op)
+	}
+	maxRows, err := sqlMaxRows(p.kind, st.Id, op, cn.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddSqlConnectorTask(SqlConfig{
+		JobType:   p.jobType,
+		Connector: strings.TrimSpace(cn.Connector),
+		Op:        op,
+		Statement: stmt,
+		ParamsVar: strings.TrimSpace(cn.ParametersVariable),
+		MaxRows:   maxRows,
+		ResultVar: result,
+		Retries:   retries,
+	}), nil
+}
+
+// sqlMaxRows reads the authored row cap. It applies to query alone: query-one is
+// capped at one row by its own definition and execute returns a count, so a cap on
+// either is an author believing something the connector will not do — reported rather
+// than ignored.
+func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if op != "query" {
+		return 0, fmt.Errorf("compiler: %s task %q sets maxRows on operation %q, which returns no row set (maxRows applies to query)", kind, taskID, op)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: %s task %q has a non-numeric maxRows %q", kind, taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: %s task %q has a negative maxRows %d", kind, taskID, n)
+	}
+	return int32(n), nil
 }
 
 // adOps is the set of Active Directory provisioning operations a connector task can

@@ -271,6 +271,43 @@ const AdJobType = "io.atlas.ad"
 // LdapJobTypeIndex (ADR-0166).
 const AdJobTypeIndex int32 = 19
 
+// The three SQL connector job types (ADR-0170). They are one connector in three
+// faces: the same task shape, the same engine-side resolution and the same worker
+// code, differing only in the driver behind them — and therefore in the placeholder
+// syntax a statement must use. That difference is why the product is part of the
+// *model* rather than of the worker's configuration: a statement written with $1 is
+// a PostgreSQL statement, and a kind per product makes pointing it at SQL Server
+// unrepresentable instead of a runtime error.
+//
+// None of the three has an in-process handler. SQL is worker-only (ADR-0164/0170):
+// the type exists precisely so a worker — the one process holding the DSN — can
+// lease it, and the engine never learns which database it is for.
+
+// MsSqlJobType is the reserved job type a Microsoft SQL Server connector task
+// carries. Statements use @p1-style placeholders and may bind by name.
+const MsSqlJobType = "io.atlas.mssql"
+
+// MsSqlJobTypeIndex is the interned index MsSqlJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-first (after the twenty job
+// types above), so it is always 20.
+const MsSqlJobTypeIndex int32 = 20
+
+// MariaDBJobType is the reserved job type a MariaDB (or MySQL) connector task
+// carries. Statements use ?-style positional placeholders only.
+const MariaDBJobType = "io.atlas.mariadb"
+
+// MariaDBJobTypeIndex is the interned index MariaDBJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-second, so it is always 21.
+const MariaDBJobTypeIndex int32 = 21
+
+// PostgresJobType is the reserved job type a PostgreSQL connector task carries.
+// Statements use $1-style positional placeholders only.
+const PostgresJobType = "io.atlas.postgres"
+
+// PostgresJobTypeIndex is the interned index PostgresJobType is guaranteed to occupy
+// in every compiled process: NewBuilder reserves it twenty-third, so it is always 22.
+const PostgresJobTypeIndex int32 = 22
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -298,6 +335,9 @@ var reservedJobTypes = []string{
 	LdapJobType,          // 17
 	SoapJobType,          // 18
 	AdJobType,            // 19
+	MsSqlJobType,         // 20
+	MariaDBJobType,       // 21
+	PostgresJobType,      // 22
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1125,6 +1165,57 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdMemberDN:    cfg.MemberDN,
 		AdEntryVar:    b.intern(cfg.EntryVar),
 		AdNewPassword: cfg.NewPassword,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-0170),
+// shared by all three products. JobType is the product's reserved job type
+// (MsSqlJobType, MariaDBJobType or PostgresJobType) — the one field that differs
+// between them, and what decides which driver the worker opens.
+//
+// Connector names the database the worker is configured for: a SQL task carries no
+// DSN, because the connection string never enters the engine. Op is the operation
+// ("query"|"query-one"|"execute"). Statement is the SQL text, a literal by
+// construction so no process value can become part of it; ParamsVar names the
+// process variable bound to its placeholders. MaxRows caps a query's result set
+// (0 = the worker's default), and ResultVar receives the rows, the row, or the
+// affected count (empty = discard, valid only for execute).
+type SqlConfig struct {
+	JobType   string
+	Connector string
+	Op        string
+	Statement string
+	ParamsVar string
+	MaxRows   int32
+	ResultVar string
+	Retries   int32
+}
+
+// AddSqlConnectorTask adds a SQL connector task of cfg's product and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the product's reserved job type. Unlike every kind before it, nothing in
+// the engine subscribes to that type — SQL is worker-only (ADR-0164/0170), so the job
+// waits for a worker that holds the DSN. The engine's half is resolving the
+// parameters against the instance's variables (ADR-0168); the statement needs no
+// resolving, being literal.
+func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(cfg.JobType),
+		Connector:    b.intern(cfg.Connector),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // a SQL operation, not an HTTP method, is authored
+		Auth:         -1, // the DSN lives on the worker; there is nothing to reference
+		ResultVar:    b.intern(cfg.ResultVar),
+		Retries:      cfg.Retries,
+		SqlOp:        b.intern(cfg.Op),
+		SqlStatement: b.intern(cfg.Statement),
+		SqlParamsVar: b.intern(cfg.ParamsVar),
+		SqlMaxRows:   cfg.MaxRows,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

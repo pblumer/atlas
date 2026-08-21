@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -4332,6 +4333,19 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+		}}
+	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
+		// The statement and its bound parameters travel; the DSN does not exist here
+		// to travel. SQL is the first kind with no in-process handler at all, so this
+		// is not one of two paths that could drift — it is the only one (ADR-0170).
+		j, err := sqldb.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: j.Product, Fields: map[string]any{
+			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
+			"statement": j.Statement, "params": j.Params, "named": j.Named,
+			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
 		}}
 	}
 	return nil

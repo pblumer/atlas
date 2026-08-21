@@ -11,6 +11,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/sqldb"
 )
 
 // Connector kinds this worker can serve out of process (ADR-0168).
@@ -58,6 +59,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
+			})
+		default:
+			// The three SQL products (ADR-0170). Unlike every kind above them they
+			// have no in-process counterpart to fall back to, so a worker is the only
+			// way a SQL task ever runs — which is why a misconfigured one is refused
+			// here, at startup, rather than discovered a retry budget later.
+			p, ok := sqldb.ProductByName(kind)
+			if !ok {
+				continue // an unknown kind: the caller compares counts and reports it
+			}
+			reg, names, err := sqlRegistryFromEnv(env, p)
+			if err != nil {
+				return Connectors{}, err
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[p.JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSQLJob(ctx, j, reg)
 			})
 		}
 	}
