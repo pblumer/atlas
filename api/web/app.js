@@ -3783,10 +3783,12 @@ async function viewWorkers() {
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
+    <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
 
   const types = document.getElementById("wk-types");
   const workers = document.getElementById("wk-workers");
+  const gaps = document.getElementById("wk-gaps");
   const supervised = document.getElementById("wk-supervised");
   let showAllTypes = false;
 
@@ -3830,6 +3832,7 @@ async function viewWorkers() {
     } catch (e) {
       types.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
       workers.innerHTML = "";
+      gaps.hidden = true;
       return;
     }
     const allTypes = (data && data.types) || [];
@@ -3886,7 +3889,7 @@ async function viewWorkers() {
       </div>
       ${workerRows.length ? `<table data-dt-key="wk-workers">
         <thead><tr>
-          <th>Worker</th><th>Pulls</th>
+          <th>Worker</th><th>Pulls</th><th>Connectors held</th>
           <th class="wk-num">In flight</th><th class="wk-num">Pulled</th>
           <th class="wk-num">Completed</th><th class="wk-num">Failed</th><th class="wk-num">Last seen</th>
         </tr></thead>
@@ -3894,6 +3897,8 @@ async function viewWorkers() {
           <td><b>${w.worker ? esc(w.worker) : `<span class="muted">(unnamed)</span>`}</b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
+          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
+            || `<span class="muted">&mdash;</span>`}</td>
           <td class="wk-num">${w.leased}</td>
           <td class="wk-num">${w.pulled}</td>
           <td class="wk-num">${w.completed}</td>
@@ -3904,7 +3909,40 @@ async function viewWorkers() {
         leases its first job &mdash; point one at <span class="pill-kv">POST /api/v1/jobs/activate</span>
         and name the job type it serves.</p>`}
       <p class="wk-note">Counters are since this server started and are not restored on restart.
-        <b>In flight</b> is what a worker holds a lease on right now.</p>`;
+        <b>In flight</b> is what a worker holds a lease on right now. <b>Connectors held</b> is what a
+        worker reports it has credentials for &mdash; only it knows, since Atlas holds none for a kind
+        it has handed over.</p>`;
+
+    // Connectors nothing can serve. This is the gap handing a credential to a worker
+    // opens up: Atlas used to refuse an unconfigured connector when it held every
+    // credential itself, and for a kind it has handed over it no longer can. The
+    // engine knows which names models ask for and the workers report which they hold;
+    // only here do the two halves meet, which is why this is worth a card of its own
+    // rather than a column somewhere.
+    const missing = (data && data.unservedConnectors) || [];
+    if (missing.length) {
+      gaps.hidden = false;
+      gaps.innerHTML = `
+        <div class="wk-head"><b>Connectors nothing can serve</b>
+          <span class="muted small">${missing.length} name${missing.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Connector</th><th>Kind</th><th>Used by</th></tr></thead>
+          <tbody>${missing.map((m) => `<tr class="wk-stuck">
+            <td><b>${esc(m.name)}</b></td>
+            <td><span class="pill-kv">${esc(m.jobType)}</span></td>
+            <td>${(m.processes || []).map((p) => `<a href="#/operations/p/${p.processDefKey}" title="${
+              esc(`${p.processId} v${p.version}`)}">${esc(p.name || p.processId)}</a>`).join(", ")
+              || `<span class="muted">&mdash;</span>`}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">These models name a connector, and neither Atlas nor any worker seen this run
+          holds a configuration for it &mdash; so their tasks will park. Configure the name on a worker
+          that serves this kind, or point the model at one that is configured. A worker that has not
+          polled yet reports nothing, so a name may clear itself on its first poll.</p>`;
+    } else {
+      gaps.hidden = true;
+      gaps.innerHTML = "";
+    }
 
     // Supervised workers: the ones Atlas launched itself, and the only ones it can
     // restart or show logs for. A worker running in someone else's cluster gets the

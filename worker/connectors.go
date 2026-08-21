@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -40,26 +41,42 @@ import (
 // fail. A kind that *is* implemented but misconfigured returns an error here for the
 // same reason — the operator is still watching at startup, and a per-job discovery
 // would spend a retry budget learning what was knowable before the first poll.
-func BuiltinConnectors(env func(string) string, kinds ...string) (map[string]Exec, error) {
+func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, error) {
 	if env == nil {
 		env = func(string) string { return "" }
 	}
-	out := map[string]Exec{}
+	built := Connectors{Handlers: map[string]Exec{}}
 	for _, kind := range kinds {
 		switch kind {
 		case "csv":
-			out[compiler.CsvImportJobType] = ExecFunc(runCSV)
+			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
 		case "mail":
-			reg, err := mailRegistryFromEnv(env)
+			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
-				return nil, err
+				return Connectors{}, err
 			}
-			out[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
 			})
 		}
 	}
-	return out, nil
+	sort.Strings(built.Names)
+	return built, nil
+}
+
+// Connectors is what a worker was configured to serve: the handlers, keyed by the
+// job type each answers, and the connector *names* this worker holds credentials
+// for.
+//
+// The names are reported to the engine on every poll, because they are the half of
+// "can this connector be served" that only the worker knows — once a kind is
+// offloaded the engine holds no credential for it and cannot read another process's
+// environment. The Workers view subtracts them from what deployed models reference
+// to show the names configured nowhere (ADR-0168).
+type Connectors struct {
+	Handlers map[string]Exec
+	Names    []string
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -69,17 +86,17 @@ const mailEnvPrefix = "ATLAS_MAIL_"
 // lists the names; each name contributes ATLAS_MAIL_<NAME>_ENDPOINT and the optional
 // _USERNAME, _PASSWORD and _FROM. The names are the ones models reference, so the
 // list is also the answer to "what can this worker actually send through".
-func mailRegistryFromEnv(env func(string) string) (*mail.Registry, error) {
+func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, error) {
 	names := splitAndTrim(env(mailEnvPrefix + "CONNECTORS"))
 	if len(names) == 0 {
-		return nil, fmt.Errorf("worker: --connector mail needs at least one connector: set %sCONNECTORS to the names this worker sends through", mailEnvPrefix)
+		return nil, nil, fmt.Errorf("worker: --connector mail needs at least one connector: set %sCONNECTORS to the names this worker sends through", mailEnvPrefix)
 	}
 	reg := mail.NewRegistry()
 	for _, name := range names {
 		key := mailEnvPrefix + envFold(name) + "_"
 		endpoint := env(key + "ENDPOINT")
 		if endpoint == "" {
-			return nil, fmt.Errorf("worker: mail connector %q has no endpoint: set %sENDPOINT", name, key)
+			return nil, nil, fmt.Errorf("worker: mail connector %q has no endpoint: set %sENDPOINT", name, key)
 		}
 		reg.Register(name, mail.NewSMTPClient(mail.Connector{
 			Endpoint: endpoint,
@@ -88,7 +105,7 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, error) {
 			From:     env(key + "FROM"),
 		}))
 	}
-	return reg, nil
+	return reg, names, nil
 }
 
 // envFold turns a connector name into the environment-variable form of itself:

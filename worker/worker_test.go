@@ -286,8 +286,8 @@ func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if len(got) != 0 {
-		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got))
+	if len(got.Handlers) != 0 {
+		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got.Handlers))
 	}
 }
 
@@ -627,5 +627,5 @@ func mustConnectors(t *testing.T, kinds ...string) map[string]worker.Exec {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors(%v): %v", kinds, err)
 	}
-	return execs
+	return execs.Handlers
 }

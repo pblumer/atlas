@@ -643,10 +643,10 @@ func runWorker(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(builtin) != len(kinds) {
+	if len(builtin.Handlers) != len(kinds) {
 		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv, mail), got %q", *connectors)
 	}
-	if len(handles) == 0 && len(builtin) == 0 {
+	if len(handles) == 0 && len(builtin.Handlers) == 0 {
 		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")
 	}
 	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
@@ -654,7 +654,7 @@ func runWorker(args []string) error {
 	}
 
 	execs := map[string]worker.Exec{}
-	for jobType, exec := range builtin {
+	for jobType, exec := range builtin.Handlers {
 		execs[jobType] = exec
 	}
 	for jobType, argv := range handles {
@@ -663,11 +663,13 @@ func runWorker(args []string) error {
 	w := worker.New(worker.Options{
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
 		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+		Connectors: builtin.Names,
 	})
 
 	logging.Info(logging.WorkerStarting, "working jobs for a running Atlas",
 		slog.String("server", *server), slog.String("id", *id),
-		slog.String("types", strings.Join(sortedKeys(execs), ",")), slog.Duration("lease", *lease))
+		slog.String("types", strings.Join(sortedKeys(execs), ",")),
+		slog.String("connectors", strings.Join(builtin.Names, ",")), slog.Duration("lease", *lease))
 
 	if *once {
 		return w.RunOnce(context.Background())

@@ -2,6 +2,7 @@ package worker_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -34,8 +35,8 @@ func TestMailWorkerHoldsItsOwnCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if _, ok := execs[compiler.MailJobType]; !ok {
-		t.Fatalf("no handler for %s; got %v", compiler.MailJobType, execs)
+	if _, ok := execs.Handlers[compiler.MailJobType]; !ok {
+		t.Fatalf("no handler for %s; got %v", compiler.MailJobType, execs.Handlers)
 	}
 }
 
@@ -81,7 +82,7 @@ func TestMailConnectorNamesFoldIntoEnvironmentVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if _, ok := execs[compiler.MailJobType]; !ok {
+	if _, ok := execs.Handlers[compiler.MailJobType]; !ok {
 		t.Fatal("a hyphenated connector name was not configurable")
 	}
 }
@@ -98,7 +99,7 @@ func TestMailWorkerRefusesAConnectorItDoesNotHold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	_, err = execs[compiler.MailJobType].Run(context.Background(), worker.Job{
+	_, err = execs.Handlers[compiler.MailJobType].Run(context.Background(), worker.Job{
 		JobKey: 1, Type: compiler.MailJobType,
 		Connector: &worker.ConnectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": "some-other-provider",
@@ -125,7 +126,7 @@ func TestMailWorkerNeedsTheResolvedDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	_, err = execs[compiler.MailJobType].Run(context.Background(), worker.Job{JobKey: 1, Type: compiler.MailJobType})
+	_, err = execs.Handlers[compiler.MailJobType].Run(context.Background(), worker.Job{JobKey: 1, Type: compiler.MailJobType})
 	if err == nil {
 		t.Fatal("a mail job with no connector detail succeeded")
 	}
@@ -204,3 +205,47 @@ const mailConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// TestAWorkersConnectorNamesReachTheWorkersView closes the loop the API tests only
+// half prove: a real worker, configured from its own environment, reports the names
+// it holds on its poll, and the engine's Workers view shows them. Without this the
+// two halves could agree on a JSON field and still not meet.
+func TestAWorkersConnectorNamesReachTheWorkersView(t *testing.T) {
+	ts := liveAtlasWith(t, mailConnectorModel, `{"customer":"ada@example.com"}`,
+		api.WithOffloadedConnectorKinds([]string{"mail"}))
+
+	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
+		"ATLAS_MAIL_CONNECTORS":              "internal-relay",
+		"ATLAS_MAIL_INTERNAL_RELAY_ENDPOINT": "relay.internal:25",
+	}), "mail")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "mailer-1", Handlers: built.Handlers, Connectors: built.Names,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	// The send will fail — this worker holds "internal-relay" and the model asks for
+	// "office365" — which is the situation being reported on, not a problem with it.
+	_ = w.RunOnce(ctx)
+
+	var view struct {
+		Workers []struct {
+			Worker     string   `json:"worker"`
+			Connectors []string `json:"connectors"`
+		} `json:"workers"`
+		Unserved []struct {
+			Name string `json:"name"`
+		} `json:"unservedConnectors"`
+	}
+	if err := json.Unmarshal(get(t, ts, "/api/v1/workers"), &view); err != nil {
+		t.Fatalf("decode workers: %v", err)
+	}
+	if len(view.Workers) != 1 || strings.Join(view.Workers[0].Connectors, ",") != "internal-relay" {
+		t.Fatalf("workers = %+v, want mailer-1 holding internal-relay", view.Workers)
+	}
+	if len(view.Unserved) != 1 || view.Unserved[0].Name != "office365" {
+		t.Errorf("unserved = %+v, want office365 named as reachable by nothing", view.Unserved)
+	}
+}

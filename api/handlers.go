@@ -4138,6 +4138,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// WaitMs long-polls: how long to hold the request open waiting for a job of
 		// this type before answering empty. 0 (or absent) answers immediately.
 		WaitMs int64 `json:"waitMs"`
+		// Connectors names the connector configurations this worker holds — the
+		// providers it can actually reach. Only the worker knows this: once a kind is
+		// offloaded the engine holds no credential for it and cannot read another
+		// process's environment. Reporting it here is what lets the Workers view say
+		// which names deployed models reference and *nothing* can serve (ADR-0168).
+		Connectors []string `json:"connectors,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -4221,6 +4227,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				jobs = append(jobs, j)
 			}
 			s.workers.leased(body.Worker, body.Type, len(jobs))
+			// Recorded on every poll, not just a productive one: an idle worker still
+			// holds its connectors, and it is exactly the idle case an operator is
+			// looking at when work is not moving.
+			s.workers.holdsConnectors(body.Worker, body.Connectors)
 		})
 	}
 
