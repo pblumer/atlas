@@ -23,6 +23,12 @@ type inflightValue struct {
 	variableAudit model.VariableAuditValue
 	compensable   model.CompensableValue
 	operatorAct   model.OperatorActionValue
+	// migration rides only on the operator-initiated migrate command and the event it
+	// emits (ADR-0162). Its mapping is a slice, so — like the decision a job completion
+	// carries — it is a non-hot-path payload: no token movement ever populates it. It is
+	// also what makes inflightValue non-comparable, so compare one with reflect.DeepEqual
+	// rather than ==.
+	migration model.ProcessMigrationValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -60,6 +66,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.compensable
 	case model.VTOperatorAction:
 		return &v.operatorAct
+	case model.VTProcessMigration:
+		return &v.migration
 	}
 	return nil
 }
@@ -136,6 +144,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTOperatorAction:
 		if v, ok := rec.Value.(*model.OperatorActionValue); ok {
 			iv.operatorAct = *v
+		}
+	case model.VTProcessMigration:
+		if v, ok := rec.Value.(*model.ProcessMigrationValue); ok {
+			iv.migration = *v
 		}
 	}
 	return iv

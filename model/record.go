@@ -101,6 +101,17 @@ const (
 	// engine drove, and the trail rebuilds from the log. Appended last so every prior
 	// value type keeps its numeric value on the log.
 	VTOperatorAction
+
+	// VTProcessMigration is a running instance being rebound from one deployed version
+	// of its process to another (ADR-0162). It is the only value that rewrites live
+	// state in bulk rather than describing one entity's transition: the instance's
+	// definition key and every element index its live records carry are translated
+	// through the mapping the value holds. That mapping is *in the event* — never
+	// derived during the fold — because a fold that recomputed it would depend on the
+	// matching algorithm's code, so improving that algorithm would silently replay an
+	// old log into a different state (invariants I4/I6). Appended last so every prior
+	// value type keeps its numeric value on the log.
+	VTProcessMigration
 )
 
 func (t ValueType) String() string {
@@ -141,6 +152,8 @@ func (t ValueType) String() string {
 		return "Compensable"
 	case VTOperatorAction:
 		return "OperatorAction"
+	case VTProcessMigration:
+		return "ProcessMigration"
 	default:
 		return "ValueType(?)"
 	}
@@ -311,6 +324,19 @@ const (
 	// I6) — the fire is the persisted Completing→Completed chain — its numeric value never
 	// reaches the log. Appended at the end so every prior intent keeps its numeric value.
 	IntentConditionRecheck
+
+	// IntentMigrating is a command-only intent (never persisted as an event), like
+	// IntentPurging: an operator directs the processor to rebind a running instance to
+	// another deployed version of its process (ADR-0162). Its handler re-checks what the
+	// API validated, then emits IntentMigrated for the instance it carries. Because
+	// commands are not replayed (invariant I6), its numeric value never reaches the log.
+	// Appended at the end so every prior intent keeps its numeric value.
+	IntentMigrating
+	// IntentMigrated rebinds a running instance to another deployed version: the
+	// durable fact applyToState folds, carrying both definition keys and the element
+	// mapping it rewrites the instance's live records through (ADR-0162). Appended at
+	// the end so every prior intent keeps its numeric value on the log.
+	IntentMigrated
 )
 
 func (i Intent) String() string {
@@ -393,6 +419,10 @@ func (i Intent) String() string {
 		return "Purged"
 	case IntentConditionRecheck:
 		return "ConditionRecheck"
+	case IntentMigrating:
+		return "Migrating"
+	case IntentMigrated:
+		return "Migrated"
 	default:
 		return "Intent(?)"
 	}

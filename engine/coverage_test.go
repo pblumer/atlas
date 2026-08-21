@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/expr"
@@ -148,9 +149,10 @@ func TestInflightFromRecord(t *testing.T) {
 	if iv.job != (model.JobValue{}) {
 		t.Errorf("mismatched value: job = %+v, want zero", iv.job)
 	}
-	// Unknown value type: nothing copied.
+	// Unknown value type: nothing copied. Compared with DeepEqual rather than == because
+	// the union holds a migration value, whose element mapping is a slice (ADR-0162).
 	iv = inflightFromRecord(model.Record{Header: model.RecordHeader{ValueType: model.ValueType(200)}})
-	if iv != (inflightValue{}) {
+	if !reflect.DeepEqual(iv, inflightValue{}) {
 		t.Errorf("unknown value type: iv = %+v, want zero", iv)
 	}
 }

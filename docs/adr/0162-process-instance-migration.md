@@ -54,14 +54,30 @@ rewrites all of them or leaves the instance inconsistent. Grouped by what they a
 |---|---|
 | `cfProcessInstance` | `ProcessDefKey` |
 | `cfElementInstance` | `ProcessDefKey`, `ElementId` |
-| `cfTimer` | `TargetElementId` of an instance-owned catch/boundary timer |
-| `cfMessageSubscription` | `ProcessDefKey`, `ElementId` (the message name is in the *key*) |
-| `cfSignalSubscription` | `ProcessDefKey`, `ElementId` (the signal name is in the key) |
 | `cfIncident` | `ElementId` |
 | `cfCompensable` | `ProcessDefKey`, `ElementId`, `HandlerNode` |
 | `cfElementTokenCount` | keyed `elTok:<defKey>:<elementId>` — the live-token counter behind the Operations overlay (ADR-0080) |
 | `cfDefInstanceCount` | keyed `defInst:<defKey>` — the active-instance counter |
 | `cfActiveStartKey` | keyed `activeStartKey:<defKey>:<corrKey>`, for a message-start instance (ADR-0094) |
+
+**Amended while implementing: execution follows the element instance, not the index.**
+This record first listed timers and message/signal subscriptions among the families a
+migration rewrites. Reading the engine before writing the fold showed that it does not
+need to, and that rewriting them would be expensive for nothing. A due timer resolves
+its element through `GetElementInstance(timer.ElementInstanceKey)` and never reads
+`TargetElementId`; a correlated message completes `m.elKey`'s element instance and never
+reads the subscription's `ElementId`. Both fields are carried for display — and a
+recurring timer re-derives `TargetElementId` from the element instance the next time it
+arms, so it heals itself, while a subscription's `ProcessDefKey` and `ElementId` are
+copied *together* into the retained message-flow row, where the pair truthfully records
+the element as it was in the version the catch was armed under.
+
+Rewriting them anyway would have meant scanning every timer and every subscription per
+migrated instance — no per-instance index exists for either — which makes a batch
+migration quadratic, for values nothing reads to decide anything. So they are left
+alone, and the fold's set is six families, all reachable from the instance and its
+element instances without a scan. If a future change makes one of those fields
+load-bearing, the fix is a per-instance index, not a scan.
 
 **Live state keyed by instance or scope — untouched, and that is the point:**
 `cfElByProc`, `cfVariable`, `cfDataObject`, `cfActiveChildren`, `cfJobByElement`,
@@ -252,7 +268,7 @@ indices reach the log (I5: no model strings in the log).
   old version, migrate the rest, retire it. The instance keeps its variables, its
   history and its keys, so nothing downstream that references an element instance key
   breaks. The migration is on the record, with an actor and a reason.
-- **Negative / trade-offs accepted:** it is a genuinely large surface — ten durable
+- **Negative / trade-offs accepted:** it is a genuinely large surface — six durable
   families rewritten in one fold, and every one of them a place to be wrong; the
   validation rules are the feature, and they will refuse migrations an operator
   believes should work — and the surface moves as the engine does: the engine-wide

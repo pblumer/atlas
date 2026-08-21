@@ -512,6 +512,165 @@ func (t *Tx) CompensablesOfScopeDesc(scopeKey uint64, fn func(seq uint64, v *mod
 	return iter.Error()
 }
 
+// MigrateInstance rebinds a running instance from one deployed version of its process
+// to another (ADR-0162): the definition key it is bound to, and every element index its
+// live records carry, translated through the mapping the migration event froze at
+// command time. It is the whole fold — everything it touches, it touches here — so the
+// live path and recovery replay produce the identical result (invariant I4).
+//
+// Element instance keys are not translated and never change. That is the design, not an
+// omission: variables, data objects, jobs, the active-children counts and the entire
+// scope tree are keyed by element instance key, so preserving those keys is what lets
+// all of them ride through a migration untouched.
+//
+// What is rewritten is exactly what execution reads by *index*:
+//
+//   - the instance's ProcessDefKey, and its per-definition active-instance counter;
+//   - each element instance's ProcessDefKey and ElementId, and the per-definition
+//     live-token counter that follows it (ADR-0080);
+//   - the correlation-key counter of a message-start instance (ADR-0094);
+//   - each incident's ElementId, which is what an operator surface resolves to a
+//     diagram element and, since ADR-0160, to the connector behind it;
+//   - each compensable record's ProcessDefKey, ElementId and HandlerNode — the handler
+//     node is dereferenced against the definition when compensation fires, so a stale
+//     one would activate an element from the version the instance has left.
+//
+// Timers and message/signal subscriptions are deliberately *not* rewritten. Their
+// element ids never drive execution: a due timer resolves its element through
+// GetElementInstance(ElementInstanceKey) and a correlated message completes
+// m.elKey's element instance, so both already follow the element instance this fold
+// does rewrite. A recurring timer re-derives TargetElementId from the element instance
+// the next time it arms, so it heals itself; and a subscription's ProcessDefKey and
+// ElementId are copied together into the retained message-flow row, where the pair
+// truthfully records the element as it was in the version the catch was armed under.
+// Rewriting them would need a scan of all timers and all subscriptions per instance,
+// which would make a batch migration quadratic, for values nothing reads to decide
+// anything.
+//
+// A mapping that does not cover an element index leaves that record alone rather than
+// guessing: validation at command time is what guarantees no *live* record carries an
+// uncovered index, and a fold that invented a target would be the one way this
+// corrupts an instance beyond repair.
+func (t *Tx) MigrateInstance(v *model.ProcessMigrationValue) error {
+	pi, err := t.GetProcessInstance(v.ProcessInstanceKey)
+	if err != nil || pi == nil {
+		return err // gone (completed, cancelled, purged): nothing to rebind, and replay agrees
+	}
+	if pi.ProcessDefKey != v.FromProcessDefKey {
+		// Already migrated (a re-applied event) or never on the source version. Either
+		// way rewriting again would move the counters twice, so this is where a replayed
+		// or duplicated migration becomes a no-op.
+		return nil
+	}
+
+	// Element instances first: each carries the index execution actually dispatches on.
+	// Collected before writing, because the iterator reads the same column family the
+	// writes go to.
+	type rebind struct {
+		key  uint64
+		from int32
+		next model.ElementInstanceValue
+	}
+	var rebinds []rebind
+	scopes := []uint64{v.ProcessInstanceKey} // every scope a compensable record can hang off
+	err = t.ElementInstancesOfProcess(v.ProcessInstanceKey, func(elKey uint64, ei *model.ElementInstanceValue) error {
+		scopes = append(scopes, elKey)
+		to, ok := v.Target(ei.ElementId)
+		if !ok {
+			return nil
+		}
+		next := *ei
+		next.ProcessDefKey = v.ToProcessDefKey
+		next.ElementId = to
+		rebinds = append(rebinds, rebind{key: elKey, from: ei.ElementId, next: next})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for i := range rebinds {
+		r := &rebinds[i]
+		if err := t.PutElementInstance(r.key, &r.next); err != nil {
+			return err
+		}
+		// The live-token counter is per (definition, element), so a token moving between
+		// versions leaves one bucket and enters another (ADR-0080).
+		if err := t.DecElementToken(v.FromProcessDefKey, r.from); err != nil {
+			return err
+		}
+		if err := t.IncElementToken(v.ToProcessDefKey, r.next.ElementId); err != nil {
+			return err
+		}
+		// An incident is keyed by the element instance it parks, so it is reachable
+		// without a scan — and its element index is what every operator surface resolves
+		// to a diagram element, and since ADR-0160 to the connector behind it.
+		inc, err := t.GetIncident(r.key)
+		if err != nil {
+			return err
+		}
+		if inc != nil {
+			if to, ok := v.Target(inc.ElementId); ok {
+				inc.ElementId = to
+				if err := t.PutIncident(inc); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Compensable records hang off a scope — the instance's root scope or a subprocess's
+	// element instance — so every scope collected above is asked for its own.
+	for _, scope := range scopes {
+		type compRebind struct {
+			seq uint64
+			v   model.CompensableValue
+		}
+		var comps []compRebind
+		if err := t.CompensablesOfScopeDesc(scope, func(seq uint64, cv *model.CompensableValue) error {
+			next := *cv
+			to, okEl := v.Target(cv.ElementId)
+			handler, okHandler := v.Target(cv.HandlerNode)
+			if !okEl || !okHandler {
+				return nil // uncovered: leave it rather than guess (validation refuses this case)
+			}
+			next.ProcessDefKey = v.ToProcessDefKey
+			next.ElementId = to
+			next.HandlerNode = handler
+			comps = append(comps, compRebind{seq: seq, v: next})
+			return nil
+		}); err != nil {
+			return err
+		}
+		for i := range comps {
+			if err := t.RecordCompensable(comps[i].seq, &comps[i].v); err != nil {
+				return err
+			}
+		}
+	}
+
+	pi.ProcessDefKey = v.ToProcessDefKey
+	if err := t.PutProcessInstance(v.ProcessInstanceKey, pi); err != nil {
+		return err
+	}
+	if err := t.DecDefInstanceCount(v.FromProcessDefKey); err != nil {
+		return err
+	}
+	if err := t.IncDefInstanceCount(v.ToProcessDefKey); err != nil {
+		return err
+	}
+	if pi.CorrelationKey != "" {
+		// A message-start instance holds its correlation key open against its definition
+		// so a second message cannot start a duplicate (ADR-0094). The hold moves with it.
+		if err := t.DecrementActiveStartKey(v.FromProcessDefKey, pi.CorrelationKey); err != nil {
+			return err
+		}
+		if err := t.IncrementActiveStartKey(v.ToProcessDefKey, pi.CorrelationKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

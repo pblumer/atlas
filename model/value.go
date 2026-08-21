@@ -1,6 +1,9 @@
 package model
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"sort"
+)
 
 // Value is the typed payload of a record. Each implementation owns a fixed
 // binary layout. encode appends to a caller-owned buffer (no allocation when
@@ -648,12 +651,21 @@ const (
 	// OperatorActionCompleteJob is an operator completing a parked job by hand, the
 	// job a worker would otherwise have completed (ADR-0159).
 	OperatorActionCompleteJob OperatorActionKind = iota + 1
+	// OperatorActionMigrate is an operator rebinding a running instance to another
+	// deployed version of its process (ADR-0162). It is the audit half of the
+	// migration: the rebinding itself is VTProcessMigration, and this record is what
+	// makes it visible — who, why, and at which log position the instance stopped being
+	// the old version and started being the new one, which is what lets the replay
+	// resolve each step through the definition that was in force at it.
+	OperatorActionMigrate
 )
 
 func (k OperatorActionKind) String() string {
 	switch k {
 	case OperatorActionCompleteJob:
 		return "completeJob"
+	case OperatorActionMigrate:
+		return "migrate"
 	default:
 		return "OperatorActionKind(?)"
 	}
@@ -681,6 +693,14 @@ type OperatorActionValue struct {
 	Kind               OperatorActionKind
 	Actor              string // who performed it; "" when auth is off / unidentified
 	Reason             string // why — free text supplied by the operator
+	// FromProcessDefKey is the definition the instance was on *before* the action, set
+	// only by OperatorActionMigrate and 0 for every other kind (ADR-0162). The instance
+	// record names the definition it is on now; each migration record names the one
+	// before it, so a chain of migrations reads back as a chain of log-position ranges
+	// — which is how the replay knows to resolve a step recorded under the old version
+	// through the old version's compiled graph. Append-compatible: a record written
+	// before this field decodes to 0, which is what every non-migration record means.
+	FromProcessDefKey uint64
 }
 
 func (*OperatorActionValue) ValueType() ValueType { return VTOperatorAction }
@@ -691,7 +711,8 @@ func (v *OperatorActionValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
 	dst = append(dst, byte(v.Kind))
 	dst = appendString(dst, v.Actor)
-	return appendString(dst, v.Reason)
+	dst = appendString(dst, v.Reason)
+	return binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
 }
 
 func (v *OperatorActionValue) decode(src []byte) error {
@@ -707,11 +728,126 @@ func (v *OperatorActionValue) decode(src []byte) error {
 		return err
 	}
 	v.Actor = actor
-	reason, _, err := readString(rest)
+	reason, rest, err := readString(rest)
 	if err != nil {
 		return err
 	}
 	v.Reason = reason
+	// Appended after the two strings, so a record written before it simply ends here
+	// and the field stays 0 — which is what every kind but a migration means by it.
+	v.FromProcessDefKey = 0
+	if len(rest) >= 8 {
+		v.FromProcessDefKey = binary.LittleEndian.Uint64(rest)
+	}
+	return nil
+}
+
+// MaxMigrationMappings bounds the element mapping a single migration event may carry.
+// The mapping covers the element indices an instance's *live* records reference — a
+// handful for an ordinary instance, more for a wide multi-instance activity — never the
+// size of either graph, so this is far above anything real and exists to keep a
+// corrupt or hostile record from asking the decoder for an unbounded allocation.
+const MaxMigrationMappings = 4096
+
+// ElementMapping is one element index in the source definition's compiled graph and
+// the index that means the same element in the target's. Indices, never ids: element
+// ids are interned at compile time and never written to the log as text (invariant I5),
+// so the API resolves an operator's element-id overrides into indices before the
+// command is ever submitted.
+type ElementMapping struct {
+	From int32
+	To   int32
+}
+
+// ProcessMigrationValue rebinds a running instance from one deployed version of its
+// process to another (ADR-0162). It carries the two definition keys and the fully
+// materialized element mapping — every index the instance's live records reference —
+// because applyToState must reproduce the rebinding from the event alone.
+//
+// That is the whole design constraint. A fold that *derived* the mapping from the two
+// compiled processes would depend on the matching algorithm's code, so an algorithm
+// improved in a later release would replay an old log into a different state, and two
+// builds of Atlas could disagree about where a token is (invariants I4/I6). The
+// matching runs once, at command time, where it can also be refused.
+//
+// Element instance keys are *not* in the mapping and never change: a migration rewrites
+// bindings, it does not terminate and recreate, which is what lets variables, data
+// objects, jobs and the whole scope tree ride through untouched — they are keyed by
+// element instance key, not by element index.
+type ProcessMigrationValue struct {
+	ProcessInstanceKey uint64
+	FromProcessDefKey  uint64
+	ToProcessDefKey    uint64
+	// Mapping is ordered by From and carries no duplicate From, so a fold can binary
+	// search it and a reader can compare two migrations without normalizing first.
+	// NewProcessMigration establishes both.
+	Mapping []ElementMapping
+}
+
+// NewProcessMigration builds a migration value from a from→to index map, ordering the
+// mapping by source index so the encoding of a given migration is byte-identical
+// whatever order the caller discovered it in. A map has no order, and an event whose
+// bytes depend on Go's map iteration is an event whose log is not reproducible.
+func NewProcessMigration(piKey, fromDefKey, toDefKey uint64, mapping map[int32]int32) ProcessMigrationValue {
+	v := ProcessMigrationValue{
+		ProcessInstanceKey: piKey,
+		FromProcessDefKey:  fromDefKey,
+		ToProcessDefKey:    toDefKey,
+		Mapping:            make([]ElementMapping, 0, len(mapping)),
+	}
+	for from, to := range mapping {
+		v.Mapping = append(v.Mapping, ElementMapping{From: from, To: to})
+	}
+	sort.Slice(v.Mapping, func(i, j int) bool { return v.Mapping[i].From < v.Mapping[j].From })
+	return v
+}
+
+// Target returns the index the given source element index maps to, and whether the
+// mapping covers it. An uncovered index is not an error here — the fold leaves such a
+// record alone — because validation at command time is what guarantees no *live* record
+// carries one (ADR-0162).
+func (v *ProcessMigrationValue) Target(from int32) (int32, bool) {
+	i := sort.Search(len(v.Mapping), func(i int) bool { return v.Mapping[i].From >= from })
+	if i < len(v.Mapping) && v.Mapping[i].From == from {
+		return v.Mapping[i].To, true
+	}
+	return 0, false
+}
+
+func (*ProcessMigrationValue) ValueType() ValueType { return VTProcessMigration }
+
+func (v *ProcessMigrationValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ToProcessDefKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(v.Mapping)))
+	for _, m := range v.Mapping {
+		dst = binary.LittleEndian.AppendUint32(dst, uint32(m.From))
+		dst = binary.LittleEndian.AppendUint32(dst, uint32(m.To))
+	}
+	return dst
+}
+
+func (v *ProcessMigrationValue) decode(src []byte) error {
+	if len(src) < 28 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.FromProcessDefKey = binary.LittleEndian.Uint64(src[8:])
+	v.ToProcessDefKey = binary.LittleEndian.Uint64(src[16:])
+	n := binary.LittleEndian.Uint32(src[24:])
+	if n > MaxMigrationMappings {
+		return ErrShortBuffer // a count no real migration produces: refuse to size an allocation from it
+	}
+	rest := src[28:]
+	if uint32(len(rest)) < n*8 {
+		return ErrShortBuffer
+	}
+	v.Mapping = make([]ElementMapping, n)
+	for i := range v.Mapping {
+		v.Mapping[i].From = int32(binary.LittleEndian.Uint32(rest[i*8:]))
+		v.Mapping[i].To = int32(binary.LittleEndian.Uint32(rest[i*8+4:]))
+	}
 	return nil
 }
 
@@ -1039,6 +1175,8 @@ func newValue(vt ValueType) Value {
 		return &CompensableValue{}
 	case VTOperatorAction:
 		return &OperatorActionValue{}
+	case VTProcessMigration:
+		return &ProcessMigrationValue{}
 	default:
 		return nil
 	}
