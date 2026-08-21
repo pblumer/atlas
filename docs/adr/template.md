@@ -1,4 +1,12 @@
-# ADR-NNNN: Title
+# ADR-DRAFT: Title
+
+<!--
+Copy this file to docs/adr/draft-<slug>.md and leave the heading as ADR-DRAFT.
+Do not pick a number and do not add a row to README.md's index: the number is
+assigned when the record lands on main (`make adr-number`), which also fixes the
+heading, adds the index row, and rewrites every ADR-draft-<slug> citation. See
+README.md § Writing a record.
+-->
 
 - **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Deprecated
 - **Date:** YYYY-MM-DD
