@@ -357,8 +357,13 @@ type adOp struct {
 }
 
 var adOps = map[string]adOp{
-	"create-user":         {needsEntry: true},
-	"create-group":        {needsEntry: true},
+	"create-user":  {needsEntry: true},
+	"create-group": {needsEntry: true},
+	// A contact is a mail-enabled object with no account behind it — how a person in
+	// another forest appears in this one's address book. It is a third create for the
+	// same reason create-group is a second: the object classes differ, and AD rejects
+	// an add without them.
+	"create-contact":      {needsEntry: true},
 	"update-attributes":   {needsEntry: true},
 	"set-password":        {needsPassword: true},
 	"enable":              {},

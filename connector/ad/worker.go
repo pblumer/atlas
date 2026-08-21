@@ -43,6 +43,9 @@ const (
 var (
 	userObjectClass  = []string{"top", "person", "organizationalPerson", "user"}
 	groupObjectClass = []string{"top", "group"}
+	// A contact carries no account: it is a directory entry that exists to hold an
+	// address, which is what a cross-forest address-book entry is.
+	contactObjectClass = []string{"top", "person", "organizationalPerson", "contact"}
 )
 
 // Handler builds a job handler that performs an Active Directory connector task.
@@ -89,11 +92,14 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 func dispatch(j Job, conn Conn) error {
 	dn, op := j.DN, j.Operation
 	switch op {
-	case "create-user", "create-group":
+	case "create-user", "create-group", "create-contact":
 		attrs := j.Attributes
 		defaultClass := userObjectClass
-		if op == "create-group" {
+		switch op {
+		case "create-group":
 			defaultClass = groupObjectClass
+		case "create-contact":
+			defaultClass = contactObjectClass
 		}
 		if _, authored := attrs[attrObjectClass]; !authored {
 			attrs[attrObjectClass] = defaultClass

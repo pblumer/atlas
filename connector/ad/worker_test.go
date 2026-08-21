@@ -728,3 +728,36 @@ func instanceVars(t *testing.T, s *state.Store) map[string]string {
 	}
 	return out
 }
+
+// A contact is the third create, and it exists because the object classes differ: a
+// contact holds an address with no account behind it, which is how a person in
+// another forest appears in this one's address book (GALSync).
+func TestAdCreateContact(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "create-contact", DN: lit("cn=Arno,ou=galsync,dc=x"), EntryVar: "kontakt",
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "kontakt", Kind: model.VarJSON,
+			Text: `{"targetAddress":"SMTP:arno@forest-a.example","mail":"arno@forest-a.example"}`})
+
+	if conn.addDN != "cn=Arno,ou=galsync,dc=x" {
+		t.Errorf("add dn = %q", conn.addDN)
+	}
+	got := conn.addAt["objectClass"]
+	want := []string{"top", "person", "organizationalPerson", "contact"}
+	if len(got) != len(want) {
+		t.Fatalf("objectClass = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("objectClass = %v, want %v", got, want)
+		}
+	}
+	// targetAddress is what makes the entry a *mail-enabled* contact rather than an
+	// address-book row that bounces.
+	if conn.addAt["targetAddress"][0] != "SMTP:arno@forest-a.example" {
+		t.Errorf("targetAddress = %v", conn.addAt["targetAddress"])
+	}
+}

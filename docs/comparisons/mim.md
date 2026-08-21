@@ -61,7 +61,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 | Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Plus a **DirSync delta read** for reconciliation. Runs on a worker (`--offload-connectors ad`). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no incremental-values flag. |
 | *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0171) | **Implemented** — the same lifecycle against Entra ID over Graph. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
-| Active Directory Global Address List (GAL) | — | **Missing** — cross-forest GALSync (contact provisioning + mail-attribute stitching). |
+| Active Directory Global Address List (GAL) | a **process**, not a connector — [`examples/galsync.bpmn`](../../examples/galsync.bpmn) | **Implemented as a model.** GALSync is a policy ("show forest A's mailboxes in forest B's address book"), not a protocol: the DirSync delta, the contact create/update/delete and the loop are all connectors already. `ad create-contact` was the one piece missing. |
 | Generic LDAP Connector | `ldap` (ADR-0154, amended) | **Implemented** — search / add / modify / add-values / delete-values / delete / modify-password, paged and entry-capped searches, and a client-certificate (SASL EXTERNAL) bind. Connections are pooled. Remaining: a delta/sync cookie. |
 | IBM Directory Server | `ldap` | **Implemented** via the generic connector. |
 | Novell eDirectory | `ldap` | **Implemented** via the generic connector. |
@@ -146,7 +146,13 @@ particular is the modern replacement for several MIM target-system MAs.
    joined the text-file connector (ADR-0139, amended); LDIF and DSML became their own
    `ldif` connector (ADR-0172), because they carry directory entries rather than table
    rows and produce the shape a live directory read produces.
-6. **GALSync.**
+6. ~~**GALSync.**~~ **Done as a process** ([`examples/galsync.bpmn`](../../examples/galsync.bpmn)),
+   plus `ad create-contact` for the one directory primitive it needed. It is worth
+   saying why it is not a connector: GALSync has no wire protocol of its own — it is a
+   rule about which objects in one forest should appear in another's address book, and
+   a rule expressed as sequence flow is one an operator can read and change. Building
+   it in Go would have put business policy in the engine, which is the thing a BPMN
+   engine exists to avoid.
 
 ### Deliberately not building
 

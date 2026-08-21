@@ -1,8 +1,8 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Proposed (amended 2026-08-21 three times — the operation set covers the
-  whole lifecycle, the connector runs on a worker, and it can read a DirSync delta;
-  see the amendment notes below)
+- **Status:** Proposed (amended 2026-08-21 four times — the operation set covers the
+  whole lifecycle, the connector runs on a worker, it can read a DirSync delta, and it
+  can create a contact; see the amendment notes below)
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -132,6 +132,23 @@
 > A deleted object arrives as an entry carrying `isDeleted=TRUE`. AD reports a deletion
 > as a change rather than as an absence, and flattening that away would remove the only
 > signal a leaver process has.
+>
+> **Amendment (2026-08-21, fourth): create-contact.** A contact joins create-user and
+> create-group, and for the same reason they are separate: it supplies its own object
+> classes — `top`/`person`/`organizationalPerson`/`contact` — which AD rejects an add
+> without. A contact is a mail-enabled entry with no account behind it, which is how a
+> person in one forest appears in another's address book.
+>
+> It was added for GALSync, and that is worth recording because of what GALSync did
+> *not* need. MIM ships cross-forest address-list sync as a management agent; here it
+> is [`examples/galsync.bpmn`](../../examples/galsync.bpmn), a process. GALSync has no
+> wire protocol of its own — it is a rule about which objects in one forest should
+> appear in another's address book, and every mechanism it uses was already a
+> connector: the DirSync delta above, `ldap search` to find an existing contact (search
+> deliberately not being this connector's job), `update-attributes`, `delete`, and a
+> timer to loop. Only the contact primitive was missing. Building the rest in Go would
+> have put business policy in the engine, which is the thing a BPMN engine exists to
+> avoid.
 >
 > **Not built:** `LDAP_DIRSYNC_INCREMENTAL_VALUES`, which returns only the changed
 > values of a multi-valued attribute rather than the whole attribute. It matters for a

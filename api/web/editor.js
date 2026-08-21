@@ -2178,6 +2178,7 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "create-user", l: "Create user" },
           { v: "create-group", l: "Create group" },
+          { v: "create-contact", l: "Create contact" },
           { v: "update-attributes", l: "Update attributes" },
           { v: "set-password", l: "Set password (unicodePwd)" },
           { v: "enable", l: "Enable account" },
@@ -2222,8 +2223,8 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "update-attributes",
-        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, objectClass is supplied for you unless you set it yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
+        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
       },
       {
         key: "newDN", label: "New DN", placeholder: "cn=Arno Meier,ou=extern,dc=example,dc=com", fx: true,

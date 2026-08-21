@@ -116,7 +116,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // needsEntry reports whether an operation reads the authored attribute object.
 func needsEntry(op string) bool {
 	switch op {
-	case "create-user", "create-group", "update-attributes":
+	case "create-user", "create-group", "create-contact", "update-attributes":
 		return true
 	default:
 		return false
