@@ -2,6 +2,27 @@
   "generatedAt": "2026-08-19",
   "entries": [
     {
+      "id": "process-instance-migration-the-api-and-the-mcp-tools",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Move a running instance onto a newer version of its process",
+        "de": "Eine laufende Instanz auf eine neuere Version ihres Prozesses umstellen"
+      },
+      "summary": {
+        "en": "A running instance no longer has to be cancelled when its model is fixed. It can be rebound to another deployed version and keeps its variables, its tasks and everything already done. A dry run says first exactly which tokens would move where, and anything that cannot be mapped safely is refused rather than guessed. Available over the HTTP API and as MCP tools; the Operations screen for it follows.",
+        "de": "Eine laufende Instanz muss nicht mehr abgebrochen werden, wenn das Modell korrigiert wird. Sie lässt sich auf eine andere bereitgestellte Version umstellen und behält dabei ihre Variablen, ihre Aufgaben und alles bereits Erledigte. Ein Probelauf zeigt vorab genau, welche Tokens wohin wandern; was sich nicht sicher zuordnen lässt, wird abgelehnt statt geraten. Verfügbar über die HTTP-API und als MCP-Tools; die Oberfläche in Operations folgt."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "a-connector-says-what-it-is-for-and-deleting-one-that-models",
       "version": "Unreleased",
       "date": null,
@@ -340,27 +361,6 @@
         },
         "route": "#/console/org"
       }
-    },
-    {
-      "id": "the-step-by-step-replay-says-why-an-instance-stopped",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The step-by-step replay says why an instance stopped",
-        "de": "The step-by-step replay says why an instance stopped"
-      },
-      "summary": {
-        "en": "The step-by-step replay of a process instance now shows why it stopped — including who changed a variable by hand — so you can retrace exactly what happened.",
-        "de": "Das Schritt-für-Schritt-Replay einer Prozessinstanz zeigt jetzt, warum sie gestoppt ist — inklusive wer eine Variable von Hand geändert hat — damit Sie genau nachvollziehen können, was passiert ist."
-      },
-      "link": {
-        "label": "ADR-0151",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0151-incidents-beyond-the-live-diagram.md"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }
