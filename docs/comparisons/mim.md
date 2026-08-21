@@ -62,7 +62,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 | *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0171) | **Implemented** — the same lifecycle against Entra ID over Graph. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
 | Active Directory Global Address List (GAL) | — | **Missing** — cross-forest GALSync (contact provisioning + mail-attribute stitching). |
-| Generic LDAP Connector | `ldap` (ADR-0154) | **Partial** — search / add / modify / delete / modify-password. No paged results, no delta/sync cookie, modify is whole-attribute replace, no connection pooling, no mTLS bind. |
+| Generic LDAP Connector | `ldap` (ADR-0154, amended) | **Implemented** — search / add / modify / add-values / delete-values / delete / modify-password, paged and entry-capped searches, and a client-certificate (SASL EXTERNAL) bind. Remaining: connection pooling and a delta/sync cookie. |
 | IBM Directory Server | `ldap` | **Implemented** via the generic connector. |
 | Novell eDirectory | `ldap` | **Implemented** via the generic connector. |
 | Oracle (previously Sun and Netscape) Directory Servers | `ldap` | **Implemented** via the generic connector. |
@@ -136,9 +136,13 @@ particular is the modern replacement for several MIM target-system MAs.
 
 ### Wave 2 — depth on what exists
 
-4. **LDAP hardening.** Paged results and a delta/sync cookie, per-value modify,
-   connection pooling, mTLS bind — already recorded as follow-ups in ADR-0154, and
-   delta read is what makes a directory connector usable for reconciliation.
+4. **LDAP hardening.** Paged results, per-value modify and an mTLS bind are **done**
+   (ADR-0154, amended 2026-08-21). Connection pooling remains. So does the delta
+   read — which is not one feature but two vendor protocols, DirSync for AD and
+   RFC 4533 elsewhere, so the AD half belongs with the AD connector rather than with
+   a generic one guessing which server it is talking to. Delta is what makes a
+   directory connector usable for reconciliation, so it stays the most valuable item
+   left in this wave.
 5. **File connector family.** Fixed-width, AVP, LDIF, DSML, and a CSV *export*
    side. Individually small and they share the `csvimport` parsing seam.
 6. **GALSync.**

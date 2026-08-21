@@ -2033,6 +2033,16 @@ type xmlLdapConnector struct {
 	EntryVariable  string `xml:"entryVariable,attr"`
 	NewPassword    string `xml:"newPassword,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// PageSize and MaxEntries bound a search (ADR-0154, amended). PageSize drives the
+	// simple paged-results control so a directory's admin size limit does not truncate
+	// or refuse the search; MaxEntries caps how much may land in a process variable.
+	// Both are absent-means-default; "0" is the authored way to say unbounded.
+	PageSize   string `xml:"pageSize,attr"`
+	MaxEntries string `xml:"maxEntries,attr"`
+	// ClientCertSecret names the server-side secret holding a PEM bundle (certificate
+	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
+	// reference, never a value (ADR-0041).
+	ClientCertSecret string `xml:"clientCertSecret,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

@@ -151,3 +151,99 @@ func TestParseLdapConnectorErrors(t *testing.T) {
 		}
 	}
 }
+
+// ldapTaskBPMN builds a one-task model from raw <atlas:ldapConnector> attributes.
+func ldapTaskBPMN(attrs string) string {
+	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:ldapConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+}
+
+func ldapDetailOf(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDetail) {
+	t.Helper()
+	cp, err := Parse(1, 1, strings.NewReader(ldapTaskBPMN(attrs)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+	return cp, cp.ConnectorTask(node.Detail)
+}
+
+// A search carries its bounds compiled in, so the runtime interprets nothing (I5):
+// the defaults when the model authors none, and the authored numbers otherwise.
+func TestLdapSearchBoundDefaults(t *testing.T) {
+	_, d := ldapDetailOf(t, `url="ldap://dc" operation="search" baseDN="dc=x" resultVariable="r"`)
+	if d.LdapPageSize != defaultLdapPageSize || d.LdapMaxEntries != defaultLdapMaxEntries {
+		t.Errorf("bounds = %d / %d, want the defaults %d / %d",
+			d.LdapPageSize, d.LdapMaxEntries, defaultLdapPageSize, defaultLdapMaxEntries)
+	}
+
+	_, d2 := ldapDetailOf(t, `url="ldap://dc" operation="search" baseDN="dc=x" resultVariable="r" pageSize="100" maxEntries="50"`)
+	if d2.LdapPageSize != 100 || d2.LdapMaxEntries != 50 {
+		t.Errorf("bounds = %d / %d, want 100 / 50", d2.LdapPageSize, d2.LdapMaxEntries)
+	}
+
+	// Zero is how a model asks for unbounded, and it must survive as zero rather than
+	// being mistaken for "unset" and replaced by the default.
+	_, d3 := ldapDetailOf(t, `url="ldap://dc" operation="search" baseDN="dc=x" resultVariable="r" pageSize="0" maxEntries="0"`)
+	if d3.LdapPageSize != 0 || d3.LdapMaxEntries != 0 {
+		t.Errorf("bounds = %d / %d, want 0 / 0 (explicitly unbounded)", d3.LdapPageSize, d3.LdapMaxEntries)
+	}
+
+	// A non-search operation carries no bounds at all.
+	_, d4 := ldapDetailOf(t, `url="ldap://dc" operation="delete" dn="uid=a"`)
+	if d4.LdapPageSize != 0 || d4.LdapMaxEntries != 0 {
+		t.Errorf("bounds = %d / %d, want 0 / 0 for a non-search", d4.LdapPageSize, d4.LdapMaxEntries)
+	}
+}
+
+// The per-value operations compile and carry the attribute object, so a multi-valued
+// attribute can be changed without restating everyone else's values.
+func TestLdapPerValueOperations(t *testing.T) {
+	for _, op := range []string{"add-values", "delete-values"} {
+		cp, d := ldapDetailOf(t, `url="ldap://dc" operation="`+op+`" dn="cn=team,dc=x" entryVariable="mitglieder"`)
+		if got := cp.Intern(d.LdapOp); got != op {
+			t.Errorf("operation = %q, want %q", got, op)
+		}
+		if got := cp.Intern(d.LdapEntryVar); got != "mitglieder" {
+			t.Errorf("entryVariable = %q", got)
+		}
+	}
+}
+
+// A client certificate is a reference, never a value — the same rule the bind
+// password follows (ADR-0041).
+func TestLdapClientCertSecret(t *testing.T) {
+	cp, d := ldapDetailOf(t, `url="ldaps://dc" operation="delete" dn="uid=a" clientCertSecret="LDAP_CLIENT_CERT"`)
+	if got := cp.Intern(d.LdapClientCertSecret); got != "LDAP_CLIENT_CERT" {
+		t.Errorf("clientCertSecret = %q, want the reference", got)
+	}
+}
+
+func TestLdapHardeningValidation(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"pageSize on a non-search", `url="ldap://dc" operation="delete" dn="uid=a" pageSize="10"`, "pageSize"},
+		{"maxEntries on a non-search", `url="ldap://dc" operation="delete" dn="uid=a" maxEntries="10"`, "maxEntries"},
+		{"pageSize not a number", `url="ldap://dc" operation="search" baseDN="dc=x" resultVariable="r" pageSize="viele"`, "pageSize"},
+		{"maxEntries negative", `url="ldap://dc" operation="search" baseDN="dc=x" resultVariable="r" maxEntries="-1"`, "maxEntries"},
+		{"add-values without entry", `url="ldap://dc" operation="add-values" dn="cn=t"`, "entryVariable"},
+		{"delete-values without entry", `url="ldap://dc" operation="delete-values" dn="cn=t"`, "entryVariable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(ldapTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}

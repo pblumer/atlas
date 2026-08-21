@@ -2062,6 +2062,10 @@ const SERVICE_TASK_KINDS = [
         hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
       },
       {
+        key: "clientCertSecret", label: "Client certificate reference", placeholder: "LDAP_CLIENT_CERT",
+        hint: "Optional. Names a server-side secret holding one PEM bundle — certificate and private key together — presented to the directory. With no bind DN the certificate is the identity and the connector binds SASL EXTERNAL; with one it is transport only.",
+      },
+      {
         key: "startTLS", label: "STARTTLS", type: "select",
         options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
         hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
@@ -2072,7 +2076,9 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "search", l: "Search" },
           { v: "add", l: "Add entry" },
-          { v: "modify", l: "Modify entry" },
+          { v: "modify", l: "Modify entry (replace attributes)" },
+          { v: "add-values", l: "Add attribute values" },
+          { v: "delete-values", l: "Delete attribute values" },
           { v: "delete", l: "Delete entry" },
           { v: "modify-password", l: "Set password (RFC 3062)" },
         ],
@@ -2085,18 +2091,26 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "dn", label: "Entry DN", placeholder: "uid=arno,ou=users,dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "delete" || v.operation === "modify-password",
+        showIf: (v) => v.operation && v.operation !== "search",
         hint: "The entry the operation acts on. May be a FEEL expression (fx).",
       },
       {
         key: "entryVariable", label: "Attributes variable", placeholder: "ldapEntry",
-        showIf: (v) => v.operation === "add" || v.operation === "modify",
-        hint: "A process variable holding a JSON object of attribute names to values.",
+        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "add-values" || v.operation === "delete-values",
+        hint: "A process variable holding a JSON object of attribute names to values. Modify replaces each named attribute wholesale; add/delete values change individual values, which is what a multi-valued attribute two processes both write needs — adding one group member is not a statement about everyone else's.",
       },
       {
         key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
         showIf: (v) => v.operation === "modify-password",
         hint: "Usually a FEEL reference to a variable, so no password is written into the model.",
+      },
+      {
+        key: "pageSize", label: "Page size", placeholder: "500", showIf: (v) => v.operation === "search",
+        hint: "Fetches the search in pages (RFC 2696), so a directory's administrative size limit does not refuse it. Empty uses 500; 0 asks for one unpaged search.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000", showIf: (v) => v.operation === "search",
+        hint: "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
       },
       { group: "Output" },
       { key: "resultVariable", label: "Result variable", placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },

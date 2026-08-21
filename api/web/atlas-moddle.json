@@ -117,6 +117,9 @@
         { "name": "entryVariable", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "pageSize", "type": "String", "isAttr": true },
+        { "name": "maxEntries", "type": "String", "isAttr": true },
+        { "name": "clientCertSecret", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

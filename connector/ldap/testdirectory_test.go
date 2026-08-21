@@ -32,7 +32,10 @@ type testDirectory struct {
 	// entries is what a search returns; result and bindResult are the LDAP result
 	// codes answered for operations and for the bind (0 = success). Keeping the
 	// bind separate lets a test fail one operation while still getting connected.
-	entries    []Entry
+	entries []Entry
+	// paged makes the search-done carry a simple paged-results control with an empty
+	// cookie, which is what a server answering RFC 2696 sends on the last page.
+	paged      bool
 	result     uint16
 	bindResult uint16
 }
@@ -94,7 +97,11 @@ func (d *testDirectory) handle(conn net.Conn) {
 					_, _ = conn.Write(searchEntryPacket(id, e))
 				}
 			}
-			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationSearchResultDone, code))
+			if d.pagedResults() {
+				_, _ = conn.Write(searchDoneWithPaging(id, code))
+			} else {
+				_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationSearchResultDone, code))
+			}
 		case goldap.ApplicationAddRequest:
 			d.record("add", seqChildString(op, 0))
 			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationAddResponse, d.codeFor(false)))
@@ -199,5 +206,41 @@ func searchEntryPacket(id int64, e Entry) []byte {
 	}
 	ent.AppendChild(attrs)
 	msg.AppendChild(ent)
+	return msg.Bytes()
+}
+
+func (d *testDirectory) pagedResults() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.paged
+}
+
+// pagedResultsOID is the simple paged-results control (RFC 2696).
+const pagedResultsOID = "1.2.840.113556.1.4.319"
+
+// searchDoneWithPaging builds a SearchResultDone carrying a paged-results control
+// with an empty cookie — the answer a directory gives on the last page, and what
+// go-ldap's SearchWithPaging needs to see before it stops asking for more.
+func searchDoneWithPaging(id int64, code uint16) []byte {
+	msg := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAPMessage")
+	msg.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, id, "MessageID"))
+	res := ber.Encode(ber.ClassApplication, ber.TypeConstructed, ber.Tag(goldap.ApplicationSearchResultDone), nil, "Response")
+	res.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, int64(code), "resultCode"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "diagnosticMessage"))
+	msg.AppendChild(res)
+
+	// controlValue ::= SEQUENCE { size INTEGER, cookie OCTET STRING }
+	val := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "searchControlValue")
+	val.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, int64(0), "size"))
+	val.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "cookie"))
+
+	ctrl := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Control")
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, pagedResultsOID, "Control Type"))
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(val.Bytes()), "Control Value"))
+
+	ctrls := ber.Encode(ber.ClassContext, ber.TypeConstructed, 0, nil, "Controls")
+	ctrls.AppendChild(ctrl)
+	msg.AppendChild(ctrls)
 	return msg.Bytes()
 }

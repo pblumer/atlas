@@ -1043,7 +1043,13 @@ type LdapConfig struct {
 	EntryVar    string
 	NewPassword RestExpr
 	ResultVar   string
-	Retries     int32
+	// PageSize and MaxEntries are the effective search bounds; the compiler has
+	// already applied the defaults, and 0 means unbounded. ClientCertSecret names the
+	// secret holding a PEM certificate+key bundle for a client-certificate bind.
+	PageSize         int32
+	MaxEntries       int32
+	ClientCertSecret string
+	Retries          int32
 }
 
 // AddLdapConnectorTask adds a generic LDAP connector task and returns its element id.
@@ -1056,27 +1062,30 @@ type LdapConfig struct {
 func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:         b.intern(LdapJobType),
-		Connector:       -1, // LDAP carries its endpoint in the model, not a registry name
-		Subject:         -1, // not a clio task
-		EventType:       -1,
-		ClioQuery:       -1,
-		ReduceSpec:      -1,
-		Method:          -1, // the LDAP operation, not an HTTP method, is authored
-		Auth:            -1, // the bind password is a dedicated secret ref, not RestAuth
-		ResultVar:       b.intern(cfg.ResultVar),
-		Retries:         cfg.Retries,
-		LdapURL:         cfg.URL,
-		LdapBindDN:      cfg.BindDN,
-		LdapBindSecret:  b.intern(cfg.BindSecret),
-		LdapStartTLS:    cfg.StartTLS,
-		LdapOp:          b.intern(cfg.Op),
-		LdapDN:          cfg.DN,
-		LdapBaseDN:      cfg.BaseDN,
-		LdapFilter:      cfg.Filter,
-		LdapScope:       b.intern(cfg.Scope),
-		LdapEntryVar:    b.intern(cfg.EntryVar),
-		LdapNewPassword: cfg.NewPassword,
+		JobType:              b.intern(LdapJobType),
+		Connector:            -1, // LDAP carries its endpoint in the model, not a registry name
+		Subject:              -1, // not a clio task
+		EventType:            -1,
+		ClioQuery:            -1,
+		ReduceSpec:           -1,
+		Method:               -1, // the LDAP operation, not an HTTP method, is authored
+		Auth:                 -1, // the bind password is a dedicated secret ref, not RestAuth
+		ResultVar:            b.intern(cfg.ResultVar),
+		Retries:              cfg.Retries,
+		LdapURL:              cfg.URL,
+		LdapBindDN:           cfg.BindDN,
+		LdapBindSecret:       b.intern(cfg.BindSecret),
+		LdapStartTLS:         cfg.StartTLS,
+		LdapOp:               b.intern(cfg.Op),
+		LdapDN:               cfg.DN,
+		LdapBaseDN:           cfg.BaseDN,
+		LdapFilter:           cfg.Filter,
+		LdapScope:            b.intern(cfg.Scope),
+		LdapEntryVar:         b.intern(cfg.EntryVar),
+		LdapNewPassword:      cfg.NewPassword,
+		LdapPageSize:         cfg.PageSize,
+		LdapMaxEntries:       cfg.MaxEntries,
+		LdapClientCertSecret: b.intern(cfg.ClientCertSecret),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

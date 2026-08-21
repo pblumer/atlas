@@ -572,7 +572,8 @@ type ConnectorTaskDetail struct {
 	// LdapBindSecret is the interned name of the server-side secret holding the bind
 	// password (interned "" → an anonymous bind); LdapStartTLS upgrades a plain
 	// connection with STARTTLS. LdapOp is the interned operation
-	// ("search"|"add"|"modify"|"delete"|"modify-password"). LdapDN is the target entry
+	// ("search"|"add"|"modify"|"add-values"|"delete-values"|"delete"|
+	// "modify-password"). LdapDN is the target entry
 	// (add/modify/delete/modify-password); LdapBaseDN/LdapFilter/LdapScope (interned
 	// "base"|"one"|"sub") address a search. LdapEntryVar is the interned name of the
 	// process variable holding the add/modify attribute object; LdapNewPassword is the
@@ -590,6 +591,15 @@ type ConnectorTaskDetail struct {
 	LdapScope       int32
 	LdapEntryVar    int32
 	LdapNewPassword RestExpr
+	// LdapPageSize and LdapMaxEntries bound a search (ADR-0154, amended). The compiler
+	// writes the effective value here — the default when the model authored none — so
+	// the runtime interprets nothing (I5); 0 means unbounded, which a model asks for
+	// explicitly. LdapClientCertSecret is the interned name of the secret holding a
+	// PEM certificate+key bundle for a TLS client-certificate bind (interned "" →
+	// none); with no bind DN it authenticates by SASL EXTERNAL.
+	LdapPageSize         int32
+	LdapMaxEntries       int32
+	LdapClientCertSecret int32
 	// SOAP connector fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
 	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
 	// over the instance's variables at call time. SoapOp is the interned operation name,

@@ -1,15 +1,17 @@
 package ldap
 
 import (
-	goldap "github.com/go-ldap/ldap/v3"
+	"strings"
 	"testing"
+
+	goldap "github.com/go-ldap/ldap/v3"
 )
 
 // TestGoDialerDialError covers the real dialer's connect-failure path: an unreachable
 // server yields an error. The bind, search and write paths are covered against the
 // in-process directory in goconn_test.go.
 func TestGoDialerDialError(t *testing.T) {
-	if _, err := NewDialer().Dial("ldap://127.0.0.1:1", "cn=admin", "pw", false); err == nil {
+	if _, err := NewDialer().Dial(DialOptions{URL: "ldap://127.0.0.1:1", BindDN: "cn=admin", BindPassword: "pw"}); err == nil {
 		t.Fatal("Dial to an unreachable server: err = nil, want error")
 	}
 }
@@ -98,7 +100,7 @@ func TestBuildAddRequest(t *testing.T) {
 
 // TestBuildModifyRequest replaces each named attribute.
 func TestBuildModifyRequest(t *testing.T) {
-	r := buildModifyRequest("uid=ada", map[string][]string{"mail": {"new@x"}})
+	r := buildModifyRequest("uid=ada", []Mod{{Op: ModReplace, Attr: "mail", Vals: []string{"new@x"}}})
 	if r.DN != "uid=ada" {
 		t.Errorf("DN = %q, want uid=ada", r.DN)
 	}
@@ -108,5 +110,36 @@ func TestBuildModifyRequest(t *testing.T) {
 	ch := r.Changes[0]
 	if ch.Operation != goldap.ReplaceAttribute || ch.Modification.Type != "mail" || ch.Modification.Vals[0] != "new@x" {
 		t.Errorf("change = %+v, want a replace of mail", ch)
+	}
+}
+
+// buildModifyRequest maps each change operation to its go-ldap counterpart, so an
+// add-values does not silently become a replace.
+func TestBuildModifyRequestPerValue(t *testing.T) {
+	r := buildModifyRequest("cn=team,dc=x", []Mod{
+		{Op: ModAdd, Attr: "member", Vals: []string{"uid=a"}},
+		{Op: ModDelete, Attr: "member", Vals: []string{"uid=b"}},
+		{Op: ModReplace, Attr: "description", Vals: []string{"Team"}},
+	})
+	if len(r.Changes) != 3 {
+		t.Fatalf("changes = %d, want 3", len(r.Changes))
+	}
+	for i, want := range []uint{ModAdd, ModDelete, ModReplace} {
+		if got := r.Changes[i].Operation; got != want {
+			t.Errorf("change %d operation = %d, want %d", i, got, want)
+		}
+	}
+}
+
+// An external bind that the server refuses fails the dial rather than yielding a
+// connection nobody authenticated.
+func TestExternalBindFailureFailsTheDial(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{bindResult: 49}) // invalidCredentials
+	_, err := NewDialer().Dial(DialOptions{URL: d.URL, ClientCert: testCertPEM(t)})
+	if err == nil {
+		t.Fatal("a refused external bind must fail the dial")
+	}
+	if !strings.Contains(err.Error(), "external bind") {
+		t.Errorf("error = %v, want it to name the external bind", err)
 	}
 }

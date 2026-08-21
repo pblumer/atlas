@@ -1,6 +1,54 @@
 # ADR-0154: Generic LDAP connector
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-08-21 — paging, per-value modify and a
+  client-certificate bind; see the amendment note below)
+
+> **Amendment (2026-08-21): hardening.** Three of the follow-ups below are done, and
+> two of them change the shape of what the connector does rather than only adding to
+> it.
+>
+> - **A search is paged and bounded.** `pageSize` drives the simple paged-results
+>   control (RFC 2696), so a directory's administrative size limit no longer refuses
+>   a legitimate search — an author who has never met that limit has no reason to know
+>   the control exists, so paging defaults *on* at 500. `maxEntries` caps what may
+>   land in a process variable and defaults to 1000; exceeding it **fails** rather
+>   than truncating, for the reason [ADR-0170](0170-generic-sql-connector.md) gives
+>   about rows: a short result set is a wrong answer, not a partial one. `0` is the
+>   authored way to say unbounded for either. The compiler writes the effective value
+>   into the compiled process, so the runtime interprets nothing (I5).
+>
+>   **This changes behaviour for an existing model**: a subtree search that returned
+>   more than a thousand entries used to succeed and now fails. That is deliberate —
+>   an unbounded search into a process variable is the failure mode being hardened
+>   against — and `maxEntries="0"` restores the old behaviour explicitly.
+>
+> - **Modify can change individual values.** The original `modify` replaced an
+>   attribute wholesale, which is the wrong shape for a multi-valued attribute more
+>   than one process writes: adding a member to a group is not a statement about
+>   everyone else's membership. `add-values` and `delete-values` join it, sharing the
+>   authored attribute object and differing only in the change operation. The three
+>   are expressed with the same `Mod` shape the AD connector uses, so the two
+>   directory connectors describe a change the same way.
+>
+> - **A client-certificate bind.** `clientCertSecret` names a secret holding one PEM
+>   bundle — certificate and private key together, because splitting them would be two
+>   things to rotate together and one more way to get it half-done. With a bind DN the
+>   certificate is transport only; **with no bind DN the certificate is the identity**
+>   and the connector binds SASL EXTERNAL, because presenting a certificate and then
+>   staying anonymous would authenticate nothing. An optional `CACert` covers a
+>   directory behind a private CA.
+>
+>   `Dial` now takes a `DialOptions` struct: the parameter list had reached four and
+>   TLS added two more, past which a call site is a row of positional booleans nobody
+>   can read.
+>
+> **Still open from the list below:** connection pooling, and a sync/delta cookie. The
+> delta read is not one feature but two vendor protocols — DirSync for Active
+> Directory, RFC 4533 content sync elsewhere — and the AD half belongs with the AD
+> connector for the reason [ADR-0166](0166-active-directory-connector.md) gives:
+> a vendor's own mechanism deserves a named operation rather than a generic one that
+> guesses which server it is talking to.
+
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

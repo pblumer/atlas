@@ -460,7 +460,33 @@ func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 }
 
 // ldapOps is the set of directory operations an LDAP connector task can author.
-var ldapOps = map[string]bool{"search": true, "add": true, "modify": true, "delete": true, "modify-password": true}
+//
+// modify, add-values and delete-values are the same LDAP modify with different change
+// operations: modify *replaces* an attribute wholesale, while the other two change
+// individual values. Whole-attribute replace was the only shape ADR-0154 shipped, and
+// it is the wrong one for a multi-valued attribute two processes both write — one
+// adding a group member does not intend to remove everyone else's (ADR-0154, amended).
+var ldapOps = map[string]bool{
+	"search": true, "add": true, "modify": true, "add-values": true,
+	"delete-values": true, "delete": true, "modify-password": true,
+}
+
+// ldapEntryOps are the operations that read the authored attribute object.
+var ldapEntryOps = map[string]bool{"add": true, "modify": true, "add-values": true, "delete-values": true}
+
+// Default search bounds, applied by the compiler when a model authors none, so the
+// runtime interprets nothing (I5).
+//
+// Paging defaults *on* because a directory's admin size limit otherwise refuses a
+// perfectly reasonable search, and an author who has not met that limit has no reason
+// to know the control exists. The entry cap defaults on for the reason sqldb's row cap
+// does (ADR-0170): an unbounded subtree search into a process variable is the failure
+// mode this is hardening against, and a short result set would be a wrong answer
+// rather than a partial one.
+const (
+	defaultLdapPageSize   = 500
+	defaultLdapMaxEntries = 1000
+)
 
 // ldapScopes maps the authored search scope names to their canonical form. An empty
 // scope defaults to "sub" (whole subtree) at compile time.
@@ -479,10 +505,10 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (search, add, modify, delete, or modify-password)", st.Id)
+		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (%s)", st.Id, strings.Join(ldapOpNames(), ", "))
 	}
 	if !ldapOps[op] {
-		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want search, add, modify, delete, or modify-password)", st.Id, cn.Operation)
+		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(ldapOpNames(), ", "))
 	}
 	scope := strings.ToLower(strings.TrimSpace(cn.Scope))
 	if op == "search" {
@@ -501,15 +527,19 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs a dn", st.Id, op)
 		}
 	}
-	switch op {
-	case "add", "modify":
-		if strings.TrimSpace(cn.EntryVariable) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
-		}
-	case "modify-password":
-		if strings.TrimSpace(cn.NewPassword) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
-		}
+	if ldapEntryOps[op] && strings.TrimSpace(cn.EntryVariable) == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	}
+	if op == "modify-password" && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
+	}
+	pageSize, err := ldapSearchBound(st.Id, op, "pageSize", cn.PageSize, defaultLdapPageSize)
+	if err != nil {
+		return 0, err
+	}
+	maxEntries, err := ldapSearchBound(st.Id, op, "maxEntries", cn.MaxEntries, defaultLdapMaxEntries)
+	if err != nil {
+		return 0, err
 	}
 	url, err := connectorValue(st.Id, "ldap connector", "url", cn.URL)
 	if err != nil {
@@ -536,20 +566,61 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		return 0, err
 	}
 	return b.AddLdapConnectorTask(LdapConfig{
-		URL:         url,
-		BindDN:      bindDN,
-		BindSecret:  strings.TrimSpace(cn.BindSecret),
-		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
-		Op:          op,
-		DN:          dn,
-		BaseDN:      baseDN,
-		Filter:      filter,
-		Scope:       scope,
-		EntryVar:    strings.TrimSpace(cn.EntryVariable),
-		NewPassword: newPassword,
-		ResultVar:   strings.TrimSpace(cn.ResultVariable),
-		Retries:     retries,
+		URL:              url,
+		BindDN:           bindDN,
+		BindSecret:       strings.TrimSpace(cn.BindSecret),
+		StartTLS:         strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:               op,
+		DN:               dn,
+		BaseDN:           baseDN,
+		Filter:           filter,
+		Scope:            scope,
+		EntryVar:         strings.TrimSpace(cn.EntryVariable),
+		NewPassword:      newPassword,
+		ResultVar:        strings.TrimSpace(cn.ResultVariable),
+		PageSize:         pageSize,
+		MaxEntries:       maxEntries,
+		ClientCertSecret: strings.TrimSpace(cn.ClientCertSecret),
+		Retries:          retries,
 	}), nil
+}
+
+// ldapOpNames lists the directory operations, sorted, for the error messages.
+func ldapOpNames() []string {
+	out := make([]string, 0, len(ldapOps))
+	for n := range ldapOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ldapSearchBound reads one authored search bound, returning the effective value the
+// compiled process carries: the default when the attribute is absent, and the
+// authored number otherwise — including 0, which is how a model says unbounded.
+//
+// A bound on a non-search operation is rejected rather than ignored: it is an author
+// believing something the connector will not do, and silently dropping it is how a
+// model comes to look bounded without being it.
+func ldapSearchBound(taskID, op, what, raw string, def int32) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if op == "search" {
+			return def, nil
+		}
+		return 0, nil
+	}
+	if op != "search" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q sets %s on operation %q, which returns no entries (%s applies to search)", taskID, what, op, what)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: ldap connector task %q has a non-numeric %s %q", taskID, what, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: ldap connector task %q has a negative %s %d", taskID, what, n)
+	}
+	return int32(n), nil
 }
 
 // scimOps is the set of SCIM 2.0 operations a connector task can author. create/get/
