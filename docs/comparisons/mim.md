@@ -1,0 +1,152 @@
+# Microsoft Identity Manager and Atlas
+
+This document compares [Microsoft Identity Manager](https://learn.microsoft.com/en-us/microsoft-identity-manager/microsoft-identity-manager-2016)
+(MIM, formerly FIM/ILM) with Atlas, and records **which connectors Atlas still
+needs** to cover MIM's connector surface.
+
+It exists because ADR-0154 and ADR-0166 both cite a "connector wishlist" that was
+never checked in. This is that list, derived from MIM's own
+[supported connectors](https://learn.microsoft.com/en-us/microsoft-identity-manager/supported-management-agents)
+page rather than from memory.
+
+> [!IMPORTANT]
+> Atlas is in early development. In this document, **implemented** means present in
+> the current Atlas codebase and tests. **Partial** means the kind exists but does
+> not cover the MIM connector's scope. **Missing** means there is no such kind.
+
+## The category difference (read this first)
+
+MIM and Atlas are not the same kind of product, and the connector table below is
+misleading without this paragraph.
+
+**A MIM connector is a synchronization management agent.** It participates in
+MIM's sync model: a full or delta *import* stages objects into a per-connector
+*connector space*, *join/projection* rules link them to a *metaverse* object,
+declarative *attribute flows* (with precedence) move values in and out, and an
+*export* run writes changes back. The connector is a data-source adapter driven by
+run profiles on a schedule; nobody authors the individual operations.
+
+**An Atlas connector is an operation on a service task.** A `TypeConnectorTask`
+compiles to a job carrying a reserved job-type index, and a worker performs exactly
+the one operation the model authored, off the hot path and after fsync
+(ADR-0007/0067/0168). There is no connector space, no metaverse, no join, no
+declarative attribute flow, and no run profile.
+
+So the honest summary is:
+
+| | MIM | Atlas |
+|---|---|---|
+| Primary category | Identity synchronization and lifecycle suite | Durable BPMN 2.x workflow engine |
+| Connector role | Sync management agent (import/export, delta) | Per-operation service-task worker |
+| Identity data model | Metaverse + connector space, join/projection | Process variables; no identity store |
+| Attribute movement | Declarative flows with precedence | Explicit in the model |
+| Scheduling | Run profiles | BPMN timer start events (cycles supported) |
+| Workflow model | WF/XOML declarative workflows, MPRs, Sets | BPMN 2.x |
+| Extensibility | ECMA 2.0 / rules extensions (.NET) | Out-of-process job workers (ADR-0164/0168) |
+| Migration path | — | `mimimport` converts MIM XOML workflows to BPMN |
+
+**Replacing MIM connector-for-connector is therefore not sufficient**, and it is not
+the only gap: an Atlas process must model the reconciliation logic MIM performs
+declaratively. Whether Atlas should grow a sync/reconciliation layer at all is an
+architecture decision that needs its own ADR — it is deliberately out of scope here.
+
+## Connector coverage
+
+MIM's supported-connector list, mapped to Atlas as of this writing.
+
+### Directory
+
+| MIM connector | Atlas | Status |
+|---|---|---|
+| Active Directory Domain Services | `ad` (ADR-0166) | **Partial** — create-user, set-password, enable/disable, add/remove-group-member. No search (delegated to `ldap`), no attribute modify, move/rename, delete, or group creation. Simple bind over TLS only; no Kerberos/NTLM, no DirSync. |
+| Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
+| Active Directory Global Address List (GAL) | — | **Missing** — cross-forest GALSync (contact provisioning + mail-attribute stitching). |
+| Generic LDAP Connector | `ldap` (ADR-0154) | **Partial** — search / add / modify / delete / modify-password. No paged results, no delta/sync cookie, modify is whole-attribute replace, no connection pooling, no mTLS bind. |
+| IBM Directory Server | `ldap` | **Implemented** via the generic connector. |
+| Novell eDirectory | `ldap` | **Implemented** via the generic connector. |
+| Oracle (previously Sun and Netscape) Directory Servers | `ldap` | **Implemented** via the generic connector. |
+
+### Database
+
+| MIM connector | Atlas | Status |
+|---|---|---|
+| Generic SQL Connector | — | **Missing** |
+| Microsoft SQL Server | — | **Missing** |
+| Oracle Database | — | **Missing** |
+| IBM DB2 Universal Database | — | **Missing** |
+
+There is no database connector of any kind in `connector/`. This is the single
+largest gap: one generic SQL connector over `database/sql` covers all four rows.
+
+### Cloud and web services
+
+| MIM connector | Atlas | Status |
+|---|---|---|
+| Microsoft Graph Connector | — | **Missing** as a connector kind. Graph is used *internally* by `mail` (ADR-0093) and `sharepoint` (ADR-0141), including an OAuth2 client-credentials path, but no kind exposes Graph/Entra ID objects to a model. |
+| Microsoft Azure Active Directory Connector | — | Out of support in MIM itself; superseded by Graph. |
+| Connector for Web Services | `soap` (ADR-0165) | **Implemented** |
+| SharePoint Services Connector UPA | `sharepoint` (ADR-0141) | **Partial** — Graph list items, not the SharePoint User Profile Application. |
+| Connector for Lotus Domino | — | **Missing** — legacy; recommend not building. |
+
+### Files
+
+| MIM connector | Atlas | Status |
+|---|---|---|
+| Generic CSV Connector / Delimited text file | `csv` (ADR-0139) | **Partial** — CSV-to-JSON *import* only. No export/write side. |
+| Fixed-Width text file | — | **Missing** |
+| Attribute-Value Pair text file | — | **Missing** |
+| LDAP Data Interchange Format (LDIF) | — | **Missing** |
+| Directory Services Mark-up Language (DSML) | — | **Missing** |
+
+### Platform
+
+| MIM connector | Atlas | Status |
+|---|---|---|
+| Windows PowerShell Connector | `script` (ADR-0047) | **Implemented** — plus Python and JavaScript. |
+| Extensible Connectivity 2.0 (ECMA2) | out-of-process job workers (ADR-0164/0168) | **Equivalent, different shape** — Atlas's extensibility seam is a job worker in any language, not a .NET MA assembly. |
+| FIM Service | Atlas itself | n/a — and `mimimport` converts MIM's XOML workflow definitions into Atlas BPMN. |
+
+## What Atlas has that MIM does not
+
+`rest` (ADR-0067/0152), `scim` (ADR-0153), `mail` (ADR-0079/0093), `remedy`
+(ADR-0106), `webscrape` (ADR-0118), `clio` (ADR-0036), `temis` (ADR-0050), DMN
+decisions, and the sanctioned user-provisioning connector (ADR-0123). SCIM in
+particular is the modern replacement for several MIM target-system MAs.
+
+## The remaining work, in priority order
+
+### Wave 1 — blocks a MIM replacement
+
+1. **Generic SQL connector.** One kind over `database/sql` (SQL Server, Oracle,
+   DB2, PostgreSQL) closes four MIM rows at once and is the most-requested MIM MA
+   after AD. Needs a decision on driver vendoring and on whether the query is
+   model-authored or connector-configured — the credentials-never-in-the-model rule
+   (ADR-0041) applies to the DSN.
+2. **Microsoft Graph / Entra ID connector.** Covers the Graph connector row and the
+   retired Azure AD MA. The OAuth2 client-credentials plumbing already exists twice
+   (`mail`, `sharepoint`) and should be lifted rather than written a third time.
+3. **Complete the AD connector.** Today's five operations do not cover a
+   joiner/mover/leaver process: attribute modify, move/rename (a mover is a DN
+   change), delete, and group create/delete are all absent.
+
+### Wave 2 — depth on what exists
+
+4. **LDAP hardening.** Paged results and a delta/sync cookie, per-value modify,
+   connection pooling, mTLS bind — already recorded as follow-ups in ADR-0154, and
+   delta read is what makes a directory connector usable for reconciliation.
+5. **File connector family.** Fixed-width, AVP, LDIF, DSML, and a CSV *export*
+   side. Individually small and they share the `csvimport` parsing seam.
+6. **GALSync.**
+
+### Deliberately not building
+
+Lotus Domino, native DB2/Oracle MAs beyond the generic SQL connector, and the
+SharePoint UPA connector. Legacy or vanishing surface; revisit only on a concrete
+customer need.
+
+### Beyond connectors
+
+MIM ships more than management agents: password change notification (PCNS) and
+password sync, self-service password reset, Privileged Access Management, BHOLD,
+and Certificate Management. None have an Atlas counterpart, and none are connector
+work.
