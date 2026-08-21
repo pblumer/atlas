@@ -3587,9 +3587,11 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 	}
 }
 
-// loopCounterVar is the standard multi-instance per-iteration counter variable
+// LoopCounterVariable is the standard multi-instance per-iteration counter variable
 // (1-based), bound into each inner iteration's scope (ADR-0077, matching Zeebe).
-const loopCounterVar = "loopCounter"
+// Exported so read-side surfaces can name the variable they are looking for without
+// re-inventing the string and drifting from what the engine actually writes.
+const LoopCounterVariable = "loopCounter"
 
 // seedMultiInstance runs a multi-instance body's activation (ADR-0077): it evaluates
 // the loop's input collection (or cardinality) over the body's scope chain to N items
@@ -3652,7 +3654,7 @@ func seedMultiInstanceIteration(c *ProcessingContext, bodyKey uint64, body *mode
 		SourceFlowId:       -1,
 	})
 	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
-		ScopeKey: k, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(i + 1),
+		ScopeKey: k, Name: LoopCounterVariable, Kind: model.VarNumber, Text: strconv.Itoa(i + 1),
 	})
 	if inputElem := cp.Intern(d.InputElement); inputElem != "" {
 		kind, b, text := expr.Classify(item)
@@ -3677,8 +3679,8 @@ func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail
 		return true
 	}
 	vars := bindInputsChain(c, d.LoopCondition.Inputs(), scope)
-	if _, ok := vars[loopCounterVar]; !ok && vars != nil {
-		vars[loopCounterVar] = expr.FromStored(expr.KindNumber, false, strconv.FormatInt(int64(done), 10))
+	if _, ok := vars[LoopCounterVariable]; !ok && vars != nil {
+		vars[LoopCounterVariable] = expr.FromStored(expr.KindNumber, false, strconv.FormatInt(int64(done), 10))
 	}
 	v, err := d.LoopCondition.Eval(vars)
 	return err == nil && expr.IsTrue(v)
@@ -3693,7 +3695,7 @@ func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail
 // iteration's own, and is dropped rather than promoted when the loop ends.
 func parkRunawayLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, done int) {
 	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
-		ScopeKey: bodyKey, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(done),
+		ScopeKey: bodyKey, Name: LoopCounterVariable, Kind: model.VarNumber, Text: strconv.Itoa(done),
 	})
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: body.ProcessInstanceKey,
@@ -3716,7 +3718,7 @@ func resumeStandardLoop(c *ProcessingContext, bodyKey uint64, ei *model.ElementI
 	// iteration's 0-based index — unlike an iteration's own 1-based loopCounter, so this
 	// deliberately does not go through iterationIndex.
 	next := 0
-	if v := c.GetVariable(bodyKey, loopCounterVar); v != nil {
+	if v := c.GetVariable(bodyKey, LoopCounterVariable); v != nil {
 		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
 			next = n
 		}
@@ -3845,7 +3847,7 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
 		// leave behind exactly what the same activity would have left running once.
 		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
-			if v.Name == loopCounterVar {
+			if v.Name == LoopCounterVariable {
 				return // the parked-run bookkeeping of parkRunawayLoop, not the loop's work
 			}
 			v.ScopeKey = ei.FlowScopeKey
@@ -3866,7 +3868,7 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 
 // iterationIndex reads an inner iteration's 0-based index from its loopCounter (1-based).
 func iterationIndex(c *ProcessingContext, key uint64) int {
-	if v := c.GetVariable(key, loopCounterVar); v != nil {
+	if v := c.GetVariable(key, LoopCounterVariable); v != nil {
 		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
 			return n - 1
 		}

@@ -1253,6 +1253,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .ops-toggle { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .ops-history-list { overflow: auto; flex: 1; padding: 4px 0; }
+/* Which round of a loop a history row is, beside the element's name — six activations
+   of one task are otherwise six identical rows (ADR-0077/0133). */
+.ops-hiter {
+  font: 600 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0 4px; margin-left: 5px; border-radius: 4px;
+  color: var(--muted); background: var(--bg); border: 1px solid var(--border);
+}
 .ops-hrow {
   display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; font-size: 13px;
   border-left: 3px solid transparent;

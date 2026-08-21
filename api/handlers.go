@@ -24,6 +24,7 @@ import (
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -297,13 +298,17 @@ type timelineStep struct {
 	// inputs were evaluated to, in its own activity-local scope (ADR-0068). Variables
 	// and VariablesAfter carry the process (and subprocess) scopes, so these locals are
 	// on the log but in neither. Absent for an element that declares no input mapping.
-	Inputs             []variableView `json:"inputs,omitempty"`
-	Position           uint64         `json:"position"`
-	TokenID            uint64         `json:"tokenId,omitempty"`
-	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
-	SourceElementID    string         `json:"sourceElementId,omitempty"`
-	Action             string         `json:"action,omitempty"`
-	Relation           string         `json:"relation,omitempty"`
+	Inputs []variableView `json:"inputs,omitempty"`
+	// Iteration is which round of a loop this step is, 1-based, from the loopCounter the
+	// engine binds into the round's own scope (ADR-0077/0133). Zero for an element that
+	// is not one round of a loop, so a plain step carries nothing extra.
+	Iteration          int    `json:"iteration,omitempty"`
+	Position           uint64 `json:"position"`
+	TokenID            uint64 `json:"tokenId,omitempty"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
+	SourceElementID    string `json:"sourceElementId,omitempty"`
+	Action             string `json:"action,omitempty"`
+	Relation           string `json:"relation,omitempty"`
 	// ChildInstanceKey is the process instance a call activity started as its child
 	// (ADR-0076), so the replay view can drill from the caller's call activity into
 	// the child's own replay. Zero for a non-call-activity step, or a call activity
@@ -1553,13 +1558,35 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			label    string
 			endPos   uint64
 		}
+		// A loop body is a scope too. Its rounds do not each get their own copy of the
+		// work: a standard loop holds what the iterations write at the *body* scope, so
+		// each round can read the previous one's result, and only promotes it when the
+		// loop ends (ADR-0133); a multi-instance loop assembles its output collection
+		// there the same way (ADR-0077). Folded like a subprocess scope, that work shows
+		// up while the loop is running and against the round that did it — without this a
+		// finished iteration truthfully reported that nothing had changed in the process
+		// scope, which reads as "this round did nothing".
+		//
+		// The body is identified from the log rather than guessed: every iteration is
+		// activated carrying its body's token as ParentTokenID, so the tokens named that
+		// way *are* the bodies. A loop that never ran an iteration has no such scope, and
+		// nothing to show in it either.
+		loopBodyTokens := map[uint64]struct{}{}
+		for _, rr := range replayRows {
+			if rr.v.Action != 1 || rr.v.ParentTokenID == 0 || !ver.isLoop(rr.pos, rr.v.ElementID) {
+				continue
+			}
+			loopBodyTokens[rr.v.ParentTokenID] = struct{}{}
+		}
 		subScopes := map[uint64]*scopeSpan{}
 		var subScopeList []*scopeSpan
 		for _, rr := range replayRows {
-			if !ver.isType(rr.pos, rr.v.ElementID, compiler.TypeSubProcess) {
+			_, isLoopBody := loopBodyTokens[rr.v.TokenID]
+			isLoopBody = isLoopBody && ver.isLoop(rr.pos, rr.v.ElementID)
+			if !isLoopBody && !ver.isType(rr.pos, rr.v.ElementID, compiler.TypeSubProcess) {
 				continue
 			}
-			if rr.v.Action == 1 { // the subprocess scope opened
+			if rr.v.Action == 1 { // the scope opened
 				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), endPos: noEnd}
 				subScopes[rr.v.ElementInstanceKey] = sp
 				subScopeList = append(subScopeList, sp)
@@ -1696,31 +1723,42 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			emitFrame(last.pos, last.at)
 		}
 
-		// What each element was actually handed: an activity's zeebe:ioMapping inputs are
-		// evaluated into its *activity-local* scope, keyed by the element instance
-		// (ADR-0068). The folds above read the process and subprocess scopes only, so
-		// those values sit on the log but appear nowhere in the timeline — the one thing
-		// an operator asking "what went into this task" most wants. Kept off Variables /
-		// VariablesAfter deliberately: a local belongs to one element instance, and folding
-		// it into the shared running set would leak it onto every concurrent step.
+		// What each element instance was actually handed. Two kinds of value live in an
+		// activity's own scope, keyed by the element instance, and the folds above read
+		// neither: its zeebe:ioMapping inputs, evaluated when the token arrived (ADR-0068),
+		// and — for one round of a loop — that round's 1-based loopCounter and the item it
+		// is running for (ADR-0077/0133). Both sit on the log and appeared nowhere in the
+		// timeline, which is why six activations of the same looping task read as six
+		// identical rows carrying nothing that told them apart.
 		//
-		// Only elements that declare input mappings are scanned, so an instance with none
-		// pays nothing, and only the declared targets are kept — an activity's local scope
-		// also carries values its own behavior parked there (a script result awaiting its
-		// output mapping, a multi-instance loop counter), which are not inputs.
+		// Kept off Variables / VariablesAfter deliberately: a local belongs to one element
+		// instance, and folding it into the shared running set would leak it onto every
+		// concurrent step. The names wanted are listed explicitly rather than taking the
+		// whole scope — a loop *body's* scope also accumulates what its iterations wrote,
+		// which is the loop's result and not an input to any one round — and an element
+		// that declares neither mappings nor a loop is never scanned at all.
 		inputsByEIK := map[uint64][]variableView{}
+		iterationByEIK := map[uint64]int{}
 		for actPos, v := range activations {
 			acp := ver.cp(actPos)
 			if acp == nil {
 				continue // its definition is gone; nothing can say what it declared
 			}
-			ins := acp.IOInputs(v.ElementID)
-			if len(ins) == 0 || v.ElementInstanceKey == 0 {
+			if v.ElementInstanceKey == 0 {
 				continue
 			}
-			targets := make(map[string]struct{}, len(ins))
-			for _, m := range ins {
+			targets := map[string]struct{}{}
+			for _, m := range acp.IOInputs(v.ElementID) {
 				targets[acp.Intern(m.Target)] = struct{}{}
+			}
+			if mi := acp.Node(v.ElementID).MultiInstance; mi >= 0 {
+				targets[engine.LoopCounterVariable] = struct{}{}
+				if d := acp.MultiInstance(mi); d.InputElement >= 0 {
+					targets[acp.Intern(d.InputElement)] = struct{}{}
+				}
+			}
+			if len(targets) == 0 {
+				continue
 			}
 			byName := map[string]variableView{}
 			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
@@ -1740,6 +1778,15 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 			inputsByEIK[v.ElementInstanceKey] = list
+			// The counter is also this step's identity — which round of the loop it is — so
+			// the history can tell repeated activations of one task apart without the
+			// operator reading variable lists. Surfaced as a number of its own rather than
+			// left for the frontend to fish out of the list by name.
+			if lc, ok := byName[engine.LoopCounterVariable]; ok {
+				if n, err := strconv.Atoi(lc.Value); err == nil && n > 0 {
+					iterationByEIK[v.ElementInstanceKey] = n
+				}
+			}
 		}
 
 		// Walk the steps in order, advancing through every variable change at or
@@ -1787,6 +1834,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
 				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
+				step.Iteration = iterationByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).
 				if m, ok := manualByElement[rv.ElementInstanceKey]; ok {
 					mv := m
