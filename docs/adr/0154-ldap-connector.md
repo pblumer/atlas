@@ -1,9 +1,9 @@
 # ADR-0154: Generic LDAP connector
 
-- **Status:** Proposed (amended 2026-08-21 — paging, per-value modify and a
-  client-certificate bind; see the amendment note below)
+- **Status:** Proposed (amended 2026-08-21 — paging, per-value modify, a
+  client-certificate bind and connection pooling; see the amendment note below)
 
-> **Amendment (2026-08-21): hardening.** Three of the follow-ups below are done, and
+> **Amendment (2026-08-21): hardening.** Four of the follow-ups below are done, and
 > two of them change the shape of what the connector does rather than only adding to
 > it.
 >
@@ -42,7 +42,31 @@
 >   TLS added two more, past which a call site is a row of positional booleans nobody
 >   can read.
 >
-> **Still open from the list below:** connection pooling, and a sync/delta cookie. The
+> - **Connections are pooled.** A connection per operation is the right default and
+>   the wrong steady state: a joiner run over a few hundred accounts pays a TCP
+>   handshake, a TLS handshake and a bind for every entry it touches, against a server
+>   that would happily have kept the first connection. `ldap.Pool` sits in front of the
+>   dialer, and the server holds one and closes it at shutdown.
+>
+>   **The key is the whole credential** — URL, STARTTLS, bind DN, bind password, client
+>   certificate, CA — hashed. A connection bound as one identity therefore cannot be
+>   handed to a job asking for another, and a rotated password does not reuse a
+>   connection bound with the old one: the fingerprint moves with it and the stale
+>   entries age out unused. The parts are length-prefixed before hashing so a bind DN
+>   ending where a password begins cannot collide with the other split of the same
+>   bytes.
+>
+>   **Any error retires the connection.** LDAP does not reliably distinguish "your
+>   filter was wrong" from "this socket is gone", and betting a later job on the
+>   difference is not worth the saved handshake. **The pool also does not retry**: a
+>   connection the server closed while it sat idle fails its next operation, and that
+>   job takes the ordinary retry-then-incident path (ADR-0061). Retrying inside the
+>   connector would mean re-sending a write whose outcome is unknown, which is a worse
+>   failure than the one it would paper over. The idle window is 30 seconds for the
+>   same reason — long enough to carry a burst, short enough that the stale case stays
+>   rare.
+>
+> **Still open from the list below:** a sync/delta cookie. The
 > delta read is not one feature but two vendor protocols — DirSync for Active
 > Directory, RFC 4533 content sync elsewhere — and the AD half belongs with the AD
 > connector for the reason [ADR-0166](0166-active-directory-connector.md) gives:
