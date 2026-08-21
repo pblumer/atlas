@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -229,5 +230,106 @@ func TestStandardLoopWithInputMappingPromotesWhatItWrote(t *testing.T) {
 	snaps := variableSnapshots(t, h.store, instanceKey(t, h))
 	if len(snaps) == 0 || snaps[len(snaps)-1] != "total=3" {
 		t.Errorf("instance-scope variable history = %v, want it to end at total=3 (the last run's result escapes the loop)", snaps)
+	}
+}
+
+// stdLoopOutputProcess builds start → work → end, where work is a service task with a
+// standard loop capped at max and one *output* mapping, gesamt = ergebnis — the value
+// each round's worker reports.
+func stdLoopOutputProcess(t *testing.T, max int32) (*compiler.CompiledProcess, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(1, "loop-out", 1)
+	start := b.AddStartEvent()
+	work := b.AddServiceTask("loopoutwork", 3)
+	b.SetStandardLoop(work, false, max, nil)
+	b.AddOutputMapping(work, "gesamt", mustCompile(t, "ergebnis"))
+	end := b.AddEndEvent()
+	b.Connect(start, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ServiceTask(cp.Node(work).Detail).JobType
+}
+
+// TestStandardLoopWithOutputMappingWritesOnlyRealResults checks that the loop *body*
+// does not re-run the activity's output mappings. Each round evaluates them over its own
+// scope, where its raw result is, and promotes the value (ADR-0068/ADR-0133); evaluating
+// them a second time over the body scope — which holds no round's raw result — yielded
+// null, and wrote that null into the process before the real value landed on top of it.
+// A variable no run produced has no business in the process or on its replay.
+func TestStandardLoopWithOutputMappingWritesOnlyRealResults(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, jobType := stdLoopOutputProcess(t, 3)
+
+	rounds := runLoopRounds(t, h, cp, jobType, 10, func(round int, jobKey uint64) []model.VariableValue {
+		return []model.VariableValue{{Name: "ergebnis", Kind: model.VarNumber, Text: strconv.Itoa(round * 100)}}
+	})
+	if rounds != 3 {
+		t.Fatalf("rounds = %d, want 3", rounds)
+	}
+	// Exactly one write at the instance scope: the last round's mapped result.
+	snaps := variableSnapshots(t, h.store, instanceKey(t, h))
+	if len(snaps) != 1 || snaps[0] != "gesamt=300" {
+		t.Errorf("instance-scope variable history = %v, want exactly [gesamt=300]", snaps)
+	}
+}
+
+// TestMultiInstanceOutputMappingLeavesTheProcessAlone is the sharp edge of the same
+// defect: a multi-instance activity's output mapping belongs to one iteration, so its
+// value stays scoped to the loop (collect across rounds with an output collection). The
+// body re-evaluating the mapping wrote a null over whatever the process already held
+// under that name — here a value the loop never touched.
+func TestMultiInstanceOutputMappingLeavesTheProcessAlone(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(1, "mi-out", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[10, 20, 30]"), "items")
+	work := b.AddServiceTask("mioutwork", 3)
+	b.SetMultiInstance(work, true /*sequential*/, "item", "", mustCompile(t, "items"), nil, nil, nil)
+	b.AddOutputMapping(work, "zusammen", mustCompile(t, "item * 2"))
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "zusammen", Kind: model.VarNumber, Text: "5"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	for i := 0; i < 6; i++ {
+		jobs := activatableJobs(t, h.store, jobType)
+		if len(jobs) == 0 {
+			break
+		}
+		p.CompleteJob(jobs[0])
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle: %v", err)
+		}
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after the loop: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	var writes []string
+	for _, snap := range variableSnapshots(t, h.store, instanceKey(t, h)) {
+		if strings.HasPrefix(snap, "zusammen=") {
+			writes = append(writes, snap)
+		}
+	}
+	if len(writes) != 1 || writes[0] != "zusammen=5" {
+		t.Errorf("instance-scope writes of zusammen = %v, want only the start value [zusammen=5]", writes)
 	}
 }
