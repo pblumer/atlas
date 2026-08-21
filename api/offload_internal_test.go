@@ -142,3 +142,25 @@ func TestOffloadingIgnoresBlankEntries(t *testing.T) {
 		}
 	})
 }
+
+// TestEveryDefaultOffloadedKindNeedsNoCredential is the safety property behind
+// making the default opt-out. A supervised worker inherits this process's
+// environment but not its connector store, so a kind whose endpoint and password
+// live in that store would be handed to a worker that cannot serve it — every task
+// of that kind would fail on a server nobody had configured for it. The default set
+// must therefore hold only kinds with nothing to configure.
+func TestEveryDefaultOffloadedKindNeedsNoCredential(t *testing.T) {
+	managed := map[string]bool{}
+	for _, k := range managedConnectorKinds {
+		managed[k.name] = true
+	}
+	for _, kind := range DefaultOffloadedKinds() {
+		if _, ok := offloadableKinds[kind]; !ok {
+			t.Errorf("default kind %q is not offloadable at all", kind)
+		}
+		if managed[kind] {
+			t.Errorf("default kind %q is managed: its credentials live in the connector store, "+
+				"which a supervised worker cannot read", kind)
+		}
+	}
+}

@@ -202,7 +202,8 @@ func runServe(args []string) error {
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
-	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for an external worker instead (ADR-0168). An unknown kind is refused at startup rather than ignored")
+	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for a worker instead (ADR-0168). Adds to the default set unless --in-process-connectors turns that off. A kind whose credentials live in this server's connector store needs its secret moved to the worker too, so those are never defaulted. An unknown kind is refused at startup rather than ignored")
+	inProcess := fs.Bool("in-process-connectors", false, "run every connector inside the engine, as before ADR-0164. Off by default: the credential-free kinds ("+strings.Join(api.DefaultOffloadedKinds(), ", ")+") run in a worker this server starts and supervises itself, so the loop cannot stall behind them and trying Atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
@@ -223,7 +224,7 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload))
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), *inProcess)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -272,7 +273,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds []string) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds []string, inProcessConnectors bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -419,14 +420,28 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		}
 		apiOpts = append(apiOpts, api.WithScriptWorker(lang.JobType, ex))
 	}
-	if len(offloadKinds) > 0 {
-		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
-	}
 	// Workers this server runs itself (ADR-0157 step 7). The configuration comes from
 	// this command line and from nowhere else: the API can restart one of these, and
 	// can neither introduce a worker nor name a command.
-	if len(supervise) > 0 {
-		specs, handles := supervise.build()
+	specs, handles := supervise.build()
+
+	// ADR-0164's default, opt-out: the credential-free connector kinds run in a worker
+	// this server starts, so the engine's loop cannot stall behind them and somebody
+	// trying Atlas configures nothing to get there. --in-process-connectors returns to
+	// the old arrangement wholesale; --offload-connectors adds credential-bearing
+	// kinds on top, once their secrets have been moved to a worker.
+	if !inProcessConnectors {
+		defaults := api.DefaultOffloadedKinds()
+		offloadKinds = append(defaults, offloadKinds...)
+		specs = append(specs, api.SuperviseSpec{
+			ID: "connectors", Kinds: defaults, Connectors: defaults,
+		})
+		handles = append(handles, nil)
+	}
+	if len(offloadKinds) > 0 {
+		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
+	}
+	if len(specs) > 0 {
 		apiOpts = append(apiOpts, api.WithSupervisedWorkers(selfURL(addr), specs, handles))
 	}
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
@@ -649,9 +664,7 @@ func runWorker(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(builtin.Handlers) != len(kinds) {
-		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv, mail, rest, script, webscrape), got %q", *connectors)
-	}
+
 	if len(handles) == 0 && len(builtin.Handlers) == 0 {
 		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")
 	}

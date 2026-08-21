@@ -97,6 +97,9 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
 			})
+		default:
+			return Connectors{}, fmt.Errorf("worker: --connector names a kind this worker does not implement: %q (have: %s)",
+				kind, strings.Join(KnownConnectorKinds(), ", "))
 		}
 	}
 	sort.Strings(built.Names)
@@ -115,6 +118,13 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 type Connectors struct {
 	Handlers map[string]Exec
 	Names    []string
+}
+
+// KnownConnectorKinds are the kinds [BuiltinConnectors] implements, for the error a
+// misspelling produces. A kind may serve several job types — script serves one per
+// language — which is why a caller must not check this by counting handlers.
+func KnownConnectorKinds() []string {
+	return []string{"csv", "mail", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

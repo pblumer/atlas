@@ -276,6 +276,22 @@ var offloadableKinds = map[string][]int32{
 	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
 }
 
+// DefaultOffloadedKinds are the connector kinds Atlas moves onto a worker of its
+// own accord, and supervises a worker for. It is the opt-out half of ADR-0164:
+// somebody trying Atlas gets the out-of-process architecture without configuring
+// anything, because the engine starts the worker itself.
+//
+// The set is exactly the kinds that need **no credential**. A supervised worker is a
+// child of this process and inherits its environment, but not its connector store —
+// where a managed kind's endpoint and password actually live (ADR-0036/0041). Moving
+// mail here would hand every mail task to a worker with no mailbox to send through,
+// so the credential-bearing kinds stay in the engine until an operator moves the
+// secret too, with --offload-connectors.
+//
+// What each of these needs is something a worker has by being a separate process:
+// a CPU for a script, network reach for a scrape, neither for a CSV parse.
+func DefaultOffloadedKinds() []string { return []string{"csv", "script", "webscrape"} }
+
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
 // moved to a worker, after every registration path has run. Doing it as a removal
 // rather than a condition at each site is what makes it impossible to miss one.

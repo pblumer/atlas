@@ -56,6 +56,9 @@ const (
 type SuperviseSpec struct {
 	ID    string
 	Kinds []string
+	// Connectors are built-in connector kinds this worker serves (--connector on the
+	// child). A worker may serve these, model-authored job types, or both.
+	Connectors []string
 }
 
 // childStatus is one supervised worker as the console sees it.

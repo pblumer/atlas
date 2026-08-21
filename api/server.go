@@ -1143,6 +1143,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			for _, h := range s.superviseHandles[i] {
 				args = append(args, "--handle", h)
 			}
+			// A supervised worker may also serve built-in connector kinds. It is a
+			// child of this process, so it inherits the environment any of them read
+			// their configuration from — which is what makes the default set below
+			// work with nothing configured at all.
+			if len(spec.Connectors) > 0 {
+				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
+			}
 			s.supervisor.add(spec, args)
 		}
 		s.supervisor.start()
