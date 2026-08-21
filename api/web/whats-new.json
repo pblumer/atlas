@@ -1,6 +1,105 @@
 {
-  "generatedAt": "2026-08-20",
+  "generatedAt": "2026-08-19",
   "entries": [
+    {
+      "id": "a-connector-says-what-it-is-for-and-deleting-one-that-models",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A connector says what it is for, and deleting one that models use is refused",
+        "de": "A connector says what it is for, and deleting one that models use is refused"
+      },
+      "summary": {
+        "en": "Each connector now shows which processes use it and how many instances are running on them, and deleting one that is still in use is refused instead of quietly breaking those processes.",
+        "de": "Jeder Connector zeigt jetzt, welche Prozesse ihn nutzen und wie viele Instanzen darauf laufen. Einen noch benutzten Connector zu löschen wird abgelehnt, statt diese Prozesse stillschweigend lahmzulegen."
+      },
+      "link": {
+        "label": "ADR-0163",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0163-deleting-a-referenced-connector.md"
+      },
+      "tags": [
+        "Organization",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organisation öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "the-connector-behind-an-incident-can-be-reconfigured-from-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The connector behind an incident can be reconfigured from the incident",
+        "de": "The connector behind an incident can be reconfigured from the incident"
+      },
+      "summary": {
+        "en": "When a step is stuck because the system it calls is unreachable, you can now fix that connector directly from the incident — test the connection, save, and retry in one place. The change takes effect immediately, no redeploy.",
+        "de": "Wenn ein Schritt hängt, weil das angesprochene System nicht erreichbar ist, können Sie den Connector jetzt direkt aus dem Incident heraus korrigieren — Verbindung testen, speichern und erneut versuchen an einer Stelle. Die Änderung wirkt sofort, ohne erneutes Deployment."
+      },
+      "link": {
+        "label": "ADR-0160",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
+      },
+      "tags": [
+        "Operations",
+        "Connectors"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Incidents and find the stuck incident.",
+          "Click ⚙ Connector… — its configuration opens prefilled, with the reason it failed.",
+          "Correct the settings, use Test connection, then Save & retry."
+        ],
+        "de": [
+          "Öffnen Sie Betrieb › Incidents und suchen Sie den hängenden Incident.",
+          "Klicken Sie auf ⚙ Connector… — die Konfiguration öffnet sich vorausgefüllt, samt Fehlergrund.",
+          "Einstellungen korrigieren, Verbindung testen, dann Speichern & erneut versuchen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Incidents",
+          "de": "Incidents öffnen"
+        },
+        "route": "#/operations/incidents"
+      }
+    },
+    {
+      "id": "a-stored-connector-has-a-real-edit-form",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A stored connector has a real edit form",
+        "de": "A stored connector has a real edit form"
+      },
+      "summary": {
+        "en": "Editing a connector now uses a proper form showing only the fields that kind actually needs — including the enabled switch and the connection test — instead of two generic prompt boxes.",
+        "de": "Einen Connector zu bearbeiten läuft jetzt über ein richtiges Formular mit genau den Feldern, die diese Art tatsächlich braucht — inklusive Aktiv-Schalter und Verbindungstest — statt über zwei generische Eingabeboxen."
+      },
+      "link": {
+        "label": "ADR-0160",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
+      },
+      "tags": [
+        "Organization",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organisation öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
     {
       "id": "a-parked-connector-task-now-says-what-is-actually-wrong",
       "version": "Unreleased",
@@ -262,96 +361,6 @@
       "tags": [
         "Operations"
       ]
-    },
-    {
-      "id": "the-instances-overview-flags-what-is-stuck",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The Instances overview flags what is stuck",
-        "de": "The Instances overview flags what is stuck"
-      },
-      "summary": {
-        "en": "The Instances overview now flags, per process, how many instances are stuck behind an unresolved incident, so you see where to look first.",
-        "de": "Die Instanzen-Übersicht kennzeichnet jetzt pro Prozess, wie viele Instanzen hinter einem ungelösten Incident hängen — so sehen Sie, wo Sie zuerst hinschauen müssen."
-      },
-      "link": {
-        "label": "ADR-0151",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0151-incidents-beyond-the-live-diagram.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-incidents-table-s-instance-link-works",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The incidents table's instance link works",
-        "de": "The incidents table's instance link works"
-      },
-      "summary": {
-        "en": "The link from the incidents table now opens the right instance, so you land on the process that is actually stuck.",
-        "de": "Der Link aus der Incidents-Tabelle öffnet jetzt die richtige Instanz — Sie landen beim tatsächlich hängenden Prozess."
-      },
-      "link": {
-        "label": "ADR-0151",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0151-incidents-beyond-the-live-diagram.md"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "import-microsoft-identity-manager-mim-fim-workflows-as-bpmn",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN",
-        "de": "Import Microsoft Identity Manager (MIM/FIM) workflows as BPMN"
-      },
-      "summary": {
-        "en": "You can now import Microsoft Identity Manager (MIM/FIM) workflows straight into the Modeler and turn them into editable BPMN — no manual redrawing.",
-        "de": "Sie können jetzt Microsoft-Identity-Manager-Workflows (MIM/FIM) direkt in den Modeler importieren und in bearbeitbares BPMN umwandeln — kein manuelles Nachzeichnen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler.",
-          "Choose the MIM/FIM import and pick your exported workflow XML.",
-          "Review the generated BPMN, then deploy it like any other model."
-        ],
-        "de": [
-          "Öffnen Sie den Modeler.",
-          "Wählen Sie den MIM/FIM-Import und Ihre exportierte Workflow-XML.",
-          "Prüfen Sie das erzeugte BPMN und deployen Sie es wie jedes andere Modell."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
