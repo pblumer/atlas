@@ -1956,6 +1956,11 @@ function withRetries(kind) {
 const SERVICE_TASK_KINDS = [
   {
     id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
+    // outOfProcess marks the kinds Atlas does NOT execute itself. The polarity is
+    // deliberate: every other kind today runs inside the engine, and a kind that
+    // later gains a worker sets this rather than being remembered as an exception
+    // in a list somewhere else (ADR-0164).
+    outOfProcess: true,
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
@@ -2421,7 +2426,9 @@ function stKindRowsHTML(kinds, curId) {
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b>${runsInEngine(k)
+        ? `<span class="stkind-inengine" title="Atlas runs this kind itself. Work that can fail slowly belongs on a worker (ADR-0164).">in&#8209;engine</span>` : ""}<br>
+        <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
 }
 
@@ -2491,6 +2498,23 @@ function stKindFieldsHTML(cur, ext) {
 // (data-standalone-group keeps it a sibling instead of being folded into the Type group),
 // and keep a real <h3> only for a kind whose fields live directly under it (Job worker),
 // where the heading does have content to collapse.
+// runsInEngine reports whether Atlas executes a catalog kind itself. Everything
+// except the plain job worker does, today (ADR-0164): the engine's own process
+// makes the call, so its latency and its failures are the engine's.
+function runsInEngine(k) { return !k.outOfProcess; }
+
+// inEngineNoticeHTML is the deprecation notice for a kind Atlas runs itself
+// (ADR-0164). It says it where the choice is actually made — the Workers view can
+// only report the consequence afterwards — and it says what to do instead rather
+// than only that something is discouraged.
+function inEngineNoticeHTML(cur) {
+  if (!runsInEngine(cur)) return "";
+  return `<p class="stkind-notice">Atlas runs this kind <b>in its own process</b>, so this call&rsquo;s
+    latency and failures are the engine&rsquo;s. New models should prefer a <b>Job worker</b> and an
+    <code>atlas worker</code> serving that job type; these kinds keep working and are being moved out
+    of the engine.</p>`;
+}
+
 function stKindHeadingHTML(cur) {
   const fields = cur.fields || [];
   // Fields listed before the kind's first group have no group of their own (the Job
@@ -2515,7 +2539,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${inEngineNoticeHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task

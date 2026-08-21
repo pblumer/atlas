@@ -23,9 +23,18 @@ const (
 	srcEnv  = "ATLAS_SCRIPT" // the author's script source
 )
 
-// defaultTimeout bounds a single script's wall-clock runtime when Timeout is
-// unset. A runaway or blocking script (an infinite loop, a hung network call) is
-// killed at the deadline so it cannot pin the worker; the job then stays pending.
+// defaultTimeout bounds a single script's wall-clock runtime when Timeout is unset.
+// A runaway or blocking script (an infinite loop, a hung network call) is killed at
+// the deadline so it cannot pin the worker; the job then stays pending.
+//
+// It is deliberately larger than [nettimeout.Default], and the difference is now a
+// decision rather than an accident. ADR-0156 listed unifying them as a follow-up,
+// on the grounds that both were charged to the same goroutine — which ADR-0157 step
+// 6 removed. They bound different things: a connector call is one request to an
+// endpoint that is supposed to be fast, while a script is the customer's own code,
+// which may legitimately compute for a while and no longer holds anything but its
+// own slot in the round. What both share is that neither may run unbounded, because
+// a token parked in silence is worse than a job that fails visibly.
 const defaultTimeout = 30 * time.Second
 
 // Lang describes how to run one scripting language: the reserved job type its

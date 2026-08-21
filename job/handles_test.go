@@ -27,3 +27,49 @@ func TestHandlesReportsRegisteredJobTypes(t *testing.T) {
 		t.Error("Handles(9) = true for a job type nothing registered, want false")
 	}
 }
+
+// TestUnhandleParksAJobForAnExternalWorker is the mechanism behind
+// --offload-connectors. The assertion that matters is not that Handles flips but
+// that Claim stops collecting the type: a runner that still claimed it would work
+// the job in the engine while an external worker was also allowed to lease it, which
+// is the double-work the refusal exists to prevent.
+func TestUnhandleParksAJobForAnExternalWorker(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	r.Handle(jobType, func(state.Reader) job.Handler { return func(job.Job) error { return nil } })
+
+	p.CreateInstance(defKey)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	claimed, err := r.Claim()
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("claimed %d jobs while handling the type, want 1", len(claimed))
+	}
+
+	r.Unhandle(jobType)
+	if r.Handles(jobType) {
+		t.Error("Handles is still true after Unhandle, so the pull would refuse an external worker")
+	}
+	claimed, err = r.Claim()
+	if err != nil {
+		t.Fatalf("Claim after Unhandle: %v", err)
+	}
+	if len(claimed) != 0 {
+		t.Errorf("claimed %d jobs after Unhandle, want none — the job must park for an external worker", len(claimed))
+	}
+}
+
+// Unhandling a type nothing registered is a no-op rather than an error: the server
+// applies the operator's list in one pass over every kind, and a kind whose handler
+// was never registered (an optional one left off) must not fail that pass.
+func TestUnhandleIsHarmlessForATypeNothingRegistered(t *testing.T) {
+	r := job.NewRunner(nil, nil)
+	r.Unhandle(11)
+	if r.Handles(11) {
+		t.Error("Handles(11) = true after unhandling a type nothing registered")
+	}
+}

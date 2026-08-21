@@ -87,53 +87,23 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 	}
 }
 
-// rowsFromConnector runs a CSV-to-JSON connector task (ADR-0139): it reads the raw
-// text from the authored source variable up the task's scope chain, builds the column
-// layout from the compiled detail (delimiter, header flag, columns), parses it with
-// the same parser the endpoint uses, and returns the JSON rows under the authored
-// result variable plus rowCount. Source/result/delimiter default to csvText/rows/","
-// when unset; an empty column list derives the columns from the header row.
+// rowsFromConnector runs a CSV-to-JSON connector task (ADR-0139) in process. It is
+// the same two steps a worker takes — [Resolve] the task into plain values, then
+// [Run] them — so the in-process path and an out-of-process one cannot disagree
+// about defaults, validation, or what a headerless file's column list means
+// (ADR-0168).
 func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) ([]model.VariableValue, error) {
-	if detail == nil {
-		return nil, fmt.Errorf("csv-import: connector task has no detail")
-	}
-	vars, err := scopeChainVars(store, elementInstanceKey)
-	if err != nil {
-		return nil, fmt.Errorf("csv-import: read variables: %w", err)
-	}
-	sourceName := cp.Intern(detail.CsvSource)
-	if sourceName == "" {
-		sourceName = csvSourceVar
-	}
-	text, ok := vars[sourceName]
-	if !ok || text.Kind != model.VarString || text.Text == "" {
-		return nil, fmt.Errorf("csv-import: source variable %q is missing or not a non-empty string", sourceName)
-	}
-	hasHeader := detail.CsvHasHeader
-	cfg := Config{
-		Delimiter: cp.Intern(detail.CsvDelimiter),
-		HasHeader: &hasHeader,
-	}
-	for _, ci := range detail.CsvColumns {
-		if name := cp.Intern(ci); name != "" {
-			cfg.Columns = append(cfg.Columns, Column{Name: name})
-		}
-	}
-	rows, err := ParseRows(cfg, []byte(text.Text))
-	if err != nil {
-		return nil, fmt.Errorf("csv-import: %v", err)
-	}
-	rowsJSON, err := rowsToJSON(rows)
+	j, err := Resolve(store, cp, detail, elementInstanceKey)
 	if err != nil {
 		return nil, err
 	}
-	resultName := cp.Intern(detail.CsvResult)
-	if resultName == "" {
-		resultName = csvRowsVar
+	res, err := Run(j)
+	if err != nil {
+		return nil, err
 	}
 	return []model.VariableValue{
-		{Name: resultName, Kind: model.VarJSON, Text: rowsJSON},
-		{Name: csvRowCountVar, Kind: model.VarNumber, Text: strconv.Itoa(len(rows))},
+		{Name: res.ResultVariable, Kind: model.VarJSON, Text: res.RowsJSON},
+		{Name: csvRowCountVar, Kind: model.VarNumber, Text: strconv.Itoa(res.RowCount)},
 	}, nil
 }
 
