@@ -251,7 +251,7 @@ func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
 		api.WithOffloadedConnectorKinds([]string{"csv"}))
 
 	w := worker.New(worker.Options{
-		Server: ts.URL, ID: "csv-1", Handlers: worker.BuiltinConnectors("csv"),
+		Server: ts.URL, ID: "csv-1", Handlers: mustConnectors(t, "csv"),
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -282,8 +282,12 @@ func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
 // A worker asked for a connector kind it does not implement is a configuration
 // error, not a process that leases work it cannot do.
 func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
-	if got := worker.BuiltinConnectors("no-such-kind"); len(got) != 0 {
-		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got))
+	got, err := worker.BuiltinConnectors(nil, "no-such-kind")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(got.Handlers) != 0 {
+		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got.Handlers))
 	}
 }
 
@@ -291,7 +295,7 @@ func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
 // engine's retry and then an incident. A worker that completed the job with zero
 // rows would turn a broken upload into a silently empty import.
 func TestOffloadedCsvReportsAParseFailure(t *testing.T) {
-	run := worker.BuiltinConnectors("csv")[compiler.CsvImportJobType]
+	run := mustConnectors(t, "csv")[compiler.CsvImportJobType]
 	_, err := run.Run(context.Background(), worker.Job{
 		JobKey: 1, Type: compiler.CsvImportJobType,
 		Connector: &worker.ConnectorPayload{
@@ -571,7 +575,7 @@ func TestCmdExecSurfacesAFailureWithNoStderr(t *testing.T) {
 // kind were served without the payload the message must point at the server's
 // configuration rather than at the file.
 func TestOffloadedCsvNeedsTheResolvedDetail(t *testing.T) {
-	run := worker.BuiltinConnectors("csv")[compiler.CsvImportJobType]
+	run := mustConnectors(t, "csv")[compiler.CsvImportJobType]
 	_, err := run.Run(context.Background(), worker.Job{JobKey: 1, Type: compiler.CsvImportJobType})
 	if err == nil {
 		t.Fatal("a CSV job with no connector detail succeeded")
@@ -584,7 +588,7 @@ func TestOffloadedCsvNeedsTheResolvedDetail(t *testing.T) {
 // Detail the worker cannot read is reported as such, rather than being parsed as an
 // empty job that would import zero rows and complete as if it had worked.
 func TestOffloadedCsvRejectsDetailItCannotRead(t *testing.T) {
-	run := worker.BuiltinConnectors("csv")[compiler.CsvImportJobType]
+	run := mustConnectors(t, "csv")[compiler.CsvImportJobType]
 	_, err := run.Run(context.Background(), worker.Job{
 		JobKey: 1, Type: compiler.CsvImportJobType,
 		Connector: &worker.ConnectorPayload{
@@ -614,4 +618,14 @@ func TestWorkerReportsAServerAddressItCannotUse(t *testing.T) {
 	if err := w.RunOnce(context.Background()); err == nil {
 		t.Error("RunOnce against an unusable server address succeeded, want an error")
 	}
+}
+
+// mustConnectors builds the built-in handlers for kinds that need no configuration.
+func mustConnectors(t *testing.T, kinds ...string) map[string]worker.Exec {
+	t.Helper()
+	execs, err := worker.BuiltinConnectors(nil, kinds...)
+	if err != nil {
+		t.Fatalf("BuiltinConnectors(%v): %v", kinds, err)
+	}
+	return execs.Handlers
 }

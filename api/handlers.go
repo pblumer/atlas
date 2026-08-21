@@ -16,6 +16,7 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -4248,6 +4249,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// WaitMs long-polls: how long to hold the request open waiting for a job of
 		// this type before answering empty. 0 (or absent) answers immediately.
 		WaitMs int64 `json:"waitMs"`
+		// Connectors names the connector configurations this worker holds — the
+		// providers it can actually reach. Only the worker knows this: once a kind is
+		// offloaded the engine holds no credential for it and cannot read another
+		// process's environment. Reporting it here is what lets the Workers view say
+		// which names deployed models reference and *nothing* can serve (ADR-0168).
+		Connectors []string `json:"connectors,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -4331,6 +4338,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				jobs = append(jobs, j)
 			}
 			s.workers.leased(body.Worker, body.Type, len(jobs))
+			// Recorded on every poll, not just a productive one: an idle worker still
+			// holds its connectors, and it is exactly the idle case an operator is
+			// looking at when work is not moving.
+			s.workers.holdsConnectors(body.Worker, body.Connectors)
 		})
 	}
 
@@ -4404,7 +4415,7 @@ type connectorPayload struct {
 //
 // Runs on the run-loop goroutine, which is where the store and the deployment
 // registry are readable.
-func (s *Server) resolveConnectorTask(jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
+func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
 	node := cp.Node(ei.ElementId)
 	if node.Type != compiler.TypeConnectorTask {
 		return nil // a plain job-worker task: nothing authored to resolve
@@ -4420,6 +4431,18 @@ func (s *Server) resolveConnectorTask(jv *model.JobValue, ei *model.ElementInsta
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
 			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
+		}}
+	case compiler.MailJobTypeIndex:
+		// The message travels; the SMTP host and password do not. What names the
+		// credential is the connector's name, which the worker resolves against its
+		// own configuration — the whole of ADR-0168's decision, in one field.
+		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "mail", Fields: map[string]any{
+			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
+			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
 		}}
 	}
 	return nil
@@ -4460,7 +4483,7 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 		j.ProcessDefKey = ei.ProcessDefKey
 		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
 			j.ElementID = d.cp.ElementBpmnId(ei.ElementId)
-			j.Connector = s.resolveConnectorTask(jv, ei, d.cp)
+			j.Connector = s.resolveConnectorTask(jobKey, jv, ei, d.cp)
 		}
 	}
 	// The task's own scope chain, so an input mapping shadows the instance value.
