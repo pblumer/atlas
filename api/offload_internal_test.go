@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -141,4 +142,46 @@ func TestOffloadingIgnoresBlankEntries(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestEveryDefaultOffloadedKindCanBeServedByItsWorker is the safety property behind
+// making the default opt-out. A supervised worker inherits this process's environment
+// but not its connector store, so a managed kind — whose endpoint and password live
+// in that store — can only be defaulted if the engine hands that configuration to the
+// child at spawn. Default a managed kind the engine does not provision and every task
+// of it fails on a worker nobody configured, which is the one outcome the opt-out
+// default must never produce.
+func TestEveryDefaultOffloadedKindCanBeServedByItsWorker(t *testing.T) {
+	managed := map[string]bool{}
+	for _, k := range managedConnectorKinds {
+		managed[k.name] = true
+	}
+	provisioned := (&Server{}).provisionedConnectorKinds()
+	for _, kind := range DefaultOffloadedKinds() {
+		if _, ok := offloadableKinds[kind]; !ok {
+			t.Errorf("default kind %q is not offloadable at all", kind)
+		}
+		if _, handed := provisioned[kind]; managed[kind] && !handed {
+			t.Errorf("default kind %q is managed but not provisioned: its credentials live in the "+
+				"connector store, which a supervised worker cannot read and is not handed", kind)
+		}
+	}
+}
+
+// The check above is only worth anything if it could fail, and it could not if every
+// managed kind were provisioned. Naming the ones that are not is what keeps it a
+// real constraint rather than a tautology that grew one.
+func TestSomeManagedKindsAreStillNotProvisioned(t *testing.T) {
+	provisioned := (&Server{}).provisionedConnectorKinds()
+	var unprovisioned []string
+	for _, k := range managedConnectorKinds {
+		if _, handed := provisioned[k.name]; !handed {
+			unprovisioned = append(unprovisioned, k.name)
+		}
+	}
+	if len(unprovisioned) == 0 {
+		t.Fatal("every managed kind is provisioned, so the default-set check can no longer fail; " +
+			"give it something else to hold, or drop it")
+	}
+	t.Logf("managed kinds a supervised worker is not handed: %s", strings.Join(unprovisioned, ", "))
 }

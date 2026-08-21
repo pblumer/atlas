@@ -276,6 +276,32 @@ var offloadableKinds = map[string][]int32{
 	"script":                {compiler.PwshJobTypeIndex, compiler.PythonJobTypeIndex, compiler.JsJobTypeIndex},
 }
 
+// DefaultOffloadedKinds are the connector kinds Atlas moves onto a worker of its
+// own accord, and supervises a worker for. It is the opt-out half of ADR-0164:
+// somebody trying Atlas gets the out-of-process architecture without configuring
+// anything, because the engine starts the worker itself.
+//
+// A kind belongs here when a supervised worker can actually serve it, which is true
+// two ways. Most of these need **no credential** at all: what each of them needs is
+// something a worker has by being a separate process — a CPU for a script, network
+// reach for a scrape, neither for a CSV parse.
+//
+// Mail is the other way, and the reason the set is not simply "the unmanaged kinds".
+// Its endpoint and password live in the connector store rather than the environment
+// (ADR-0036/0041), so for as long as a child only inherited the environment, moving
+// mail here would have handed every mail task to a worker with no mailbox. The engine
+// now writes that configuration into the child's environment at spawn (see
+// superviseEnv), which is the operator setting the worker up, done by the program —
+// so mail is served, and it is served by the process that should be waiting on an
+// SMTP handshake. Every managed kind here must be one superviseEnv provisions;
+// TestEveryDefaultOffloadedKindCanBeServedByItsWorker holds that.
+//
+// The credential-bearing kinds the engine cannot yet hand over stay in the engine
+// until an operator moves their secrets themselves, with --offload-connectors.
+func DefaultOffloadedKinds() []string {
+	return []string{"csv", connectorKindMail, "script", "webscrape"}
+}
+
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
 // moved to a worker, after every registration path has run. Doing it as a removal
 // rather than a condition at each site is what makes it impossible to miss one.

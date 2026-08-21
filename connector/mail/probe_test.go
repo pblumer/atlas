@@ -64,11 +64,12 @@ func TestGraphProbeReportsARejectedClientSecret(t *testing.T) {
 }
 
 func TestPreviewProbeIsReadyWithoutANetwork(t *testing.T) {
-	c := NewPreviewClient(NewOutbox(0), "trial", "bot@x")
+	box := NewOutbox(0)
+	c := NewPreviewClient(box, "trial", "bot@x")
 	if err := Probe(context.Background(), c); err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
-	if n := c.outbox.Len(); n != 0 {
+	if n := box.Len(); n != 0 {
 		t.Errorf("the check delivered %d message(s), want none", n)
 	}
 	if err := Probe(context.Background(), NewPreviewClient(nil, "trial", "bot@x")); err == nil {

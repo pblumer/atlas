@@ -58,40 +58,21 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("rest: %w", err)
 		}
-		method := cp.Intern(detail.Method)
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: the url/header/query FEEL values and
-		// the request body all evaluate against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
-		if err != nil {
-			return nil, fmt.Errorf("rest: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		url := resolveValue(detail.Url, scope, scopeVars)
-		headers, err := applyAuth(context.Background(), resolveKVs(detail.Headers, scope, scopeVars), cp.Intern(detail.Auth), secret, tokens)
+		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
+		// changes only whose secret store is in reach, never what a resolved REST
+		// task means.
+		resolved, err := Resolve(store, cp, detail, ei.ProcessInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		query := resolveKVs(detail.Query, scope, scopeVars)
-		var body map[string]any
-		if methodHasBody(method) {
-			body = bodyFromVars(scopeVars)
-		}
-		resp, err := client.Do(context.Background(), Request{
-			Method:         method,
-			URL:            url,
-			Headers:        headers,
-			Query:          query,
-			Body:           body,
-			IdempotencyKey: strconv.FormatUint(j.Key, 10),
-		})
+		res, err := Run(context.Background(), resolved, client, secret, tokens)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
+		if res.ResultVariable == "" {
 			return nil, nil // the model discards the response
 		}
-		return []model.VariableValue{responseVariable(resultVar, resp.Body)}, nil
+		return []model.VariableValue{responseVariable(res.ResultVariable, res.Body)}, nil
 	}
 }
 

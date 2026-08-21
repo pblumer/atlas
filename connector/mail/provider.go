@@ -35,13 +35,15 @@ const (
 //
 // Name and Outbox serve the preview provider (ADR-0150), which delivers into the
 // server's outbox under the connector's own name; every other provider ignores them.
+// Outbox is a [Sink] rather than the concrete outbox because a mail worker runs in
+// another process and delivers back over the wire (ADR-0168).
 type ProviderConfig struct {
 	Provider string
 	Endpoint string
 	Sender   string
 	Secret   string
 	Name     string
-	Outbox   *Outbox
+	Outbox   Sink
 }
 
 // NewProviderClient builds the mail client for a managed connector, dispatching on its

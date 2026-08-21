@@ -3,6 +3,8 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -40,16 +42,41 @@ func TestMailWorkerHoldsItsOwnCredential(t *testing.T) {
 	}
 }
 
-// A worker told to serve mail but given no mail connector would lease every mail job
-// and fail it. That is a configuration mistake, and it is caught at startup where
-// the operator is still looking, rather than in an incident an hour later.
-func TestMailWorkerWithNoConfiguredConnectorIsRefusedAtStartup(t *testing.T) {
-	_, err := worker.BuiltinConnectors(fakeEnv(nil), "mail")
-	if err == nil {
-		t.Fatal("a mail worker with no configured connector started anyway")
+// A worker told to serve mail but given no mail connector must not lease every mail
+// job and fail it. It does not subscribe to mail at all, so those tasks wait for a
+// worker that can actually send them — and it says so, because "mail is not served
+// here" is the answer to why one is waiting.
+//
+// It is not a startup error, because this worker very likely serves other kinds too:
+// a server started with nothing configured — which is the case the opt-out default
+// exists for — would otherwise come up with no worker at all, its CSV and script
+// tasks stranded because no mailbox had been configured yet.
+func TestAMailWorkerWithNoConfiguredConnectorSimplyDoesNotServeMail(t *testing.T) {
+	built, err := worker.BuiltinConnectors(fakeEnv(nil), "csv", "mail")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ATLAS_MAIL_CONNECTORS") {
-		t.Errorf("error = %v, want it to name the variable that configures this", err)
+	if _, ok := built.Handlers[compiler.MailJobType]; ok {
+		t.Error("the worker subscribed to mail with no connector to send through")
+	}
+	if _, ok := built.Handlers[compiler.CsvImportJobType]; !ok {
+		t.Error("the kinds it *can* serve were dropped along with mail")
+	}
+	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "mail" {
+		t.Errorf("unconfigured = %v, want [mail] so the startup line can say it", built.Unconfigured)
+	}
+}
+
+// A worker whose *only* kind is an unconfigured one still stops at startup: it has
+// no handler at all, and `atlas worker` refuses to run with nothing to do. That is
+// where the operator's typo is caught, which is where it always was.
+func TestAWorkerWithNothingLeftToServeHasNoHandlers(t *testing.T) {
+	built, err := worker.BuiltinConnectors(fakeEnv(nil), "mail")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Handlers) != 0 {
+		t.Errorf("handlers = %v, want none — the caller stops on that", built.Handlers)
 	}
 }
 
@@ -248,4 +275,178 @@ func TestAWorkersConnectorNamesReachTheWorkersView(t *testing.T) {
 	if len(view.Unserved) != 1 || view.Unserved[0].Name != "office365" {
 		t.Errorf("unserved = %+v, want office365 named as reachable by nothing", view.Unserved)
 	}
+}
+
+// TestWorkerScrapesAnOffloadedPage is the third shape of the split, and the one that
+// shows the seam carrying a result back. No credential is involved — what the worker
+// contributes is network reach — and the scraped values land in the instance as a
+// variable, so the engine sees the outcome of work it did not do.
+func TestWorkerScrapesAnOffloadedPage(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><h2 class="q">first</h2><h2 class="q">second</h2></body></html>`))
+	}))
+	defer page.Close()
+
+	ts := liveAtlasWith(t, scrapeConnectorModel, `{"target":"`+page.URL+`"}`,
+		api.WithOffloadedConnectorKinds([]string{"webscrape"}))
+
+	built, err := worker.BuiltinConnectors(nil, "webscrape")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Names) != 0 {
+		t.Errorf("names = %v, want none: a scrape holds no credential to report", built.Names)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "scraper-1", Handlers: built.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the scrape job was not completed", running)
+	}
+	vars := instanceVariables(t, ts)
+	got, ok := vars["quotes"]
+	if !ok {
+		t.Fatalf("the result variable was not written; variables = %v", vars)
+	}
+	list, ok := got.([]any)
+	if !ok || len(list) != 2 || list[0] != "first" || list[1] != "second" {
+		t.Errorf("quotes = %v, want the two scraped headings", got)
+	}
+}
+
+const scrapeConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="scrape" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:webscrapeConnector url="=target" selector="h2.q" resultVariable="quotes"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestWorkerRunsAnOffloadedScript is the shape where moving the work is most
+// obviously right: a script task needs an *interpreter on the machine*, and until
+// now that meant installing every one of them beside the engine. Here the engine
+// hands over the source and the variables the script may see, and the worker runs
+// it — so a runaway script pegs the worker's host, not the one the run loop is on.
+func TestWorkerRunsAnOffloadedScript(t *testing.T) {
+	if _, err := lookPath("node"); err != nil {
+		t.Skip("no node on this machine")
+	}
+	ts := liveAtlasWith(t, scriptConnectorModel, `{"amount":21}`,
+		api.WithOffloadedConnectorKinds([]string{"script"}))
+
+	built, err := worker.BuiltinConnectors(nil, "script")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Names) != 0 {
+		t.Errorf("names = %v, want none: an interpreter is not a credential", built.Names)
+	}
+	// A short wait because RunOnce polls each of the three languages in turn, and two
+	// of them have nothing: continuous Run gives each its own goroutine instead.
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "scripts-1", Handlers: built.Handlers,
+		Wait: 100 * time.Millisecond,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the script job was not completed", running)
+	}
+	if got := instanceVariables(t, ts)["doubled"]; got != float64(42) {
+		t.Errorf("doubled = %v, want 42 — the script saw the instance's variables and wrote back", got)
+	}
+}
+
+// TestWorkerCallsAnOffloadedRestApiWithItsOwnSecret is ADR-0168's rule at its
+// sharpest. The engine resolved everything the model authored — method, url,
+// headers, body — and the auth *configuration* including the reference naming the
+// secret. The secret itself is configured only on this side, and the API refuses a
+// call that arrives without it, so the assertion is real rather than incidental.
+func TestWorkerCallsAnOffloadedRestApiWithItsOwnSecret(t *testing.T) {
+	var sawAuth string
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		if sawAuth != "Bearer s3cr3t" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"no credential"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer apiSrv.Close()
+
+	ts := liveAtlasWith(t, restConnectorModel(apiSrv.URL), `{}`,
+		api.WithOffloadedConnectorKinds([]string{"rest"}))
+
+	// The credential lives here and nowhere else: the engine above was given none.
+	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
+		"ATLAS_CONNECTOR_BILLING_API_TOKEN": "s3cr3t",
+	}), "rest")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "rest-1", Handlers: built.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if sawAuth != "Bearer s3cr3t" {
+		t.Fatalf("the API saw Authorization %q, want the worker's own token", sawAuth)
+	}
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the REST job was not completed", running)
+	}
+}
+
+const scriptConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="calc" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:scriptTask id="t">
+      <bpmn:extensionElements>
+        <atlas:jobScript language="javascript" resultVariable="doubled">result = amount * 2;</atlas:jobScript>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+func restConnectorModel(url string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="charge" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET" url="` + url + `" resultVariable="reply"
+          authType="bearer" authSecret="billing-api"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
 }

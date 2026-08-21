@@ -306,10 +306,34 @@ var reservedJobTypes = []string{
 // re-point every job already written under them.
 func ReservedJobTypes() []string { return slices.Clone(reservedJobTypes) }
 
+// ReservedJobTypeCount is how many built-in job types exist in this build, and so
+// the exclusive upper bound of the reserved index range. It grows whenever a
+// connector is added, which is exactly why it is not the same number as
+// [FirstDynamicJobTypeIndex].
+func ReservedJobTypeCount() int32 { return int32(len(reservedJobTypes)) }
+
+// dynamicJobTypeFloor is the lowest index a model-authored job type may be issued.
+//
+// It is a fixed number rather than one past the reserved range, and that is the
+// whole point. Adding a built-in connector grows the reserved range; when the two
+// were the same number, that growth walked over indices already issued to
+// model-authored types, and the jobs parked under them kept an index that had come
+// to mean something else. SOAP and Active Directory did exactly that to 18 and 19.
+//
+// With a fixed floor the reserved range can grow by hundreds of connectors and never
+// reach an issued index. The gap is dead space in an int32, which costs nothing:
+// indices are dense only in the sense that they are compared, never iterated.
+//
+// Note what this does *not* mean: an index below the floor is not thereby invalid.
+// Stores written before the floor existed hold perfectly good assignments between
+// [ReservedJobTypeCount] and here, and only an index inside the reserved range is a
+// collision.
+const dynamicJobTypeFloor int32 = 1000
+
 // FirstDynamicJobTypeIndex is the lowest index available to a model-authored job
-// type (a <zeebe:taskDefinition type>), i.e. one past the reserved range. The
-// engine-wide registry assigns from here up.
-func FirstDynamicJobTypeIndex() int32 { return int32(len(reservedJobTypes)) }
+// type (a <zeebe:taskDefinition type>). The engine-wide registry assigns from here
+// up; see [dynamicJobTypeFloor] for why it is not simply one past the reserved range.
+func FirstDynamicJobTypeIndex() int32 { return dynamicJobTypeFloor }
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add

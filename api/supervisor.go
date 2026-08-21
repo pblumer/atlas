@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"sync"
 	"time"
 
@@ -56,6 +57,9 @@ const (
 type SuperviseSpec struct {
 	ID    string
 	Kinds []string
+	// Connectors are built-in connector kinds this worker serves (--connector on the
+	// child). A worker may serve these, model-authored job types, or both.
+	Connectors []string
 }
 
 // childStatus is one supervised worker as the console sees it.
@@ -74,6 +78,11 @@ type childStatus struct {
 type child struct {
 	spec SuperviseSpec
 	args []string
+	// env adds to the environment the child inherits, evaluated at every spawn so a
+	// connector added in the Console is picked up by pressing Restart rather than by
+	// restarting Atlas. nil means the child inherits this process's environment
+	// unchanged, which is every worker an operator configured by hand.
+	env func() []string
 
 	mu       sync.Mutex
 	state    string
@@ -83,6 +92,9 @@ type child struct {
 	since    int64
 	log      *logRing
 	cmd      *exec.Cmd
+	// lastEnv is the extra environment the running process was spawned with, so a
+	// configuration change can be noticed as a difference rather than guessed at.
+	lastEnv []string
 	// cycle is closed and replaced to ask the run loop to stop the current process
 	// and start a fresh one.
 	stop chan struct{}
@@ -111,12 +123,14 @@ func newSupervisor(quit <-chan struct{}) *supervisor {
 }
 
 // add registers a worker to supervise. args is the argv tail the server built; it
-// never contains anything a request supplied.
-func (s *supervisor) add(spec SuperviseSpec, args []string) {
+// never contains anything a request supplied. env, when non-nil, is the extra
+// environment this worker is spawned with — it is where a credential goes, because
+// argv is readable by anyone who can list processes and an environment is not.
+func (s *supervisor) add(spec SuperviseSpec, args []string, env func() []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.children = append(s.children, &child{
-		spec: spec, args: args, state: "starting",
+		spec: spec, args: args, env: env, state: "starting",
 		log: newLogRing(childLogLines), stop: make(chan struct{}),
 	})
 }
@@ -182,6 +196,16 @@ func (s *supervisor) supervise(c *child) {
 // a restart to be asked for. It returns nil when the exit was expected.
 func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 	cmd := exec.Command(s.exe, c.args...)
+	// The child inherits this process's environment and is handed the configuration
+	// for the connector kinds it serves on top of it. Reading it here rather than at
+	// registration is what makes the console's Restart button pick up a connector
+	// added since the server started.
+	var extra []string
+	if c.env != nil {
+		if extra = c.env(); len(extra) > 0 {
+			cmd.Env = append(os.Environ(), extra...)
+		}
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		c.set(func() { c.state = "failed"; c.lastExit = err.Error() })
@@ -200,6 +224,7 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		c.starts++
 		c.since = time.Now().UnixNano()
 		c.cmd = cmd
+		c.lastEnv = extra
 	})
 	logging.Info(logging.WorkerSupervisorStarted, "started a supervised worker",
 		slog.String("id", c.spec.ID), slog.Int("pid", cmd.Process.Pid))
@@ -309,6 +334,35 @@ func (s *supervisor) restart(id string) error {
 		return nil
 	}
 	return fmt.Errorf("no supervised worker %q", id)
+}
+
+// refresh restarts every supervised worker whose configuration has changed since it
+// was spawned. An operator who adds a mail connector in the Console means for it to
+// work, and the worker holding the old set would leave them pressing Restart to find
+// out why it does not.
+//
+// It restarts on a *difference*, not on the fact that something was saved: editing a
+// clio connector must not cycle the mail worker, and neither must saving a mail
+// connector without changing anything the worker holds. Nothing is restarted before
+// its first start, so this cannot fight the initial launch.
+//
+// It runs OFF the run loop, because reading a worker's configuration goes onto it.
+func (s *supervisor) refresh() {
+	s.mu.Lock()
+	children := append([]*child(nil), s.children...)
+	s.mu.Unlock()
+	for _, c := range children {
+		if c.env == nil {
+			continue
+		}
+		want := c.env()
+		c.mu.Lock()
+		stale := c.starts > 0 && !slices.Equal(want, c.lastEnv)
+		c.mu.Unlock()
+		if stale {
+			_ = s.restart(c.spec.ID)
+		}
+	}
 }
 
 // list reports every supervised worker.

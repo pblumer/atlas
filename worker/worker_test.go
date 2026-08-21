@@ -282,12 +282,14 @@ func TestWorkerRunsAnOffloadedCsvConnector(t *testing.T) {
 // A worker asked for a connector kind it does not implement is a configuration
 // error, not a process that leases work it cannot do.
 func TestBuiltinConnectorsRejectsAnUnknownKind(t *testing.T) {
-	got, err := worker.BuiltinConnectors(nil, "no-such-kind")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
+	// Refused by name rather than by a handler count: script alone contributes one
+	// handler per language, so counting would call a correct configuration wrong.
+	_, err := worker.BuiltinConnectors(nil, "no-such-kind")
+	if err == nil {
+		t.Fatal("an unknown connector kind was accepted")
 	}
-	if len(got.Handlers) != 0 {
-		t.Errorf("BuiltinConnectors returned %d handlers for an unknown kind, want none", len(got.Handlers))
+	if !strings.Contains(err.Error(), "no-such-kind") {
+		t.Errorf("error = %v, want it to name the kind it does not implement", err)
 	}
 }
 
