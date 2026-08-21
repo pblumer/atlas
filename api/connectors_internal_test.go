@@ -1035,3 +1035,76 @@ func TestConnectorUsageIsVisibleBeforeDeleting(t *testing.T) {
 		t.Fatalf("delete a referenced connector = %d %s, want 409", code, b)
 	}
 }
+
+// TestConnectorTestDetail pins the operator-facing sentence a successful connection
+// test reports, one per provider/recipient combination. The message is the whole
+// point of the "test" button — it tells the operator whether a message actually left
+// Atlas, or merely that a credential was accepted — so each branch is asserted for
+// the distinction it draws, not just for a non-empty string.
+func TestConnectorTestDetail(t *testing.T) {
+	cases := []struct {
+		name                     string
+		provider, endpoint, to   string
+		wantContains, wantAbsent string
+	}{
+		{
+			name:     "preview provider with a recipient keeps it in the outbox",
+			provider: mail.ProviderPreview, to: "a@b.ch",
+			wantContains: "outbox", wantAbsent: "sent to a@b.ch",
+		},
+		{
+			name:     "a real provider with a recipient reports the message left Atlas",
+			provider: mail.ProviderSMTP, endpoint: "mx.example.ch:587", to: "a@b.ch",
+			wantContains: "sent to a@b.ch",
+		},
+		{
+			name:         "preview provider with no recipient dials nothing",
+			provider:     mail.ProviderPreview,
+			wantContains: "outbox", wantAbsent: "Connected",
+		},
+		{
+			name:     "smtp with no recipient names the endpoint it authenticated against",
+			provider: mail.ProviderSMTP, endpoint: "mx.example.ch:587",
+			wantContains: "mx.example.ch:587",
+		},
+		{
+			name:         "a token provider with no recipient reports the credential only",
+			provider:     "graph",
+			wantContains: "access token",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := connectorTestDetail(tc.provider, tc.endpoint, tc.to)
+			if !strings.Contains(got, tc.wantContains) {
+				t.Errorf("detail = %q, want it to contain %q", got, tc.wantContains)
+			}
+			if tc.wantAbsent != "" && strings.Contains(got, tc.wantAbsent) {
+				t.Errorf("detail = %q, want it NOT to contain %q", got, tc.wantAbsent)
+			}
+		})
+	}
+}
+
+// TestConnectorProblemFallback covers the two ways connectorProblem finds nothing to
+// report: a kind no managed entry claims, and a managed kind that carries no problem
+// probe. Both must return the empty string — connectorWarnings reads it as "usable"
+// and stays silent — rather than a spurious warning.
+func TestConnectorProblemFallback(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	if why := srv.connectorProblem("no-such-kind", "whatever"); why != "" {
+		t.Errorf("connectorProblem for an unmanaged kind = %q, want empty", why)
+	}
+
+	// Find a managed kind whose entry defines no problem probe, if one exists, and
+	// confirm it too reports nothing rather than panicking on the nil probe.
+	for _, k := range managedConnectorKinds {
+		if k.problem == nil {
+			if why := srv.connectorProblem(k.name, "whatever"); why != "" {
+				t.Errorf("connectorProblem for probe-less kind %q = %q, want empty", k.name, why)
+			}
+			break
+		}
+	}
+}

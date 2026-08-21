@@ -88,15 +88,15 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       <div class="editor-bar">
         <a class="crumbs" id="form-back" href="#/modeler">&larr; Forms</a>
         <div class="etabs" id="form-tabs">
-          <button type="button" data-ftab="design" class="active">Design</button>
-          <button type="button" data-ftab="validate">Validate</button>
-          <button type="button" data-ftab="editor">Editor</button>
+          <button type="button" data-ftab="design" class="active" title="Build the form visually">Design</button>
+          <button type="button" data-ftab="validate" title="Preview the form and check it for problems">Validate</button>
+          <button type="button" data-ftab="editor" title="Edit the form’s raw JSON schema">Editor</button>
         </div>
         <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
-        <button class="btn" id="form-save">Save</button>
+        <button class="btn" id="form-save" title="Save this form">Save</button>
       </div>
       <div class="editor-body fv-body">
         <div class="fv-pane active" id="pane-design">

@@ -326,9 +326,9 @@ export function attachJSONEditor(textarea, opts = {}) {
         <div class="json-modal-head">
           <strong>Edit JSON</strong>
           <span style="flex:1"></span>
-          <button type="button" class="btn ghost small json-modal-fmt">{ } Format</button>
-          <button type="button" class="btn ghost small json-modal-cancel">Cancel</button>
-          <button type="button" class="btn small json-modal-apply">Apply</button>
+          <button type="button" class="btn ghost small json-modal-fmt" title="Reformat the JSON">{ } Format</button>
+          <button type="button" class="btn ghost small json-modal-cancel" title="Close without applying changes">Cancel</button>
+          <button type="button" class="btn small json-modal-apply" title="Apply the edited JSON">Apply</button>
         </div>
         <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea></div>
       </div>`;

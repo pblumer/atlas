@@ -128,10 +128,10 @@ function askConnector({ api, connector, intro, extraLabel }) {
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-conn-cancel>Cancel</button>
+          <button class="btn neutral" data-conn-cancel title="Close without saving">Cancel</button>
           <button class="btn neutral conn-f-test" data-conn-test title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
-          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save>Save</button>
-          ${extraLabel ? `<button class="btn" data-conn-extra>${esc(extraLabel)}</button>` : ""}
+          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the connector changes">Save</button>
+          ${extraLabel ? `<button class="btn" data-conn-extra title="Save the changes and retry the parked task">${esc(extraLabel)}</button>` : ""}
         </div>
       </div>`;
     document.body.appendChild(ov);

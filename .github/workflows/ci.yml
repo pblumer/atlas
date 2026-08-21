@@ -22,6 +22,12 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
+      # For the What's New generator below; it is plain ESM with no dependencies.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Build
         run: go build ./...
 
@@ -34,6 +40,21 @@ jobs:
           if [ -n "$out" ]; then
             echo "These files are not gofmt-formatted:"
             echo "$out"
+            exit 1
+          fi
+
+      # The Console "What's New" feed is generated from CHANGELOG.md and committed
+      # (ADR-0012 keeps the web UI buildless, so nothing regenerates it at build or
+      # runtime). Nothing else notices when a CHANGELOG entry lands without the
+      # generator having been re-run — the feed just silently stops at the last time
+      # someone remembered. Re-run it here and fail on any diff.
+      - name: What's New feed is up to date
+        run: |
+          node scripts/whats-new/gen.mjs
+          if ! git diff --quiet -- api/web/whats-new.json; then
+            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
+            echo "(Add curated DE/EN prose in scripts/whats-new/overrides.json — see scripts/whats-new/README.md.)"
+            git --no-pager diff -- api/web/whats-new.json
             exit 1
           fi
 

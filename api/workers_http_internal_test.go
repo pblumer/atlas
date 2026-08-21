@@ -271,3 +271,49 @@ func TestWorkersViewListsOnlyTheNewestVersionOfAProcess(t *testing.T) {
 	}
 	t.Fatal("no row for send-email")
 }
+
+// TestRestartWorkerEndpoint covers the three answers the restart button can get. A
+// server that supervises nothing says so with 409 (the worker runs elsewhere, so it
+// is restarted elsewhere); a server that supervises the named worker restarts it and
+// reports 200; and a name it does not supervise is a 404. The restart itself goes
+// through the same supervisor path a crash would, so the handler only has to route
+// the outcome.
+func TestRestartWorkerEndpoint(t *testing.T) {
+	// No supervisor at all: the honest 409.
+	srv, _ := newValidateServer(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/workers/mailer-1/restart", "", ""); code != http.StatusConflict {
+		t.Fatalf("restart with no supervisor = %d %s, want 409", code, body)
+	}
+
+	// A server that supervises one worker. The supervisor is wired up the way the
+	// server's own constructor does it, but nothing is started — restart only cycles
+	// the stop channel, so no child process is spawned.
+	quit := make(chan struct{})
+	defer close(quit)
+	sup := newSupervisor(quit)
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"worker"})
+	srv.supervisor = sup
+	if n := sup.count(); n != 1 {
+		t.Fatalf("supervised worker count = %d, want 1", n)
+	}
+
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/workers/mailer-1/restart", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("restart a supervised worker = %d %s, want 200", code, body)
+	}
+	var resp struct {
+		ID         string `json:"id"`
+		Restarting bool   `json:"restarting"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode restart response: %v (%s)", err, body)
+	}
+	if resp.ID != "mailer-1" || !resp.Restarting {
+		t.Errorf("restart response = %+v, want mailer-1 restarting", resp)
+	}
+
+	// An unknown worker on a server that does supervise: 404, not 409.
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/workers/nope/restart", "", ""); code != http.StatusNotFound {
+		t.Fatalf("restart an unknown worker = %d %s, want 404", code, body)
+	}
+}
