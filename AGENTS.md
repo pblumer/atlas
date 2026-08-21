@@ -130,7 +130,10 @@ listing order and the filename scheme. Do not hand-roll the read/write/list
 mechanics; sixteen copies of it is what this replaced. Note that the filename
 predicate also guards keys on the way *in*, so a request-supplied key cannot
 address a file outside the store. Non-Go trees: [`docs/`](docs/), [`examples/`](examples/), [`e2e/`](e2e/),
-[`deploy/`](deploy/), [`scripts/`](scripts/), [`postman/`](postman/).
+[`deploy/`](deploy/), [`scripts/`](scripts/), [`postman/`](postman/) — with one
+exception: [`docs/adr/`](docs/adr/) is a Go package, because the decision records
+guard their own conventions with tests in the mandatory sweep and assign their own
+numbers (`docs/adr/number.go`, `make adr-number`).
 
 ## How to approach a task
 
@@ -139,7 +142,7 @@ address a file outside the store. Non-Go trees: [`docs/`](docs/), [`examples/`](
 3. **Check the invariants** above against your plan *before* writing code.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
-6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and update [`docs/adr/README.md`](docs/adr/README.md). Take the next free number — **not** one another branch may already have claimed; `go test ./docs/adr` checks that numbers are unique and that the index matches the directory, and it runs in the normal test sweep.
+6. **If you changed an architectural decision**, write a new ADR instead of silently diverging — and **do not give it a number**. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`, keep its `# ADR-DRAFT: Title` heading, and add **no** row to [`docs/adr/README.md`](docs/adr/README.md). The number is assigned when the record lands on main, by a workflow that runs `make adr-number` there; picking one on a branch is how two records end up sharing it, and how a record gets renumbered on every merge. Cite the record as `ADR-draft-<slug>` (or link `draft-<slug>.md`) from code and docs — the numbering rewrites those citations along with the file name and adds the index row. `go test ./docs/adr` guards all of it and runs in the normal test sweep. See [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) for the whole flow.
 
 ## Testing conventions
 
@@ -194,6 +197,7 @@ it will be read by humans.
 |------------|-------|
 | Understand the whole system | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | Know why a decision was made | [`docs/adr/`](docs/adr/) |
+| Write a decision record | [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) — copy the template to `draft-<slug>.md`, **do not pick a number** |
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
