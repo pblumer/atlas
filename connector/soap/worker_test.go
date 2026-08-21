@@ -438,3 +438,45 @@ func TestSoapRecoversAcrossRestart(t *testing.T) {
 		t.Fatalf("after recovery Drive: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
+
+// TestSoapConnectorSeesInputMappedLocal proves the worker resolves its FEEL endpoint,
+// action and body up the scope chain, so an input-mapped local is visible to them
+// beside what the task inherits (ADR-0068).
+func TestSoapConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(soapDefKey, "billing", 1)
+	start := b.AddStartEvent()
+	call := b.AddSoapConnectorTask(compiler.SoapConfig{
+		Endpoint: lit(soapEndpoint),
+		Op:       "GetUser",
+		Body:     compiler.RestExpr{Expr: compile(`"<id>" + tag + "</id>"`)},
+		Retries:  3,
+	})
+	b.AddInputMapping(call, "tag", compile(`"u-" + userId`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{resp: soap.Response{Status: 200}}
+	drive(t, cp, jobType, rc, noSecret, store, log,
+		model.VariableValue{Name: "userId", Kind: model.VarString, Text: "7"})
+
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests made = %d, want 1", len(rc.requests))
+	}
+	if want := "<id>u-7</id>"; !strings.Contains(rc.requests[0].Body, want) {
+		t.Errorf("request body = %q, want the input-mapped %q", rc.requests[0].Body, want)
+	}
+}

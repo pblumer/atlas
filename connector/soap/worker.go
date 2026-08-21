@@ -31,7 +31,8 @@ type SecretResolver func(ref string) string
 // HandleWithOutput; the runner then pulls activatable SOAP jobs, and for each the
 // handler resolves the task's endpoint / operation / SOAPAction / body / version /
 // result-variable from the compiled process and calls the web service through client —
-// evaluating any FEEL values over the instance's variables (the fx toggle, ADR-0067).
+// evaluating any FEEL values over the variables the task sees, up its scope chain (the
+// fx toggle, ADR-0067/0068).
 // Authentication (basic/bearer/apiKey) is resolved through secret, which turns the
 // model's secret *reference* into the credential at call time (ADR-0041); the credential
 // never lives in the model. When the task names a result variable, the parsed SOAP Body
@@ -55,19 +56,20 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("soap: %w", err)
 		}
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: the endpoint/action/body FEEL values all
-		// evaluate against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		// Read the variables the task sees once — up its scope chain, so its own
+		// input-mapped locals shadow what it inherits (ADR-0068). The endpoint,
+		// action and body FEEL values all evaluate against them, off the hot path.
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("soap: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
-		endpoint := resolveValue(detail.SoapEndpoint, scope, scopeVars)
+		endpoint := resolveValue(detail.SoapEndpoint, piKey, scopeVars)
 		if strings.TrimSpace(endpoint) == "" {
 			return nil, fmt.Errorf("soap: task has no endpoint (its FEEL endpoint evaluated to empty)")
 		}
 		op := cp.Intern(detail.SoapOp)
-		action := resolveValue(detail.SoapAction, scope, scopeVars)
+		action := resolveValue(detail.SoapAction, piKey, scopeVars)
 		if strings.TrimSpace(action) == "" {
 			action = op // the operation name is the default SOAPAction
 		}
@@ -80,7 +82,7 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 			Operation: op,
 			Action:    action,
 			Version:   cp.Intern(detail.SoapVersion),
-			Body:      resolveValue(detail.SoapBody, scope, scopeVars),
+			Body:      resolveValue(detail.SoapBody, piKey, scopeVars),
 			Headers:   headers,
 		})
 		if err != nil {
@@ -103,11 +105,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // expression evaluated over the scope's variables and coerced to its string form. A FEEL
 // null — an absent variable or a failed evaluation — becomes the empty string, matching
 // the engine's null-propagating contract (as the REST worker does).
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -115,32 +117,17 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the worker
-// binds only the names each expression reads without a per-name store lookup (mirrors
-// the REST worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name absent from
-// the scope is left unbound (FEEL null); the reserved name processInstanceKey binds to
-// the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name absent
+// from the chain is left unbound (FEEL null); the reserved name processInstanceKey binds
+// to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

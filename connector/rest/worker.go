@@ -31,10 +31,11 @@ type SecretResolver func(ref string) string
 // HandleWithOutput; the runner then pulls activatable REST jobs, and for each the
 // handler resolves the connector task's method/url/headers/query/result-variable
 // from the compiled process and calls the API through client — evaluating any FEEL
-// url/header/query values over the instance's variables (the fx toggle, ADR-0067)
-// and sending the instance's variables as the JSON request body for methods that
-// carry one, keyed by the job key so an at-least-once retry de-duplicates.
-// Authentication
+// url/header/query values over the variables the task sees, up its scope chain (the
+// fx toggle, ADR-0067/0068), and sending as the JSON request body, for methods that
+// carry one, what the task's input mappings map — or, with none, every variable it
+// sees (ADR-draft-connector-payloads-are-the-input-mapping) — keyed by the job key so
+// an at-least-once retry de-duplicates. Authentication
 // (basic/bearer/apiKey) is resolved through secret, which turns the model's secret
 // *reference* into the credential at call time (ADR-0041); the token never lives in
 // the model. When the task names a result variable, the JSON response is returned
@@ -61,7 +62,7 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client, secret Sec
 		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
 		// changes only whose secret store is in reach, never what a resolved REST
 		// task means.
-		resolved, err := Resolve(store, cp, detail, ei.ProcessInstanceKey, j.Key)
+		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -87,11 +88,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // variable or a failed evaluation — becomes the empty string, matching the
 // engine's null-propagating contract (as the DMN worker's mappings do); a genuinely
 // broken URL then surfaces as a call error downstream.
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -101,43 +102,28 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 
 // resolveKVs resolves a list of named REST values (headers or query parameters)
 // into a map, evaluating any FEEL values. Returns nil for an empty list.
-func resolveKVs(kvs []compiler.RestKV, scope uint64, scopeVars map[string]model.VariableValue) map[string]string {
+func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
 	if len(kvs) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(kvs))
 	for _, kv := range kvs {
-		out[kv.Name] = resolveValue(kv.Val, scope, scopeVars)
+		out[kv.Name] = resolveValue(kv.Val, piKey, scopeVars)
 	}
 	return out
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each expression reads without a per-name store
-// lookup (mirrors the DMN worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name
-// absent from the scope is left unbound (FEEL null); the reserved name
-// processInstanceKey binds to the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name
+// absent from the chain is left unbound (FEEL null); the reserved name
+// processInstanceKey binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {
@@ -280,8 +266,8 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 }
 
 // methodHasBody reports whether an HTTP method conventionally carries a request
-// body. The worker sends the instance's variables as the body only for these, so
-// a GET/DELETE/HEAD stays body-free.
+// body. The worker sends a body only for these, so a GET/DELETE/HEAD stays
+// body-free.
 func methodHasBody(method string) bool {
 	switch method {
 	case "POST", "PUT", "PATCH":
@@ -291,10 +277,11 @@ func methodHasBody(method string) bool {
 	}
 }
 
-// bodyFromVars turns the already-read scope variables into a JSON-ready map — the
-// request body a connector task sends. Until input mappings exist the whole
-// variable scope is the payload, exactly as the clio connector sends the instance's
-// variables as its event body (ADR-0036/0067).
+// bodyFromVars turns the already-read variables into a JSON-ready map — the request
+// body a connector task sends. Which variables those are is [Resolve]'s decision:
+// the task's input mappings when it has them, else everything it sees — the same
+// rule the clio connector's event body follows
+// (ADR-draft-connector-payloads-are-the-input-mapping).
 func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
 	data := make(map[string]any, len(scopeVars))
 	for name, v := range scopeVars {

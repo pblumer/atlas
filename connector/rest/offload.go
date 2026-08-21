@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -56,28 +57,38 @@ type Result struct {
 // Auth is deliberately left unapplied. Applying it here would mean resolving the
 // secret here, and then the credential would be in the job — which is the one thing
 // the split exists to prevent.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, scope, jobKey uint64) (Job, error) {
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("rest: connector task has no detail")
 	}
-	// Read the scope's variables once: the url, headers, query and body all evaluate
-	// against the same snapshot.
-	scopeVars, err := readScopeVars(store, scope)
+	// Read the variables the task sees once — up its scope chain, so its own
+	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate the url,
+	// headers and query against that one snapshot.
+	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {
-		return Job{}, fmt.Errorf("rest: read variables for scope %d: %w", scope, err)
+		return Job{}, fmt.Errorf("rest: read variables for element %d: %w", elementInstanceKey, err)
 	}
+	piKey := ei.ProcessInstanceKey // the processInstanceKey builtin, not the read scope
 	method := cp.Intern(detail.Method)
 	j := Job{
 		Method:         method,
-		URL:            resolveValue(detail.Url, scope, scopeVars),
-		Headers:        resolveKVs(detail.Headers, scope, scopeVars),
-		Query:          resolveKVs(detail.Query, scope, scopeVars),
+		URL:            resolveValue(detail.Url, piKey, scopeVars),
+		Headers:        resolveKVs(detail.Headers, piKey, scopeVars),
+		Query:          resolveKVs(detail.Query, piKey, scopeVars),
 		Auth:           cp.Intern(detail.Auth),
 		IdempotencyKey: strconv.FormatUint(jobKey, 10),
 		Result:         cp.Intern(detail.ResultVar),
 	}
 	if methodHasBody(method) {
-		j.Body = bodyFromVars(scopeVars)
+		bodyVars := scopeVars
+		if len(cp.IOInputs(ei.ElementId)) > 0 {
+			// The mappings are the body: exactly the activity-local scope they wrote,
+			// inheriting nothing (ADR-draft-connector-payloads-are-the-input-mapping).
+			if bodyVars, err = state.LocalVariablesMap(store, elementInstanceKey); err != nil {
+				return Job{}, fmt.Errorf("rest: read mapped inputs for element %d: %w", elementInstanceKey, err)
+			}
+		}
+		j.Body = bodyFromVars(bodyVars)
 	}
 	return j, nil
 }

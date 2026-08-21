@@ -4,6 +4,13 @@
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 
+> **Update (2026-08-21).** The whole-scope payload this record accepted as a
+> limitation is lifted: a task's `zeebe:ioMapping` inputs, when it has any, are its
+> request body (a named body variable still wins), and every FEEL field — and the body
+> variable itself — now resolves up the task's scope chain, so an input mapping can
+> build the SCIM resource. See
+> [ADR-draft-connector-payloads-are-the-input-mapping](draft-connector-payloads-are-the-input-mapping.md).
+
 ## Context and problem statement
 
 Atlas is being evaluated as the process- and approval layer in front of identity

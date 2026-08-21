@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -17,7 +18,7 @@ import (
 // worker knows where to send it and with what credential.**
 //
 // So the boundary falls exactly between those two. Finding the task's detail,
-// evaluating its FEEL against the instance's variables, splitting the recipient
+// evaluating its FEEL against the variables the task sees, splitting the recipient
 // lists — all of that needs the compiled process and the scope chain, which only the
 // engine has, so [Resolve] does it and produces plain strings. The SMTP host, the
 // username and the password are never among them: what travels is the connector's
@@ -61,25 +62,27 @@ type Job struct {
 // with the send, after the connector lookup, so an operator with both an
 // unconfigured connector and an empty recipient list hears about the configuration
 // first — that being the one they can act on.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, scope, jobKey uint64) (Job, error) {
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("mail: connector task has no detail")
 	}
-	// Read the scope's variables once: every recipient/subject/body expression
-	// evaluates against the same snapshot.
-	scopeVars, err := readScopeVars(store, scope)
+	// Read the variables the task sees once — up its scope chain, so its own
+	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate every
+	// recipient/subject/body expression against that one snapshot.
+	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {
-		return Job{}, fmt.Errorf("mail: read variables for scope %d: %w", scope, err)
+		return Job{}, fmt.Errorf("mail: read variables for element %d: %w", elementInstanceKey, err)
 	}
+	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
 	return Job{
 		Connector: cp.Intern(detail.Connector),
-		From:      resolveValue(detail.From, scope, scopeVars),
-		To:        splitAddrs(resolveValue(detail.To, scope, scopeVars)),
-		Cc:        splitAddrs(resolveValue(detail.Cc, scope, scopeVars)),
-		Bcc:       splitAddrs(resolveValue(detail.Bcc, scope, scopeVars)),
-		Subject:   resolveValue(detail.MailSubject, scope, scopeVars),
-		Body:      resolveValue(detail.Body, scope, scopeVars),
-		HTML:      resolveValue(detail.BodyHTML, scope, scopeVars),
+		From:      resolveValue(detail.From, piKey, scopeVars),
+		To:        splitAddrs(resolveValue(detail.To, piKey, scopeVars)),
+		Cc:        splitAddrs(resolveValue(detail.Cc, piKey, scopeVars)),
+		Bcc:       splitAddrs(resolveValue(detail.Bcc, piKey, scopeVars)),
+		Subject:   resolveValue(detail.MailSubject, piKey, scopeVars),
+		Body:      resolveValue(detail.Body, piKey, scopeVars),
+		HTML:      resolveValue(detail.BodyHTML, piKey, scopeVars),
 		MessageID: strconv.FormatUint(jobKey, 10),
 	}, nil
 }

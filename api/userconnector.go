@@ -12,6 +12,7 @@ import (
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // userConnStore is the slice of the state store the user-provisioning worker reads:
@@ -65,44 +66,46 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 		if err != nil {
 			return fmt.Errorf("user connector: %w", err)
 		}
-		scope := ei.ProcessInstanceKey
-		scopeVars, err := userReadScopeVars(store, scope)
+		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+		// The variables the task sees, up its scope chain, so its own input-mapped
+		// locals shadow what it inherits (ADR-0068).
+		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
 		if err != nil {
 			return fmt.Errorf("user connector: read variables: %w", err)
 		}
 		op := cp.Intern(detail.UserOp)
-		username := strings.TrimSpace(userResolve(detail.UserName, scope, scopeVars))
+		username := strings.TrimSpace(userResolve(detail.UserName, piKey, scopeVars))
 		if username == "" {
 			return fmt.Errorf("user connector: resolved an empty username")
 		}
 		now := time.Now().Unix()
 		switch op {
 		case "create":
-			email := strings.TrimSpace(userResolve(detail.UserEmail, scope, scopeVars))
-			displayName := strings.TrimSpace(userResolve(detail.UserDisplayName, scope, scopeVars))
-			roles := splitRoles(userResolve(detail.UserRoles, scope, scopeVars))
-			password := userResolve(detail.UserPassword, scope, scopeVars)
+			email := strings.TrimSpace(userResolve(detail.UserEmail, piKey, scopeVars))
+			displayName := strings.TrimSpace(userResolve(detail.UserDisplayName, piKey, scopeVars))
+			roles := splitRoles(userResolve(detail.UserRoles, piKey, scopeVars))
+			password := userResolve(detail.UserPassword, piKey, scopeVars)
 			id, created, err := s.provisionCreateUser(username, email, displayName, roles, password, now)
 			if err != nil {
 				return err
 			}
 			logging.Info(logging.UserProvisioningUserCreated, "provisioned a user from a process instance",
-				slog.Uint64("instance", scope), slog.String("username", username),
+				slog.Uint64("instance", piKey), slog.String("username", username),
 				slog.String("userId", id), slog.Bool("created", created))
 			return nil
 		case "set-password":
-			if err := s.provisionSetPassword(username, userResolve(detail.UserPassword, scope, scopeVars), now); err != nil {
+			if err := s.provisionSetPassword(username, userResolve(detail.UserPassword, piKey, scopeVars), now); err != nil {
 				return err
 			}
 			logging.Info(logging.UserProvisioningPasswordSet, "set a user password from a process instance",
-				slog.Uint64("instance", scope), slog.String("username", username))
+				slog.Uint64("instance", piKey), slog.String("username", username))
 			return nil
 		case "disable":
 			if err := s.provisionDisableUser(username, now); err != nil {
 				return err
 			}
 			logging.Info(logging.UserProvisioningUserDisabled, "disabled a user from a process instance",
-				slog.Uint64("instance", scope), slog.String("username", username))
+				slog.Uint64("instance", piKey), slog.String("username", username))
 			return nil
 		default:
 			return fmt.Errorf("user connector: unknown operation %q", op)
@@ -235,11 +238,11 @@ const userBuiltinProcessInstanceKey = "processInstanceKey"
 // FEEL expression evaluated over the scope's variables and coerced to its string
 // form. A FEEL null (absent variable or failed evaluation) becomes "" — the same
 // null-propagating contract the mail/REST workers use.
-func userResolve(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func userResolve(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(userBindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(userBindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -247,30 +250,17 @@ func userResolve(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.
 	return text
 }
 
-// userReadScopeVars reads all of a scope's variables into a map keyed by name.
-func userReadScopeVars(store userConnStore, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// userBindVars binds the named variables from a scope into a FEEL binding; an absent
+// userBindVars binds the named variables the task sees into a FEEL binding; an absent
 // name is left unbound (FEEL null), and the reserved processInstanceKey binds to the
-// scope's own key as a string.
-func userBindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// process instance's key as a string.
+func userBindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == userBuiltinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

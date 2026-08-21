@@ -248,6 +248,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A connector task's input mappings now reach its worker — and shape what it sends.**
+  Input mappings write an activity-local variable scope (ADR-0068), but every connector
+  worker read the process-instance scope flat, so none of them could see its own task's
+  mappings. A clio write task whose payload came from mappings appended events with an
+  **empty body**; a REST url could not interpolate a mapped local; a SCIM task failed
+  with "body variable is not set on the instance" for a resource a mapping had just
+  built; LDAP and AD could not find a mapped entry variable. Every worker — clio, REST,
+  mail, SCIM, SOAP, LDAP, AD, SharePoint, Remedy, web scrape, and user provisioning —
+  now resolves up the task's scope chain, with its own locals shadowing what it
+  inherits. **Where a payload *is* a variable scope** — the clio event body, the REST
+  request body for methods that carry one, and the SCIM body when no payload variable
+  is named — a task's input mappings, when it has any, are now exactly that payload:
+  the model says what leaves it rather than shipping every scratch and internal
+  variable into an external system, which is what makes a registered clio event schema
+  or a strict SCIM endpoint satisfiable from a model at all. A task that maps nothing
+  is unchanged and still sends everything it sees, so existing models keep working; a
+  mapped clio/REST/SCIM task's payload does change, from "everything" (or, for clio,
+  nothing) to "what you mapped". See
+  [ADR-draft-connector-payloads-are-the-input-mapping](docs/adr/draft-connector-payloads-are-the-input-mapping.md);
+  the Event type, Method and Payload variable fields in the Modeler say which rule
+  applies.
+
 - **Breaking: the "Marketplace" area is now called "Repository"** — the same feature
   under a name that says what it is: the place a server's reusable building blocks live.
   The Modeler navigation entry and its route (`#/modeler/repository`) change, and so do

@@ -9,6 +9,7 @@ import (
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // VarStore is the slice of the state store the CSV-import worker reads — a scope's
@@ -36,10 +37,6 @@ const (
 	csvRowsVar     = "rows"
 	csvRowCountVar = "rowCount"
 )
-
-// csvMaxScopeDepth bounds the scope-chain walk, a defensive guard against a cyclic
-// or corrupt FlowScopeKey chain (mirrors the worker-side guards elsewhere).
-const csvMaxScopeDepth = 64
 
 // Handler is the in-process worker for a CSV-import service task
 // (compiler.CsvImportJobType). It converts an uploaded CSV into a JSON `rows`
@@ -161,29 +158,9 @@ func rowsToJSON(rows []map[string]any) (string, error) {
 }
 
 // scopeChainVars reads the variables an element sees up its scope chain (nearest
-// scope wins), mirroring the worker scope-chain reads elsewhere (dmn/script), so a
+// scope wins), through the shared walk every job worker uses (ADR-0068), so a
 // CSV-import task nested in a subprocess still reads its enclosing scope's
 // csvText/columnConfig (or a connector's source variable).
 func scopeChainVars(store VarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	scope := elementInstanceKey
-	for depth := 0; depth <= csvMaxScopeDepth; depth++ {
-		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-			if _, seen := vars[v.Name]; !seen {
-				vars[v.Name] = *v
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		ei, ok, err := store.GetElementInstance(scope)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || ei.FlowScopeKey == 0 || ei.FlowScopeKey == scope {
-			break
-		}
-		scope = ei.FlowScopeKey
-	}
-	return vars, nil
+	return state.VisibleVariablesMap(store, elementInstanceKey)
 }

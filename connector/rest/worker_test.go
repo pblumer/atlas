@@ -691,3 +691,69 @@ func TestRestConnectorOAuth2SecretMissing(t *testing.T) {
 		t.Errorf("active instances = %d, want 1 (job parked on incident)", pi)
 	}
 }
+
+// TestRestConnectorBodyIsTheInputMappings proves a REST task's zeebe:ioMapping
+// inputs *are* its request body, and that its FEEL fields see those mapped locals:
+// the url interpolates one, the body is exactly the two mapped values, and the
+// process variable they were computed from does not travel
+// (ADR-draft-connector-payloads-are-the-input-mapping). Before this the worker read
+// the process-instance scope flat, so the mapped locals were invisible to both.
+func TestRestConnectorBodyIsTheInputMappings(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(restDefKey, "orders", 1)
+	start := b.AddStartEvent()
+	call := b.AddRestConnectorTask(compiler.RestConfig{
+		Method:  "POST",
+		Url:     compiler.RestExpr{Expr: compile(`"https://api.example.com/orders/" + id`)},
+		Retries: 3,
+	})
+	b.AddInputMapping(call, "id", compile(`orderId`))
+	b.AddInputMapping(call, "label", compile(`"order " + orderId`))
+	wait := b.AddServiceTask("wait", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, wait)
+	b.Connect(wait, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+		return rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret, nil)
+	})
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "orderId", Kind: model.VarString, Text: "c-1"},
+		model.VariableValue{Name: "internalNote", Kind: model.VarString, Text: "do not ship"})
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	req := rc.requests[0]
+	if req.URL != "https://api.example.com/orders/c-1" {
+		t.Errorf("url = %q, want the input-mapped local interpolated", req.URL)
+	}
+	if req.Body["id"] != "c-1" || req.Body["label"] != "order c-1" {
+		t.Errorf("body = %#v, want the two input-mapped values", req.Body)
+	}
+	if len(req.Body) != 2 {
+		t.Errorf("body = %#v, want exactly the mapped inputs (no process variables)", req.Body)
+	}
+}

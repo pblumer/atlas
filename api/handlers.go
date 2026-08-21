@@ -4540,7 +4540,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the connector's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey, jobKey)
+		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -4566,7 +4566,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// What does not is the bind password: the *reference* travels and whoever runs
 		// the job resolves it, so an offloaded AD task never reads the engine's vault
 		// (ADR-0168).
-		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey)
+		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -4593,7 +4593,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page
 		// only reachable from somewhere the engine is not is the case for moving it.
-		j, err := webscrape.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey)
+		j, err := webscrape.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -4605,7 +4605,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The authored auth travels — its type, username, api-key header name, OAuth
 		// endpoint and the *reference* naming the secret. The secret behind that
 		// reference does not: the worker resolves it from its own store.
-		j, err := rest.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey, jobKey)
+		j, err := rest.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}

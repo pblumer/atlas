@@ -28,8 +28,8 @@ func resolveFixture(t *testing.T, cfg compiler.MailConfig, vars ...model.Variabl
 	captured := false
 	// Drive the process with a handler that resolves rather than sends, so the
 	// resolution runs against a real instance's variables and element instance.
-	driveResolving(t, cp, jobType, store, log, func(scope, jobKey uint64, detail *compiler.ConnectorTaskDetail) {
-		resolved, resolveErr = mail.Resolve(store, cp, detail, scope, jobKey)
+	driveResolving(t, cp, jobType, store, log, func(ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, detail *compiler.ConnectorTaskDetail) {
+		resolved, resolveErr = mail.Resolve(store, cp, detail, ei, elementInstanceKey, jobKey)
 		captured = true
 	}, vars...)
 	if !captured {
@@ -179,7 +179,7 @@ func mustExpr(t *testing.T, src string) *expr.Compiled {
 // key and detail to fn instead of sending. It is how a test reaches the exact inputs
 // the engine's own lease-time resolution has, without reimplementing the lookup.
 func driveResolving(t *testing.T, cp *compiler.CompiledProcess, jobType int32, store *state.Store, log *wal.Log,
-	fn func(scope, jobKey uint64, detail *compiler.ConnectorTaskDetail), vars ...model.VariableValue) {
+	fn func(ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, detail *compiler.ConnectorTaskDetail), vars ...model.VariableValue) {
 	t.Helper()
 	p := engine.New(1, log, store, &fixedClock{})
 	p.Deploy(cp)
@@ -197,7 +197,7 @@ func driveResolving(t *testing.T, cp *compiler.CompiledProcess, jobType int32, s
 			if err != nil {
 				t.Fatalf("ConnectorTaskOf: %v", err)
 			}
-			fn(ei.ProcessInstanceKey, j.Key, detail)
+			fn(ei, j.ElementInstanceKey, j.Key, detail)
 			return nil
 		}
 	})

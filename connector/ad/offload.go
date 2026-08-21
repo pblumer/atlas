@@ -70,25 +70,28 @@ type Job struct {
 // evaluated against the instance's variables, and the attribute object read out of
 // the named variable. It is engine work by necessity — FEEL is compiled at deploy
 // (ADR-0008/0015) and only the engine has the scope.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, scope uint64) (Job, error) {
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("ad: connector task has no detail")
 	}
-	scopeVars, err := readScopeVars(store, scope)
+	// The variables the task sees, up its scope chain, so its own input-mapped locals
+	// shadow what it inherits (ADR-0068).
+	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {
-		return Job{}, fmt.Errorf("ad: read variables for scope %d: %w", scope, err)
+		return Job{}, fmt.Errorf("ad: read variables for element %d: %w", elementInstanceKey, err)
 	}
+	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
 	op := cp.Intern(detail.AdOp)
 	j := Job{
-		URL:         resolveValue(detail.AdURL, scope, scopeVars),
-		BindDN:      resolveValue(detail.AdBindDN, scope, scopeVars),
+		URL:         resolveValue(detail.AdURL, piKey, scopeVars),
+		BindDN:      resolveValue(detail.AdBindDN, piKey, scopeVars),
 		BindSecret:  cp.Intern(detail.AdBindSecret),
 		StartTLS:    detail.AdStartTLS,
 		Operation:   op,
-		DN:          resolveValue(detail.AdDN, scope, scopeVars),
-		MemberDN:    resolveValue(detail.AdMemberDN, scope, scopeVars),
-		NewDN:       resolveValue(detail.AdNewDN, scope, scopeVars),
-		NewPassword: resolveValue(detail.AdNewPassword, scope, scopeVars),
+		DN:          resolveValue(detail.AdDN, piKey, scopeVars),
+		MemberDN:    resolveValue(detail.AdMemberDN, piKey, scopeVars),
+		NewDN:       resolveValue(detail.AdNewDN, piKey, scopeVars),
+		NewPassword: resolveValue(detail.AdNewPassword, piKey, scopeVars),
 	}
 	if needsEntry(op) {
 		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
@@ -98,8 +101,8 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		j.Attributes = attrs
 	}
 	if op == "sync" {
-		j.BaseDN = resolveValue(detail.AdBaseDN, scope, scopeVars)
-		j.Filter = resolveValue(detail.AdFilter, scope, scopeVars)
+		j.BaseDN = resolveValue(detail.AdBaseDN, piKey, scopeVars)
+		j.Filter = resolveValue(detail.AdFilter, piKey, scopeVars)
 		j.MaxEntries = int(detail.AdMaxEntries)
 		j.ObjectSecurity = detail.AdObjectSecurity
 		j.ResultVariable = cp.Intern(detail.ResultVar)

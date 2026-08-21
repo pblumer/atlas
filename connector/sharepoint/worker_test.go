@@ -364,3 +364,48 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestSharePointConnectorSeesInputMappedLocal proves the worker resolves its FEEL
+// fields up the scope chain: an input mapping computes a local, and a field reads it
+// beside an inherited process variable (ADR-0068). Reading the process-instance scope
+// flat left the local invisible, so the field rendered without it.
+func TestSharePointConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	b := compiler.NewBuilder(spDefKey, "incidents", 1)
+	start := b.AddStartEvent()
+	call := b.AddSharePointConnectorTask(compiler.SharePointConfig{
+		Connector: "contoso",
+		Site:      compiler.RestExpr{Literal: "s-1"},
+		List:      compiler.RestExpr{Expr: compileExpr(t, `listRef`)},
+		Fields:    []compiler.RestKV{{Name: "Title", Val: compiler.RestExpr{Expr: compileExpr(t, `listRef + " / " + listName`)}}},
+		Retries:   3,
+	})
+	b.AddInputMapping(call, "listRef", compileExpr(t, `"List " + listName`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{item: map[string]any{"id": "1"}}
+	reg := sharepoint.NewRegistry()
+	reg.Register("contoso", rc)
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "listName", Kind: model.VarString, Text: "Ops"},
+	); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	req := rc.requests[0]
+	if req.List != "List Ops" {
+		t.Errorf("list = %q, want the input-mapped local", req.List)
+	}
+	if req.Fields["Title"] != "List Ops / Ops" {
+		t.Errorf("Title = %q, want the mapped local beside the inherited variable", req.Fields["Title"])
+	}
+}

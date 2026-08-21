@@ -73,7 +73,7 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("ad: %w", err)
 		}
-		task, err := Resolve(store, cp, detail, ei.ProcessInstanceKey)
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey)
 		if err != nil {
 			return nil, err
 		}
@@ -278,11 +278,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 
 // resolveValue turns an AD field value into a string: a literal verbatim, or a FEEL
 // expression evaluated over the scope's variables. A FEEL null becomes "".
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -290,28 +290,15 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name.
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

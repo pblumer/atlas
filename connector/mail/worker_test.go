@@ -75,9 +75,23 @@ func active(t *testing.T, s *state.Store) (pi, ei int) {
 // message is sent, since a mail task produces no result variable).
 func mailProcess(t *testing.T, cfg compiler.MailConfig) (*compiler.CompiledProcess, int32) {
 	t.Helper()
+	return mailProcessMapped(t, cfg, nil)
+}
+
+// mailProcessMapped is [mailProcess] with zeebe:ioMapping inputs on the mail task,
+// so a test can prove its FEEL fields resolve the mapped locals (ADR-0068).
+func mailProcessMapped(t *testing.T, cfg compiler.MailConfig, mappings map[string]string) (*compiler.CompiledProcess, int32) {
+	t.Helper()
 	b := compiler.NewBuilder(mailDefKey, "notify", 1)
 	start := b.AddStartEvent()
 	call := b.AddMailConnectorTask(cfg)
+	for target, src := range mappings {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		b.AddInputMapping(call, target, e)
+	}
 	end := b.AddEndEvent()
 	b.Connect(start, call)
 	b.Connect(call, end)
@@ -402,5 +416,42 @@ func TestMailConnectorWithoutHTMLBody(t *testing.T) {
 	}
 	if rc.sent[0].HTML != "" {
 		t.Errorf("HTML = %q, want empty for a text-only task", rc.sent[0].HTML)
+	}
+}
+
+// TestMailConnectorSeesInputMappedLocal proves the worker resolves its FEEL fields up
+// the scope chain: an input mapping computes a local, and the subject reads it
+// alongside an inherited process variable (ADR-0068). Reading the process-instance
+// scope flat left the local invisible, so the subject rendered without it.
+func TestMailConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	cp, jobType := mailProcessMapped(t, compiler.MailConfig{
+		Connector: "smtp",
+		To:        compiler.RestExpr{Literal: "a@b.c"},
+		Subject:   compiler.RestExpr{Expr: compile(`greeting + ", " + name`)},
+		Body:      compiler.RestExpr{Literal: "Welcome."},
+		Retries:   3,
+	}, map[string]string{"greeting": `"Hallo " + name`})
+	rc := &recordingClient{}
+	reg := mail.NewRegistry()
+	reg.Register("smtp", rc)
+
+	if err := drive(t, cp, jobType, reg, store, log,
+		model.VariableValue{Name: "name", Kind: model.VarString, Text: "Ada"},
+	); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.sent) != 1 {
+		t.Fatalf("messages sent = %d, want 1", len(rc.sent))
+	}
+	if got := rc.sent[0].Subject; got != "Hallo Ada, Ada" {
+		t.Errorf("subject = %q, want %q (the input-mapped local plus the inherited variable)", got, "Hallo Ada, Ada")
 	}
 }

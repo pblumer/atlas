@@ -605,3 +605,47 @@ func TestLdapClientCertificate(t *testing.T) {
 		t.Error("want the job parked on an incident")
 	}
 }
+
+// TestLdapConnectorSeesInputMappedLocal proves the worker resolves both its FEEL
+// fields and its entry variable up the scope chain: an input mapping builds the DN
+// and the entry, and the add uses them (ADR-0068). Reading the process-instance scope
+// flat left both invisible.
+func TestLdapConnectorSeesInputMappedLocal(t *testing.T) {
+	log, store := openStore(t)
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	b := compiler.NewBuilder(ldapDefKey, "directory", 1)
+	start := b.AddStartEvent()
+	call := b.AddLdapConnectorTask(compiler.LdapConfig{
+		URL: lit(ldapURL), Op: "add",
+		DN:       compiler.RestExpr{Expr: compile(`dn`)},
+		EntryVar: "entry",
+		Retries:  3,
+	})
+	b.AddInputMapping(call, "dn", compile(`"uid=" + uid + ",ou=people,dc=example,dc=com"`))
+	b.AddInputMapping(call, "entry", compile(`{uid: uid, objectClass: ["top", "person"]}`))
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "uid", Kind: model.VarString, Text: "ada"})
+
+	if conn.addDN != "uid=ada,ou=people,dc=example,dc=com" {
+		t.Errorf("add DN = %q, want the input-mapped DN", conn.addDN)
+	}
+	if got := conn.addAttrs["uid"]; len(got) != 1 || got[0] != "ada" {
+		t.Errorf("add attrs uid = %v, want the input-mapped entry's uid", got)
+	}
+}

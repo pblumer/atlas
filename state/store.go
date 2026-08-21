@@ -972,30 +972,12 @@ func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
 // scope sees its locals over anything inherited. Passing the process-instance root
 // key yields exactly the root's variables (it has no enclosing scope), so callers
 // reading a root instance are unaffected.
+//
+// It is the [Reader]-level [VisibleVariables] under a name that reads better at a
+// call site holding a *Store; the walk itself lives there, shared with the connector
+// workers.
 func (s *Store) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
-	seen := map[string]bool{}
-	visited := map[uint64]bool{}
-	for scope != 0 && !visited[scope] {
-		visited[scope] = true
-		if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
-			if seen[v.Name] {
-				return nil // a nearer scope already provided this name (shadowing)
-			}
-			seen[v.Name] = true
-			return fn(v)
-		}); err != nil {
-			return err
-		}
-		ei, ok, err := s.GetElementInstance(scope)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			break // reached the process root (no element instance record)
-		}
-		scope = ei.FlowScopeKey
-	}
-	return nil
+	return VisibleVariables(s, scope, fn)
 }
 
 // CompensablesOfScope calls fn with every completed compensable activity retained

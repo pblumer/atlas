@@ -8,11 +8,8 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
-
-// maxScopeDepth bounds the walk up an element's scope chain, matching the other
-// connectors' bound so a malformed chain cannot loop.
-const maxScopeDepth = 64
 
 // VarStore is the slice of the state store the engine half reads.
 type VarStore interface {
@@ -190,27 +187,7 @@ func variablesOf(res Result) ([]model.VariableValue, error) {
 }
 
 // scopeChainVars reads the variables an element sees up its scope chain (nearest
-// wins), the same walk the other connectors make.
+// wins), through the shared walk every job worker uses (ADR-0068).
 func scopeChainVars(store VarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	scope := elementInstanceKey
-	for depth := 0; depth <= maxScopeDepth; depth++ {
-		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-			if _, seen := vars[v.Name]; !seen {
-				vars[v.Name] = *v
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		ei, ok, err := store.GetElementInstance(scope)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || ei.FlowScopeKey == 0 || ei.FlowScopeKey == scope {
-			break
-		}
-		scope = ei.FlowScopeKey
-	}
-	return vars, nil
+	return state.VisibleVariablesMap(store, elementInstanceKey)
 }

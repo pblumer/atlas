@@ -22,9 +22,10 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // Register it with a [job.Runner] for the reserved [compiler.MailJobTypeIndex]; the
 // runner then pulls activatable mail jobs, and for each the handler resolves the
 // task's connector/recipients/subject/body from the compiled process — evaluating
-// any FEEL field over the instance's variables (the fx toggle, ADR-0067) — resolves
-// the named connector's provider client from reg, and sends the message keyed by the
-// job key so an at-least-once retry de-duplicates (ADR-0079). Returning an error
+// any FEEL field over the variables the task sees, up its scope chain (the fx
+// toggle, ADR-0067/0068) — resolves the named connector's provider client from reg,
+// and sends the message keyed by the job key so an at-least-once retry de-duplicates
+// (ADR-0079). Returning an error
 // leaves the job pending (retry, then an incident, ADR-0061); the runner completes it
 // only on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handler {
@@ -47,7 +48,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handle
 		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
 		// changes only *where* the registry comes from, never what a resolved mail
 		// task means — which is the point of routing both paths through one pair.
-		resolved, err := Resolve(store, cp, detail, ei.ProcessInstanceKey, j.Key)
+		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return err
 		}
@@ -81,11 +82,11 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // expression evaluated over the scope's variables and coerced to its string form. A
 // FEEL null — an absent variable or a failed evaluation — becomes the empty string,
 // matching the engine's null-propagating contract (as the REST worker's fields do).
-func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) string {
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
 	if rv.Expr == nil {
 		return rv.Literal
 	}
-	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
 	if err != nil {
 		return ""
 	}
@@ -93,32 +94,17 @@ func resolveValue(rv compiler.RestExpr, scope uint64, scopeVars map[string]model
 	return text
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each expression reads without a per-name store lookup
-// (mirrors the REST worker).
-func readScopeVars(store state.Reader, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
-}
-
-// bindVars turns the named variables from a scope into a FEEL binding. A name absent
-// from the scope is left unbound (FEEL null); the reserved name processInstanceKey
-// binds to the scope's own key as a string.
-func bindVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindVars turns the named variables the task sees into a FEEL binding. A name absent
+// from the chain is left unbound (FEEL null); the reserved name processInstanceKey
+// binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

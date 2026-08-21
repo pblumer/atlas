@@ -1931,7 +1931,7 @@ const SERVICE_TASK_KINDS = [
     ext: "atlas:RestConnector",
     fields: [
       { group: "HTTP endpoint" },
-      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], hint: "POST, PUT and PATCH carry a JSON body: the input mappings below are that body. With none, every variable the task sees is sent." },
       { key: "url", label: "URL", placeholder: "https://api.example.com/customers", fx: true },
       { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", fx: true, hint: "Sent with the request. A value may be a FEEL expression (fx)." },
       { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
@@ -1986,7 +1986,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "bodyVariable", label: "Payload variable", placeholder: "scimUser",
         showIf: (v) => v.operation === "create" || v.operation === "replace" || v.operation === "patch",
-        hint: "A process variable holding the JSON object to send. Empty sends the whole variable scope.",
+        hint: "A process variable holding the JSON object to send. Empty sends the input mappings below instead — or, with none, every variable the task sees.",
       },
       { group: "Authentication" },
       {
@@ -2413,7 +2413,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Event", showIf: (v) => !v.operation || v.operation === "write" },
       { key: "subject", label: "Subject", placeholder: "orders/new", showIf: (v) => !v.operation || v.operation === "write" || v.operation === "read", hint: "The clio subject the event lands under (write) or is read from (read/get_state)." },
-      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The instance's variables are sent as the event body." },
+      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The input mappings below are the event body. With none, every variable the task sees is sent." },
       { group: "Query", showIf: (v) => v.operation === "query" },
       { key: "query", label: "Query", placeholder: "leave empty for get_state", showIf: (v) => v.operation === "query", hint: "A run_query query string. If empty, get_state is read for the subject above." },
       { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },

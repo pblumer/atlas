@@ -23,17 +23,18 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // task. Register it with a [job.Runner] for the reserved ClioWriteJobType index;
 // the runner then pulls activatable clio jobs, and for each the handler resolves
 // the connector task's connector/subject/event-type from the compiled process,
-// resolves the connector's client from reg, and appends an event carrying the
-// instance's variables as its body — keyed by the job key so an at-least-once
-// retry de-duplicates (ADR-0036). Returning an error leaves the job pending,
-// exactly as for any worker; the runner completes it only on success.
+// resolves the connector's client from reg, and appends an event whose body the
+// task's input mappings define — or, with none, the variables it sees (see
+// [eventBody]) — keyed by the job key so an at-least-once retry de-duplicates
+// (ADR-0036). Returning an error leaves the job pending, exactly as for any
+// worker; the runner completes it only on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handler {
 	return func(j job.Job) error {
 		cp, detail, client, ei, ok, err := resolveConnector(store, lookup, reg, j)
 		if err != nil || !ok {
 			return err
 		}
-		data, err := instanceData(store, ei.ProcessInstanceKey)
+		data, err := eventBody(store, cp, ei, j.ElementInstanceKey)
 		if err != nil {
 			return fmt.Errorf("clio: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
@@ -168,16 +169,32 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 	}
 }
 
-// instanceData reads the instance's variables into a JSON-ready map — the event
-// body a connector task sends. Until output mappings exist (Milestone 1) the
-// whole variable scope is the payload, exactly as a message throw publishes its
-// instance's variables (ADR-0035/0036).
-func instanceData(store state.Reader, scope uint64) (map[string]any, error) {
+// eventBody builds the JSON-ready body a write-events task appends.
+//
+// When the task carries zeebe:ioMapping inputs, those mappings *are* the payload:
+// the body is exactly its activity-local scope, which at this point holds the mapped
+// values and nothing else (a job's result is written there only on completion). That
+// is the "payload mapping" ADR-0036 planned, expressed with the ADR-0068 mappings
+// that arrived later (ADR-draft-connector-payloads-are-the-input-mapping) — a model
+// states what leaves it rather than spilling every process variable, including
+// scratch and internal ones, into an external event store.
+//
+// With no input mappings the body stays every variable the task *sees*, resolved up
+// its scope chain (nearest scope wins), so a task inside a subprocess also carries
+// that subprocess's variables; for a top-level task the chain is just the process
+// instance, exactly the previous behaviour (ADR-0035/0036).
+func eventBody(store state.Reader, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue, elementInstanceKey uint64) (map[string]any, error) {
 	data := map[string]any{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
+	collect := func(v *model.VariableValue) error {
 		data[v.Name] = varToAny(v)
 		return nil
-	})
+	}
+	var err error
+	if len(cp.IOInputs(ei.ElementId)) > 0 {
+		err = store.VariablesOfScope(elementInstanceKey, collect) // the mappings, inheriting nothing
+	} else {
+		err = state.VisibleVariables(store, elementInstanceKey, collect)
+	}
 	if err != nil {
 		return nil, err
 	}
