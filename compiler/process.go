@@ -289,6 +289,14 @@ type CallActivityDetail struct {
 // compiler names it in the loop.unbounded warning, so both read the same number.
 const SafeLoopCeiling = 1000
 
+// LoopCounterVariable is the name of the 1-based per-iteration counter a loop binds
+// into each round's own scope (ADR-0077/ADR-0133, matching Zeebe). The engine writes
+// it and reads it back to know which round just finished, so it is the engine's name
+// to own inside a loop: the deploy refuses a model that maps onto it there
+// (loop.counter-mapping), and both sides name it from here rather than repeating the
+// string.
+const LoopCounterVariable = "loopCounter"
+
 // MultiInstanceDetail is the per-multi-instance-activity data a behavior needs at
 // runtime (ADR-0077). A multi-instance activity runs its node N times — once per
 // element of InputCollection (a FEEL list), or Cardinality times — as inner element

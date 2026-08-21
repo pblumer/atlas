@@ -26,8 +26,9 @@ const standardLoopBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100
   </process>
 </definitions>`
 
-// loopTimeline runs the looping definition and returns its finished instance's steps.
-func loopTimeline(t *testing.T) []loopStep {
+// loopTimeline runs the looping definition and returns its finished instance's replay:
+// the steps and the token frames the diagram is drawn from.
+func loopTimeline(t *testing.T) loopReplay {
 	t.Helper()
 	ts := newTestServer(t)
 	c := newClient(t)
@@ -64,13 +65,29 @@ func loopTimeline(t *testing.T) []loopStep {
 	if code != http.StatusOK {
 		t.Fatalf("timeline: %d (%s)", code, raw)
 	}
-	var tl struct {
-		Steps []loopStep `json:"steps"`
-	}
+	var tl loopReplay
 	if err := json.Unmarshal(raw, &tl); err != nil {
 		t.Fatalf("decode timeline: %v", err)
 	}
-	return tl.Steps
+	return tl
+}
+
+// loopReplay is the part of an instance's timeline these tests read: the steps, and the
+// frames that say which tokens the replay draws at each position.
+type loopReplay struct {
+	Steps  []loopStep  `json:"steps"`
+	Frames []loopFrame `json:"frames"`
+}
+
+type loopFrame struct {
+	Position uint64      `json:"position"`
+	Tokens   []loopToken `json:"tokens"`
+}
+
+type loopToken struct {
+	ElementID          string `json:"elementId"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	State              string `json:"state"`
 }
 
 type loopVar struct {
@@ -93,7 +110,7 @@ type loopStep struct {
 // it was. The counter now rides along as an input and as the step's own iteration
 // number.
 func TestLoopRoundsAreIdentified(t *testing.T) {
-	steps := loopTimeline(t)
+	steps := loopTimeline(t).Steps
 
 	var rounds []int
 	body := 0
@@ -138,7 +155,7 @@ func TestLoopRoundsAreIdentified(t *testing.T) {
 // That scope was not folded either, so a finished round reported no change at all —
 // which the replay stated as "wrote nothing" about a round that had done work.
 func TestLoopRoundShowsWhatItWrote(t *testing.T) {
-	steps := loopTimeline(t)
+	steps := loopTimeline(t).Steps
 
 	find := func(vars []loopVar, name string) (loopVar, bool) {
 		for _, v := range vars {
@@ -182,5 +199,40 @@ func TestLoopRoundShowsWhatItWrote(t *testing.T) {
 	}
 	if seen != 5 {
 		t.Fatalf("checked %d rounds, want 5", seen)
+	}
+}
+
+// TestLoopReplayDropsAFinishedRoundsToken checks that replaying a loop does not pile up
+// one ghost token per round. A completed element instance is normally kept visible until
+// the activation it causes appears, so the token does not flicker between two log
+// positions — but a loop round activates nothing: the body owns the activity's outgoing
+// flow and takes it once, when the loop ends (ADR-0077/0133). Every finished round was
+// therefore left waiting for a successor that never came, so a five-round loop drew six
+// tokens on one shape and a runaway loop drew hundreds.
+func TestLoopReplayDropsAFinishedRoundsToken(t *testing.T) {
+	frames := loopTimeline(t).Frames
+	if len(frames) == 0 {
+		t.Fatal("the replay has no frames")
+	}
+	peak := 0
+	for _, f := range frames {
+		if len(f.Tokens) > peak {
+			peak = len(f.Tokens)
+		}
+		live := map[uint64]bool{}
+		for _, tk := range f.Tokens {
+			if live[tk.ElementInstanceKey] {
+				t.Errorf("frame at %d draws element instance %d twice", f.Position, tk.ElementInstanceKey)
+			}
+			live[tk.ElementInstanceKey] = true
+		}
+	}
+	// The most a frame may hold is the loop body plus the one round running under it —
+	// this loop is sequential and the process has no other branch.
+	if peak != 2 {
+		t.Errorf("the busiest frame holds %d tokens, want 2 (the loop body and its live round)", peak)
+	}
+	if last := frames[len(frames)-1]; len(last.Tokens) != 0 {
+		t.Errorf("the finished instance still draws %d tokens", len(last.Tokens))
 	}
 }

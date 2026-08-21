@@ -425,7 +425,14 @@ func handleElementCompleting(c *ProcessingContext) {
 		// variables when the child completes (resumeCaller), not against this
 		// element's local scope, so the generic promotion is skipped for it — but its
 		// input-mapped local scope is still dropped (ADR-0076).
-		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity {
+		//
+		// A loop *body* is skipped too, and for the same kind of reason: it runs no
+		// work of its own. Each round applied the activity's output mappings over its
+		// own scope, where its result was, and promoted them (ADR-0068 with ADR-0077).
+		// Re-evaluating them over the body scope — which holds no round's raw result —
+		// evaluated to null, and wrote that null into the enclosing scope, fabricating
+		// a variable no run produced and overwriting any real value of that name.
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody {
 			applyOutputMappings(c, c.cmd.Key, ei)
 		}
 		// A loop's element instances drop their own scope further down this same
@@ -3600,8 +3607,10 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 // LoopCounterVariable is the standard multi-instance per-iteration counter variable
 // (1-based), bound into each inner iteration's scope (ADR-0077, matching Zeebe).
 // Exported so read-side surfaces can name the variable they are looking for without
-// re-inventing the string and drifting from what the engine actually writes.
-const LoopCounterVariable = "loopCounter"
+// re-inventing the string and drifting from what the engine actually writes. It is the
+// compiler's constant, so the deploy check that keeps a model from mapping onto it
+// (loop.counter-mapping) and the runtime that writes it can never disagree.
+const LoopCounterVariable = compiler.LoopCounterVariable
 
 // seedMultiInstance runs a multi-instance body's activation (ADR-0077): it evaluates
 // the loop's input collection (or cardinality) over the body's scope chain to N items

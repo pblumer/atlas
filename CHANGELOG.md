@@ -29,6 +29,42 @@ _Changed_ / _Removed_ for each version.
   drop their scope where they always did, after the loop has read what it keeps there.
   An activity without a loop marker is unchanged.
 
+- **A loop body no longer writes a null over the process** (ADR-0068 with
+  ADR-0077/ADR-0133). Each round of a looping activity evaluates the activity's
+  `zeebe:ioMapping` outputs over its own scope, where its result is, and promotes them.
+  The body then did it a second time — over the body scope, which holds no round's raw
+  result — so the mapping evaluated to null and wrote that null into the enclosing
+  scope: a variable no run produced, landing on top of whatever the process already held
+  under that name. On a standard loop the real result overwrote it a moment later, so it
+  showed up as a phantom write on the replay; on a multi-instance activity it was the
+  last word. The body no longer re-runs mappings that were never its own. Collecting
+  across rounds is still `outputCollection`, and a standard loop's result still escapes.
+
+- **A finished loop round no longer leaves a token behind on the replay**
+  (ADR-0077/ADR-0133). The replay keeps a completed element instance visible until the
+  activation it causes appears, so a token does not flicker between the two log
+  positions it takes to move — but a loop round activates nothing: the body owns the
+  activity's outgoing flow and takes it once, when the loop ends. Every finished round
+  was therefore left waiting for a successor that never came, so a five-round loop drew
+  six tokens stacked on one shape and a runaway loop drew hundreds. A round's token is
+  now dropped when the round ends, like a termination or an end event, leaving the body
+  and the round running under it.
+
+- **A model that maps onto `loopCounter` is refused at deploy** (new rule
+  `loop.counter-mapping`, ADR-0077/ADR-0133): a round's counter lives in that round's own
+  local scope — the same scope a `zeebe:ioMapping` input writes into — and the engine
+  reads it back to know which round just finished. A mapping onto that name overwrote the
+  count, and the loop then ran exactly as the defect above did: past its maximum, until
+  someone cancelled the instance. There is no model behind it worth keeping — the counter
+  is the engine's to set and every round can already read it — so the deploy now says so,
+  naming the element and the mapping.
+
+- **The Modeler stops calling every script task a FEEL one**: the task-type select
+  labeled `bpmn:ScriptTask` "Script task (FEEL)" even when the task carried an
+  `<atlas:jobScript>` in PowerShell (ADR-0047) — the Language select right beneath it
+  said otherwise. It now names both, so the type and the language stop contradicting
+  each other.
+
 ## [0.3.0] — 2026-08-21
 
 This release moves the work that can be slow out of the engine. `atlas worker` makes
