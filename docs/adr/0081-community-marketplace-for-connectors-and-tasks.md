@@ -4,6 +4,12 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas maintainers
 
+> **Terminology note (2026-08-21).** The area this record calls the *marketplace*
+> is now called the **Repository** throughout Atlas: the Modeler navigation entry,
+> the routes under `/api/v1/repository/`, and the `<data>/repository` directory.
+> Only the name changed — every decision below still holds. This record is left in
+> its original wording as the dated account of the decision.
+
 ## Context and problem statement
 
 Atlas can now *package* reusable building blocks, but it cannot *share* them

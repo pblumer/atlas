@@ -294,7 +294,7 @@ const TOPNAV = {
   ],
   modeler: [
     { name: "Home", route: "#/modeler" },
-    { name: "Marketplace", route: "#/modeler/marketplace" },
+    { name: "Repository", route: "#/modeler/repository" },
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
@@ -5519,18 +5519,18 @@ function setTitle(label) {
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
-// viewMarketplace is the community marketplace gallery (ADR-0081): browse the
+// viewRepository is the community repository gallery (ADR-0081): browse the
 // curated catalog of connectors, service tasks and script tasks and install one
 // into this server's template store. The trust split is the load-bearing UI
 // signal — a data-only connector/service task installs in one click ("Data only"),
 // while a script task carries code, so it reads "Runs code" and installs through a
 // review affordance (and is admin-gated server-side). No secret ever travels in a
 // shared package.
-async function viewMarketplace() {
+async function viewRepository() {
   view.innerHTML = `
     <div class="between">
-      <h1>Marketplace</h1>
-      <button class="btn neutral" id="mkt-refresh" title="Reload the marketplace catalog">Refresh</button>
+      <h1>Repository</h1>
+      <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
     <p class="muted">Connectors, service tasks and scripts the community already built,
     packaged as element templates. Install one and it lands in your palette ready to
@@ -5538,24 +5538,24 @@ async function viewMarketplace() {
     is imported for review. Credentials never travel in a shared package — you connect
     those on your server.</p>
     <div class="ops-toolbar">
-      <input id="mkt-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the marketplace">
-      <div class="seg" id="mkt-kinds" role="tablist">
+      <input id="repo-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the repository">
+      <div class="seg" id="repo-kinds" role="tablist">
         <button class="active" data-kind="" role="tab" title="Show all packages">All</button>
         <button data-kind="connector" role="tab" title="Show connectors only">Connectors</button>
         <button data-kind="service-task" role="tab" title="Show service tasks only">Service tasks</button>
         <button data-kind="script-task" role="tab" title="Show script tasks only">Script tasks</button>
       </div>
     </div>
-    <div id="mkt-grid" class="mkt-grid"><div class="card empty">Loading…</div></div>`;
+    <div id="repo-grid" class="repo-grid"><div class="card empty">Loading…</div></div>`;
 
-  const grid = document.getElementById("mkt-grid");
+  const grid = document.getElementById("repo-grid");
   const kindLabel = { "connector": "Connector", "service-task": "Service task", "script-task": "Script task" };
   let packages = [];
   let installed = new Set();
   let kind = "";
 
   const render = () => {
-    const q = document.getElementById("mkt-q").value.trim().toLowerCase();
+    const q = document.getElementById("repo-q").value.trim().toLowerCase();
     const list = packages.filter((p) => {
       if (kind && p.kind !== kind) return false;
       if (q && !(`${p.title} ${p.description} ${p.author}`).toLowerCase().includes(q)) return false;
@@ -5576,22 +5576,22 @@ async function viewMarketplace() {
           ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
           : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template into your palette">Install</button>`;
       const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
-      return `<div class="mkt-card card">
-        <div class="mkt-head">
-          <div class="mkt-title">
+      return `<div class="repo-card card">
+        <div class="repo-head">
+          <div class="repo-title">
             <h3>${esc(p.title)}</h3>
-            <div class="muted mkt-author">${esc(p.author)}</div>
+            <div class="muted repo-author">${esc(p.author)}</div>
           </div>
           <span class="chip">${esc(kindLabel[p.kind] || p.kind)}</span>
         </div>
-        <p class="mkt-desc">${esc(p.description)}</p>
-        <div class="mkt-meta">
+        <p class="repo-desc">${esc(p.description)}</p>
+        <div class="repo-meta">
           <span class="chip">v${esc(p.version)}</span>
           <span class="chip">Atlas ${esc(p.engineCompat)}</span>
           ${trust}
           ${installedTag}
         </div>
-        <div class="mkt-foot">${action}</div>
+        <div class="repo-foot">${action}</div>
       </div>`;
     }).join("");
   };
@@ -5600,8 +5600,8 @@ async function viewMarketplace() {
     grid.innerHTML = `<div class="card empty">Loading…</div>`;
     try {
       const [pkgs, inst] = await Promise.all([
-        api("GET", "/api/v1/marketplace/packages"),
-        api("GET", "/api/v1/marketplace/installed"),
+        api("GET", "/api/v1/repository/packages"),
+        api("GET", "/api/v1/repository/installed"),
       ]);
       packages = pkgs || [];
       installed = new Set((inst || []).map((r) => r.id));
@@ -5620,11 +5620,11 @@ async function viewMarketplace() {
     btn.disabled = true;
     try {
       if (btn.dataset.act === "install") {
-        const res = await api("POST", `/api/v1/marketplace/packages/${encodeURIComponent(id)}/install`);
+        const res = await api("POST", `/api/v1/repository/packages/${encodeURIComponent(id)}/install`);
         installed.add(id);
         toast(res && res.reviewRequired ? `${name} imported for review` : `${name} installed`, "ok");
       } else {
-        await api("DELETE", `/api/v1/marketplace/installed/${encodeURIComponent(id)}`);
+        await api("DELETE", `/api/v1/repository/installed/${encodeURIComponent(id)}`);
         installed.delete(id);
         toast(`${name} removed`, "ok");
       }
@@ -5635,15 +5635,15 @@ async function viewMarketplace() {
     }
   });
 
-  document.getElementById("mkt-q").addEventListener("input", render);
-  document.getElementById("mkt-kinds").addEventListener("click", (e) => {
+  document.getElementById("repo-q").addEventListener("input", render);
+  document.getElementById("repo-kinds").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-kind]");
     if (!b) return;
     kind = b.dataset.kind;
-    document.querySelectorAll("#mkt-kinds button").forEach((x) => x.classList.toggle("active", x === b));
+    document.querySelectorAll("#repo-kinds button").forEach((x) => x.classList.toggle("active", x === b));
     render();
   });
-  document.getElementById("mkt-refresh").addEventListener("click", load);
+  document.getElementById("repo-refresh").addEventListener("click", load);
   await load();
 }
 
@@ -5662,7 +5662,7 @@ function routeTitle(path) {
     [/^#\/modeler\/dmn\//, "Decision · Modeler"],
     [/^#\/modeler\/(d|draft)\//, "Diagram · Modeler"],
     [/^#\/modeler\/p\//, "Project · Modeler"],
-    [/^#\/modeler\/marketplace$/, "Marketplace · Modeler"],
+    [/^#\/modeler\/repository$/, "Repository · Modeler"],
     [/^#\/modeler$/, "Modeler"],
     [/^#\/tasks\/start$/, "Start a process · Tasks"],
     [/^#\/tasks\/t\//, "Task · Tasks"],
@@ -5716,7 +5716,7 @@ async function route() {
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
-    if (path === "#/modeler/marketplace") return await viewMarketplace();
+    if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);

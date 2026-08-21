@@ -16,11 +16,11 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-func newInstalled(t *testing.T) *marketplaceStore {
+func newInstalled(t *testing.T) *repositoryStore {
 	t.Helper()
-	ms, err := newMarketplaceStore(filepath.Join(t.TempDir(), "marketplace"))
+	ms, err := newRepositoryStore(filepath.Join(t.TempDir(), "repository"))
 	if err != nil {
-		t.Fatalf("newMarketplaceStore: %v", err)
+		t.Fatalf("newRepositoryStore: %v", err)
 	}
 	return ms
 }
@@ -29,9 +29,9 @@ func rawTemplate(name string) json.RawMessage {
 	return json.RawMessage(`{"name":"` + name + `","appliesTo":["bpmn:ServiceTask"],"properties":[]}`)
 }
 
-// TestMarketplaceStoreRoundTripAndOrder saves records out of order and reads them
+// TestRepositoryStoreRoundTripAndOrder saves records out of order and reads them
 // back oldest-install-first, and proves get finds a specific one.
-func TestMarketplaceStoreRoundTripAndOrder(t *testing.T) {
+func TestRepositoryStoreRoundTripAndOrder(t *testing.T) {
 	ms := newInstalled(t)
 	save := func(id string, at int64) {
 		if err := ms.Save(installedTemplate{ID: id, PackageID: id, Kind: packageKindConnector, Template: rawTemplate(id), InstalledAt: at}); err != nil {
@@ -60,9 +60,9 @@ func TestMarketplaceStoreRoundTripAndOrder(t *testing.T) {
 	}
 }
 
-// TestMarketplaceStoreTieBreakByID proves records installed in the same second
+// TestRepositoryStoreTieBreakByID proves records installed in the same second
 // sort deterministically by id.
-func TestMarketplaceStoreTieBreakByID(t *testing.T) {
+func TestRepositoryStoreTieBreakByID(t *testing.T) {
 	ms := newInstalled(t)
 	for _, id := range []string{"c", "a", "b"} {
 		if err := ms.Save(installedTemplate{ID: id, Template: rawTemplate(id), InstalledAt: 42}); err != nil {
@@ -80,9 +80,9 @@ func TestMarketplaceStoreTieBreakByID(t *testing.T) {
 	}
 }
 
-// TestMarketplaceStoreOverwriteAndDelete proves re-installing an id replaces the
+// TestRepositoryStoreOverwriteAndDelete proves re-installing an id replaces the
 // record and uninstall is idempotent.
-func TestMarketplaceStoreOverwriteAndDelete(t *testing.T) {
+func TestRepositoryStoreOverwriteAndDelete(t *testing.T) {
 	ms := newInstalled(t)
 	if err := ms.Save(installedTemplate{ID: "p", Version: "1.0.0", Template: rawTemplate("p"), InstalledAt: 1}); err != nil {
 		t.Fatalf("save: %v", err)
@@ -108,21 +108,21 @@ func TestMarketplaceStoreOverwriteAndDelete(t *testing.T) {
 	}
 }
 
-// TestMarketplaceStoreErrorPaths covers mkdir, decode, stray-file, and missing-dir
+// TestRepositoryStoreErrorPaths covers mkdir, decode, stray-file, and missing-dir
 // branches, mirroring the other sidecar stores' error coverage.
-func TestMarketplaceStoreErrorPaths(t *testing.T) {
+func TestRepositoryStoreErrorPaths(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "afile")
 	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	if _, err := newMarketplaceStore(filepath.Join(f, "marketplace")); err == nil {
-		t.Fatal("newMarketplaceStore under a file: want error")
+	if _, err := newRepositoryStore(filepath.Join(f, "repository")); err == nil {
+		t.Fatal("newRepositoryStore under a file: want error")
 	}
 
-	dir := filepath.Join(t.TempDir(), "marketplace")
-	ms, err := newMarketplaceStore(dir)
+	dir := filepath.Join(t.TempDir(), "repository")
+	ms, err := newRepositoryStore(dir)
 	if err != nil {
-		t.Fatalf("newMarketplaceStore: %v", err)
+		t.Fatalf("newRepositoryStore: %v", err)
 	}
 
 	bad := ms.FileFor("p")
@@ -164,51 +164,51 @@ func TestMarketplaceStoreErrorPaths(t *testing.T) {
 	}
 }
 
-// TestMarketplaceChecksumDeterministic proves the checksum ignores key order and
+// TestRepositoryChecksumDeterministic proves the checksum ignores key order and
 // whitespace but changes when the template content changes.
-func TestMarketplaceChecksumDeterministic(t *testing.T) {
-	a, err := marketplaceChecksum(json.RawMessage(`{"a":1,"b":2}`))
+func TestRepositoryChecksumDeterministic(t *testing.T) {
+	a, err := repositoryChecksum(json.RawMessage(`{"a":1,"b":2}`))
 	if err != nil {
 		t.Fatalf("checksum a: %v", err)
 	}
-	b, err := marketplaceChecksum(json.RawMessage(`{ "b": 2,  "a": 1 }`))
+	b, err := repositoryChecksum(json.RawMessage(`{ "b": 2,  "a": 1 }`))
 	if err != nil {
 		t.Fatalf("checksum b: %v", err)
 	}
 	if a != b {
 		t.Errorf("checksum should ignore key order/whitespace: %s != %s", a, b)
 	}
-	c, err := marketplaceChecksum(json.RawMessage(`{"a":1,"b":3}`))
+	c, err := repositoryChecksum(json.RawMessage(`{"a":1,"b":3}`))
 	if err != nil {
 		t.Fatalf("checksum c: %v", err)
 	}
 	if a == c {
 		t.Error("checksum should change when content changes")
 	}
-	if _, err := marketplaceChecksum(json.RawMessage(`{nope`)); err == nil {
+	if _, err := repositoryChecksum(json.RawMessage(`{nope`)); err == nil {
 		t.Error("checksum of invalid JSON: want error")
 	}
 }
 
 // TestValidatePackage covers each rejection branch and the happy path.
 func TestValidatePackage(t *testing.T) {
-	good := marketplacePackage{ID: "x", Version: "1.0.0", Kind: packageKindConnector, Title: "X", Template: rawTemplate("x")}
+	good := repositoryPackage{ID: "x", Version: "1.0.0", Kind: packageKindConnector, Title: "X", Template: rawTemplate("x")}
 	if err := validatePackage(good); err != nil {
 		t.Fatalf("valid package rejected: %v", err)
 	}
 
 	cases := []struct {
 		name string
-		mut  func(p *marketplacePackage)
+		mut  func(p *repositoryPackage)
 	}{
-		{"no id", func(p *marketplacePackage) { p.ID = " " }},
-		{"no version", func(p *marketplacePackage) { p.Version = "" }},
-		{"no title", func(p *marketplacePackage) { p.Title = "" }},
-		{"bad kind", func(p *marketplacePackage) { p.Kind = "widget" }},
-		{"empty template", func(p *marketplacePackage) { p.Template = nil }},
-		{"template not object", func(p *marketplacePackage) { p.Template = json.RawMessage(`[1,2]`) }},
-		{"checksum mismatch", func(p *marketplacePackage) { p.Checksum = "sha256:deadbeef" }},
-		{"embedded secret", func(p *marketplacePackage) {
+		{"no id", func(p *repositoryPackage) { p.ID = " " }},
+		{"no version", func(p *repositoryPackage) { p.Version = "" }},
+		{"no title", func(p *repositoryPackage) { p.Title = "" }},
+		{"bad kind", func(p *repositoryPackage) { p.Kind = "widget" }},
+		{"empty template", func(p *repositoryPackage) { p.Template = nil }},
+		{"template not object", func(p *repositoryPackage) { p.Template = json.RawMessage(`[1,2]`) }},
+		{"checksum mismatch", func(p *repositoryPackage) { p.Checksum = "sha256:deadbeef" }},
+		{"embedded secret", func(p *repositoryPackage) {
 			p.Template = json.RawMessage(`{"properties":[{"password":"hunter2"}]}`)
 		}},
 	}
@@ -327,51 +327,51 @@ func TestLoadCatalogErrors(t *testing.T) {
 	}
 }
 
-// TestMarketplaceHandlerErrorPaths covers the install/list/uninstall handler error
+// TestRepositoryHandlerErrorPaths covers the install/list/uninstall handler error
 // branches: an empty install list, a validation failure, and store I/O failures.
-func TestMarketplaceHandlerErrorPaths(t *testing.T) {
+func TestRepositoryHandlerErrorPaths(t *testing.T) {
 	srv := newServerForErrors(t)
 
 	// A fresh server has nothing installed: the nil-slice-to-[] branch, 200 with [].
 	rr := httptest.NewRecorder()
-	srv.handleListInstalled(rr, httptest.NewRequest("GET", "/api/v1/marketplace/installed", nil))
+	srv.handleListInstalled(rr, httptest.NewRequest("GET", "/api/v1/repository/installed", nil))
 	if rr.Code != 200 || rr.Body.String() != "[]\n" {
 		t.Errorf("empty installed list = %d %q, want 200 \"[]\\n\"", rr.Code, rr.Body.String())
 	}
 
 	// Install of a package that fails validation → 422. Inject an invalid connector
 	// (a data-only kind, so no admin gate) carrying an embedded secret.
-	srv.marketplace = append(srv.marketplace, marketplacePackage{
+	srv.repository = append(srv.repository, repositoryPackage{
 		ID: "bad.secret", Version: "1.0.0", Kind: packageKindConnector, Title: "Bad",
 		Template: json.RawMessage(`{"password":"hunter2"}`),
 	})
-	req := httptest.NewRequest("POST", "/api/v1/marketplace/packages/bad.secret/install", nil)
+	req := httptest.NewRequest("POST", "/api/v1/repository/packages/bad.secret/install", nil)
 	req.SetPathValue("id", "bad.secret")
 	rr = httptest.NewRecorder()
-	srv.handleInstallMarketplacePackage(rr, req)
+	srv.handleInstallRepositoryPackage(rr, req)
 	if rr.Code != 422 {
 		t.Errorf("install of an invalid package = %d, want 422", rr.Code)
 	}
 
 	// Point the store at a path that cannot be written/read so save/loadAll/delete
 	// surface I/O errors as 500s.
-	srv.marketplaceStore = brokenStore(newMarketplaceStore(filepath.Join(t.TempDir(), "gone")))
+	srv.repositoryStore = brokenStore(newRepositoryStore(filepath.Join(t.TempDir(), "gone")))
 
-	req = httptest.NewRequest("POST", "/api/v1/marketplace/packages/"+"atlas.rest-outbound"+"/install", nil)
+	req = httptest.NewRequest("POST", "/api/v1/repository/packages/"+"atlas.rest-outbound"+"/install", nil)
 	req.SetPathValue("id", "atlas.rest-outbound")
 	rr = httptest.NewRecorder()
-	srv.handleInstallMarketplacePackage(rr, req)
+	srv.handleInstallRepositoryPackage(rr, req)
 	if rr.Code != 500 {
 		t.Errorf("install with a broken store = %d, want 500", rr.Code)
 	}
 
 	rr = httptest.NewRecorder()
-	srv.handleListInstalled(rr, httptest.NewRequest("GET", "/api/v1/marketplace/installed", nil))
+	srv.handleListInstalled(rr, httptest.NewRequest("GET", "/api/v1/repository/installed", nil))
 	if rr.Code != 500 {
 		t.Errorf("list with a broken store = %d, want 500", rr.Code)
 	}
 
-	req = httptest.NewRequest("DELETE", "/api/v1/marketplace/installed/"+"atlas.rest-outbound", nil)
+	req = httptest.NewRequest("DELETE", "/api/v1/repository/installed/"+"atlas.rest-outbound", nil)
 	req.SetPathValue("id", "atlas.rest-outbound")
 	rr = httptest.NewRecorder()
 	srv.handleUninstall(rr, req)
@@ -383,7 +383,7 @@ func TestMarketplaceHandlerErrorPaths(t *testing.T) {
 // scriptTaskID returns the id of the first script-task package in the catalog.
 func scriptTaskID(t *testing.T, srv *Server) string {
 	t.Helper()
-	for _, p := range srv.marketplace {
+	for _, p := range srv.repository {
 		if p.carriesCode() {
 			return p.ID
 		}
@@ -422,13 +422,13 @@ func TestInstallScriptTaskAdminGate(t *testing.T) {
 	id := scriptTaskID(t, srv)
 
 	call := func(p *httpapi.Principal) int {
-		req := httptest.NewRequest("POST", "/api/v1/marketplace/packages/"+id+"/install", nil)
+		req := httptest.NewRequest("POST", "/api/v1/repository/packages/"+id+"/install", nil)
 		req.SetPathValue("id", id)
 		if p != nil {
 			req = req.WithContext(httpapi.WithPrincipal(context.Background(), p))
 		}
 		rr := httptest.NewRecorder()
-		srv.handleInstallMarketplacePackage(rr, req)
+		srv.handleInstallRepositoryPackage(rr, req)
 		return rr.Code
 	}
 
@@ -440,5 +440,141 @@ func TestInstallScriptTaskAdminGate(t *testing.T) {
 	}
 	if code := call(&httpapi.Principal{UserID: "admin", Roles: []string{RoleAdmin}}); code != 200 {
 		t.Errorf("admin script-task install = %d, want 200", code)
+	}
+}
+
+// The "Marketplace" → "Repository" rename moved the design-time directory from
+// <data>/marketplace to <data>/repository. migrateRepositoryDir carries an
+// existing install's templates across; these cover the four ways it can be asked.
+
+// TestMigrateRepositoryDirMovesTheOldDirectory is the upgrade path: a server that
+// installed templates under the old name finds them under the new one.
+func TestMigrateRepositoryDirMovesTheOldDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	old := filepath.Join(dataDir, "marketplace")
+	if err := os.MkdirAll(old, 0o755); err != nil {
+		t.Fatalf("seed old dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(old, "community.rest-outbound.json"), []byte(`{"id":"community.rest-outbound"}`), 0o644); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+
+	if err := migrateRepositoryDir(dataDir); err != nil {
+		t.Fatalf("migrateRepositoryDir: %v", err)
+	}
+
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("old directory still present, want it moved (stat err = %v)", err)
+	}
+	moved := filepath.Join(dataDir, "repository", "community.rest-outbound.json")
+	if _, err := os.Stat(moved); err != nil {
+		t.Errorf("installed record did not survive the migration: %v", err)
+	}
+}
+
+// TestMigrateRepositoryDirLeavesAnAlreadyMigratedInstall covers the second start
+// after an upgrade — and the odd case of both directories existing, where the new
+// one is authoritative and the old is left untouched rather than clobbering it.
+func TestMigrateRepositoryDirLeavesAnAlreadyMigratedInstall(t *testing.T) {
+	dataDir := t.TempDir()
+	old, current := filepath.Join(dataDir, "marketplace"), filepath.Join(dataDir, "repository")
+	for _, dir := range []string{old, current} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("seed %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(current, "keep.json"), []byte(`{"id":"keep"}`), 0o644); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+
+	if err := migrateRepositoryDir(dataDir); err != nil {
+		t.Fatalf("migrateRepositoryDir: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(current, "keep.json")); err != nil {
+		t.Errorf("current directory was overwritten: %v", err)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Errorf("old directory was removed, want it left alone: %v", err)
+	}
+}
+
+// TestMigrateRepositoryDirOnAFreshInstall: nothing to move is not an error.
+func TestMigrateRepositoryDirOnAFreshInstall(t *testing.T) {
+	if err := migrateRepositoryDir(t.TempDir()); err != nil {
+		t.Fatalf("migrateRepositoryDir on a fresh data dir: %v", err)
+	}
+}
+
+// TestMigrateRepositoryDirReportsAFailedMove covers the error branch: the move
+// cannot happen, so construction must hear about it rather than start on an empty
+// repository and silently strand the operator's installed templates.
+func TestMigrateRepositoryDirReportsAFailedMove(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: a read-only data dir would not deny the rename")
+	}
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dataDir, "marketplace"), 0o755); err != nil {
+		t.Fatalf("seed old dir: %v", err)
+	}
+	if err := os.Chmod(dataDir, 0o500); err != nil { // r-x: the rename cannot write the entry
+		t.Fatalf("chmod data dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dataDir, 0o700) })
+
+	if err := migrateRepositoryDir(dataDir); err == nil {
+		t.Fatal("migrateRepositoryDir on an unwritable data dir: got nil, want an error")
+	}
+}
+
+// TestNewMigratesAnOldMarketplaceDirectory is the wiring: constructing a Server on
+// a data directory written before the rename must surface the templates that were
+// installed back then, not start on an empty repository.
+func TestNewMigratesAnOldMarketplaceDirectory(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "marketplace")
+	rec := installedTemplate{
+		ID: "community.rest-outbound", PackageID: "community.rest-outbound",
+		Version: "1.0.0", Kind: packageKindConnector, Title: "REST outbound",
+		Template: rawTemplate("REST outbound"), InstalledAt: 42,
+	}
+	// Seed through the store itself, so the record is filed exactly the way the
+	// pre-rename server filed it (the sidecar names files by hex-encoded key).
+	seed, err := newRepositoryStore(old)
+	if err != nil {
+		t.Fatalf("open the old store: %v", err)
+	}
+	if err := seed.Save(rec); err != nil {
+		t.Fatalf("seed record: %v", err)
+	}
+
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, log, store, nil)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	srv, err := New(proc, store, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() {
+		srv.Close()
+		_ = store.Close()
+		_ = log.Close()
+	})
+
+	got, err := srv.repositoryStore.LoadAll()
+	if err != nil {
+		t.Fatalf("loadAll: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != rec.ID {
+		t.Fatalf("installed templates after migration = %+v, want the one seeded under the old name", got)
 	}
 }
