@@ -39,7 +39,7 @@ type Client interface {
 }
 
 // Registry resolves a connector name to the tenant behind it. It is the worker's own
-// map: the engine never holds one for this kind (ADR-draft-entra-id-connector).
+// map: the engine never holds one for this kind (ADR-0172).
 type Registry = clientreg.Registry[Client]
 
 // NewRegistry creates an empty registry.

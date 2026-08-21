@@ -1817,7 +1817,7 @@ type xmlServiceTask struct {
 	// model-authored server through the job path.
 	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
 	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
-	// that product (ADR-draft-generic-sql-connector): one statement against a database a *worker* is
+	// that product (ADR-0173): one statement against a database a *worker* is
 	// configured for. They share a shape and differ only in the driver behind them,
 	// which is what decides the placeholder syntax a statement must use. They are the
 	// first kinds with no in-process handler at all.
@@ -1825,11 +1825,11 @@ type xmlServiceTask struct {
 	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
 	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
 	// Entra, when present, marks this service task a Microsoft Entra ID connector
-	// task (ADR-draft-entra-id-connector): one directory lifecycle operation through Graph, against a
+	// task (ADR-0172): one directory lifecycle operation through Graph, against a
 	// tenant a *worker* holds the app credential for.
 	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
 	// Ldif, when present, marks this service task a directory-file connector task
-	// (ADR-draft-directory-file-connector): LDIF or DSML entries read from, or written to, a variable.
+	// (ADR-0171): LDIF or DSML entries read from, or written to, a variable.
 	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
@@ -1995,7 +1995,7 @@ type xmlAdConnector struct {
 
 // xmlSqlConnector is the extension a SQL connector task carries, under whichever of
 // <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
-// its product (ADR-draft-generic-sql-connector). The three share this shape exactly; only the element name,
+// its product (ADR-0173). The three share this shape exactly; only the element name,
 // and so the driver, differs. connector names the database the worker holds the DSN
 // for — there is deliberately no url and no credential attribute, because the
 // connection string never enters the engine. operation is query / query-one / execute. statement is the
@@ -2015,7 +2015,7 @@ type xmlSqlConnector struct {
 }
 
 // xmlLdifConnector is the <atlas:ldifConnector> extension on a service task
-// (ADR-draft-directory-file-connector). format is "ldif" or "dsml" — required, because guessing a directory
+// (ADR-0171). format is "ldif" or "dsml" — required, because guessing a directory
 // file's format from its bytes is how a malformed file becomes a plausible-looking
 // empty result. operation is "read" (the default) or "write"; source names the
 // variable holding the file text or the entries, and resultVariable the one receiving
@@ -2031,7 +2031,7 @@ type xmlLdifConnector struct {
 }
 
 // xmlEntraConnector is the <atlas:entraConnector> extension on a service task
-// (ADR-draft-entra-id-connector). connector names the tenant the worker holds the app credential for —
+// (ADR-0172). connector names the tenant the worker holds the app credential for —
 // there is deliberately no tenantId, clientId or secret attribute, because none of
 // them enters the engine. operation is the lifecycle step; userId and groupId address
 // the objects (literal-or-FEEL); attributesVariable names the variable holding the

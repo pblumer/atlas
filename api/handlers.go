@@ -4503,7 +4503,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here
 		// to travel. SQL is the first kind with no in-process handler at all, so this
-		// is not one of two paths that could drift — it is the only one (ADR-draft-generic-sql-connector).
+		// is not one of two paths that could drift — it is the only one (ADR-0173).
 		j, err := sqldb.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
@@ -4533,7 +4533,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not
-		// exist here to travel. Worker-only, like the SQL kinds (ADR-draft-entra-id-connector).
+		// exist here to travel. Worker-only, like the SQL kinds (ADR-0172).
 		j, err := entra.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil

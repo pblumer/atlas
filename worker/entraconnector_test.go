@@ -11,7 +11,7 @@ import (
 
 // An Entra worker is configured entirely from its environment. The app credential
 // here can create and disable accounts across a directory, so it must never be
-// reachable through argv (ADR-draft-entra-id-connector).
+// reachable through argv (ADR-0172).
 func TestBuiltinConnectorsRegistersEntra(t *testing.T) {
 	got, err := BuiltinConnectors(envMap(map[string]string{
 		"ATLAS_ENTRA_CONNECTORS":            "contoso",

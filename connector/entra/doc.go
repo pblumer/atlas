@@ -1,5 +1,5 @@
 // Package entra provisions identities in Microsoft Entra ID (formerly Azure AD)
-// through the Microsoft Graph API on behalf of a BPMN service task (ADR-draft-entra-id-connector).
+// through the Microsoft Graph API on behalf of a BPMN service task (ADR-0172).
 //
 // # What it is for
 //
@@ -14,7 +14,7 @@
 //
 // # Worker-only
 //
-// Like the SQL connectors (ADR-draft-generic-sql-connector) and unlike everything built before them, this
+// Like the SQL connectors (ADR-0173) and unlike everything built before them, this
 // kind has no in-process handler: [ADR-0164] decided that new connector kinds are
 // built worker-first. The tenant id, client id and client secret live in the
 // worker's own environment, so the engine holds no Entra credential — which matters

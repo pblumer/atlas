@@ -134,7 +134,7 @@ const (
 )
 
 // compileLdifConnectorTask compiles an <atlas:ldifConnector> task: directory entries
-// read from, or written to, a file held in a process variable (ADR-draft-directory-file-connector).
+// read from, or written to, a file held in a process variable (ADR-0171).
 func compileLdifConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Ldif
 	format := strings.ToLower(strings.TrimSpace(cn.Format))
@@ -202,7 +202,7 @@ func entraOpNames() []string {
 }
 
 // compileEntraConnectorTask compiles an <atlas:entraConnector> task: one Microsoft
-// Entra ID lifecycle operation through Graph (ADR-draft-entra-id-connector). The model names a tenant
+// Entra ID lifecycle operation through Graph (ADR-0172). The model names a tenant
 // connector and the operation; the tenant id, client id and client secret live on the
 // worker, so there is nothing here to validate about a credential.
 func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
@@ -268,7 +268,7 @@ var sqlProducts = map[string]sqlProduct{
 var sqlOps = map[string]bool{"query": true, "query-one": true, "execute": true}
 
 // compileSqlConnectorTask compiles a SQL connector task of one product: it runs one
-// statement against a database a *worker* is configured for (ADR-draft-generic-sql-connector). The model
+// statement against a database a *worker* is configured for (ADR-0173). The model
 // names a connector and authors the statement; the DSN and its credential never
 // enter the engine, so there is nothing here to validate about an address.
 //
@@ -294,7 +294,7 @@ func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sql
 		return 0, fmt.Errorf("compiler: %s task %q needs a statement", p.kind, st.Id)
 	}
 	if strings.HasPrefix(stmt, "=") {
-		return 0, fmt.Errorf("compiler: %s task %q has a FEEL statement; the statement must be literal SQL so no process value can become part of it — pass data through parametersVariable instead (ADR-draft-generic-sql-connector)", p.kind, st.Id)
+		return 0, fmt.Errorf("compiler: %s task %q has a FEEL statement; the statement must be literal SQL so no process value can become part of it — pass data through parametersVariable instead (ADR-0173)", p.kind, st.Id)
 	}
 	result := strings.TrimSpace(cn.ResultVariable)
 	if result == "" && op != "execute" {
@@ -600,7 +600,7 @@ var ldapEntryOps = map[string]bool{"add": true, "modify": true, "add-values": tr
 // Paging defaults *on* because a directory's admin size limit otherwise refuses a
 // perfectly reasonable search, and an author who has not met that limit has no reason
 // to know the control exists. The entry cap defaults on for the reason sqldb's row cap
-// does (ADR-draft-generic-sql-connector): an unbounded subtree search into a process variable is the failure
+// does (ADR-0173): an unbounded subtree search into a process variable is the failure
 // mode this is hardening against, and a short result set would be a wrong answer
 // rather than a partial one.
 const (

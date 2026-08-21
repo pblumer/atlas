@@ -1,5 +1,5 @@
 // Package sqldb runs one SQL statement against a relational database on behalf of a
-// BPMN service task — for Microsoft SQL Server, MariaDB, or PostgreSQL (ADR-draft-generic-sql-connector).
+// BPMN service task — for Microsoft SQL Server, MariaDB, or PostgreSQL (ADR-0173).
 //
 // # Worker-only
 //

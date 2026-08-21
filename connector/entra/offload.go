@@ -67,7 +67,7 @@ func OpNames() []string {
 
 // Job is an Entra task with everything already evaluated. There is nowhere here to
 // put a tenant id, a client id or a client secret, which is what makes "the engine
-// holds no Entra credential" a property of the type (ADR-draft-entra-id-connector).
+// holds no Entra credential" a property of the type (ADR-0172).
 type Job struct {
 	// Connector names the tenant the *worker* is configured for.
 	Connector string `json:"connector"`

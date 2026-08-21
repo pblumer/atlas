@@ -124,7 +124,7 @@
 >   the account can read. It is an operational blocker rather than a tuning knob, which
 >   is why it is in the model and the other flags are not.
 > - **`maxEntries` caps a pass and defaults to 1000.** Unlike a plain search's cap
->   (ADR-0154 amended, ADR-draft-generic-sql-connector) this costs nothing but a second pass, because a pass
+>   (ADR-0154 amended, ADR-0173) this costs nothing but a second pass, because a pass
 >   is resumable by construction: the cookie says where it got to. The result carries
 >   `more`, the server's own signal that further changes are already waiting, so a loop
 >   can go straight round again instead of waiting for its timer.

@@ -1072,7 +1072,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
 	})
-	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-draft-directory-file-connector).
+	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-0171).
 	// Like CSV it is a pure transform — no network, no credential — so it runs here as
 	// well as on a worker, and neither placement can block the other.
 	s.jobRunner.HandleWithOutput(compiler.LdifJobTypeIndex, func(rd state.Reader) job.OutputHandler {

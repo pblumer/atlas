@@ -4,7 +4,7 @@
 //
 // It exists because three connectors needed the same hundred lines. The mail
 // connector grew them first (ADR-0093), the SharePoint connector copied them
-// (ADR-0141), and a third copy for Entra ID (ADR-draft-entra-id-connector) would have made a token
+// (ADR-0141), and a third copy for Entra ID (ADR-0172) would have made a token
 // caching or refresh bug something to fix in three places and remember in a fourth.
 //
 // # What is shared, and what is not

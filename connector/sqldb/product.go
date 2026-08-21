@@ -16,7 +16,7 @@ import (
 // That is also why the product is part of the *model* rather than of the worker's
 // configuration. A statement written with $1 is a PostgreSQL statement; a kind per
 // product makes pointing it at SQL Server a thing the model cannot express, instead
-// of a runtime error an operator meets at 3am (ADR-draft-generic-sql-connector).
+// of a runtime error an operator meets at 3am (ADR-0173).
 type Product struct {
 	// Name is the operator-facing kind name: what `atlas worker --connector` takes
 	// and what prefixes this product's environment variables.

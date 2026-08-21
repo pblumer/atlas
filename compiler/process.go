@@ -661,7 +661,7 @@ type ConnectorTaskDetail struct {
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool
-	// Generic SQL connector fields (JobType == SqlJobType, ADR-draft-generic-sql-connector). Connector
+	// Generic SQL connector fields (JobType == SqlJobType, ADR-0173). Connector
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is
 	// the interned operation ("query"|"query-one"|"execute").
@@ -682,7 +682,7 @@ type ConnectorTaskDetail struct {
 	SqlStatement int32
 	SqlParamsVar int32
 	SqlMaxRows   int32
-	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-draft-entra-id-connector).
+	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0172).
 	// Connector (above) names the tenant the *worker* is configured for; a task
 	// carries no tenant id and no client secret, because they never enter the engine.
 	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
@@ -698,7 +698,7 @@ type ConnectorTaskDetail struct {
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraAttributesVar int32
-	// Directory-file connector fields (JobType == LdifJobType, ADR-draft-directory-file-connector). LdifFormat
+	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the
 	// file text (read) or the entries (write); LdifResult the variable receiving the

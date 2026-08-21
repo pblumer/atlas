@@ -9,7 +9,7 @@
 > import and export, so `docs/comparisons/mim.md` counted four gaps here. They are
 > closed as **formats and a direction of this connector**, not as new kinds.
 >
-> **Why formats rather than kinds.** ADR-draft-generic-sql-connector split SQL into three connectors because
+> **Why formats rather than kinds.** ADR-0173 split SQL into three connectors because
 > a statement written with `$1` is a PostgreSQL statement and pointing it at SQL Server
 > is a mismatch a model can express *silently*. Nothing here is like that: all three
 > formats describe a table of records in a text file, produce the same rows, and share

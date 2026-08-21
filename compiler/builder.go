@@ -271,7 +271,7 @@ const AdJobType = "io.atlas.ad"
 // LdapJobTypeIndex (ADR-0166).
 const AdJobTypeIndex int32 = 19
 
-// The three SQL connector job types (ADR-draft-generic-sql-connector). They are one connector in three
+// The three SQL connector job types (ADR-0173). They are one connector in three
 // faces: the same task shape, the same engine-side resolution and the same worker
 // code, differing only in the driver behind them — and therefore in the placeholder
 // syntax a statement must use. That difference is why the product is part of the
@@ -323,7 +323,7 @@ const EntraJobType = "io.atlas.entra"
 const EntraJobTypeIndex int32 = 23
 
 // LdifJobType is the reserved job type a directory-file connector task carries: LDIF
-// (RFC 2849) or DSML v1, read or written (ADR-draft-directory-file-connector).
+// (RFC 2849) or DSML v1, read or written (ADR-0171).
 //
 // It has an in-process handler as well as a worker one, and that is not a lapse from
 // ADR-0164: parsing a file is pure computation with no network and no credential, the
@@ -1262,7 +1262,7 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-draft-generic-sql-connector),
+// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-0173),
 // shared by all three products. JobType is the product's reserved job type
 // (MsSqlJobType, MariaDBJobType or PostgresJobType) — the one field that differs
 // between them, and what decides which driver the worker opens.
@@ -1314,7 +1314,7 @@ func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 }
 
 // LdifConfig is the deploy-time configuration of a directory-file connector task
-// (ADR-draft-directory-file-connector). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
+// (ADR-0171). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
 // names the variable holding the file text (read) or the entries (write), and Result
 // the variable receiving the entries (read) or the rendered file (write).
 type LdifConfig struct {
@@ -1351,7 +1351,7 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 }
 
 // EntraConfig is the deploy-time configuration of a Microsoft Entra ID connector
-// task (ADR-draft-entra-id-connector). Connector names the tenant the worker is configured for — a task
+// task (ADR-0172). Connector names the tenant the worker is configured for — a task
 // carries no tenant id and no client secret, because they never enter the engine. Op
 // is the lifecycle operation. UserID and GroupID are literal-or-FEEL values
 // addressing the user (a UPN or object id) and the group; AttributesVar names the

@@ -138,7 +138,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				return RunEntraJob(ctx, j, reg)
 			})
 		case "mssql", "mariadb", "postgres":
-			// The three SQL products (ADR-draft-generic-sql-connector). Unlike the
+			// The three SQL products (ADR-0173). Unlike the
 			// kinds above them they have no in-process counterpart to fall back to, so
 			// a worker is the only way a SQL task ever runs — which is why a
 			// misconfigured one is refused here, at startup, rather than discovered a

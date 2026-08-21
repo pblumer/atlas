@@ -27,7 +27,7 @@ type VarStore interface {
 //
 // There is nowhere here to put a DSN, a username, or a password, and that is the
 // point: the engine resolves a Job and hands it over without ever having held a
-// database credential (ADR-draft-generic-sql-connector).
+// database credential (ADR-0173).
 type Job struct {
 	// Connector names the database the *worker* is configured for. A name and not an
 	// address, because an address is half a credential.
@@ -50,7 +50,7 @@ type Job struct {
 // work by necessity — the compiled process and the scope live only there.
 //
 // The statement needs no resolving. It is literal by construction, which is the whole
-// of this connector's injection defence (ADR-draft-generic-sql-connector).
+// of this connector's injection defence (ADR-0173).
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("sqldb: connector task has no detail")

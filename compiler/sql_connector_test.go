@@ -50,7 +50,7 @@ func sqlDetail(t *testing.T, ext string) (*CompiledProcess, *ConnectorTaskDetail
 }
 
 // A service task bearing one of the three SQL connector extensions is a connector
-// task of that product (ADR-draft-generic-sql-connector): it runs one statement against a database the
+// task of that product (ADR-0173): it runs one statement against a database the
 // *worker* is configured for, so the model names a connector and never an address.
 func TestParseSqlConnectorTask(t *testing.T) {
 	for _, p := range sqlProductCases {
@@ -94,7 +94,7 @@ func TestParseSqlConnectorTask(t *testing.T) {
 
 // The statement is literal by construction: a FEEL statement would let a process
 // variable become part of the SQL text, so the compiler refuses one outright rather
-// than trusting an author to quote (ADR-draft-generic-sql-connector).
+// than trusting an author to quote (ADR-0173).
 func TestSqlConnectorRejectsFeelStatement(t *testing.T) {
 	for _, p := range sqlProductCases {
 		t.Run(p.elem, func(t *testing.T) {

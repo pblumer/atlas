@@ -59,7 +59,7 @@ type SearchRequest struct {
 	// MaxEntries caps how many entries may be returned. Exceeding it is an error
 	// rather than a truncation: a short result set is a wrong answer, not a partial
 	// one, and a process branching on the count would branch on it confidently
-	// (the same rule the SQL connectors apply to rows, ADR-draft-generic-sql-connector). 0 is unbounded.
+	// (the same rule the SQL connectors apply to rows, ADR-0173). 0 is unbounded.
 	MaxEntries int32
 }
 

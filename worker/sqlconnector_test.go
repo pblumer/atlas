@@ -15,7 +15,7 @@ func envMap(m map[string]string) func(string) string {
 }
 
 // A SQL worker is configured entirely from its environment: the DSN is the credential
-// here, so it must never be reachable through argv (ADR-draft-generic-sql-connector).
+// here, so it must never be reachable through argv (ADR-0173).
 func TestBuiltinConnectorsRegistersEachSQLProduct(t *testing.T) {
 	for _, tc := range []struct{ kind, prefix, dsn, jobType string }{
 		{"mssql", "ATLAS_MSSQL_", "sqlserver://u:p@localhost:1433?database=hr", compiler.MsSqlJobType},

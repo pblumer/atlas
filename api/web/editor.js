@@ -2244,7 +2244,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Tenant" },
       {
         key: "connector", label: "Connector", placeholder: "contoso",
-        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-draft-entra-id-connector).",
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0172).",
       },
       { group: "Operation" },
       {
@@ -2290,7 +2290,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
@@ -2328,7 +2328,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
@@ -2366,7 +2366,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
+        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
       },
       { group: "Statement" },
       {
