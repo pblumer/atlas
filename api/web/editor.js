@@ -10,6 +10,7 @@ import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { migrateInstanceFlow } from "./migrationdialog.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -7351,6 +7352,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
@@ -7431,6 +7433,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // Migrating is offered only where it means something: an instance still running has
+  // tokens to rebind, a finished one has none, and the button would be an invitation to
+  // an action the engine would refuse (ADR-0162).
+  const migrateBtn = root.querySelector("#rp-migrate");
+  if (tl.state === "active") {
+    migrateBtn.hidden = false;
+    migrateBtn.addEventListener("click", () => migrateInstanceFlow({
+      api, toast,
+      instanceKey: key,
+      processId: tl.processId,
+      fromVersion: tl.version,
+      fromProcessDefKey: tl.processDefKey,
+      // The replay is a fold of the instance's history and the migration changes what
+      // that history means, so it is re-read from scratch rather than patched.
+      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+    }));
+  }
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -7482,6 +7501,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // view reports "no variables" for an element that plainly produced some.
   let varSide = "in";
   let selElId = "";  // selected diagram element id (may cover several instances)
+  // A migration is the one history row that is not an element at all (ADR-0162), so it
+  // cannot be selected by element instance key like every other. Index into steps, -1
+  // for none.
+  let selMig = -1;
   let activeTab = "details";
   let showEnd = false; // history shows end date instead of start date
   let playing = false;
@@ -7514,6 +7537,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   };
 
   function stepLabel(s) {
+    if (s && s.action === "migrate") {
+      const m = s.migration || {};
+      // Name both ends the way an operator reads a process — by version — and fall back
+      // to the definition key when a side has since been deleted and nothing can say
+      // what version it was.
+      const side = (ver, k) => (ver ? `v${ver}` : `#${k}`);
+      return `Migrated ${side(m.fromVersion, m.fromProcessDefKey)} \u2192 ${side(m.toVersion, m.toProcessDefKey)}`;
+    }
     const el = registry.get(s.elementId);
     const bo = el && el.businessObject;
     return (bo && (bo.name || bo.id)) || s.elementId || "?";
@@ -7682,9 +7713,45 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </div>`;
   };
 
+  // migrationDetail is the Details tab for the one history row that is not an element:
+  // the point at which an operator rebound this instance to another version of its
+  // process (ADR-0162). It says what it says plainly, because the consequence is easy to
+  // misread — the steps above this row ran on a *different* model, so an element named
+  // there may not be on the diagram at all, and one that is may have changed.
+  function migrationDetail(s) {
+    const m = s.migration || {};
+    const side = (ver, tag, k) => {
+      if (!ver) return `<span class="mono">#${esc(String(k))}</span> <span class="hint">(no longer deployed)</span>`;
+      return `Version ${esc(String(ver))}${tag ? ` <span class="hint">(${esc(tag)})</span>` : ""}`;
+    };
+    const who = m.actor ? esc(m.actor) : "an operator";
+    return `<dl class="ops-props">
+      <dt>Event</dt><dd>Migrated to another version</dd>
+      <dt>From</dt><dd>${side(m.fromVersion, m.fromVersionTag, m.fromProcessDefKey)}</dd>
+      <dt>To</dt><dd>${side(m.toVersion, m.toVersionTag, m.toProcessDefKey)}</dd>
+      <dt>Date</dt><dd>${esc(fmtDateTime(m.at || s.at))}</dd>
+      <dt>By</dt><dd>${who}</dd>
+    </dl>
+    <div class="ops-mig">
+      <h4>&#8644; The model changed here</h4>
+      <p>This instance kept its variables, its tasks and everything already done, and
+        carried on under the newer version. The steps <b>above</b> this point ran on the
+        earlier one, so they name that version's elements — the diagram shows the version
+        the instance is on <b>now</b>.</p>
+      <p class="ops-mig-reason">${esc(m.reason || "")}</p>
+    </div>`;
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
+    // A migration selected in the history is not an element at all: it has no element
+    // instance and no diagram shape, so it is answered before either of the branches
+    // below — the first of which treats "no element instance" as "nothing selected".
+    if (selMig >= 0 && steps[selMig] && steps[selMig].migration) {
+      detailEl.innerHTML = migrationDetail(steps[selMig]);
+      return;
+    }
     if (!selEik) {
       // An element the operator clicked that this instance never reached has no step to
       // report — but it does have an identity and, often, the documentation explaining
@@ -8113,7 +8180,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const pos = steps[i] ? steps[i].position : 0;
       row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
       row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
-      row.classList.toggle("sel", steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0);
+      row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0) || i === selMig);
     });
     const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
@@ -8137,6 +8204,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       return;
     }
     const rows = steps.map((s, i) => {
+      if (s.action === "migrate") {
+        // Drawn as a rule across the list rather than another element row: the steps
+        // above it and below it are on different versions of the process, and that is
+        // the one thing this row exists to say.
+        return `<div class="ops-hrow mig" data-i="${i}" data-eik="0"
+            title="${esc((s.migration && s.migration.reason) || "Migrated to another version")}">
+          <span class="ops-hicon mig">&#8644;</span>
+          <span class="ops-hname">${esc(stepLabel(s))}</span>
+          <span class="ops-htime">${esc(fmtClock(s.at))}</span>
+        </div>`;
+      }
       const done = s.endAt > 0;
       const inc = incidentByEik(s.elementInstanceKey);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
@@ -8158,6 +8236,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       pause();
       if (i < 0) { selectElement("", 0); return; }
       const s = steps[i];
+      if (s.action === "migrate") {
+        // It names no element, so there is nothing to select on the diagram and nothing
+        // to animate — but the playhead still moves, so the surrounding steps read in
+        // the order they happened.
+        selMig = i; selElId = ""; selEik = 0;
+        renderOverlay(); renderInspector();
+        const at = frames.findIndex((f) => f.position >= s.position);
+        setPlayhead(at < 0 ? frames.length : at);
+        highlightHistory();
+        return;
+      }
       selectElement(s.elementId, s.elementInstanceKey || 0);
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
@@ -8169,6 +8258,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // selectElement cross-highlights the diagram, the history and the inspector for
   // one element instance (or clears the selection when elId is empty).
   function selectElement(elId, eik) {
+    selMig = -1;
     selElId = elId;
     // Without a specific instance, default to this element's last activation so the
     // inspector has facts to show (clicking the diagram picks the whole element).

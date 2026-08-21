@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Migrating an instance from Operations**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): the plan endpoint and the
+  migrate endpoint now have a surface. A running instance's replay carries a
+  **Migrate…** button that opens the target version, reads the plan for it, and shows
+  what that migration would do *before* anything is written — which elements pair across
+  a changed id, how many matched unchanged, and every reason it would be refused. A plan
+  that cannot go through cannot be submitted: the refusal an operator would otherwise
+  have discovered by trying is the thing the dry run exists to show them first. Changing
+  the target re-reads the plan for that target, because a plan shown beside a different
+  selection is the one way this dialog could mislead about live state. A reason is
+  required and lands on the instance's timeline at the point it happened. From the
+  Operations process list, **Migrate running instances…** drains one deployed version
+  onto another in the bounded batches the server hands out, and reports both numbers:
+  each instance is its own command, so the ones that could not move are listed by key
+  with what is wrong — still running, unchanged, on the version they were already on —
+  rather than being lost behind a success count.
+
+- **A migrated instance's replay reads under the version each step ran on**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): the instance timeline now
+  resolves every element through the definition in force at that step's own log
+  position, rather than through the version the instance happens to be on now. Element
+  records name their element by its *compiled index*, and an index means whatever the
+  graph it was compiled against says it means — so before this, a step recorded on v1
+  was read back through v2 and reported the token as having been on whichever element
+  now held that index: a step that never happened, on an element that did not exist when
+  it supposedly ran. Nothing rewrites history to achieve it, because history is fact:
+  each migration's operator-action record already carries the definition the instance
+  left and the position it left it at, and a migration's target is by construction the
+  next one's source, so the chain closes without any new field. A version deleted after
+  the instance moved off it resolves to no graph and its steps are left unnamed —
+  labelling them wrong is worse than leaving them blank, because only the second is
+  visibly missing. The migration itself now appears in the replay's history as a
+  boundary between the steps it separates: which version the instance left, which it
+  arrived on, who moved it and why.
+
 - **Process instance migration: the API and the MCP tools**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): a running instance can be
   moved to another version of its process over HTTP.

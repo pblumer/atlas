@@ -241,6 +241,30 @@ difference between an instance whose behavior changed mid-flight for a reason an
 that appears to have changed by itself. A reason is required, as it is for manual
 completion.
 
+Two things the reader had to settle that this section did not anticipate, both found
+building it:
+
+**A source version can be deleted.** The API refuses to delete a definition with running
+instances — but once an instance migrates away, the version it left has no instances on
+it and may be deleted outright. So a historical definition is genuinely, routinely
+absent, not merely absent in theory. The reader answers such a step with *no* element id
+rather than falling back to the current graph: a step labelled with the wrong element is
+worse than one labelled with none, because only the second is visibly missing. The one
+place that must not degrade to "unknown" is the frame fold's leaf test, which decides
+whether a token is dropped or held waiting for a successor — an unresolvable element
+answers "leaf" there, so a token whose successor can never be identified is dropped
+rather than stranded on the replay forever (the ghost [ADR-0136](0136-terminated-tokens-in-the-replay.md)
+removed).
+
+**Two indices from different versions cannot be compared.** The frame fold links a
+deferred completion to the activation that succeeds it by comparing the completed node
+against the activation's incoming-flow source — an index comparison, exact within one
+definition and meaningless across two. Across a boundary it falls back to the BPMN
+element id, the same identity the mapping pairs elements by. Deliberately only across a
+boundary: a process built through the builder API rather than parsed from XML has no
+BPMN ids at all, so making the id comparison the default would make every element equal
+to every other.
+
 The per-definition analytics stay split on purpose: `elVisit`/`elVisAgg` are keyed by
 definition key, so version *n* keeps the visits that happened under it and version
 *n+1* accrues its own. That is what actually happened.
@@ -259,6 +283,31 @@ stable across an ordinary edit and is the only element identity a human controls
 Explicit overrides name elements by BPMN id on both sides, never by compiled index; the
 server resolves them to indices when it builds the command, and only the resolved
 indices reach the log (I5: no model strings in the log).
+
+### 6. The surface leads with the plan, and refuses before it asks
+
+The plan endpoint is not an optional extra on the way to migrating — it is what the
+Operations dialog opens with. An operator picks a target version and reads what that
+migration would do *before* a reason is even typed: which elements pair across a changed
+id, how many matched unchanged, and every reason it would be refused. A plan that cannot
+go through cannot be submitted at all; the confirm button is the gate rather than a later
+error, because a refusal an operator could have seen first is a round trip they should not
+have had to make. Changing the target re-reads the plan for *that* target — a plan shown
+beside a different selection is the one way this dialog could mislead about live state,
+which is precisely what the whole record exists to prevent.
+
+The batch has deliberately no dry run. A plan is per-instance, and pre-flighting hundreds
+of them to show a summary would be a second, slower implementation of what the batch
+already reports. Instead the batch's own answer is the report: both numbers, and every
+refused instance named by key with what is wrong with it. That list is a work queue, not
+an error — each named instance is still running, unchanged, on the version it was already
+on, and still needs a decision. Hiding it behind a success count would leave those
+instances silently behind, which is the failure mode a bulk operation on live process
+state most easily produces.
+
+Migration is offered only where it means something: on an instance that is still running,
+and on a process with more than one version deployed. Both are cases the engine would
+refuse anyway, and an affordance that leads to a refusal is worse than no affordance.
 
 ### Consequences
 

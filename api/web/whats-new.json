@@ -2,6 +2,62 @@
   "generatedAt": "2026-08-19",
   "entries": [
     {
+      "id": "migrating-an-instance-from-operations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Move a running instance onto a fixed version, from Operations",
+        "de": "Eine laufende Instanz aus Operations heraus auf eine korrigierte Version umstellen"
+      },
+      "summary": {
+        "en": "When a model turns out to be wrong, the instances that are already running no longer have to be cancelled. Open an instance's replay and use Migrate: it shows what the move would do before anything is written — which elements pair up, and every reason it would be refused — and will not let you submit one that cannot work. A whole version's instances can be moved at once from the process list; any that cannot be moved are listed by key, still running and unchanged.",
+        "de": "Wenn sich ein Modell als falsch herausstellt, müssen die bereits laufenden Instanzen nicht mehr abgebrochen werden. Öffnen Sie den Replay einer Instanz und wählen Sie Migrieren: Vorab wird gezeigt, was die Umstellung bewirken würde — welche Elemente einander zugeordnet werden und jeder Grund, aus dem sie abgelehnt würde. Eine nicht durchführbare Umstellung lässt sich gar nicht erst abschicken. Aus der Prozessliste heraus lassen sich alle Instanzen einer Version auf einmal umstellen; was nicht umgestellt werden kann, wird mit Schlüssel aufgeführt und läuft unverändert weiter."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-migrated-instance-s-replay-reads-under-the-version-each-st",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A migrated instance's replay shows what really happened",
+        "de": "Der Replay einer migrierten Instanz zeigt, was wirklich passiert ist"
+      },
+      "summary": {
+        "en": "When an instance has been moved to a newer version of its process, its replay now labels each step with the element it actually ran on, not with whatever sits in that spot in the new model. The move itself appears in the history as a marked boundary — which version the instance left, which it arrived on, who moved it and why — so it is clear that the steps above it belong to a different model.",
+        "de": "Wurde eine Instanz auf eine neuere Version ihres Prozesses umgestellt, beschriftet der Replay jeden Schritt jetzt mit dem Element, auf dem er tatsächlich lief — nicht mit dem, was im neuen Modell an dieser Stelle steht. Die Umstellung selbst erscheint als markierte Grenze im Verlauf: von welcher Version auf welche, durch wen und warum. So ist erkennbar, dass die Schritte darüber zu einem anderen Modell gehören."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "process-instance-migration-the-api-and-the-mcp-tools",
       "version": "Unreleased",
       "date": null,
@@ -299,67 +355,6 @@
           "de": "Postausgang öffnen"
         },
         "route": "#/operations/outbox"
-      }
-    },
-    {
-      "id": "the-live-diagram-says-why-a-token-is-not-moving",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The live diagram says why a token is not moving",
-        "de": "The live diagram says why a token is not moving"
-      },
-      "summary": {
-        "en": "On the live process diagram, a token that is stuck now carries an overlay explaining why it is not moving — no need to dig through logs.",
-        "de": "Im Live-Prozessdiagramm trägt ein hängendes Token jetzt eine Einblendung, die erklärt, warum es sich nicht bewegt — kein Wühlen in Logs mehr nötig."
-      },
-      "link": {
-        "label": "ADR-0150",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0150-preview-mail-provider-and-visible-incidents.md"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-connector-can-be-checked-before-it-is-trusted-with-anythin",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A connector can be checked before it is trusted with anything",
-        "de": "A connector can be checked before it is trusted with anything"
-      },
-      "summary": {
-        "en": "Before a connector runs real work, you can test its configuration and see whether it can actually reach the target system.",
-        "de": "Bevor ein Connector echte Arbeit ausführt, können Sie seine Konfiguration testen und sehen, ob er das Zielsystem tatsächlich erreicht."
-      },
-      "link": {
-        "label": "ADR-0150",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0150-preview-mail-provider-and-visible-incidents.md"
-      },
-      "tags": [
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console › Organization and pick a connector.",
-          "Use its Check / Test action.",
-          "Read the result — a green check, or the exact reason it cannot connect."
-        ],
-        "de": [
-          "Öffnen Sie Console › Organisation und wählen Sie einen Connector.",
-          "Nutzen Sie dessen Prüfen-/Test-Aktion.",
-          "Lesen Sie das Ergebnis — ein grüner Haken oder der genaue Grund, warum keine Verbindung zustande kommt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
       }
     }
   ]
