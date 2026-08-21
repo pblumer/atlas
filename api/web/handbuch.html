@@ -268,9 +268,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <li>
           <b data-l="de">Modeler öffnen und ein Beispiel laden</b>
           <b data-l="en">Open the Modeler and load an example</b>
-          <p data-l="de">Öffne den <a href="/#/modeler">Modeler</a>. Im <a href="/#/modeler/marketplace">Marketplace</a>
+          <p data-l="de">Öffne den <a href="/#/modeler">Modeler</a>. Im <a href="/#/modeler/repository">Repository</a>
             findest du fertige Vorlagen – oder starte mit <a href="/#/modeler/new">Neues Diagramm</a>.</p>
-          <p data-l="en">Open the <a href="/#/modeler">Modeler</a>. The <a href="/#/modeler/marketplace">Marketplace</a>
+          <p data-l="en">Open the <a href="/#/modeler">Modeler</a>. The <a href="/#/modeler/repository">Repository</a>
             has ready-made templates – or begin with <a href="/#/modeler/new">New diagram</a>.</p>
         </li>
         <li>
@@ -615,7 +615,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="en">The Modeler validates live. A tidy layout is part of the job, not a bonus.</p></li>
       </ol>
       <p><a class="pilllink" href="/#/modeler/new"><span data-l="de">Neues Diagramm anlegen</span><span data-l="en">Create a new diagram</span></a>
-         <a class="pilllink ghost" href="/#/modeler/marketplace"><span data-l="de">Vorlagen im Marketplace</span><span data-l="en">Templates in the Marketplace</span></a></p>
+         <a class="pilllink ghost" href="/#/modeler/repository"><span data-l="de">Vorlagen im Repository</span><span data-l="en">Templates in the Repository</span></a></p>
     </section>
 
     <!-- ==================== RECIPES ==================== -->
@@ -724,7 +724,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschließt; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. nimm die fertigen Connector-Vorlagen aus dem <a href="/#/modeler/marketplace">Marketplace</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. use the ready-made connector templates in the <a href="/#/modeler/marketplace">Marketplace</a>.</span></p>
+        <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschließt; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. nimm die fertigen Connector-Vorlagen aus dem <a href="/#/modeler/repository">Repository</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. use the ready-made connector templates in the <a href="/#/modeler/repository">Repository</a>.</span></p>
         <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, Connector-Task, Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Failure handling</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heißt „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, connector tasks, script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
       </div>
       <div class="recipe" id="rz-dmn" data-proc="recipe-dmn">
@@ -1884,10 +1884,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <span class="lbl" data-l="de">Weiterbauen</span><span class="lbl" data-l="en">Keep building</span>
         <p data-l="de" style="margin:.3em 0 0">Von hier ist es ein kleiner Schritt: die Betragsgrenze durch eine
           <a href="#rz-dmn">DMN-Entscheidung</a> ersetzen, &bdquo;Bestellung anlegen&ldquo; an einen
-          <a href="/#/modeler/marketplace">REST-Connector</a> h&auml;ngen, oder eine zweite Freigabestufe als
+          <a href="/#/modeler/repository">REST-Connector</a> h&auml;ngen, oder eine zweite Freigabestufe als
           <a href="#rz-parallel">parallelen</a> Zweig erg&auml;nzen.</p>
         <p data-l="en" style="margin:.3em 0 0">From here it's a small step: replace the amount threshold with a
-          <a href="#rz-dmn">DMN decision</a>, wire "create order" to a <a href="/#/modeler/marketplace">REST connector</a>,
+          <a href="#rz-dmn">DMN decision</a>, wire "create order" to a <a href="/#/modeler/repository">REST connector</a>,
           or add a second approval level as a <a href="#rz-parallel">parallel</a> branch.</p>
       </div>
     </section>

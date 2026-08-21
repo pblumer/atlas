@@ -21,7 +21,7 @@ type manifestDTO struct {
 
 func listPackages(t *testing.T, ts *httptest.Server, query string) []manifestDTO {
 	t.Helper()
-	code, body := doReq(t, ts, "GET", "/api/v1/marketplace/packages"+query, "", "")
+	code, body := doReq(t, ts, "GET", "/api/v1/repository/packages"+query, "", "")
 	if code != 200 {
 		t.Fatalf("list%s = %d, want 200 (%s)", query, code, body)
 	}
@@ -32,9 +32,9 @@ func listPackages(t *testing.T, ts *httptest.Server, query string) []manifestDTO
 	return out
 }
 
-// TestMarketplaceListFilters covers the full catalog list, the kind filter, and the
+// TestRepositoryListFilters covers the full catalog list, the kind filter, and the
 // free-text search.
-func TestMarketplaceListFilters(t *testing.T) {
+func TestRepositoryListFilters(t *testing.T) {
 	ts := newTestServer(t)
 
 	all := listPackages(t, ts, "")
@@ -75,12 +75,12 @@ func TestMarketplaceListFilters(t *testing.T) {
 	}
 }
 
-// TestMarketplaceGetPackage covers the detail endpoint (with template payload) and
+// TestRepositoryGetPackage covers the detail endpoint (with template payload) and
 // the 404 for an unknown id.
-func TestMarketplaceGetPackage(t *testing.T) {
+func TestRepositoryGetPackage(t *testing.T) {
 	ts := newTestServer(t)
 
-	code, body := doReq(t, ts, "GET", "/api/v1/marketplace/packages/"+restPkgID, "", "")
+	code, body := doReq(t, ts, "GET", "/api/v1/repository/packages/"+restPkgID, "", "")
 	if code != 200 {
 		t.Fatalf("get = %d, want 200 (%s)", code, body)
 	}
@@ -95,18 +95,18 @@ func TestMarketplaceGetPackage(t *testing.T) {
 		t.Fatalf("get returned %+v, want the package with a template", view)
 	}
 
-	if code, _ := doReq(t, ts, "GET", "/api/v1/marketplace/packages/nope", "", ""); code != 404 {
+	if code, _ := doReq(t, ts, "GET", "/api/v1/repository/packages/nope", "", ""); code != 404 {
 		t.Fatalf("get unknown = %d, want 404", code)
 	}
 }
 
-// TestMarketplaceInstallFlow covers installing a data-only package and a code-
+// TestRepositoryInstallFlow covers installing a data-only package and a code-
 // bearing one (auth off, so both succeed), the reviewRequired flag, listing, and
 // idempotent uninstall.
-func TestMarketplaceInstallFlow(t *testing.T) {
+func TestRepositoryInstallFlow(t *testing.T) {
 	ts := newTestServer(t)
 
-	code, body := doReq(t, ts, "POST", "/api/v1/marketplace/packages/"+restPkgID+"/install", "", "")
+	code, body := doReq(t, ts, "POST", "/api/v1/repository/packages/"+restPkgID+"/install", "", "")
 	if code != 200 {
 		t.Fatalf("install connector = %d, want 200 (%s)", code, body)
 	}
@@ -123,7 +123,7 @@ func TestMarketplaceInstallFlow(t *testing.T) {
 	}
 
 	// A script task installs (auth is off) but must flag reviewRequired.
-	code, body = doReq(t, ts, "POST", "/api/v1/marketplace/packages/"+scriptPkgID+"/install", "", "")
+	code, body = doReq(t, ts, "POST", "/api/v1/repository/packages/"+scriptPkgID+"/install", "", "")
 	if code != 200 {
 		t.Fatalf("install script = %d, want 200 (%s)", code, body)
 	}
@@ -135,12 +135,12 @@ func TestMarketplaceInstallFlow(t *testing.T) {
 	}
 
 	// Installing an unknown package is a 404.
-	if code, _ := doReq(t, ts, "POST", "/api/v1/marketplace/packages/nope/install", "", ""); code != 404 {
+	if code, _ := doReq(t, ts, "POST", "/api/v1/repository/packages/nope/install", "", ""); code != 404 {
 		t.Fatalf("install unknown = %d, want 404", code)
 	}
 
 	// Both installs show up.
-	code, body = doReq(t, ts, "GET", "/api/v1/marketplace/installed", "", "")
+	code, body = doReq(t, ts, "GET", "/api/v1/repository/installed", "", "")
 	if code != 200 {
 		t.Fatalf("list installed = %d, want 200 (%s)", code, body)
 	}
@@ -155,14 +155,14 @@ func TestMarketplaceInstallFlow(t *testing.T) {
 	}
 
 	// Uninstall is idempotent.
-	if code, _ := doReq(t, ts, "DELETE", "/api/v1/marketplace/installed/"+restPkgID, "", ""); code != 204 {
+	if code, _ := doReq(t, ts, "DELETE", "/api/v1/repository/installed/"+restPkgID, "", ""); code != 204 {
 		t.Fatalf("uninstall = %d, want 204", code)
 	}
-	if code, _ := doReq(t, ts, "DELETE", "/api/v1/marketplace/installed/"+restPkgID, "", ""); code != 204 {
+	if code, _ := doReq(t, ts, "DELETE", "/api/v1/repository/installed/"+restPkgID, "", ""); code != 204 {
 		t.Fatalf("uninstall again = %d, want 204 (idempotent)", code)
 	}
 
-	code, body = doReq(t, ts, "GET", "/api/v1/marketplace/installed", "", "")
+	code, body = doReq(t, ts, "GET", "/api/v1/repository/installed", "", "")
 	if code != 200 {
 		t.Fatalf("list installed after uninstall = %d (%s)", code, body)
 	}

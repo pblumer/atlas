@@ -248,6 +248,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Breaking: the "Marketplace" area is now called "Repository"** — the same feature
+  under a name that says what it is: the place a server's reusable building blocks live.
+  The Modeler navigation entry and its route (`#/modeler/repository`) change, and so do
+  the five HTTP routes, which move from `/api/v1/marketplace/…` to `/api/v1/repository/…`:
+  `GET /packages`, `GET /packages/{id}`, `POST /packages/{id}/install`, `GET /installed`
+  and `DELETE /installed/{id}`. Request and response bodies are untouched, and the OpenAPI
+  tag is now `Repository`. On disk the design-time directory moves from `<data>/marketplace`
+  to `<data>/repository`; an existing install is migrated automatically on the first start
+  after the upgrade, so installed templates carry across without operator action. The
+  backup archive (ADR-0107) therefore carries a `repository/` member instead of
+  `marketplace/` — a backup taken before this release still restores, but its
+  `marketplace/` member is not read back. The decisions behind the feature are unchanged;
+  [ADR-0081](docs/adr/0081-community-marketplace-for-connectors-and-tasks.md) and
+  [ADR-0167](docs/adr/0167-released-connectors-ship-in-the-marketplace.md) keep their
+  original wording as dated records and carry a note about the new name.
+
 - **Breaking (HTTP API): `DELETE /api/v1/connectors/{id}` can return 409**
   (ADR-0163) when deployed processes still reference the connector. The response body
   carries `usedBy` — the processes, their versions, the elements that resolve through

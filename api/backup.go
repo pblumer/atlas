@@ -39,7 +39,7 @@ var backupDirs = []string{
 	"dmn-models",
 	"public-links",
 	"connectors",
-	"marketplace",
+	"repository",
 	"inbound-subscriptions",
 	"settings",
 }

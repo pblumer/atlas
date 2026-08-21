@@ -225,12 +225,12 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/inbound-subscriptions/{id}":          "connector infrastructure is admin config",
 	"POST /api/v1/connectors/{id}/provision-clio-key":    "connector infrastructure is admin config",
 
-	// Marketplace: package management, an admin/UI concern.
-	"GET /api/v1/marketplace/packages":               "marketplace management is a UI concern",
-	"GET /api/v1/marketplace/packages/{id}":          "marketplace management is a UI concern",
-	"POST /api/v1/marketplace/packages/{id}/install": "marketplace management is a UI concern",
-	"GET /api/v1/marketplace/installed":              "marketplace management is a UI concern",
-	"DELETE /api/v1/marketplace/installed/{id}":      "marketplace management is a UI concern",
+	// Repository: package management, an admin/UI concern.
+	"GET /api/v1/repository/packages":               "repository management is a UI concern",
+	"GET /api/v1/repository/packages/{id}":          "repository management is a UI concern",
+	"POST /api/v1/repository/packages/{id}/install": "repository management is a UI concern",
+	"GET /api/v1/repository/installed":              "repository management is a UI concern",
+	"DELETE /api/v1/repository/installed/{id}":      "repository management is a UI concern",
 
 	// Peer deploy tokens and bundle import (ADR-0129): issuing a machine credential
 	// is credential storage (admin-gated, same category as secrets), and the import

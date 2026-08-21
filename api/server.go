@@ -220,18 +220,18 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs      *processdoc.Service
-	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
-	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
-	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
-	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
-	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
-	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
-	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *vault.Vault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
-	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
-	users            *userStore           // durable sidecar for user accounts (ADR-0044)
+	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
+	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors       *connectorStore     // durable sidecar for managed connector instances (ADR-0041)
+	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
+	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
+	repositoryStore  *repositoryStore    // durable sidecar for installed repository templates (ADR-0081)
+	settings         *settingsStore      // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
+	vault            *vault.Vault        // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled     bool                // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users            *userStore          // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -823,13 +823,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
-	marketplaceStore, err := newMarketplaceStore(filepath.Join(dataDir, "marketplace"))
+	// Carry a pre-rename install across before opening the store, so templates
+	// installed when the area was still called "Marketplace" are still there.
+	if err := migrateRepositoryDir(dataDir); err != nil {
+		return nil, err
+	}
+	repositoryStore, err := newRepositoryStore(filepath.Join(dataDir, "repository"))
 	if err != nil {
 		return nil, err
 	}
-	// The marketplace catalog is curated and compiled into the binary (ADR-0081);
+	// The repository catalog is curated and compiled into the binary (ADR-0081);
 	// an invalid bundled package is a build error, so it fails construction here.
-	marketplaceCatalog, err := loadBundledCatalog()
+	repositoryCatalog, err := loadBundledCatalog()
 	if err != nil {
 		return nil, err
 	}
@@ -876,8 +881,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
-		marketplace:       marketplaceCatalog,
-		marketplaceStore:  marketplaceStore,
+		repository:        repositoryCatalog,
+		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
 		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
