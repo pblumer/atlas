@@ -258,8 +258,9 @@ _Changed_ / _Removed_ for each version.
   to `<data>/repository`; an existing install is migrated automatically on the first start
   after the upgrade, so installed templates carry across without operator action. The
   backup archive (ADR-0107) therefore carries a `repository/` member instead of
-  `marketplace/` — a backup taken before this release still restores, but its
-  `marketplace/` member is not read back. The decisions behind the feature are unchanged;
+  `marketplace/`; restoring a backup taken before this release maps that member onto
+  the new name, so an older archive still comes back in full. The decisions behind the
+  feature are unchanged;
   [ADR-0081](docs/adr/0081-community-marketplace-for-connectors-and-tasks.md) and
   [ADR-0167](docs/adr/0167-released-connectors-ship-in-the-marketplace.md) keep their
   original wording as dated records and carry a note about the new name.

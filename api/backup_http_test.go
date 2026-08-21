@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -396,5 +398,43 @@ func TestBackupResponseHeaders(t *testing.T) {
 	// The body must be a valid gzip stream.
 	if _, err := gzip.NewReader(res.Body); err != nil {
 		t.Fatalf("body is not gzip: %v", err)
+	}
+}
+
+// TestRestoreOfAPreRenameBackup is the upgrade path through a backup rather than
+// through the data directory: an archive taken while the area was still called
+// the Marketplace restores its installed templates into the Repository, and the
+// server serves them without a restart.
+func TestRestoreOfAPreRenameBackup(t *testing.T) {
+	dst, dir := newBackupServer(t)
+	const id = "community.rest-outbound"
+	rec := `{"id":"` + id + `","packageId":"` + id + `","version":"1.0.0","kind":"connector",` +
+		`"title":"REST outbound","template":{"name":"REST outbound"},"installedAt":42}`
+	// The sidecar store names a record by its hex-encoded key, so the archive
+	// member carries the same name an older server would have written.
+	member := "marketplace/" + hex.EncodeToString([]byte(id)) + ".json"
+
+	arc := makeTarGz(t, map[string]string{member: rec})
+	code, body := doReqBytes(t, dst, http.MethodPost, "/api/v1/restore", arc, "application/gzip")
+	if code != http.StatusOK {
+		t.Fatalf("restore status=%d body=%s", code, body)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "marketplace")); !os.IsNotExist(err) {
+		t.Errorf("restore recreated the legacy directory (stat err=%v)", err)
+	}
+	code, body = doReqBytes(t, dst, http.MethodGet, "/api/v1/repository/installed", nil, "")
+	if code != http.StatusOK {
+		t.Fatalf("list installed status=%d body=%s", code, body)
+	}
+	var got []struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode installed: %v (body=%s)", err, body)
+	}
+	if len(got) != 1 || got[0].ID != id {
+		t.Fatalf("installed templates after restore = %+v, want the one from the pre-rename archive", got)
 	}
 }

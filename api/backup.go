@@ -175,14 +175,31 @@ func (s *Server) restoreDest(name string) (dest string, ok bool, err error) {
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return "", false, fmt.Errorf("illegal path in archive: %q", name)
 	}
-	top := clean
+	top, rest := clean, ""
 	if i := strings.IndexRune(clean, filepath.Separator); i >= 0 {
-		top = clean[:i]
+		top, rest = clean[:i], clean[i:]
+	}
+	if current, legacy := renamedBackupDirs[top]; legacy {
+		top, clean = current, current+rest
 	}
 	if !allowedBackupDir(top) {
 		return "", false, nil
 	}
 	return filepath.Join(s.dataDir, clean), true, nil
+}
+
+// renamedBackupDirs maps a top-level directory an older Atlas wrote into an
+// archive to the name that directory goes by now, so a backup taken before a
+// rename still restores in full rather than having its members silently skipped
+// by the allowlist. Only the directory moved — the records inside are unchanged,
+// which is what makes the mapping a pure path rewrite.
+//
+// The mapping is one-way and applies to the top-level name only: an entry deeper
+// in the tree, or one that merely starts with a legacy name, is untouched. An
+// archive that somehow carries both names for the same record resolves the way
+// two entries for any one path already do — the last one in the archive wins.
+var renamedBackupDirs = map[string]string{
+	"marketplace": "repository", // the Marketplace area became the Repository
 }
 
 // allowedBackupDir reports whether a top-level directory is in the design-time
