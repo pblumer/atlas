@@ -3,6 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { copyText } from "./clipboard.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
@@ -401,29 +402,6 @@ function copyAllBtn(list) {
 function prettyJSON(text) {
   try { return JSON.stringify(JSON.parse(text), null, 2); }
   catch { return String(text); }
-}
-
-// copyText writes text to the clipboard, falling back to a hidden textarea +
-// execCommand where the async Clipboard API isn't available (older browsers, or
-// insecure origins). Returns a promise that resolves once the copy is attempted.
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch { /* fall through to the legacy path */ }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch { return false; }
 }
 
 // bindVarCopy wires the delegated click on `.vcopy` buttons inside panel: it copies
