@@ -198,11 +198,20 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			cols := splitCSVColumns(cn.Columns)
+			format, operation, err := csvFormatAndOperation(st.Id, cn.Format, cn.Operation)
+			if err != nil {
+				return err
+			}
+			cols, widths, err := splitCSVColumns(st.Id, format, cn.Columns)
+			if err != nil {
+				return err
+			}
 			hasHeader := csvHasHeader(cn.HasHeader)
-			// A headerless file maps columns by position, so it must name them; a header
-			// file may omit them to derive the columns from the header row (ADR-0139).
-			if !hasHeader && len(cols) == 0 {
+			// A delimited file read without a header row maps columns by position, so it
+			// must name them; with a header they may be derived from it (ADR-0139).
+			// Fixed-width always carries a layout (checked above) and an attribute-value
+			// file names its own fields, so neither needs this.
+			if format == csvimportFormatCSV && operation == csvimportOperationRead && !hasHeader && len(cols) == 0 {
 				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
 			}
 			id := b.AddCsvConnectorTask(CsvConfig{
@@ -211,6 +220,9 @@ func registerScope(
 				Delimiter: cn.Delimiter,
 				HasHeader: hasHeader,
 				Columns:   cols,
+				Format:    format,
+				Operation: operation,
+				Widths:    widths,
 				Retries:   retries,
 			})
 			reg.taskNode(st.Id, id, st.Form.FormId)

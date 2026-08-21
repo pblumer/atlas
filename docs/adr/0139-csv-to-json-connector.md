@@ -1,6 +1,57 @@
 # ADR-0139: A first-class "CSV to JSON" connector kind with model-authored layout
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-21 — fixed-width and attribute-value
+  formats, and a write direction; see the amendment note below)
+
+> **Amendment (2026-08-21): the text-table family.** This record shipped one format in
+> one direction. MIM has three text-table agents — *Delimited text file*,
+> *Fixed-Width text file*, *Attribute-Value Pair text file* — and its file agents both
+> import and export, so `docs/comparisons/mim.md` counted four gaps here. They are
+> closed as **formats and a direction of this connector**, not as new kinds.
+>
+> **Why formats rather than kinds.** ADR-0173 split SQL into three connectors because
+> a statement written with `$1` is a PostgreSQL statement and pointing it at SQL Server
+> is a mismatch a model can express *silently*. Nothing here is like that: all three
+> formats describe a table of records in a text file, produce the same rows, and share
+> the column layout and the type coercion. A fixed-width layout applied to a delimited
+> file does not quietly produce plausible rows — it fails on the first record, at the
+> moment the file is read. Where the mismatch is loud, one kind with a format is the
+> smaller surface.
+>
+> - **`format`** is `csv` (the default, so every existing model means exactly what it
+>   meant), `fixed-width`, or `avp`.
+> - **Fixed-width columns carry their width**, authored as `name:width` in the same
+>   `columns` attribute. The width is required for that format — a positional field
+>   has nothing else to find it by — and **rejected for the others**, because an
+>   authored width the connector would ignore is an author believing something untrue.
+>   Widths count *runes*, not bytes: an umlaut in a name would otherwise shift every
+>   column after it.
+> - **An attribute-value file names its own fields**, so it needs no layout; one only
+>   narrows what is picked out. A repeated key keeps the first value, matching the
+>   duplicate-header rule, so the result does not depend on how far down the file a
+>   duplicate appeared.
+> - **`operation`** is `read` (the default) or `write`. Writing inverts the same two
+>   attributes rather than adding any: `source` holds the rows, `resultVariable`
+>   receives the rendered text. Without a layout the output's field order is every
+>   field the rows carry, sorted, so a file written twice from the same data is the
+>   same file.
+>
+> **One deliberate data loss:** writing fixed-width truncates a value wider than its
+> column. The format has no way to express a wider field, so the alternatives are a
+> file whose columns no longer line up or refusing to write a record because a display
+> name is long. Truncation is what every producer of these files does, and it is at
+> least visible in the output.
+>
+> `Result` grew a `Variables()` method, so the in-process path and the worker cannot
+> decide separately what a read's rows and a write's file look like — the same
+> discipline that already keeps `Run` shared between them.
+>
+> **The names are historical.** The kind is still `csv`, the job type still
+> `io.atlas.csv-import`, and the package still `csvimport`, because the reserved index
+> is baked into deployed processes and `--connector csv` is an operator's command line.
+> The Modeler calls it what it now is. LDIF and DSML are *not* here: they carry
+> directory entries rather than table rows, so they are a different connector.
+
 - **Date:** 2026-08-11
 - **Deciders:** Atlas maintainers
 

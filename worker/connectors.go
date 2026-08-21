@@ -11,11 +11,14 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
 
@@ -56,6 +59,8 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		switch kind {
 		case "csv":
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
+		case "ldif":
+			built.Handlers[compiler.LdifJobType] = ExecFunc(runLdif)
 		case "webscrape":
 			// Nothing to configure: the reach is the worker's network position, not a
 			// credential, so there is no environment to read and nothing to report as
@@ -115,6 +120,41 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunMailJob(ctx, j, reg)
 			})
+		case "ad":
+			// AD needs no startup configuration: its server is model-authored and its
+			// bind password is a per-task reference, so there is nothing here a
+			// misconfiguration could be caught in (see adSecretFromEnv).
+			secret := adSecretFromEnv(env)
+			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunADJob(ctx, j, ad.NewDialer(), secret)
+			})
+		case "entra":
+			reg, names, err := entraRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunEntraJob(ctx, j, reg)
+			})
+		case "mssql", "mariadb", "postgres":
+			// The three SQL products (ADR-0173). Unlike the
+			// kinds above them they have no in-process counterpart to fall back to, so
+			// a worker is the only way a SQL task ever runs — which is why a
+			// misconfigured one is refused here, at startup, rather than discovered a
+			// retry budget later.
+			p, ok := sqldb.ProductByName(kind)
+			if !ok {
+				return Connectors{}, sqldb.UnknownProduct(kind)
+			}
+			reg, names, err := sqlRegistryFromEnv(env, p)
+			if err != nil {
+				return Connectors{}, err
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[p.JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunSQLJob(ctx, j, reg)
+			})
 		default:
 			return Connectors{}, fmt.Errorf("worker: --connector names a kind this worker does not implement: %q (have: %s)",
 				kind, strings.Join(KnownConnectorKinds(), ", "))
@@ -147,7 +187,7 @@ type Connectors struct {
 // misspelling produces. A kind may serve several job types — script serves one per
 // language — which is why a caller must not check this by counting handlers.
 func KnownConnectorKinds() []string {
-	return []string{"csv", "mail", "rest", "script", "webscrape"}
+	return []string{"ad", "csv", "entra", "ldif", "mail", "mariadb", "mssql", "postgres", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -348,11 +388,31 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var rows any
-	if err := json.Unmarshal([]byte(res.RowsJSON), &rows); err != nil {
-		return nil, fmt.Errorf("csv: parsed rows are not JSON: %w", err)
+	// Result decides what a job completes with, so a read's rows and a write's
+	// rendered file take the same path here as in the engine.
+	return res.Variables()
+}
+
+// runLdif reads or writes a resolved directory-file job. It shares [ldif.Run] and
+// [ldif.Result] with the in-process path, so the two cannot disagree about what a
+// read's entries or a write's file look like.
+func runLdif(_ context.Context, j Job) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("ldif: the job carried no resolved connector detail; is this server offloading the ldif kind?")
 	}
-	return map[string]any{res.ResultVariable: rows, "rowCount": res.RowCount}, nil
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task ldif.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("ldif: cannot read the resolved detail: %w", err)
+	}
+	res, err := ldif.Run(task)
+	if err != nil {
+		return nil, err
+	}
+	return res.Variables(), nil
 }
 
 // runWebScrape fetches a resolved scrape and returns the variable it completes with.

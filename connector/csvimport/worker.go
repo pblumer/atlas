@@ -98,8 +98,15 @@ func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *com
 	if err != nil {
 		return nil, err
 	}
+	// A read produces structured rows; a write produces the rendered file as text.
+	// Both go through Result so the in-process path and a worker cannot decide
+	// separately what a result looks like.
+	out := model.VariableValue{Name: res.ResultVariable, Kind: model.VarJSON, Text: res.RowsJSON}
+	if res.IsText {
+		out = model.VariableValue{Name: res.ResultVariable, Kind: model.VarString, Text: res.Text}
+	}
 	return []model.VariableValue{
-		{Name: res.ResultVariable, Kind: model.VarJSON, Text: res.RowsJSON},
+		out,
 		{Name: csvRowCountVar, Kind: model.VarNumber, Text: strconv.Itoa(res.RowCount)},
 	}, nil
 }

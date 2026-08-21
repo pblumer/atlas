@@ -15,10 +15,14 @@ import (
 
 	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -3497,6 +3501,10 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.failed(worker, name)
 			}
+			// The worker's own message, on the row for this job. Without it a
+			// failure that still has retries left says nothing anywhere: no
+			// incident is raised until they run out.
+			s.workers.recordOutcome(worker, key, jobRunFailed, req.Message, req.Retries, nil)
 		}
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
@@ -3618,6 +3626,8 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
 				s.workers.completed(worker, name)
 			}
+			// What the worker actually sent back, on the row its lease opened.
+			s.workers.recordOutcome(worker, key, jobRunCompleted, "", jv.Retries, vars)
 		} else {
 			s.proc.CompleteJobManually(key, actor, reason, vars...)
 		}
@@ -4355,6 +4365,10 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				jobs = append(jobs, j)
 			}
 			s.workers.leased(body.Worker, body.Type, len(jobs))
+			// The variables as they stood at lease time are the half an operator
+			// cannot reconstruct later: the instance moves on, and this is what the
+			// worker was actually given.
+			s.workers.recordLease(body.Worker, jobs)
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its connectors, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
@@ -4461,6 +4475,18 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
 			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
+			"format": j.Format, "operation": j.Operation,
+		}}
+	case compiler.LdifJobTypeIndex:
+		// A pure transform: what travels is the file text (or the entries) and the
+		// format, and there is no credential to leave behind.
+		j, err := ldif.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ldif", Fields: map[string]any{
+			"format": j.Format, "operation": j.Operation,
+			"source": j.Source, "resultVariable": j.Result,
 		}}
 	case compiler.MailJobTypeIndex:
 		// The message travels; the SMTP host and password do not. What names the
@@ -4473,6 +4499,48 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+		}}
+	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
+		// The statement and its bound parameters travel; the DSN does not exist here
+		// to travel. SQL is the first kind with no in-process handler at all, so this
+		// is not one of two paths that could drift — it is the only one (ADR-0173).
+		j, err := sqldb.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: j.Product, Fields: map[string]any{
+			"connector": j.Connector, "product": j.Product, "operation": j.Operation,
+			"statement": j.Statement, "params": j.Params, "named": j.Named,
+			"maxRows": j.MaxRows, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.AdJobTypeIndex:
+		// AD authors its own server (ADR-0166), so unlike mail the endpoint travels.
+		// What does not is the bind password: the *reference* travels and whoever runs
+		// the job resolves it, so an offloaded AD task never reads the engine's vault
+		// (ADR-0168).
+		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "ad", Fields: map[string]any{
+			"url": j.URL, "bindDN": j.BindDN, "bindSecretRef": j.BindSecret,
+			"startTLS": j.StartTLS, "operation": j.Operation, "dn": j.DN,
+			"memberDN": j.MemberDN, "newDN": j.NewDN, "newPassword": j.NewPassword,
+			"attributes": j.Attributes, "baseDN": j.BaseDN, "filter": j.Filter,
+			"cookie": j.Cookie, "cookieVariable": j.CookieVariable,
+			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
+			"resultVariable": j.ResultVariable,
+		}}
+	case compiler.EntraJobTypeIndex:
+		// The operation and the ids travel; the tenant's app credential does not
+		// exist here to travel. Worker-only, like the SQL kinds (ADR-0172).
+		j, err := entra.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "entra", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "userId": j.UserID,
+			"groupId": j.GroupID, "attributes": j.Attributes, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page

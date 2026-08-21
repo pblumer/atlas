@@ -174,3 +174,37 @@ func TestWriteRestoredFileErrors(t *testing.T) {
 		t.Error("writeRestoredFile: want error when the final path is a directory, got nil")
 	}
 }
+
+// TestRestoreDestMapsTheLegacyMarketplaceDirectory covers the rename seam: an
+// archive written before the Marketplace area became the Repository names its
+// members "marketplace/…", and those must land in <data>/repository so the
+// templates they hold come back instead of being silently dropped.
+func TestRestoreDestMapsTheLegacyMarketplaceDirectory(t *testing.T) {
+	s := &Server{dataDir: filepath.Join("/data")}
+	for _, tc := range []struct {
+		name  string
+		entry string
+		want  string
+		ok    bool
+	}{
+		{"legacy top-level member", "marketplace/abc.json", filepath.Join("/data", "repository", "abc.json"), true},
+		{"legacy nested member", "marketplace/sub/abc.json", filepath.Join("/data", "repository", "sub", "abc.json"), true},
+		{"current name is untouched", "repository/abc.json", filepath.Join("/data", "repository", "abc.json"), true},
+		{"the mapping is one-way", "repository/marketplace.json", filepath.Join("/data", "repository", "marketplace.json"), true},
+		{"a non-allowlisted name stays out", "marketplaces/abc.json", "", false},
+		{"secrets stay out", "secrets/abc.json", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dest, ok, err := s.restoreDest(tc.entry)
+			if err != nil {
+				t.Fatalf("restoreDest(%q): %v", tc.entry, err)
+			}
+			if ok != tc.ok {
+				t.Fatalf("restoreDest(%q) ok = %v, want %v", tc.entry, ok, tc.ok)
+			}
+			if ok && dest != tc.want {
+				t.Errorf("restoreDest(%q) = %q, want %q", tc.entry, dest, tc.want)
+			}
+		})
+	}
+}

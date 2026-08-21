@@ -207,6 +207,9 @@ comment safe to write.
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted |
 | [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted |
+| [0171](0171-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Proposed |
+| [0172](0172-entra-id-connector.md) | A Microsoft Entra ID connector | Proposed |
+| [0173](0173-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Proposed |
 
 ## Status values
 

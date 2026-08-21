@@ -127,3 +127,102 @@ func TestParseCsvConnectorErrors(t *testing.T) {
 		}
 	}
 }
+
+// csvTaskBPMN builds a one-task model from raw <atlas:csvConnector> attributes.
+func csvTaskBPMN(attrs string) string {
+	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:csvConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+}
+
+func csvDetailOf(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDetail) {
+	t.Helper()
+	cp, err := Parse(1, 1, strings.NewReader(csvTaskBPMN(attrs)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+	return cp, cp.ConnectorTask(node.Detail)
+}
+
+// A model written before formats existed keeps meaning exactly what it meant: a
+// delimited file, read.
+func TestCsvFormatDefaults(t *testing.T) {
+	cp, d := csvDetailOf(t, `source="csvText" resultVariable="rows"`)
+	if got := cp.Intern(d.CsvFormat); got != "csv" {
+		t.Errorf("format = %q, want csv", got)
+	}
+	if got := cp.Intern(d.CsvOperation); got != "read" {
+		t.Errorf("operation = %q, want read", got)
+	}
+	if len(d.CsvWidths) != 0 {
+		t.Errorf("widths = %v, want none for a delimited file", d.CsvWidths)
+	}
+}
+
+// A fixed-width file finds its fields by position, so each column carries a width.
+func TestCsvFixedWidthColumns(t *testing.T) {
+	cp, d := csvDetailOf(t, `source="datei" format="fixed-width" columns="personalnr:8,name:30" resultVariable="zeilen"`)
+	if got := cp.Intern(d.CsvFormat); got != "fixed-width" {
+		t.Errorf("format = %q", got)
+	}
+	if len(d.CsvColumns) != 2 || cp.Intern(d.CsvColumns[0]) != "personalnr" {
+		t.Fatalf("columns = %v", d.CsvColumns)
+	}
+	if len(d.CsvWidths) != 2 || d.CsvWidths[0] != 8 || d.CsvWidths[1] != 30 {
+		t.Errorf("widths = %v, want [8 30]", d.CsvWidths)
+	}
+}
+
+// An attribute-value file names its own fields, so it needs no layout — and a
+// headerless delimited file still does.
+func TestCsvAVPNeedsNoColumns(t *testing.T) {
+	cp, d := csvDetailOf(t, `source="datei" format="avp" hasHeader="false" resultVariable="zeilen"`)
+	if got := cp.Intern(d.CsvFormat); got != "avp" {
+		t.Errorf("format = %q", got)
+	}
+	if len(d.CsvColumns) != 0 {
+		t.Errorf("columns = %v, want none", d.CsvColumns)
+	}
+}
+
+func TestCsvWriteOperation(t *testing.T) {
+	cp, d := csvDetailOf(t, `source="zeilen" operation="write" resultVariable="datei"`)
+	if got := cp.Intern(d.CsvOperation); got != "write" {
+		t.Errorf("operation = %q, want write", got)
+	}
+	// A write needs no column layout: the rows carry their own field names.
+	if len(d.CsvColumns) != 0 {
+		t.Errorf("columns = %v", d.CsvColumns)
+	}
+}
+
+func TestCsvFormatValidation(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"unknown format", `source="f" format="yaml"`, "unknown format"},
+		{"unknown operation", `source="f" operation="append"`, "unknown operation"},
+		{"fixed-width without columns", `source="f" format="fixed-width"`, "name:width"},
+		{"fixed-width column without width", `source="f" format="fixed-width" columns="a,b"`, "needs a width"},
+		{"width on a delimited file", `source="f" columns="a:5"`, "only a fixed-width file uses"},
+		{"non-numeric width", `source="f" format="fixed-width" columns="a:breit"`, "non-numeric width"},
+		{"zero width", `source="f" format="fixed-width" columns="a:0"`, "at least one character"},
+		{"headerless delimited read without columns", `source="f" hasHeader="false"`, "must list its columns"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(csvTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}

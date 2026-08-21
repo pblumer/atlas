@@ -66,6 +66,13 @@ func main() {
 		}
 	case "worker":
 		if err := runWorker(args); err != nil {
+			// A worker with nothing to serve has already said so, at the level that
+			// fits it. It leaves its own status so a supervisor can park it rather
+			// than restart it forever; reporting it again as a failure would put a
+			// red line in the console for an ordinary state.
+			if errors.Is(err, errNothingToServe) {
+				os.Exit(exitNothingToServe)
+			}
 			fatal("atlas worker", err)
 		}
 	case "version", "-v", "--version":
@@ -433,13 +440,24 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// notices. --in-process-connectors returns to the old arrangement wholesale;
 	// --offload-connectors adds the remaining credential-bearing kinds on top, once
 	// their secrets have been moved to a worker by hand.
+	//
+	// One worker per kind, not one for all of them. Three reasons, and the first is
+	// not about tidiness: a script task inherits its worker's whole environment, so a
+	// single worker holding both the mail credential and the script interpreters
+	// would let a model-authored script read the SMTP password. Separate processes
+	// put that secret only where it is used. The other two follow from the same
+	// split — a restart, a state and a log per kind in the Workers view, and a script
+	// that pegs a core or leaks memory taking nothing else down with it, which is the
+	// isolation the script kind is moved out for in the first place.
 	if !inProcessConnectors {
 		defaults := api.DefaultOffloadedKinds()
 		offloadKinds = append(defaults, offloadKinds...)
-		specs = append(specs, api.SuperviseSpec{
-			ID: "connectors", Kinds: defaults, Connectors: defaults,
-		})
-		handles = append(handles, nil)
+		for _, kind := range defaults {
+			specs = append(specs, api.SuperviseSpec{
+				ID: kind, Kinds: []string{kind}, Connectors: []string{kind},
+			})
+			handles = append(handles, nil)
+		}
 	}
 	if len(offloadKinds) > 0 {
 		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
@@ -639,6 +657,18 @@ func (h handleFlag) Set(v string) error {
 	return nil
 }
 
+// errNothingToServe ends a worker that holds no handler at all. It leaves
+// [exitNothingToServe] rather than a generic failure so a supervisor can tell "this
+// worker has nothing configured yet" from "this worker crashed", and park it instead
+// of restarting it into an empty configuration on a backoff loop.
+var errNothingToServe = errors.New("worker: nothing to serve")
+
+// exitNothingToServe is the status [errNothingToServe] leaves. It is api's constant
+// of the same name — the supervisor is the reader, and a status the two ends
+// disagreed about would put a parked worker into a restart loop; TestNothingToServe
+// StatusIsTheOneTheSupervisorParksOn holds them together.
+const exitNothingToServe = api.ExitNothingToServe
+
 // runWorker runs the binary as an out-of-process worker for a running Atlas
 // (ADR-0157 step 5): it leases jobs of the types it was given, runs a command for
 // each, and reports the outcome. The job arrives on the command's stdin as JSON and
@@ -658,7 +688,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail, rest, script, webscrape). The server must be offloading them (it offloads csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, rest, script, webscrape). The server must be offloading them (it offloads csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, and entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -668,11 +698,20 @@ func runWorker(args []string) error {
 		return err
 	}
 
-	if len(handles) == 0 && len(builtin.Handlers) == 0 {
-		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")
-	}
 	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
 		return err
+	}
+	if len(handles) == 0 && len(builtin.Handlers) == 0 {
+		// Nothing to serve. For a worker an operator ran by hand this is a typo, and
+		// saying so and stopping is right. For a supervised one it is an ordinary
+		// state — a mail worker on a server with no mail connector yet — and the
+		// supervisor must park it rather than restart it into the same emptiness
+		// forever, so the two are told apart by the exit status rather than by the
+		// message. Configure the kind and the supervisor brings this worker back
+		// holding it.
+		logging.Warn(logging.WorkerStarting, "nothing to serve: give at least one --handle type=command, or configure a connector kind this worker was given",
+			slog.String("connectors", strings.Join(kinds, ",")))
+		return errNothingToServe
 	}
 
 	execs := map[string]worker.Exec{}

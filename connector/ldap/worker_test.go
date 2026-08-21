@@ -3,6 +3,7 @@ package ldap_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -28,7 +29,7 @@ type fakeConn struct {
 	addDN       string
 	addAttrs    map[string][]string
 	modifyDN    string
-	modifyAttrs map[string][]string
+	modifyMods  []ldap.Mod
 	deleteDN    string
 	pwDN, pwNew string
 	closed      bool
@@ -42,8 +43,8 @@ func (c *fakeConn) Add(dn string, a map[string][]string) error {
 	c.addDN, c.addAttrs = dn, a
 	return c.err
 }
-func (c *fakeConn) Modify(dn string, a map[string][]string) error {
-	c.modifyDN, c.modifyAttrs = dn, a
+func (c *fakeConn) Modify(dn string, mods []ldap.Mod) error {
+	c.modifyDN, c.modifyMods = dn, mods
 	return c.err
 }
 func (c *fakeConn) Delete(dn string) error          { c.deleteDN = dn; return c.err }
@@ -57,11 +58,13 @@ type fakeDialer struct {
 	dials                     int
 	url, bindDN, bindPassword string
 	startTLS                  bool
+	clientCert                string
 }
 
-func (d *fakeDialer) Dial(url, bindDN, bindPassword string, startTLS bool) (ldap.Conn, error) {
+func (d *fakeDialer) Dial(opts ldap.DialOptions) (ldap.Conn, error) {
 	d.dials++
-	d.url, d.bindDN, d.bindPassword, d.startTLS = url, bindDN, bindPassword, startTLS
+	d.url, d.bindDN, d.bindPassword, d.startTLS = opts.URL, opts.BindDN, opts.BindPassword, opts.StartTLS
+	d.clientCert = opts.ClientCert
 	if d.err != nil {
 		return nil, d.err
 	}
@@ -269,8 +272,12 @@ func TestLdapModifyDeletePassword(t *testing.T) {
 		conn := &fakeConn{}
 		drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
 			model.VariableValue{Name: "entry", Kind: model.VarJSON, Text: `{"mail":"new@example.com"}`})
-		if conn.modifyDN != "uid=ada" || len(conn.modifyAttrs["mail"]) != 1 || conn.modifyAttrs["mail"][0] != "new@example.com" {
-			t.Errorf("modify = %q %v, want the replaced mail", conn.modifyDN, conn.modifyAttrs)
+		if conn.modifyDN != "uid=ada" || len(conn.modifyMods) != 1 {
+			t.Fatalf("modify = %q %+v, want one change", conn.modifyDN, conn.modifyMods)
+		}
+		m := conn.modifyMods[0]
+		if m.Op != ldap.ModReplace || m.Attr != "mail" || m.Vals[0] != "new@example.com" {
+			t.Errorf("mod = %+v, want mail replaced", m)
 		}
 	})
 	t.Run("delete", func(t *testing.T) {
@@ -494,6 +501,108 @@ func TestLdapRecoversAcrossRestart(t *testing.T) {
 	}
 	if pi, ei := active(t, store2); pi != 0 || ei != 0 {
 		t.Fatalf("after recovery Drive: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestLdapSearchIsPagedAndBounded proves the search bounds reach the connection: a
+// directory's administrative size limit no longer refuses a legitimate search, and a
+// runaway one is capped rather than loaded into a process variable.
+func TestLdapSearchIsPagedAndBounded(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := ldapProcess(t, compiler.LdapConfig{
+		URL: lit(ldapURL), Op: "search", BaseDN: lit("dc=example,dc=com"), Scope: "sub",
+		ResultVar: "treffer", PageSize: 250, MaxEntries: 500,
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+
+	if conn.searchReq == nil {
+		t.Fatal("no search was performed")
+	}
+	if conn.searchReq.PageSize != 250 || conn.searchReq.MaxEntries != 500 {
+		t.Errorf("search bounds = %d / %d, want 250 / 500",
+			conn.searchReq.PageSize, conn.searchReq.MaxEntries)
+	}
+}
+
+// TestLdapPerValueModify proves add-values and delete-values change individual values
+// rather than replacing the attribute — the difference between adding one group
+// member and declaring the group's entire membership.
+func TestLdapPerValueModify(t *testing.T) {
+	for _, tc := range []struct {
+		op   string
+		want uint
+	}{
+		{"add-values", ldap.ModAdd},
+		{"delete-values", ldap.ModDelete},
+		{"modify", ldap.ModReplace},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			log, store := openStore(t)
+			cp, jobType := ldapProcess(t, compiler.LdapConfig{
+				URL: lit(ldapURL), Op: tc.op, DN: lit("cn=team,dc=x"), EntryVar: "entry",
+			}, false)
+			conn := &fakeConn{}
+			drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+				model.VariableValue{Name: "entry", Kind: model.VarJSON,
+					Text: `{"member":["uid=ada,dc=x"]}`})
+
+			if len(conn.modifyMods) != 1 {
+				t.Fatalf("mods = %+v, want one", conn.modifyMods)
+			}
+			m := conn.modifyMods[0]
+			if m.Op != tc.want || m.Attr != "member" || m.Vals[0] != "uid=ada,dc=x" {
+				t.Errorf("mod = %+v, want a %v of member", m, tc.want)
+			}
+		})
+	}
+}
+
+// A per-value change naming nothing is a modelling mistake, not an empty request.
+func TestLdapPerValueModifyEmpty(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := ldapProcess(t, compiler.LdapConfig{
+		URL: lit(ldapURL), Op: "add-values", DN: lit("cn=team,dc=x"), EntryVar: "leer",
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "leer", Kind: model.VarJSON, Text: `{}`})
+	if conn.modifyDN != "" {
+		t.Errorf("a modify was sent with no changes: %q", conn.modifyDN)
+	}
+}
+
+// The client certificate reaches the dialer resolved from its reference, and an
+// unresolvable reference fails the job before any dial — the same shape the bind
+// password follows.
+func TestLdapClientCertificate(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := ldapProcess(t, compiler.LdapConfig{
+		URL: lit("ldaps://dc.example.com:636"), Op: "delete", DN: lit("uid=a,dc=x"),
+		ClientCertSecret: "LDAP_CERT",
+	}, false)
+	dialer := &fakeDialer{conn: &fakeConn{}}
+	drive(t, cp, jobType, dialer, func(ref string) string {
+		if ref == "LDAP_CERT" {
+			return "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+		}
+		return ""
+	}, store, log)
+	if !strings.Contains(dialer.clientCert, "BEGIN CERTIFICATE") {
+		t.Errorf("client cert = %q, want the resolved PEM", dialer.clientCert)
+	}
+
+	log2, store2 := openStore(t)
+	cp2, jobType2 := ldapProcess(t, compiler.LdapConfig{
+		URL: lit("ldaps://dc"), Op: "delete", DN: lit("uid=a"), ClientCertSecret: "MISSING",
+	}, false)
+	d2 := &fakeDialer{conn: &fakeConn{}}
+	drive(t, cp2, jobType2, d2, noSecret, store2, log2)
+	if d2.dials != 0 {
+		t.Errorf("dials = %d, want 0 for an unresolvable certificate reference", d2.dials)
+	}
+	if mustActiveProcs(t, store2) != 1 {
+		t.Error("want the job parked on an incident")
 	}
 }
 

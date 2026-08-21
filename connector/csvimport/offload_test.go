@@ -67,7 +67,7 @@ func TestRunRejectsAnEmptySource(t *testing.T) {
 // Columns and a delimiter travel as plain values and are honoured.
 func TestRunHonoursColumnsAndDelimiter(t *testing.T) {
 	got, err := csvimport.Run(csvimport.Job{
-		Source: "Ada;12\nGrace;7\n", Delimiter: ";", Columns: []string{"name", "amount"},
+		Source: "Ada;12\nGrace;7\n", Delimiter: ";", Columns: []csvimport.Column{{Name: "name"}, {Name: "amount"}},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -90,7 +90,7 @@ func TestRunHonoursColumnsAndDelimiter(t *testing.T) {
 func TestHeaderlessColumnsAreParsedByPosition(t *testing.T) {
 	got, err := csvimport.Run(csvimport.Job{
 		Source:  "ada@x.io,users\ngrace@x.io,admins\n",
-		Columns: []string{"email", "group"},
+		Columns: []csvimport.Column{{Name: "email"}, {Name: "group"}},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -133,7 +133,7 @@ func TestRunRejectsAFileItCannotParse(t *testing.T) {
 func TestRunSkipsBlankColumnNames(t *testing.T) {
 	got, err := csvimport.Run(csvimport.Job{
 		Source:  "Ada,12\nGrace,7\n",
-		Columns: []string{"name", "   ", "amount"},
+		Columns: []csvimport.Column{{Name: "name"}, {Name: "   "}, {Name: "amount"}},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)

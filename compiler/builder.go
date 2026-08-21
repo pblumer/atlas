@@ -271,6 +271,70 @@ const AdJobType = "io.atlas.ad"
 // LdapJobTypeIndex (ADR-0166).
 const AdJobTypeIndex int32 = 19
 
+// The three SQL connector job types (ADR-0173). They are one connector in three
+// faces: the same task shape, the same engine-side resolution and the same worker
+// code, differing only in the driver behind them — and therefore in the placeholder
+// syntax a statement must use. That difference is why the product is part of the
+// *model* rather than of the worker's configuration: a statement written with $1 is
+// a PostgreSQL statement, and a kind per product makes pointing it at SQL Server
+// unrepresentable instead of a runtime error.
+//
+// None of the three has an in-process handler. SQL is worker-only (ADR-0164/0170):
+// the type exists precisely so a worker — the one process holding the DSN — can
+// lease it, and the engine never learns which database it is for.
+
+// MsSqlJobType is the reserved job type a Microsoft SQL Server connector task
+// carries. Statements use @p1-style placeholders and may bind by name.
+const MsSqlJobType = "io.atlas.mssql"
+
+// MsSqlJobTypeIndex is the interned index MsSqlJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-first (after the twenty job
+// types above), so it is always 20.
+const MsSqlJobTypeIndex int32 = 20
+
+// MariaDBJobType is the reserved job type a MariaDB (or MySQL) connector task
+// carries. Statements use ?-style positional placeholders only.
+const MariaDBJobType = "io.atlas.mariadb"
+
+// MariaDBJobTypeIndex is the interned index MariaDBJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-second, so it is always 21.
+const MariaDBJobTypeIndex int32 = 21
+
+// PostgresJobType is the reserved job type a PostgreSQL connector task carries.
+// Statements use $1-style positional placeholders only.
+const PostgresJobType = "io.atlas.postgres"
+
+// PostgresJobTypeIndex is the interned index PostgresJobType is guaranteed to occupy
+// in every compiled process: NewBuilder reserves it twenty-third, so it is always 22.
+const PostgresJobTypeIndex int32 = 22
+
+// EntraJobType is the reserved job type a Microsoft Entra ID connector task carries.
+// Entra is Graph, so a process could in principle reach it with the REST connector;
+// what this type marks is a task that names a *lifecycle operation* instead of a URL
+// and a JSON fragment, the same argument the AD connector makes against generic LDAP
+// (ADR-0166/0171).
+//
+// Like the SQL types above it, no in-process handler subscribes to it: the kind is
+// worker-only, so the tenant's client secret never enters the engine.
+const EntraJobType = "io.atlas.entra"
+
+// EntraJobTypeIndex is the interned index EntraJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it twenty-fourth, so it is always 23.
+const EntraJobTypeIndex int32 = 23
+
+// LdifJobType is the reserved job type a directory-file connector task carries: LDIF
+// (RFC 2849) or DSML v1, read or written (ADR-0171).
+//
+// It has an in-process handler as well as a worker one, and that is not a lapse from
+// ADR-0164: parsing a file is pure computation with no network and no credential, the
+// same category as a FEEL script or a local DMN evaluation, which that record
+// explicitly leaves in the engine. It is offloadable all the same.
+const LdifJobType = "io.atlas.ldif"
+
+// LdifJobTypeIndex is the interned index LdifJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it twenty-fifth, so it is always 24.
+const LdifJobTypeIndex int32 = 24
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -298,6 +362,11 @@ var reservedJobTypes = []string{
 	LdapJobType,          // 17
 	SoapJobType,          // 18
 	AdJobType,            // 19
+	MsSqlJobType,         // 20
+	MariaDBJobType,       // 21
+	PostgresJobType,      // 22
+	EntraJobType,         // 23
+	LdifJobType,          // 24
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1027,7 +1096,13 @@ type LdapConfig struct {
 	EntryVar    string
 	NewPassword RestExpr
 	ResultVar   string
-	Retries     int32
+	// PageSize and MaxEntries are the effective search bounds; the compiler has
+	// already applied the defaults, and 0 means unbounded. ClientCertSecret names the
+	// secret holding a PEM certificate+key bundle for a client-certificate bind.
+	PageSize         int32
+	MaxEntries       int32
+	ClientCertSecret string
+	Retries          int32
 }
 
 // AddLdapConnectorTask adds a generic LDAP connector task and returns its element id.
@@ -1040,27 +1115,30 @@ type LdapConfig struct {
 func (b *Builder) AddLdapConnectorTask(cfg LdapConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:         b.intern(LdapJobType),
-		Connector:       -1, // LDAP carries its endpoint in the model, not a registry name
-		Subject:         -1, // not a clio task
-		EventType:       -1,
-		ClioQuery:       -1,
-		ReduceSpec:      -1,
-		Method:          -1, // the LDAP operation, not an HTTP method, is authored
-		Auth:            -1, // the bind password is a dedicated secret ref, not RestAuth
-		ResultVar:       b.intern(cfg.ResultVar),
-		Retries:         cfg.Retries,
-		LdapURL:         cfg.URL,
-		LdapBindDN:      cfg.BindDN,
-		LdapBindSecret:  b.intern(cfg.BindSecret),
-		LdapStartTLS:    cfg.StartTLS,
-		LdapOp:          b.intern(cfg.Op),
-		LdapDN:          cfg.DN,
-		LdapBaseDN:      cfg.BaseDN,
-		LdapFilter:      cfg.Filter,
-		LdapScope:       b.intern(cfg.Scope),
-		LdapEntryVar:    b.intern(cfg.EntryVar),
-		LdapNewPassword: cfg.NewPassword,
+		JobType:              b.intern(LdapJobType),
+		Connector:            -1, // LDAP carries its endpoint in the model, not a registry name
+		Subject:              -1, // not a clio task
+		EventType:            -1,
+		ClioQuery:            -1,
+		ReduceSpec:           -1,
+		Method:               -1, // the LDAP operation, not an HTTP method, is authored
+		Auth:                 -1, // the bind password is a dedicated secret ref, not RestAuth
+		ResultVar:            b.intern(cfg.ResultVar),
+		Retries:              cfg.Retries,
+		LdapURL:              cfg.URL,
+		LdapBindDN:           cfg.BindDN,
+		LdapBindSecret:       b.intern(cfg.BindSecret),
+		LdapStartTLS:         cfg.StartTLS,
+		LdapOp:               b.intern(cfg.Op),
+		LdapDN:               cfg.DN,
+		LdapBaseDN:           cfg.BaseDN,
+		LdapFilter:           cfg.Filter,
+		LdapScope:            b.intern(cfg.Scope),
+		LdapEntryVar:         b.intern(cfg.EntryVar),
+		LdapNewPassword:      cfg.NewPassword,
+		LdapPageSize:         cfg.PageSize,
+		LdapMaxEntries:       cfg.MaxEntries,
+		LdapClientCertSecret: b.intern(cfg.ClientCertSecret),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1132,6 +1210,14 @@ type AdConfig struct {
 	EntryVar    string
 	NewPassword RestExpr
 	Retries     int32
+	NewDN       RestExpr
+	// The sync (DirSync) operation's own fields.
+	BaseDN         RestExpr
+	Filter         RestExpr
+	CookieVar      string
+	ResultVar      string
+	MaxEntries     int32
+	ObjectSecurity bool
 }
 
 // AddAdConnectorTask adds an Active Directory connector task and returns its element
@@ -1145,25 +1231,164 @@ type AdConfig struct {
 func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:       b.intern(AdJobType),
-		Connector:     -1, // AD carries its endpoint in the model, not a registry name
+		JobType:    b.intern(AdJobType),
+		Connector:  -1, // AD carries its endpoint in the model, not a registry name
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // the AD operation, not an HTTP method, is authored
+		Auth:       -1, // the bind password is a dedicated secret ref, not RestAuth
+		// Every AD operation but sync writes to the directory rather than back to a
+		// variable, so this interns "" (-1) for all of them.
+		ResultVar:        b.intern(cfg.ResultVar),
+		Retries:          cfg.Retries,
+		AdURL:            cfg.URL,
+		AdBindDN:         cfg.BindDN,
+		AdBindSecret:     b.intern(cfg.BindSecret),
+		AdStartTLS:       cfg.StartTLS,
+		AdOp:             b.intern(cfg.Op),
+		AdDN:             cfg.DN,
+		AdMemberDN:       cfg.MemberDN,
+		AdEntryVar:       b.intern(cfg.EntryVar),
+		AdNewPassword:    cfg.NewPassword,
+		AdNewDN:          cfg.NewDN,
+		AdBaseDN:         cfg.BaseDN,
+		AdFilter:         cfg.Filter,
+		AdCookieVar:      b.intern(cfg.CookieVar),
+		AdMaxEntries:     cfg.MaxEntries,
+		AdObjectSecurity: cfg.ObjectSecurity,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-0173),
+// shared by all three products. JobType is the product's reserved job type
+// (MsSqlJobType, MariaDBJobType or PostgresJobType) — the one field that differs
+// between them, and what decides which driver the worker opens.
+//
+// Connector names the database the worker is configured for: a SQL task carries no
+// DSN, because the connection string never enters the engine. Op is the operation
+// ("query"|"query-one"|"execute"). Statement is the SQL text, a literal by
+// construction so no process value can become part of it; ParamsVar names the
+// process variable bound to its placeholders. MaxRows caps a query's result set
+// (0 = the worker's default), and ResultVar receives the rows, the row, or the
+// affected count (empty = discard, valid only for execute).
+type SqlConfig struct {
+	JobType   string
+	Connector string
+	Op        string
+	Statement string
+	ParamsVar string
+	MaxRows   int32
+	ResultVar string
+	Retries   int32
+}
+
+// AddSqlConnectorTask adds a SQL connector task of cfg's product and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the product's reserved job type. Unlike every kind before it, nothing in
+// the engine subscribes to that type — SQL is worker-only (ADR-0164/0170), so the job
+// waits for a worker that holds the DSN. The engine's half is resolving the
+// parameters against the instance's variables (ADR-0168); the statement needs no
+// resolving, being literal.
+func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(cfg.JobType),
+		Connector:    b.intern(cfg.Connector),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // a SQL operation, not an HTTP method, is authored
+		Auth:         -1, // the DSN lives on the worker; there is nothing to reference
+		ResultVar:    b.intern(cfg.ResultVar),
+		Retries:      cfg.Retries,
+		SqlOp:        b.intern(cfg.Op),
+		SqlStatement: b.intern(cfg.Statement),
+		SqlParamsVar: b.intern(cfg.ParamsVar),
+		SqlMaxRows:   cfg.MaxRows,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// LdifConfig is the deploy-time configuration of a directory-file connector task
+// (ADR-0171). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
+// names the variable holding the file text (read) or the entries (write), and Result
+// the variable receiving the entries (read) or the rendered file (write).
+type LdifConfig struct {
+	Format    string
+	Operation string
+	Source    string
+	Result    string
+	Retries   int32
+}
+
+// AddLdifConnectorTask adds a directory-file connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved LdifJobType, which an in-process worker and an `atlas worker` both
+// serve — the work is a pure transform, so neither placement can block the other.
+func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:       b.intern(LdifJobType),
+		Connector:     -1, // a file carries no endpoint and no credential
 		Subject:       -1, // not a clio task
 		EventType:     -1,
 		ClioQuery:     -1,
 		ReduceSpec:    -1,
-		Method:        -1, // the AD operation, not an HTTP method, is authored
-		Auth:          -1, // the bind password is a dedicated secret ref, not RestAuth
-		ResultVar:     -1, // AD operations write to the directory, not back to a variable
+		Method:        -1,
+		Auth:          -1,
+		ResultVar:     -1, // LDIF uses its own LdifResult field, as CSV does
 		Retries:       cfg.Retries,
-		AdURL:         cfg.URL,
-		AdBindDN:      cfg.BindDN,
-		AdBindSecret:  b.intern(cfg.BindSecret),
-		AdStartTLS:    cfg.StartTLS,
-		AdOp:          b.intern(cfg.Op),
-		AdDN:          cfg.DN,
-		AdMemberDN:    cfg.MemberDN,
-		AdEntryVar:    b.intern(cfg.EntryVar),
-		AdNewPassword: cfg.NewPassword,
+		LdifFormat:    b.intern(cfg.Format),
+		LdifOperation: b.intern(cfg.Operation),
+		LdifSource:    b.intern(cfg.Source),
+		LdifResult:    b.intern(cfg.Result),
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// EntraConfig is the deploy-time configuration of a Microsoft Entra ID connector
+// task (ADR-0172). Connector names the tenant the worker is configured for — a task
+// carries no tenant id and no client secret, because they never enter the engine. Op
+// is the lifecycle operation. UserID and GroupID are literal-or-FEEL values
+// addressing the user (a UPN or object id) and the group; AttributesVar names the
+// process variable holding the directory properties for create-user and update-user;
+// ResultVar receives what Graph returned (empty = discard).
+type EntraConfig struct {
+	Connector     string
+	Op            string
+	UserID        RestExpr
+	GroupID       RestExpr
+	AttributesVar string
+	ResultVar     string
+	Retries       int32
+}
+
+// AddEntraConnectorTask adds an Entra ID connector task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved EntraJobType, which nothing in the engine subscribes to — the kind is
+// worker-only (ADR-0164/0171), so the job waits for a worker that holds the tenant's
+// app credential.
+func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:            b.intern(EntraJobType),
+		Connector:          b.intern(cfg.Connector),
+		Subject:            -1, // not a clio task
+		EventType:          -1,
+		ClioQuery:          -1,
+		ReduceSpec:         -1,
+		Method:             -1, // an Entra operation, not an HTTP method, is authored
+		Auth:               -1, // the app credential lives on the worker
+		ResultVar:          b.intern(cfg.ResultVar),
+		Retries:            cfg.Retries,
+		EntraOp:            b.intern(cfg.Op),
+		EntraUserID:        cfg.UserID,
+		EntraGroupID:       cfg.GroupID,
+		EntraAttributesVar: b.intern(cfg.AttributesVar),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1276,6 +1501,12 @@ type CsvConfig struct {
 	HasHeader bool
 	Columns   []string
 	Retries   int32
+	// Format is the file format and Operation the direction; empty means csv and
+	// read. Widths carries each column's character width for a fixed-width file,
+	// positionally alongside Columns.
+	Format    string
+	Operation string
+	Widths    []int32
 }
 
 // AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
@@ -1304,6 +1535,9 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 		Auth:         -1,
 		CsvSource:    b.intern(cfg.Source),
 		CsvResult:    b.intern(cfg.Result),
+		CsvFormat:    b.intern(cfg.Format),
+		CsvOperation: b.intern(cfg.Operation),
+		CsvWidths:    cfg.Widths,
 		CsvDelimiter: b.intern(cfg.Delimiter),
 		CsvHasHeader: cfg.HasHeader,
 		CsvColumns:   cols,

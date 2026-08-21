@@ -1,6 +1,7 @@
 package ad
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,183 @@ func TestGoDialerStartTLSError(t *testing.T) {
 	dir := startTestDirectory(t, &testDirectory{})
 	if _, err := NewDialer().Dial(dir.URL, "", "", true); err == nil {
 		t.Fatal("Dial with STARTTLS against a plain server: err = nil, want error")
+	}
+}
+
+// TestGoConnModifyDN drives the real go-ldap adapter's ModifyDN against the test
+// directory, so the wire path a move actually takes in production is exercised — the
+// Conn fake the worker tests use never reaches this code.
+func TestGoConnModifyDN(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.ModifyDN("cn=Arno,ou=users,dc=x", "cn=Arno Meier", "ou=extern,dc=x"); err != nil {
+		t.Fatalf("ModifyDN: %v", err)
+	}
+	if ops, dns := d.seen(); !hasOp(ops, "modifydn") {
+		t.Errorf("ops = %v (dns %v), want a modifydn", ops, dns)
+	}
+
+	// A server that refuses reports the failure rather than swallowing it.
+	bad := startTestDirectory(t, &testDirectory{result: 32}) // noSuchObject
+	c2, err := NewDialer().Dial(bad.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer c2.Close()
+	if err := c2.ModifyDN("cn=weg,dc=x", "cn=neu", "dc=x"); err == nil {
+		t.Error("a refused ModifyDN must be an error")
+	}
+}
+
+// TestGoConnDelete drives the real adapter's Delete against the test directory.
+func TestGoConnDelete(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.Delete("cn=Alt,ou=users,dc=x"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	ops, dns := d.seen()
+	if !hasOp(ops, "delete") {
+		t.Errorf("ops = %v, want a delete", ops)
+	}
+	if !hasDN(dns, "cn=Alt,ou=users,dc=x") {
+		t.Errorf("dns = %v, want the deleted entry's dn on the wire", dns)
+	}
+
+	bad := startTestDirectory(t, &testDirectory{result: 32})
+	c2, err := NewDialer().Dial(bad.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer c2.Close()
+	if err := c2.Delete("cn=weg,dc=x"); err == nil {
+		t.Error("a refused Delete must be an error")
+	}
+}
+
+// TestSplitDN pins the DN split a move depends on, including the escape rule that
+// keeps a comma inside a value from splitting the name in the wrong place.
+func TestSplitDN(t *testing.T) {
+	for _, tc := range []struct{ in, rdn, superior string }{
+		{"cn=Arno,ou=users,dc=x", "cn=Arno", "ou=users,dc=x"},
+		{`cn=Meier\, Arno,ou=users,dc=x`, `cn=Meier\, Arno`, "ou=users,dc=x"},
+		{"dc=x", "dc=x", ""},
+		{" cn=A , ou=u,dc=x ", "cn=A", "ou=u,dc=x"},
+		{"", "", ""},
+		// A trailing backslash cannot escape anything; it must not run past the end.
+		{`cn=odd\`, `cn=odd\`, ""},
+	} {
+		rdn, sup := splitDN(tc.in)
+		if rdn != tc.rdn || sup != tc.superior {
+			t.Errorf("splitDN(%q) = %q / %q, want %q / %q", tc.in, rdn, sup, tc.rdn, tc.superior)
+		}
+	}
+}
+
+func hasOp(ops []string, want string) bool { return hasDN(ops, want) }
+
+func hasDN(vals []string, want string) bool {
+	for _, v := range vals {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestGoConnDirSync drives the real adapter's delta read against the test directory,
+// so the DirSync control — request and response — crosses the wire rather than being
+// assumed. The Conn fake the worker tests use never reaches this code.
+func TestGoConnDirSync(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{
+		dirsync:     true,
+		cookieOut:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+		moreOut:     true,
+		searchDN:    "cn=Arno,ou=users,dc=x",
+		searchAttrs: map[string][]string{"cn": {"Arno"}, "isDeleted": {"TRUE"}},
+	})
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	res, err := conn.DirSync(DirSyncRequest{BaseDN: "dc=x", Filter: "(objectClass=user)"})
+	if err != nil {
+		t.Fatalf("DirSync: %v", err)
+	}
+	if len(res.Entries) != 1 || res.Entries[0].DN != "cn=Arno,ou=users,dc=x" {
+		t.Fatalf("entries = %+v", res.Entries)
+	}
+	if res.Entries[0].Attributes["isDeleted"][0] != "TRUE" {
+		t.Errorf("the tombstone marker did not survive: %+v", res.Entries[0].Attributes)
+	}
+	if string(res.Cookie) != string([]byte{0xDE, 0xAD, 0xBE, 0xEF}) {
+		t.Errorf("cookie = %v, want the server's", res.Cookie)
+	}
+	if !res.More {
+		t.Error("more = false; the response control said there were further changes")
+	}
+}
+
+// A server that answers without a DirSync control did not honour the request — most
+// often the bind account cannot replicate directory changes. Returning the entries
+// anyway would hand the process a full directory it believes to be a change set, so
+// the connector refuses instead.
+func TestGoConnDirSyncWithoutTheControl(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{searchDN: "cn=Arno,dc=x"})
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	_, err = conn.DirSync(DirSyncRequest{BaseDN: "dc=x"})
+	if err == nil {
+		t.Fatal("a response with no DirSync control must fail")
+	}
+	if !strings.Contains(err.Error(), "replicate directory changes") {
+		t.Errorf("the error should name the likely cause, got: %v", err)
+	}
+}
+
+// The cap bounds one pass. It costs nothing, because a pass is resumable: the cookie
+// says where it got to.
+func TestGoConnDirSyncEntryCap(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{dirsync: true, searchDN: "cn=Arno,dc=x"})
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.DirSync(DirSyncRequest{BaseDN: "dc=x", MaxEntries: 0}); err != nil {
+		t.Fatalf("an unbounded pass should succeed: %v", err)
+	}
+	// The directory returns one entry, so a cap below that trips.
+	if _, err := conn.DirSync(DirSyncRequest{BaseDN: "dc=x", MaxEntries: -1}); err != nil {
+		t.Fatalf("a non-positive cap is unbounded: %v", err)
+	}
+}
+
+// A server error on the delta read fails it rather than yielding an empty change set.
+func TestGoConnDirSyncError(t *testing.T) {
+	d := startTestDirectory(t, &testDirectory{dirsync: true, result: 32}) // noSuchObject
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.DirSync(DirSyncRequest{BaseDN: "dc=nope"}); err == nil {
+		t.Error("a refused DirSync must be an error")
 	}
 }

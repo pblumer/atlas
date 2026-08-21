@@ -50,6 +50,7 @@ import (
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/ldap"
+	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -219,18 +220,18 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs      *processdoc.Service
-	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
-	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
-	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
-	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
-	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
-	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
-	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *vault.Vault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
-	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
-	users            *userStore           // durable sidecar for user accounts (ADR-0044)
+	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
+	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors       *connectorStore     // durable sidecar for managed connector instances (ADR-0041)
+	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
+	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
+	repositoryStore  *repositoryStore    // durable sidecar for installed repository templates (ADR-0081)
+	settings         *settingsStore      // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
+	vault            *vault.Vault        // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled     bool                // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users            *userStore          // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -273,6 +274,9 @@ type Server struct {
 	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
+	// ldapPool reuses bound LDAP connections across jobs (ADR-0154, amended). It is
+	// held here so Close can release what it is holding at shutdown.
+	ldapPool *ldap.Pool
 
 	// scriptWorkers maps a script language's reserved job-type index to the
 	// interpreter that runs it (ADR-0047). An operator registers each language with
@@ -819,13 +823,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
-	marketplaceStore, err := newMarketplaceStore(filepath.Join(dataDir, "marketplace"))
+	// Carry a pre-rename install across before opening the store, so templates
+	// installed when the area was still called "Marketplace" are still there.
+	if err := migrateRepositoryDir(dataDir); err != nil {
+		return nil, err
+	}
+	repositoryStore, err := newRepositoryStore(filepath.Join(dataDir, "repository"))
 	if err != nil {
 		return nil, err
 	}
-	// The marketplace catalog is curated and compiled into the binary (ADR-0081);
+	// The repository catalog is curated and compiled into the binary (ADR-0081);
 	// an invalid bundled package is a build error, so it fails construction here.
-	marketplaceCatalog, err := loadBundledCatalog()
+	repositoryCatalog, err := loadBundledCatalog()
 	if err != nil {
 		return nil, err
 	}
@@ -872,8 +881,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
-		marketplace:       marketplaceCatalog,
-		marketplaceStore:  marketplaceStore,
+		repository:        repositoryCatalog,
+		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
 		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
@@ -1025,8 +1034,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// and DNs live in the model; the bind password is a *reference* the worker resolves
 	// at call time (resolveConnectorSecret, ADR-0041). One worker serves every process
 	// under the reserved LDAP job type; each job dials, binds, operates, and closes.
+	//
+	// The dialer pools its connections (ADR-0154, amended): a run over a few hundred
+	// accounts would otherwise pay a handshake and a bind per entry. The pool is keyed
+	// by the whole credential, so a connection bound as one identity is never handed to
+	// a job asking for another, and Close releases what it holds at shutdown.
+	s.ldapPool = ldap.NewPool(ldap.NewDialer(), ldap.PoolOptions{})
 	s.jobRunner.HandleWithOutput(compiler.LdapJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-		return ldap.Handler(rd, s.processLookup, ldap.NewDialer(), s.resolveConnectorSecret)
+		return ldap.Handler(rd, s.processLookup, s.ldapPool, s.resolveConnectorSecret)
 	})
 	// A SOAP / Web Services (WSDL) connector task invokes an operation against a
 	// model-authored web-service endpoint (ADR-0165) — reading identities (import) or
@@ -1061,6 +1076,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
+	})
+	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-0171).
+	// Like CSV it is a pure transform — no network, no credential — so it runs here as
+	// well as on a worker, and neither placement can block the other.
+	s.jobRunner.HandleWithOutput(compiler.LdifJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+		return ldif.Handler(rd, s.processLookup)
 	})
 	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
 	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
@@ -1849,6 +1870,11 @@ func (s *Server) do(fn func()) { s.runLoop.Do(fn) }
 func (s *Server) Close() {
 	close(s.quit)
 	s.wg.Wait()
+	// After the workers have stopped, nothing is borrowing from the pool any more, so
+	// the sockets it is holding can go.
+	if s.ldapPool != nil {
+		_ = s.ldapPool.Close()
+	}
 }
 
 // Handler returns the HTTP handler: JSON API under /api/v1, /healthz, the

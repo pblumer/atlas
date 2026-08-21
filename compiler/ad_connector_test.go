@@ -125,3 +125,148 @@ func TestParseAdConnectorErrors(t *testing.T) {
 		}
 	}
 }
+
+// adTaskBPMN builds a one-task model from raw <atlas:adConnector> attributes.
+func adTaskBPMN(attrs string) string {
+	return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements><atlas:adConnector ` + attrs + `/></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+}
+
+func adDetail(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDetail) {
+	t.Helper()
+	cp, err := Parse(1, 1, strings.NewReader(adTaskBPMN(attrs)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+	return cp, cp.ConnectorTask(node.Detail)
+}
+
+// The operations that complete the lifecycle: an entry can now be changed, moved,
+// deleted, and a group created — not only created, password-set and enabled.
+func TestParseAdLifecycleOperations(t *testing.T) {
+	const server = `url="ldaps://dc.example.com:636" bindDN="cn=svc,dc=example,dc=com" bindSecret="AD_BIND"`
+
+	cp, d := adDetail(t, server+` operation="update-attributes" dn="cn=Arno,ou=users,dc=example,dc=com" entryVariable="aenderungen"`)
+	if got := cp.Intern(d.AdOp); got != "update-attributes" {
+		t.Errorf("operation = %q", got)
+	}
+	if got := cp.Intern(d.AdEntryVar); got != "aenderungen" {
+		t.Errorf("entryVariable = %q", got)
+	}
+
+	cp2, d2 := adDetail(t, server+` operation="move" dn="cn=Arno,ou=users,dc=example,dc=com" newDN="=zielDN"`)
+	if got := cp2.Intern(d2.AdOp); got != "move" {
+		t.Errorf("operation = %q", got)
+	}
+	if d2.AdNewDN.Expr == nil {
+		t.Errorf("newDN should be a compiled FEEL expression, got literal %q", d2.AdNewDN.Literal)
+	}
+
+	cp3, d3 := adDetail(t, server+` operation="delete" dn="cn=Alt,ou=users,dc=example,dc=com"`)
+	if got := cp3.Intern(d3.AdOp); got != "delete" {
+		t.Errorf("operation = %q", got)
+	}
+
+	cp4, d4 := adDetail(t, server+` operation="create-group" dn="cn=Team,ou=groups,dc=example,dc=com" entryVariable="gruppe"`)
+	if got := cp4.Intern(d4.AdOp); got != "create-group" {
+		t.Errorf("operation = %q", got)
+	}
+	if got := cp4.Intern(d4.AdEntryVar); got != "gruppe" {
+		t.Errorf("entryVariable = %q", got)
+	}
+}
+
+func TestAdLifecycleValidation(t *testing.T) {
+	const server = `url="ldaps://dc" bindSecret="R"`
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"update without entry", server + ` operation="update-attributes" dn="cn=a"`, "entryVariable"},
+		{"create-group without entry", server + ` operation="create-group" dn="cn=a"`, "entryVariable"},
+		{"move without newDN", server + ` operation="move" dn="cn=a"`, "newDN"},
+		{"move without dn", server + ` operation="move" newDN="cn=b"`, "dn"},
+		{"delete without dn", server + ` operation="delete"`, "dn"},
+		{"bad FEEL newDN", server + ` operation="move" dn="cn=a" newDN="="`, "newDN"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// The sync operation reads a subtree delta rather than acting on one entry, so it is
+// the one AD operation that takes a base rather than a dn (ADR-0166, amended).
+func TestParseAdSync(t *testing.T) {
+	cp, d := adDetail(t, `url="ldaps://dc" bindSecret="AD_BIND" operation="sync"
+	    baseDN="dc=example,dc=com" filter="(objectClass=user)" cookieVariable="dirsyncCookie"
+	    resultVariable="aenderungen" maxEntries="250" objectSecurity="true"`)
+	if got := cp.Intern(d.AdOp); got != "sync" {
+		t.Errorf("operation = %q, want sync", got)
+	}
+	if d.AdBaseDN.Literal != "dc=example,dc=com" || d.AdFilter.Literal != "(objectClass=user)" {
+		t.Errorf("base/filter = %+v / %+v", d.AdBaseDN, d.AdFilter)
+	}
+	if got := cp.Intern(d.AdCookieVar); got != "dirsyncCookie" {
+		t.Errorf("cookieVariable = %q", got)
+	}
+	if got := cp.Intern(d.ResultVar); got != "aenderungen" {
+		t.Errorf("resultVariable = %q", got)
+	}
+	if d.AdMaxEntries != 250 || !d.AdObjectSecurity {
+		t.Errorf("maxEntries/objectSecurity = %d / %v", d.AdMaxEntries, d.AdObjectSecurity)
+	}
+	// A sync addresses a naming context, not an entry.
+	if d.AdDN.Literal != "" {
+		t.Errorf("dn = %q, want none for a sync", d.AdDN.Literal)
+	}
+}
+
+// The cap defaults on, and costs nothing: a pass is resumable by construction, so a
+// bound only means a second pass rather than a lost answer.
+func TestAdSyncMaxEntriesDefault(t *testing.T) {
+	_, d := adDetail(t, `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r"`)
+	if d.AdMaxEntries != defaultAdSyncMaxEntries {
+		t.Errorf("maxEntries = %d, want the default %d", d.AdMaxEntries, defaultAdSyncMaxEntries)
+	}
+	// Every other operation carries no cap at all.
+	_, d2 := adDetail(t, `url="ldaps://dc" operation="disable" dn="cn=a"`)
+	if d2.AdMaxEntries != 0 {
+		t.Errorf("maxEntries = %d, want 0 for a non-sync", d2.AdMaxEntries)
+	}
+}
+
+func TestAdSyncValidation(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"no baseDN", `url="ldaps://dc" operation="sync" cookieVariable="c" resultVariable="r"`, "baseDN"},
+		{"no cookie variable", `url="ldaps://dc" operation="sync" baseDN="dc=x" resultVariable="r"`, "cookieVariable"},
+		{"no result variable", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c"`, "resultVariable"},
+		{"maxEntries on a write", `url="ldaps://dc" operation="disable" dn="cn=a" maxEntries="5"`, "maxEntries"},
+		{"maxEntries not a number", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r" maxEntries="viele"`, "maxEntries"},
+		{"maxEntries negative", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r" maxEntries="-1"`, "maxEntries"},
+		{"bad FEEL baseDN", `url="ldaps://dc" operation="sync" baseDN="=" cookieVariable="c" resultVariable="r"`, "baseDN"},
+		{"bad FEEL filter", `url="ldaps://dc" operation="sync" baseDN="dc=x" filter="=" cookieVariable="c" resultVariable="r"`, "filter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}

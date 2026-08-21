@@ -294,7 +294,7 @@ const TOPNAV = {
   ],
   modeler: [
     { name: "Home", route: "#/modeler" },
-    { name: "Marketplace", route: "#/modeler/marketplace" },
+    { name: "Repository", route: "#/modeler/repository" },
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
@@ -3968,7 +3968,8 @@ async function viewWorkers() {
           <th class="wk-num">Completed</th><th class="wk-num">Failed</th><th class="wk-num">Last seen</th>
         </tr></thead>
         <tbody>${workerRows.map((w) => `<tr class="${isStale(w) ? "wk-stale" : ""}">
-          <td><b>${w.worker ? esc(w.worker) : `<span class="muted">(unnamed)</span>`}</b></td>
+          <td><b><a href="#" class="wk-open" data-worker="${esc(w.worker)}"
+            title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
           <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
@@ -3985,7 +3986,101 @@ async function viewWorkers() {
       <p class="wk-note">Counters are since this server started and are not restored on restart.
         <b>In flight</b> is what a worker holds a lease on right now. <b>Connectors held</b> is what a
         worker reports it has credentials for &mdash; only it knows, since Atlas holds none for a kind
-        it has handed over.</p>`;
+        it has handed over. Open a worker\u2019s name for the jobs it ran.</p>`;
+
+    // Opening a worker asks for its recent jobs. They are deliberately not part of the
+    // polled payload: the variables in them are process data, the endpoint is
+    // admin-only, and a view that refreshes every few seconds should not carry them.
+    workers.querySelectorAll(".wk-open").forEach((a) => {
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        showWorkerJobs(a.dataset.worker || "");
+      });
+    });
+
+  // showWorkerJobs opens one worker's recent jobs: what it leased, what it was handed,
+  // what it returned, and what failed.
+  //
+  // The counters above say how much; this says which. A failure that still has retries
+  // left raises no incident, so before this its message existed nowhere an operator
+  // could reach — the whole reason the dialog carries the error text at all.
+  //
+  // It is a tail in the server's memory, not history: a restart empties it, and a busy
+  // worker pushes older jobs out. The dialog says so rather than letting an operator
+  // read an empty list as "nothing ran".
+  async function showWorkerJobs(worker) {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal wkjobs-modal" role="dialog" aria-modal="true" aria-label="Worker jobs">
+        <div class="modal-head">
+          <h2>${worker ? esc(worker) : "(unnamed worker)"} \u2014 recent jobs</h2>
+          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">\u2715</button>
+        </div>
+        <div class="modal-body" id="wkjobs-body"><p class="empty">Loading\u2026</p></div>
+        <div class="modal-foot">
+          <span class="muted small">The last jobs this worker leased, newest first. Held in the
+            server\u2019s memory only \u2014 a restart empties it, and older jobs age out. The durable
+            account is the instance timeline.</span>
+          <button type="button" class="btn" data-done title="Close this dialog">Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+    ov.querySelector("[data-x]").addEventListener("click", close);
+    ov.querySelector("[data-done]").addEventListener("click", close);
+
+    const body = ov.querySelector("#wkjobs-body");
+    let jobs = [];
+    try {
+      const out = await api("GET", `/api/v1/workers/${encodeURIComponent(worker)}/jobs`);
+      jobs = (out && out.jobs) || [];
+    } catch (e) {
+      // The endpoint is admin-only, and "you may not see this" is a different answer
+      // from "nothing ran here" — saying which is the point.
+      body.innerHTML = `<p class="empty">${esc(String(e && e.message || e))}</p>`;
+      return;
+    }
+    if (!jobs.length) {
+      body.innerHTML = `<p class="empty">No jobs recorded for this worker in this run.</p>`;
+      return;
+    }
+    // Variables are shown collapsed: the list is for scanning outcomes, and a row of
+    // JSON per job would bury the one that failed.
+    const vars = (label, text) => text
+      ? `<details class="wkjob-vars"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
+      : `<span class="muted small">${label}: none</span>`;
+    body.innerHTML = `<div class="wkjob-list">${jobs.map((j) => {
+      const took = j.settledAt && j.leasedAt
+        ? `${Math.max(0, Math.round((j.settledAt - j.leasedAt) / 1e6))} ms` : "";
+      return `<div class="wkjob wkjob-${esc(j.outcome.replace(/ /g, "-"))}">
+        <div class="wkjob-head">
+          <b>${esc(j.type)}</b>
+          <span class="pill-kv">${esc(j.outcome)}</span>
+          ${took ? `<span class="muted small">${esc(took)}</span>` : ""}
+          ${j.elementId ? `<span class="muted small">${esc(j.elementId)}</span>` : ""}
+          ${j.processInstanceKey
+            ? `<a href="#/operations/i/${j.processInstanceKey}" title="Open the process instance">instance ${j.processInstanceKey}</a>`
+            : ""}
+        </div>
+        ${j.error ? `<div class="wkjob-err">
+          <div class="wkjob-attempts ${j.retries > 0 ? "" : "wkjob-parked"}">${j.retries > 0
+            ? `${j.retries} ${j.retries === 1 ? "attempt" : "attempts"} left`
+            : "No attempts left \u2014 this one has parked"}</div>
+          <pre>${esc(j.error)}</pre></div>` : ""}
+        <div class="wkjob-io">${vars("Handed in", j.in)}${vars("Returned", j.out)}</div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  // prettyJSON re-indents the stored JSON text for reading, and leaves it alone when it
+  // will not parse — a clipped value is still worth showing as the text it is.
+  function prettyJSON(text) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+  }
 
     // Job types whose stored index a built-in has since taken. This is a data-directory
     // condition rather than a worker one, but it belongs where job types are shown, and
@@ -5424,18 +5519,18 @@ function setTitle(label) {
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
-// viewMarketplace is the community marketplace gallery (ADR-0081): browse the
+// viewRepository is the community repository gallery (ADR-0081): browse the
 // curated catalog of connectors, service tasks and script tasks and install one
 // into this server's template store. The trust split is the load-bearing UI
 // signal — a data-only connector/service task installs in one click ("Data only"),
 // while a script task carries code, so it reads "Runs code" and installs through a
 // review affordance (and is admin-gated server-side). No secret ever travels in a
 // shared package.
-async function viewMarketplace() {
+async function viewRepository() {
   view.innerHTML = `
     <div class="between">
-      <h1>Marketplace</h1>
-      <button class="btn neutral" id="mkt-refresh" title="Reload the marketplace catalog">Refresh</button>
+      <h1>Repository</h1>
+      <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
     <p class="muted">Connectors, service tasks and scripts the community already built,
     packaged as element templates. Install one and it lands in your palette ready to
@@ -5443,24 +5538,24 @@ async function viewMarketplace() {
     is imported for review. Credentials never travel in a shared package — you connect
     those on your server.</p>
     <div class="ops-toolbar">
-      <input id="mkt-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the marketplace">
-      <div class="seg" id="mkt-kinds" role="tablist">
+      <input id="repo-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the repository">
+      <div class="seg" id="repo-kinds" role="tablist">
         <button class="active" data-kind="" role="tab" title="Show all packages">All</button>
         <button data-kind="connector" role="tab" title="Show connectors only">Connectors</button>
         <button data-kind="service-task" role="tab" title="Show service tasks only">Service tasks</button>
         <button data-kind="script-task" role="tab" title="Show script tasks only">Script tasks</button>
       </div>
     </div>
-    <div id="mkt-grid" class="mkt-grid"><div class="card empty">Loading…</div></div>`;
+    <div id="repo-grid" class="repo-grid"><div class="card empty">Loading…</div></div>`;
 
-  const grid = document.getElementById("mkt-grid");
+  const grid = document.getElementById("repo-grid");
   const kindLabel = { "connector": "Connector", "service-task": "Service task", "script-task": "Script task" };
   let packages = [];
   let installed = new Set();
   let kind = "";
 
   const render = () => {
-    const q = document.getElementById("mkt-q").value.trim().toLowerCase();
+    const q = document.getElementById("repo-q").value.trim().toLowerCase();
     const list = packages.filter((p) => {
       if (kind && p.kind !== kind) return false;
       if (q && !(`${p.title} ${p.description} ${p.author}`).toLowerCase().includes(q)) return false;
@@ -5481,22 +5576,22 @@ async function viewMarketplace() {
           ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
           : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template into your palette">Install</button>`;
       const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
-      return `<div class="mkt-card card">
-        <div class="mkt-head">
-          <div class="mkt-title">
+      return `<div class="repo-card card">
+        <div class="repo-head">
+          <div class="repo-title">
             <h3>${esc(p.title)}</h3>
-            <div class="muted mkt-author">${esc(p.author)}</div>
+            <div class="muted repo-author">${esc(p.author)}</div>
           </div>
           <span class="chip">${esc(kindLabel[p.kind] || p.kind)}</span>
         </div>
-        <p class="mkt-desc">${esc(p.description)}</p>
-        <div class="mkt-meta">
+        <p class="repo-desc">${esc(p.description)}</p>
+        <div class="repo-meta">
           <span class="chip">v${esc(p.version)}</span>
           <span class="chip">Atlas ${esc(p.engineCompat)}</span>
           ${trust}
           ${installedTag}
         </div>
-        <div class="mkt-foot">${action}</div>
+        <div class="repo-foot">${action}</div>
       </div>`;
     }).join("");
   };
@@ -5505,8 +5600,8 @@ async function viewMarketplace() {
     grid.innerHTML = `<div class="card empty">Loading…</div>`;
     try {
       const [pkgs, inst] = await Promise.all([
-        api("GET", "/api/v1/marketplace/packages"),
-        api("GET", "/api/v1/marketplace/installed"),
+        api("GET", "/api/v1/repository/packages"),
+        api("GET", "/api/v1/repository/installed"),
       ]);
       packages = pkgs || [];
       installed = new Set((inst || []).map((r) => r.id));
@@ -5525,11 +5620,11 @@ async function viewMarketplace() {
     btn.disabled = true;
     try {
       if (btn.dataset.act === "install") {
-        const res = await api("POST", `/api/v1/marketplace/packages/${encodeURIComponent(id)}/install`);
+        const res = await api("POST", `/api/v1/repository/packages/${encodeURIComponent(id)}/install`);
         installed.add(id);
         toast(res && res.reviewRequired ? `${name} imported for review` : `${name} installed`, "ok");
       } else {
-        await api("DELETE", `/api/v1/marketplace/installed/${encodeURIComponent(id)}`);
+        await api("DELETE", `/api/v1/repository/installed/${encodeURIComponent(id)}`);
         installed.delete(id);
         toast(`${name} removed`, "ok");
       }
@@ -5540,15 +5635,15 @@ async function viewMarketplace() {
     }
   });
 
-  document.getElementById("mkt-q").addEventListener("input", render);
-  document.getElementById("mkt-kinds").addEventListener("click", (e) => {
+  document.getElementById("repo-q").addEventListener("input", render);
+  document.getElementById("repo-kinds").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-kind]");
     if (!b) return;
     kind = b.dataset.kind;
-    document.querySelectorAll("#mkt-kinds button").forEach((x) => x.classList.toggle("active", x === b));
+    document.querySelectorAll("#repo-kinds button").forEach((x) => x.classList.toggle("active", x === b));
     render();
   });
-  document.getElementById("mkt-refresh").addEventListener("click", load);
+  document.getElementById("repo-refresh").addEventListener("click", load);
   await load();
 }
 
@@ -5567,7 +5662,7 @@ function routeTitle(path) {
     [/^#\/modeler\/dmn\//, "Decision · Modeler"],
     [/^#\/modeler\/(d|draft)\//, "Diagram · Modeler"],
     [/^#\/modeler\/p\//, "Project · Modeler"],
-    [/^#\/modeler\/marketplace$/, "Marketplace · Modeler"],
+    [/^#\/modeler\/repository$/, "Repository · Modeler"],
     [/^#\/modeler$/, "Modeler"],
     [/^#\/tasks\/start$/, "Start a process · Tasks"],
     [/^#\/tasks\/t\//, "Task · Tasks"],
@@ -5621,7 +5716,7 @@ async function route() {
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
-    if (path === "#/modeler/marketplace") return await viewMarketplace();
+    if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);

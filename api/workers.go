@@ -57,7 +57,10 @@ type workerRegistry struct {
 	// inferred because the completion and failure handlers already hold the job, and
 	// so know its type.
 	inFlight map[string]int64
-	now      func() int64
+	// jobs holds each worker's most recent jobs, so the console can answer "which
+	// ones" after the counters have answered "how many" (see workerjobs.go).
+	jobs map[string]*jobRunRing
+	now  func() int64
 }
 
 // newWorkerRegistry builds an empty registry over a clock, injected so the
@@ -66,7 +69,12 @@ func newWorkerRegistry(now func() int64) *workerRegistry {
 	if now == nil {
 		now = func() int64 { return time.Now().UnixNano() }
 	}
-	return &workerRegistry{byName: map[string]*workerStat{}, inFlight: map[string]int64{}, now: now}
+	return &workerRegistry{
+		byName:   map[string]*workerStat{},
+		inFlight: map[string]int64{},
+		jobs:     map[string]*jobRunRing{},
+		now:      now,
+	}
 }
 
 // seen returns the worker's record, creating it on first sight. A worker that

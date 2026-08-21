@@ -1,8 +1,10 @@
 package ad
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,16 +30,29 @@ const (
 	attrUnicodePwd        = "unicodePwd"
 	attrUserAccountCtl    = "userAccountControl"
 	attrMember            = "member"
+	attrObjectClass       = "objectClass"
 	uacNormalAccount      = 0x200
 	uacAccountDisableFlag = 0x2
+)
+
+// Default object classes for the two create operations. AD requires objectClass on
+// every entry and rejects an add without it, so the connector supplies the standard
+// chain when the authored attributes do not — a forgotten objectClass is the single
+// most common way a first create-user fails, and it is not a business decision worth
+// making the author repeat. An authored objectClass always wins.
+var (
+	userObjectClass  = []string{"top", "person", "organizationalPerson", "user"}
+	groupObjectClass = []string{"top", "group"}
+	// A contact carries no account: it is a directory entry that exists to hold an
+	// address, which is what a cross-forest address-book entry is.
+	contactObjectClass = []string{"top", "person", "organizationalPerson", "contact"}
 )
 
 // Handler builds a job handler that performs an Active Directory connector task.
 // Register it with a [job.Runner] under the reserved [compiler.AdJobTypeIndex] via
 // HandleWithOutput; the runner then pulls activatable AD jobs, and for each the handler
 // resolves the task's url / bind DN / operation / DNs from the compiled process, dials
-// and binds through dialer — evaluating any FEEL values over the variables the task
-// sees, up its scope chain (ADR-0068)
+// and binds through dialer — evaluating any FEEL values over the instance's variables
 // (ADR-0067) and resolving the bind password from a secret reference (ADR-0041) — and
 // performs the operation. Returning an error fails the job (retry, then an incident,
 // ADR-0061); the runner completes it only on success.
@@ -58,45 +73,65 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		if err != nil {
 			return nil, fmt.Errorf("ad: %w", err)
 		}
-		op := cp.Intern(detail.AdOp)
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("ad: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		serverURL := resolveValue(detail.AdURL, piKey, scopeVars)
-		if serverURL == "" {
-			return nil, fmt.Errorf("ad: %s has an empty url", op)
-		}
-		bindDN := resolveValue(detail.AdBindDN, piKey, scopeVars)
-		bindPassword := ""
-		if ref := cp.Intern(detail.AdBindSecret); ref != "" {
-			bindPassword = resolveSecret(secret, ref)
-			if bindPassword == "" {
-				return nil, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", ref)
-			}
-		}
-		conn, err := dialer.Dial(serverURL, bindDN, bindPassword, detail.AdStartTLS)
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey)
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close()
-		return nil, dispatch(cp, detail, op, piKey, scopeVars, conn)
+		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
+		// cannot change what a resolved AD task means — only which process holds the
+		// bind password behind the reference.
+		out, err := Run(context.Background(), task, dialer, secret)
+		if err != nil {
+			return nil, err
+		}
+		return variablesFrom(out), nil
 	}
 }
 
-// dispatch performs the authored AD operation over the bound connection.
-func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, piKey uint64, scopeVars map[string]model.VariableValue, conn Conn) error {
-	dn := resolveValue(detail.AdDN, piKey, scopeVars)
+// dispatch performs the resolved AD operation over the bound connection.
+func dispatch(j Job, conn Conn) error {
+	dn, op := j.DN, j.Operation
 	switch op {
-	case "create-user":
-		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
-		if err != nil {
-			return err
+	case "create-user", "create-group", "create-contact":
+		attrs := j.Attributes
+		defaultClass := userObjectClass
+		switch op {
+		case "create-group":
+			defaultClass = groupObjectClass
+		case "create-contact":
+			defaultClass = contactObjectClass
+		}
+		if _, authored := attrs[attrObjectClass]; !authored {
+			attrs[attrObjectClass] = defaultClass
 		}
 		return conn.Add(dn, attrs)
+	case "update-attributes":
+		attrs := j.Attributes
+		if len(attrs) == 0 {
+			return fmt.Errorf("ad: update-attributes resolved no attributes to change")
+		}
+		// Replace, not add: the authored object states what each named attribute
+		// should now be. Attributes it does not mention are left alone, so an update
+		// is a change to some of an entry rather than a redefinition of all of it.
+		mods := make([]Mod, 0, len(attrs))
+		for _, name := range sortedKeys(attrs) {
+			mods = append(mods, Mod{Op: modReplace, Attr: name, Vals: attrs[name]})
+		}
+		return conn.Modify(dn, mods)
+	case "move":
+		newDN := j.NewDN
+		if newDN == "" {
+			return fmt.Errorf("ad: move resolved an empty newDN")
+		}
+		rdn, superior := splitDN(newDN)
+		if rdn == "" {
+			return fmt.Errorf("ad: move newDN %q has no relative name", newDN)
+		}
+		return conn.ModifyDN(dn, rdn, superior)
+	case "delete":
+		return conn.Delete(dn)
 	case "set-password":
-		newPassword := resolveValue(detail.AdNewPassword, piKey, scopeVars)
+		newPassword := j.NewPassword
 		if newPassword == "" {
 			return fmt.Errorf("ad: set-password resolved an empty newPassword")
 		}
@@ -108,12 +143,56 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 		}
 		return conn.Modify(dn, []Mod{{Op: modReplace, Attr: attrUserAccountCtl, Vals: []string{accountControl(current, op == "disable")}}})
 	case "add-group-member":
-		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, piKey, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modAdd, Attr: attrMember, Vals: []string{j.MemberDN}}})
 	case "remove-group-member":
-		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{resolveValue(detail.AdMemberDN, piKey, scopeVars)}}})
+		return conn.Modify(dn, []Mod{{Op: modDelete, Attr: attrMember, Vals: []string{j.MemberDN}}})
 	default:
 		return fmt.Errorf("ad: unknown operation %q", op)
 	}
+}
+
+// variablesFrom turns what an operation completed with into process variables. Only
+// sync produces any: every other AD operation's effect is in the directory.
+func variablesFrom(out map[string]any) []model.VariableValue {
+	if len(out) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(out))
+	for name := range out {
+		names = append(names, name)
+	}
+	sort.Strings(names) // a stable order, so a replay writes the same events
+	vars := make([]model.VariableValue, 0, len(names))
+	for _, name := range names {
+		vars = append(vars, responseVariable(name, out[name]))
+	}
+	return vars
+}
+
+// responseVariable encodes a value as the process variable it becomes: a plain string
+// stays a string (the cookie), and anything structured becomes JSON so the result
+// nests real objects and arrays rather than a stringified blob.
+func responseVariable(name string, body any) model.VariableValue {
+	if s, ok := body.(string); ok {
+		return model.VariableValue{Name: name, Kind: model.VarString, Text: s}
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return model.VariableValue{Name: name, Kind: model.VarNull}
+	}
+	return model.VariableValue{Name: name, Kind: model.VarJSON, Text: string(raw)}
+}
+
+// sortedKeys returns a map's keys in a stable order, so an update sends its changes
+// the same way every time — a replayed job (delivery is at-least-once) then produces
+// an identical request rather than one that merely means the same thing.
+func sortedKeys(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // accountControl computes the new userAccountControl value for an enable/disable: it

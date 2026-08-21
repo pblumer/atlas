@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -89,12 +90,309 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ad.Retries },
 		compile: compileAdConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.MsSql != nil },
+		retries: func(st xmlServiceTask) string { return st.MsSql.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[MsSqlJobType])
+		},
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.MariaDB != nil },
+		retries: func(st xmlServiceTask) string { return st.MariaDB.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[MariaDBJobType])
+		},
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Postgres != nil },
+		retries: func(st xmlServiceTask) string { return st.Postgres.Retries },
+		compile: func(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+			return compileSqlConnectorTask(b, st, retries, sqlProducts[PostgresJobType])
+		},
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Entra != nil },
+		retries: func(st xmlServiceTask) string { return st.Entra.Retries },
+		compile: compileEntraConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Ldif != nil },
+		retries: func(st xmlServiceTask) string { return st.Ldif.Retries },
+		compile: compileLdifConnectorTask,
+	},
+}
+
+// The directory-file formats and directions a model can author. They are spelled here
+// as well as in connector/ldif because the compiler cannot import the connector (the
+// dependency runs the other way); TestLdifFormatsMatchTheConnector guards the seam.
+const (
+	ldifFormatLDIF     = "ldif"
+	ldifFormatDSML     = "dsml"
+	ldifOperationRead  = "read"
+	ldifOperationWrite = "write"
+)
+
+// compileLdifConnectorTask compiles an <atlas:ldifConnector> task: directory entries
+// read from, or written to, a file held in a process variable (ADR-0171).
+func compileLdifConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Ldif
+	format := strings.ToLower(strings.TrimSpace(cn.Format))
+	// There is deliberately no default: a directory file is LDIF or it is DSML, and
+	// guessing from the bytes is how a malformed file becomes a plausible-looking
+	// empty result.
+	if format == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a format (%s or %s)", st.Id, ldifFormatDSML, ldifFormatLDIF)
+	}
+	if format != ldifFormatLDIF && format != ldifFormatDSML {
+		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown format %q (want %s or %s)", st.Id, cn.Format, ldifFormatDSML, ldifFormatLDIF)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = ldifOperationRead
+	}
+	if op != ldifOperationRead && op != ldifOperationWrite {
+		return 0, fmt.Errorf("compiler: ldif connector task %q has an unknown operation %q (want %s or %s)", st.Id, cn.Operation, ldifOperationRead, ldifOperationWrite)
+	}
+	if strings.TrimSpace(cn.Source) == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a source variable", st.Id)
+	}
+	if strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: ldif connector task %q needs a resultVariable to receive the %s", st.Id,
+			map[string]string{ldifOperationRead: "entries", ldifOperationWrite: "rendered file"}[op])
+	}
+	return b.AddLdifConnectorTask(LdifConfig{
+		Format:    format,
+		Operation: op,
+		Source:    strings.TrimSpace(cn.Source),
+		Result:    strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}), nil
+}
+
+// entraOp describes what one Entra lifecycle operation requires of a model. The
+// table is the compiler's half of connector/entra's Ops table; the drift test
+// TestEntraOpsMatchTheConnector keeps the two from disagreeing about the operation
+// set, which is the failure this shape exists to prevent.
+type entraOp struct {
+	needsUser       bool
+	needsGroup      bool
+	needsAttributes bool
+}
+
+var entraOps = map[string]entraOp{
+	"create-user":         {needsAttributes: true},
+	"get-user":            {needsUser: true},
+	"update-user":         {needsUser: true, needsAttributes: true},
+	"delete-user":         {needsUser: true},
+	"enable":              {needsUser: true},
+	"disable":             {needsUser: true},
+	"add-group-member":    {needsUser: true, needsGroup: true},
+	"remove-group-member": {needsUser: true, needsGroup: true},
+}
+
+// entraOpNames lists the operations, sorted, for the error messages.
+func entraOpNames() []string {
+	out := make([]string, 0, len(entraOps))
+	for n := range entraOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileEntraConnectorTask compiles an <atlas:entraConnector> task: one Microsoft
+// Entra ID lifecycle operation through Graph (ADR-0172). The model names a tenant
+// connector and the operation; the tenant id, client id and client secret live on the
+// worker, so there is nothing here to validate about a credential.
+func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Entra
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q needs a connector (the name the worker holds the tenant credential under)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q needs an operation (%s)", st.Id, strings.Join(entraOpNames(), ", "))
+	}
+	spec, ok := entraOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: entra connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(entraOpNames(), ", "))
+	}
+	if spec.needsUser && strings.TrimSpace(cn.UserID) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a userId (a user principal name or object id)", st.Id, op)
+	}
+	if spec.needsGroup && strings.TrimSpace(cn.GroupID) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a groupId", st.Id, op)
+	}
+	if spec.needsAttributes && strings.TrimSpace(cn.AttributesVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs an attributesVariable naming the directory properties", st.Id, op)
+	}
+	userID, err := connectorValue(st.Id, "entra connector", "userId", cn.UserID)
+	if err != nil {
+		return 0, err
+	}
+	groupID, err := connectorValue(st.Id, "entra connector", "groupId", cn.GroupID)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddEntraConnectorTask(EntraConfig{
+		Connector:     strings.TrimSpace(cn.Connector),
+		Op:            op,
+		UserID:        userID,
+		GroupID:       groupID,
+		AttributesVar: strings.TrimSpace(cn.AttributesVariable),
+		ResultVar:     strings.TrimSpace(cn.ResultVariable),
+		Retries:       retries,
+	}), nil
+}
+
+// sqlProduct is one of the three SQL connector products: how a task of it is named
+// in errors, which extension it is read from, and which reserved job type it
+// compiles to. Everything else about the three is identical, which is why they share
+// one compile function rather than three that would drift.
+type sqlProduct struct {
+	kind    string // how the product is named in a compiler error
+	jobType string // the reserved job type a task of it carries
+	ext     func(xmlServiceTask) *xmlSqlConnector
+}
+
+// sqlProducts is the product table, keyed by reserved job type.
+var sqlProducts = map[string]sqlProduct{
+	MsSqlJobType:    {kind: "mssql connector", jobType: MsSqlJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MsSql }},
+	MariaDBJobType:  {kind: "mariadb connector", jobType: MariaDBJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.MariaDB }},
+	PostgresJobType: {kind: "postgres connector", jobType: PostgresJobType, ext: func(st xmlServiceTask) *xmlSqlConnector { return st.Postgres }},
+}
+
+// sqlOps is the set of operations a SQL connector task can author. query returns
+// rows, query-one a single row, execute an affected-row count.
+var sqlOps = map[string]bool{"query": true, "query-one": true, "execute": true}
+
+// compileSqlConnectorTask compiles a SQL connector task of one product: it runs one
+// statement against a database a *worker* is configured for (ADR-0173). The model
+// names a connector and authors the statement; the DSN and its credential never
+// enter the engine, so there is nothing here to validate about an address.
+//
+// The statement is literal by construction. A FEEL statement would let a process
+// value become part of the SQL text — an injection that needs no quoting bug, because
+// it would be the field doing what it says — so one is refused here rather than
+// guarded against later. Data reaches the statement through bound parameters, whose
+// placeholder syntax belongs to the product this task was authored for.
+func compileSqlConnectorTask(b *Builder, st xmlServiceTask, retries int32, p sqlProduct) (int32, error) {
+	cn := p.ext(st)
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs a connector (the name the worker holds the DSN under)", p.kind, st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs an operation (query, query-one, or execute)", p.kind, st.Id)
+	}
+	if !sqlOps[op] {
+		return 0, fmt.Errorf("compiler: %s task %q has an unknown operation %q (want query, query-one, or execute)", p.kind, st.Id, cn.Operation)
+	}
+	stmt := strings.TrimSpace(cn.Statement)
+	if stmt == "" {
+		return 0, fmt.Errorf("compiler: %s task %q needs a statement", p.kind, st.Id)
+	}
+	if strings.HasPrefix(stmt, "=") {
+		return 0, fmt.Errorf("compiler: %s task %q has a FEEL statement; the statement must be literal SQL so no process value can become part of it — pass data through parametersVariable instead (ADR-0173)", p.kind, st.Id)
+	}
+	result := strings.TrimSpace(cn.ResultVariable)
+	if result == "" && op != "execute" {
+		return 0, fmt.Errorf("compiler: %s task %q operation %q needs a resultVariable to receive the result", p.kind, st.Id, op)
+	}
+	maxRows, err := sqlMaxRows(p.kind, st.Id, op, cn.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddSqlConnectorTask(SqlConfig{
+		JobType:   p.jobType,
+		Connector: strings.TrimSpace(cn.Connector),
+		Op:        op,
+		Statement: stmt,
+		ParamsVar: strings.TrimSpace(cn.ParametersVariable),
+		MaxRows:   maxRows,
+		ResultVar: result,
+		Retries:   retries,
+	}), nil
+}
+
+// sqlMaxRows reads the authored row cap. It applies to query alone: query-one is
+// capped at one row by its own definition and execute returns a count, so a cap on
+// either is an author believing something the connector will not do — reported rather
+// than ignored.
+func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	if op != "query" {
+		return 0, fmt.Errorf("compiler: %s task %q sets maxRows on operation %q, which returns no row set (maxRows applies to query)", kind, taskID, op)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: %s task %q has a non-numeric maxRows %q", kind, taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: %s task %q has a negative maxRows %d", kind, taskID, n)
+	}
+	return int32(n), nil
 }
 
 // adOps is the set of Active Directory provisioning operations a connector task can
-// author. Each is an AD-specific primitive the generic LDAP connector cannot express
-// directly (unicodePwd, userAccountControl, incremental group membership).
-var adOps = map[string]bool{"create-user": true, "set-password": true, "enable": true, "disable": true, "add-group-member": true, "remove-group-member": true}
+// author, and what each requires of a model.
+//
+// Most are AD-specific primitives the generic LDAP connector cannot express directly
+// (unicodePwd, userAccountControl, incremental group membership). The lifecycle
+// operations added later — update-attributes, move, delete, create-group — are not,
+// and they are here anyway: an identity process that has to leave the AD connector
+// and pick up the LDAP one to rename an account has been handed two ways to bind to
+// the same directory, which is a worse answer than a little overlap (ADR-0166,
+// amended).
+type adOp struct {
+	needsEntry    bool // an entryVariable naming the attribute object
+	needsPassword bool
+	needsMember   bool
+	needsNewDN    bool
+	isSync        bool // reads a subtree delta rather than acting on one entry
+}
+
+var adOps = map[string]adOp{
+	"create-user":  {needsEntry: true},
+	"create-group": {needsEntry: true},
+	// A contact is a mail-enabled object with no account behind it — how a person in
+	// another forest appears in this one's address book. It is a third create for the
+	// same reason create-group is a second: the object classes differ, and AD rejects
+	// an add without them.
+	"create-contact":      {needsEntry: true},
+	"update-attributes":   {needsEntry: true},
+	"set-password":        {needsPassword: true},
+	"enable":              {},
+	"disable":             {},
+	"move":                {needsNewDN: true},
+	"delete":              {},
+	"add-group-member":    {needsMember: true},
+	"remove-group-member": {needsMember: true},
+	// sync is the only AD operation that reads rather than writes, and the only one
+	// that addresses a subtree instead of an entry — so it is also the only one that
+	// does not take a dn.
+	"sync": {isSync: true},
+}
+
+// defaultAdSyncMaxEntries caps one DirSync pass when the model authors no cap. A pass
+// is resumable by construction — the cookie says where it got to — so a bound here
+// costs nothing but a second pass, unlike a plain search where it costs the answer.
+const defaultAdSyncMaxEntries = 1000
+
+// adOpNames lists the operations, sorted, for the error messages that say what was
+// expected.
+func adOpNames() []string {
+	out := make([]string, 0, len(adOps))
+	for n := range adOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // compileAdConnectorTask compiles an <atlas:adConnector> task: it performs an Active
 // Directory operation against a model-authored server via the job path (ADR-0166), not
@@ -109,27 +407,43 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id)
+		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (%s)", st.Id, strings.Join(adOpNames(), ", "))
 	}
-	if !adOps[op] {
-		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id, cn.Operation)
+	spec, ok := adOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
 	}
-	if strings.TrimSpace(cn.DN) == "" {
+	// Every operation but sync addresses an existing or to-be-created entry by dn —
+	// including move, where dn is the entry being moved and newDN where it lands.
+	// sync addresses a naming context instead, so it takes a baseDN.
+	if spec.isSync {
+		if strings.TrimSpace(cn.BaseDN) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a baseDN (the naming context root the delta is read from)", st.Id)
+		}
+		if strings.TrimSpace(cn.CookieVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a cookieVariable; without one every pass re-reads the whole directory", st.Id)
+		}
+		if strings.TrimSpace(cn.ResultVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a resultVariable to receive the changes", st.Id)
+		}
+	} else if strings.TrimSpace(cn.DN) == "" {
 		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
 	}
-	switch op {
-	case "create-user":
-		if strings.TrimSpace(cn.EntryVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation create-user needs an entryVariable naming the attribute object", st.Id)
-		}
-	case "set-password":
-		if strings.TrimSpace(cn.NewPassword) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation set-password needs a newPassword", st.Id)
-		}
-	case "add-group-member", "remove-group-member":
-		if strings.TrimSpace(cn.MemberDN) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
-		}
+	maxEntries, err := adSyncMaxEntries(st.Id, op, spec.isSync, cn.MaxEntries)
+	if err != nil {
+		return 0, err
+	}
+	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	}
+	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newPassword", st.Id, op)
+	}
+	if spec.needsMember && strings.TrimSpace(cn.MemberDN) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
+	}
+	if spec.needsNewDN && strings.TrimSpace(cn.NewDN) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
 	}
 	url, err := connectorValue(st.Id, "ad connector", "url", cn.URL)
 	if err != nil {
@@ -143,6 +457,18 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if err != nil {
 		return 0, err
 	}
+	newDN, err := connectorValue(st.Id, "ad connector", "newDN", cn.NewDN)
+	if err != nil {
+		return 0, err
+	}
+	baseDN, err := connectorValue(st.Id, "ad connector", "baseDN", cn.BaseDN)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "ad connector", "filter", cn.Filter)
+	if err != nil {
+		return 0, err
+	}
 	memberDN, err := connectorValue(st.Id, "ad connector", "memberDN", cn.MemberDN)
 	if err != nil {
 		return 0, err
@@ -152,17 +478,48 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		return 0, err
 	}
 	return b.AddAdConnectorTask(AdConfig{
-		URL:         url,
-		BindDN:      bindDN,
-		BindSecret:  strings.TrimSpace(cn.BindSecret),
-		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
-		Op:          op,
-		DN:          dn,
-		MemberDN:    memberDN,
-		EntryVar:    strings.TrimSpace(cn.EntryVariable),
-		NewPassword: newPassword,
-		Retries:     retries,
+		URL:            url,
+		BindDN:         bindDN,
+		BindSecret:     strings.TrimSpace(cn.BindSecret),
+		StartTLS:       strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:             op,
+		DN:             dn,
+		MemberDN:       memberDN,
+		EntryVar:       strings.TrimSpace(cn.EntryVariable),
+		NewPassword:    newPassword,
+		NewDN:          newDN,
+		BaseDN:         baseDN,
+		Filter:         filter,
+		CookieVar:      strings.TrimSpace(cn.CookieVariable),
+		ResultVar:      strings.TrimSpace(cn.ResultVariable),
+		MaxEntries:     maxEntries,
+		ObjectSecurity: strings.EqualFold(strings.TrimSpace(cn.ObjectSecurity), "true"),
+		Retries:        retries,
 	}), nil
+}
+
+// adSyncMaxEntries reads the authored cap for one DirSync pass. It applies to sync
+// alone; on any other operation it is an author believing something the connector
+// will not do, reported rather than ignored.
+func adSyncMaxEntries(taskID, op string, isSync bool, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if isSync {
+			return defaultAdSyncMaxEntries, nil
+		}
+		return 0, nil
+	}
+	if !isSync {
+		return 0, fmt.Errorf("compiler: ad connector task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync)", taskID, op)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: ad connector task %q has a non-numeric maxEntries %q", taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: ad connector task %q has a negative maxEntries %d", taskID, n)
+	}
+	return int32(n), nil
 }
 
 // soapVersions is the set of SOAP protocol versions a connector task can author. 1.1
@@ -223,7 +580,33 @@ func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 }
 
 // ldapOps is the set of directory operations an LDAP connector task can author.
-var ldapOps = map[string]bool{"search": true, "add": true, "modify": true, "delete": true, "modify-password": true}
+//
+// modify, add-values and delete-values are the same LDAP modify with different change
+// operations: modify *replaces* an attribute wholesale, while the other two change
+// individual values. Whole-attribute replace was the only shape ADR-0154 shipped, and
+// it is the wrong one for a multi-valued attribute two processes both write — one
+// adding a group member does not intend to remove everyone else's (ADR-0154, amended).
+var ldapOps = map[string]bool{
+	"search": true, "add": true, "modify": true, "add-values": true,
+	"delete-values": true, "delete": true, "modify-password": true,
+}
+
+// ldapEntryOps are the operations that read the authored attribute object.
+var ldapEntryOps = map[string]bool{"add": true, "modify": true, "add-values": true, "delete-values": true}
+
+// Default search bounds, applied by the compiler when a model authors none, so the
+// runtime interprets nothing (I5).
+//
+// Paging defaults *on* because a directory's admin size limit otherwise refuses a
+// perfectly reasonable search, and an author who has not met that limit has no reason
+// to know the control exists. The entry cap defaults on for the reason sqldb's row cap
+// does (ADR-0173): an unbounded subtree search into a process variable is the failure
+// mode this is hardening against, and a short result set would be a wrong answer
+// rather than a partial one.
+const (
+	defaultLdapPageSize   = 500
+	defaultLdapMaxEntries = 1000
+)
 
 // ldapScopes maps the authored search scope names to their canonical form. An empty
 // scope defaults to "sub" (whole subtree) at compile time.
@@ -242,10 +625,10 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (search, add, modify, delete, or modify-password)", st.Id)
+		return 0, fmt.Errorf("compiler: ldap connector task %q needs an operation (%s)", st.Id, strings.Join(ldapOpNames(), ", "))
 	}
 	if !ldapOps[op] {
-		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want search, add, modify, delete, or modify-password)", st.Id, cn.Operation)
+		return 0, fmt.Errorf("compiler: ldap connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(ldapOpNames(), ", "))
 	}
 	scope := strings.ToLower(strings.TrimSpace(cn.Scope))
 	if op == "search" {
@@ -264,15 +647,19 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs a dn", st.Id, op)
 		}
 	}
-	switch op {
-	case "add", "modify":
-		if strings.TrimSpace(cn.EntryVariable) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
-		}
-	case "modify-password":
-		if strings.TrimSpace(cn.NewPassword) == "" {
-			return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
-		}
+	if ldapEntryOps[op] && strings.TrimSpace(cn.EntryVariable) == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	}
+	if op == "modify-password" && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q operation modify-password needs a newPassword", st.Id)
+	}
+	pageSize, err := ldapSearchBound(st.Id, op, "pageSize", cn.PageSize, defaultLdapPageSize)
+	if err != nil {
+		return 0, err
+	}
+	maxEntries, err := ldapSearchBound(st.Id, op, "maxEntries", cn.MaxEntries, defaultLdapMaxEntries)
+	if err != nil {
+		return 0, err
 	}
 	url, err := connectorValue(st.Id, "ldap connector", "url", cn.URL)
 	if err != nil {
@@ -299,20 +686,61 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		return 0, err
 	}
 	return b.AddLdapConnectorTask(LdapConfig{
-		URL:         url,
-		BindDN:      bindDN,
-		BindSecret:  strings.TrimSpace(cn.BindSecret),
-		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
-		Op:          op,
-		DN:          dn,
-		BaseDN:      baseDN,
-		Filter:      filter,
-		Scope:       scope,
-		EntryVar:    strings.TrimSpace(cn.EntryVariable),
-		NewPassword: newPassword,
-		ResultVar:   strings.TrimSpace(cn.ResultVariable),
-		Retries:     retries,
+		URL:              url,
+		BindDN:           bindDN,
+		BindSecret:       strings.TrimSpace(cn.BindSecret),
+		StartTLS:         strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:               op,
+		DN:               dn,
+		BaseDN:           baseDN,
+		Filter:           filter,
+		Scope:            scope,
+		EntryVar:         strings.TrimSpace(cn.EntryVariable),
+		NewPassword:      newPassword,
+		ResultVar:        strings.TrimSpace(cn.ResultVariable),
+		PageSize:         pageSize,
+		MaxEntries:       maxEntries,
+		ClientCertSecret: strings.TrimSpace(cn.ClientCertSecret),
+		Retries:          retries,
 	}), nil
+}
+
+// ldapOpNames lists the directory operations, sorted, for the error messages.
+func ldapOpNames() []string {
+	out := make([]string, 0, len(ldapOps))
+	for n := range ldapOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ldapSearchBound reads one authored search bound, returning the effective value the
+// compiled process carries: the default when the attribute is absent, and the
+// authored number otherwise — including 0, which is how a model says unbounded.
+//
+// A bound on a non-search operation is rejected rather than ignored: it is an author
+// believing something the connector will not do, and silently dropping it is how a
+// model comes to look bounded without being it.
+func ldapSearchBound(taskID, op, what, raw string, def int32) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if op == "search" {
+			return def, nil
+		}
+		return 0, nil
+	}
+	if op != "search" {
+		return 0, fmt.Errorf("compiler: ldap connector task %q sets %s on operation %q, which returns no entries (%s applies to search)", taskID, what, op, what)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: ldap connector task %q has a non-numeric %s %q", taskID, what, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: ldap connector task %q has a negative %s %d", taskID, what, n)
+	}
+	return int32(n), nil
 }
 
 // scimOps is the set of SCIM 2.0 operations a connector task can author. create/get/

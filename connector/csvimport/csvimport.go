@@ -30,6 +30,10 @@ type Column struct {
 	Header string `json:"header,omitempty"` // CSV header to read; defaults to Name when the file has a header row
 	Index  *int   `json:"index,omitempty"`  // 0-based source column, used when the file has no header row
 	Type   string `json:"type,omitempty"`   // "string" (default), "number", "integer", "boolean"
+	// Width is the column's character count in a fixed-width file, where a field is
+	// found by position rather than by a delimiter or a header. Unused by the other
+	// formats.
+	Width int `json:"width,omitempty"`
 }
 
 // Config is the predefined column layout an uploaded CSV is parsed against.
@@ -37,6 +41,9 @@ type Config struct {
 	Columns   []Column `json:"columns"`
 	Delimiter string   `json:"delimiter,omitempty"` // single character; defaults to ","
 	HasHeader *bool    `json:"hasHeader,omitempty"` // defaults to true (a header row is present)
+	// Format selects how records and fields are delimited; empty is CSV, which is
+	// what every layout authored before the other formats existed means.
+	Format string `json:"format,omitempty"`
 }
 
 // hasHeader reports whether the file carries a header row (the default).

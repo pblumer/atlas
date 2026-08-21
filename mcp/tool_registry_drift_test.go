@@ -107,6 +107,11 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
+	// a memory tail rather than a record. An agent debugging a run asks from the
+	// instance side, where atlas_instance_jobs and the timeline answer the same
+	// question durably and without an admin gate.
+	"GET /api/v1/workers/{id}/jobs": "operator diagnostics about a worker process, not an agent action",
 
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
@@ -220,12 +225,12 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/inbound-subscriptions/{id}":          "connector infrastructure is admin config",
 	"POST /api/v1/connectors/{id}/provision-clio-key":    "connector infrastructure is admin config",
 
-	// Marketplace: package management, an admin/UI concern.
-	"GET /api/v1/marketplace/packages":               "marketplace management is a UI concern",
-	"GET /api/v1/marketplace/packages/{id}":          "marketplace management is a UI concern",
-	"POST /api/v1/marketplace/packages/{id}/install": "marketplace management is a UI concern",
-	"GET /api/v1/marketplace/installed":              "marketplace management is a UI concern",
-	"DELETE /api/v1/marketplace/installed/{id}":      "marketplace management is a UI concern",
+	// Repository: package management, an admin/UI concern.
+	"GET /api/v1/repository/packages":               "repository management is a UI concern",
+	"GET /api/v1/repository/packages/{id}":          "repository management is a UI concern",
+	"POST /api/v1/repository/packages/{id}/install": "repository management is a UI concern",
+	"GET /api/v1/repository/installed":              "repository management is a UI concern",
+	"DELETE /api/v1/repository/installed/{id}":      "repository management is a UI concern",
 
 	// Peer deploy tokens and bundle import (ADR-0129): issuing a machine credential
 	// is credential storage (admin-gated, same category as secrets), and the import
