@@ -181,8 +181,8 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         <strong>${editing ? "Decision bearbeiten" : "Neue Decision"}</strong>
         <div class="dmn-views"></div>
         <span style="flex:1"></span>
-        <button class="btn ghost" data-act="cancel">Abbrechen</button>
-        <button class="btn" data-act="save">Speichern &amp; übernehmen</button>
+        <button class="btn ghost" data-act="cancel" title="Close without saving">Abbrechen</button>
+        <button class="btn" data-act="save" title="Save the decision and apply it">Speichern &amp; übernehmen</button>
       </div>
       <div class="dmn-body">
         <div class="dmn-canvas"></div>

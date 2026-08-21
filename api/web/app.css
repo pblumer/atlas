@@ -1,6 +1,13 @@
 :root {
   --bg: #f3f4f6;
   --surface: #ffffff;
+  /* The light-grey canvas every diagram sits on: the BPMN modeler, the live and
+     replay views, the Operations process view and the DMN editor. One lever for
+     all diagram backgrounds. The dot grid (--diagram-dot) is a modeling
+     affordance overlaid in the editor only. Changing this does not affect the
+     bpmn.io watermark, which stays fully visible per its licence (see ~L748). */
+  --diagram-bg: #f3f4f6;
+  --diagram-dot: #d7dae0;
   --border: #e2e4e9;
   --border-strong: #cdd0d6;
   --text: #14161a;
@@ -415,8 +422,15 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .editor-bar nav.crumbs .crumb-sep { color: var(--border); }
 .editor-bar nav.crumbs .crumb-current { color: var(--text); font-weight: 600; }
 .editor-body { flex: 1; display: flex; min-height: 0; }
-#canvas { flex: 1; min-width: 0; height: 100%; background:
-    radial-gradient(circle, #d7dae0 1px, transparent 1px) 0 0 / 22px 22px; }
+#canvas { flex: 1; min-width: 0; height: 100%; background: var(--diagram-bg); }
+/* The dot grid is an editing affordance — show it only in the Design/Modeler
+   view (.editor without the read-only .live modifier). The live, collaboration
+   and Operations replay views reuse #canvas but stay flat grey. */
+.editor:not(.live) #canvas {
+  background:
+    radial-gradient(circle, var(--diagram-dot) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--diagram-bg);
+}
 .props {
   width: 300px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--surface);
   display: flex; flex-direction: column; overflow: auto;
@@ -1672,7 +1686,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tp-legend .tp-sw.done { border-color: var(--muted); border-style: dashed; }
 .tp-canvas {
   position: relative; height: 360px; border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden; background: var(--surface);
+  border-radius: var(--radius); overflow: hidden; background: var(--diagram-bg);
 }
 .tp-canvas .tp-msg { padding: 16px; }
 /* Read-only: hide the editing palette, context pad and inline editor (as the live
@@ -1901,7 +1915,7 @@ tr[hidden] { display: none; }
 .dmn-view-tab:hover { color: var(--text); }
 .dmn-view-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .dmn-body { flex: 1; min-height: 0; display: flex; }
-.dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--surface); }
+.dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
 /* The Camunda-style properties panel column (DRG view). dmn-js-properties-panel
    ships its own internal styling; we only size the column and separate it. */

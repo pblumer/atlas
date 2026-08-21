@@ -114,6 +114,10 @@ func TestParseAdConnectorErrors(t *testing.T) {
 		"add-member without member":    `<atlas:adConnector url="ldaps://x" operation="add-group-member" dn="cn=g"/>`,
 		"remove-member without member": `<atlas:adConnector url="ldaps://x" operation="remove-group-member" dn="cn=g"/>`,
 		"malformed feel url":           `<atlas:adConnector url="=(" operation="disable" dn="cn=x"/>`,
+		"malformed feel bindDN":        `<atlas:adConnector url="ldaps://x" bindDN="=(" operation="disable" dn="cn=x"/>`,
+		"malformed feel dn":            `<atlas:adConnector url="ldaps://x" operation="disable" dn="=("/>`,
+		"malformed feel memberDN":      `<atlas:adConnector url="ldaps://x" operation="add-group-member" dn="cn=g" memberDN="=("/>`,
+		"malformed feel newPassword":   `<atlas:adConnector url="ldaps://x" operation="set-password" dn="cn=x" newPassword="=("/>`,
 	}
 	for name, inner := range cases {
 		if _, err := Parse(1, 1, strings.NewReader(wrap(inner))); err == nil {
