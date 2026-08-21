@@ -1753,6 +1753,13 @@ type xmlServiceTask struct {
 	// not supported. Inert on a service task.
 	OperationRef   string            `xml:"operationRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
+	// Form binds a *repair* form to this task (ADR-0169): the form an operator is shown
+	// when a token parks here with an incident, naming the variables worth looking at.
+	// It reuses zeebe:formDefinition, the same element a user task binds its work form
+	// with — the tag says "this element has a form", and what the form is *for* follows
+	// from the element that carries it. A service task never shows a form to a human in
+	// the normal course of things, so there is no ambiguity to resolve.
+	Form xmlFormDefinition `xml:"extensionElements>formDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
@@ -2209,10 +2216,12 @@ type xmlAtlasScript struct {
 //
 // The decision's result is written back into the resultVariable process variable.
 type xmlBusinessRuleTask struct {
-	Id             string               `xml:"id,attr"`
-	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
-	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
-	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
+	Id             string            `xml:"id,attr"`
+	CalledDecision xmlCalledDecision `xml:"extensionElements>calledDecision"`
+	// Form binds a repair form to this task, as on a service task (ADR-0169).
+	Form          xmlFormDefinition    `xml:"extensionElements>formDefinition"`
+	Inputs        []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
+	InputMappings []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
 	// TemisConnector, when present, marks this a central (connector) decision
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is

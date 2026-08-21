@@ -13,9 +13,13 @@ import { enhanceTable } from "./table.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
   incidentConnectorChip,
+  repairFormFlow,
 } from "./incidents.js";
 import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
+// The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
+// import and one-time stylesheet injection live in one module rather than here.
+import { loadFormViewer } from "./formviewer.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -3682,7 +3686,15 @@ function overrideCell(r) {
 // table past the width of its card (ADR-0163). Behind the menu, a fourth way out costs
 // no width at all.
 function incidentMenu(r, i) {
-  const items = [{ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } }];
+  const items = [];
+  // The modeler's own repair form leads, when the task named one (ADR-0169): it is the
+  // most specific thing on offer — the fields whoever wrote the task said matter, rather
+  // than the whole variable set. Most tasks name none, which is why the raw editor below
+  // it never goes away.
+  if (r.repairForm) {
+    items.push({ label: "Repair…", icon: "⚑", act: "repair", data: { row: i } });
+  }
+  items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
     items.push({ label: "Configure connector…", icon: "⚙", act: "fixconn", data: { row: i } });
   } else if (r.connector) {
@@ -3770,12 +3782,16 @@ async function viewIncidents() {
     // Correcting the variables first is the other half of resolving: a retry alone
     // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
     // way, for when the message is about the integration and not the data (ADR-0160).
+    // The repair form is the same correction as the first, through the fields the task's
+    // author named rather than through raw JSON (ADR-0169).
     const act = btn.dataset.act;
-    const changed = act === "fixvars"
-      ? !!(await fixVariablesFlow({ api, toast, incident }))
-      : act === "fixconn"
-        ? !!(await fixConnectorFlow({ api, toast, incident }))
-        : await resolveIncidentFlow({ api, toast, incident });
+    const changed = act === "repair"
+      ? !!(await repairFormFlow({ api, toast, incident }))
+      : act === "fixvars"
+        ? !!(await fixVariablesFlow({ api, toast, incident }))
+        : act === "fixconn"
+          ? !!(await fixConnectorFlow({ api, toast, incident }))
+          : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree
@@ -4325,25 +4341,6 @@ const TASK_FOLDERS = [
   { id: "unassigned", label: "Unassigned", match: (t) => !t.assignee },
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
-
-// loadFormViewer lazily imports the vendored form-js viewer (ADR-0013 vendoring
-// pattern) and injects its stylesheet once, the first time a task with a form is
-// opened — so users who never open a form never pay for the 86 KB CSS or the
-// bundle. The promise is cached so repeated opens reuse the one import.
-let _formViewer = null;
-function loadFormViewer() {
-  if (!_formViewer) {
-    if (!document.getElementById("form-js-css")) {
-      const link = document.createElement("link");
-      link.id = "form-js-css";
-      link.rel = "stylesheet";
-      link.href = "vendor/form-js/form-js.css";
-      document.head.appendChild(link);
-    }
-    _formViewer = import("./vendor/form-js/form-viewer.js");
-  }
-  return _formViewer;
-}
 
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth

@@ -950,6 +950,7 @@ type CompiledProcess struct {
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
 	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms        []int32      // interned repair form id per node id (-1 if none, ADR-0169)
 	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string     // intern table (index → string), for debug/export
@@ -1579,6 +1580,24 @@ func (p *CompiledProcess) ElementDocumentation(id int32) string {
 		return ""
 	}
 	return p.Intern(p.elementDocs[id])
+}
+
+// RepairForm returns the form an operator should be offered when a token parks on this
+// node with an incident (ADR-0169), or "" when the node names none or the index is out
+// of range.
+//
+// It is a *better editor over an existing write path*, not a new one: the form names the
+// variables worth looking at, and submitting it writes them through the same audited
+// operator override the raw JSON editor uses (ADR-0098). The binding lives here, in the
+// compiled model, because whoever authored the task is who knows which values its retry
+// depends on — so it is versioned with the model, costs nothing at runtime, and rides an
+// instance's migration (ADR-0162) rather than being runtime configuration that could
+// drift from the task it describes.
+func (p *CompiledProcess) RepairForm(id int32) string {
+	if id < 0 || int(id) >= len(p.repairForms) {
+		return ""
+	}
+	return p.Intern(p.repairForms[id])
 }
 
 // Documentation returns the process's own <bpmn:documentation> — the summary that

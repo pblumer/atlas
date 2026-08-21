@@ -11,6 +11,10 @@ import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { migrateInstanceFlow } from "./migrationdialog.js";
+// Which keys a form-js schema binds — the Developer View reads it to offer a linked
+// form's fields as variables, the incident's repair form reads it to know which keys a
+// submit may write (ADR-0169). One description of it, in one place.
+import { formFieldKeys } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -1345,32 +1349,6 @@ function devViewContext(modeler, api, field) {
 // { name, fields } — the form's display name and its variable-bearing field keys.
 // collectDiagramVariables reads it synchronously; ensureFormFields fills it.
 const formFieldCache = new Map();
-
-// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
-// Every form-js input component carries a `key` — the variable it reads and writes;
-// layout-only components (text, image, spacer, separator, …) have none. A repeating
-// container (dynamic list / group with a `path`) binds an array under that path, so
-// surface the path rather than descending into its per-row template. A plain group
-// is layout only, so recurse — its fields live in the enclosing scope. Each key
-// appears once, in document order.
-function formFieldKeys(schema) {
-  const keys = [];
-  const seen = new Set();
-  const add = (k) => {
-    k = (k || "").trim();
-    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
-  };
-  const walk = (comps) => {
-    for (const c of comps || []) {
-      if (!c || typeof c !== "object") continue;
-      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
-      if (typeof c.key === "string") add(c.key);
-      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
-    }
-  };
-  if (schema && Array.isArray(schema.components)) walk(schema.components);
-  return keys;
-}
 
 // linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
 // (start forms and user-task forms). Best-effort — a registry hiccup yields none.

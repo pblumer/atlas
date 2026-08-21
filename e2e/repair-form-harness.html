@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas incident repair form e2e harness</title>
+    <!-- Drives the real api/web/incidents.js repairFormFlow against a mock `api` and the
+         real vendored form-js viewer (ADR-0169). The page scaffolding is the test's own —
+         app.js boots the whole console on import and cannot be loaded here — so this
+         proves the flow: the bound form renders prefilled from the instance's variables,
+         and a submit writes *only* the keys the form binds, through the same audited
+         override the raw JSON editor uses (ADR-0098). -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="toast" hidden></div>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <div id="rows"></div>
+      <button class="btn" id="run">Repair (direct)</button>
+      <button class="btn" id="run-missing">Repair (form deleted)</button>
+    </div>
+    <script type="module">
+      import { repairFormFlow, incidentRowHTML, bindIncidentActions } from "/incidents.js";
+
+      // A parked mail task whose author bound a repair form naming the two values worth
+      // looking at. The instance holds more than that — the form must not write the rest.
+      const INCIDENT = {
+        elementInstanceKey: "9001",
+        processInstanceKey: "5001",
+        jobKey: "8001",
+        elementId: "notify",
+        type: "job",
+        raisedAt: 1_722_260_303_000_000_000,
+        message: "550 5.1.1 recipient rejected",
+        connector: "Postbox",
+        connectorKind: "mail",
+        connectorId: "c1",
+        repairForm: "fix-recipient",
+      };
+      const NO_FORM = { ...INCIDENT, elementInstanceKey: "9002", repairForm: "" };
+      const STALE = { ...INCIDENT, elementInstanceKey: "9003", repairForm: "gone" };
+
+      const SCHEMA = {
+        type: "default",
+        components: [
+          { type: "textfield", key: "recipient", label: "Recipient" },
+          { type: "textfield", key: "subject", label: "Subject" },
+        ],
+      };
+
+      // What the instance actually holds: the two the form binds, plus values it does not.
+      const VARIABLES = {
+        recipient: "wrong@example.invalid",
+        subject: "Your order",
+        orderTotal: 4200,
+        customer: { id: 77, name: "Acme" },
+      };
+
+      window.__calls = [];
+      window.__result = null;
+      window.__toast = null;
+
+      const toast = (msg, kind) => {
+        const t = document.getElementById("toast");
+        t.textContent = msg; t.className = kind || ""; t.hidden = false;
+        window.__toast = { msg, kind };
+      };
+
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        if (method === "GET" && url === "/api/v1/forms/fix-recipient") {
+          return { id: "fix-recipient", name: "Fix the recipient", schema: SCHEMA };
+        }
+        if (method === "GET" && url === "/api/v1/forms/gone") {
+          const err = new Error("no form with that id");
+          err.status = 404;
+          throw err;
+        }
+        if (method === "GET" && url.endsWith("/variables")) return VARIABLES;
+        if (method === "POST" && url.endsWith("/variables")) return {};
+        if (url.includes("/incidents/") && url.endsWith("/resolve")) return {};
+        return {};
+      };
+
+      const reset = () => { window.__calls = []; window.__result = null; window.__toast = null; };
+
+      document.getElementById("run").addEventListener("click", async () => {
+        reset();
+        window.__result = await repairFormFlow({ api, toast, incident: INCIDENT });
+      });
+      document.getElementById("run-missing").addEventListener("click", async () => {
+        reset();
+        window.__result = await repairFormFlow({ api, toast, incident: STALE });
+      });
+
+      // The rows as an operator meets them beside a diagram: one incident whose task
+      // bound a repair form, one whose did not.
+      const rowsEl = document.getElementById("rows");
+      rowsEl.innerHTML = incidentRowHTML(INCIDENT, { label: "Notify", showInstance: false })
+        + incidentRowHTML(NO_FORM, { label: "Ship", showInstance: false });
+      bindIncidentActions(rowsEl, {
+        api, toast,
+        incidents: () => [INCIDENT, NO_FORM, STALE],
+        onChanged: async () => { window.__changed = true; },
+      });
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

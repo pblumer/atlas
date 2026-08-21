@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-19",
   "entries": [
     {
+      "id": "a-form-on-the-incident-repairing-an-instance-with-named-fiel",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Repair a stuck task through named fields, not raw JSON",
+        "de": "Eine hängende Aufgabe über benannte Felder reparieren statt über rohes JSON"
+      },
+      "summary": {
+        "en": "In the Modeler you can now give a task a repair form: the fields worth looking at if that task ever gets stuck. When it does, the incident offers Repair — the form, already filled in with the instance's current values — instead of the whole variable set as a JSON document. Only the fields on the form are written, and the change is recorded with your name as before. Tasks without a repair form are unchanged; Fix variables… is still there for anything nobody saw coming.",
+        "de": "Im Modeler können Sie einer Aufgabe jetzt ein Reparaturformular mitgeben: die Felder, die zählen, falls diese Aufgabe einmal hängen bleibt. Passiert das, bietet der Incident „Reparieren“ an — das Formular, bereits mit den aktuellen Werten der Instanz gefüllt — statt des gesamten Variablensatzes als JSON-Dokument. Geschrieben werden nur die Felder des Formulars, und die Änderung wird wie bisher mit Ihrem Namen protokolliert. Aufgaben ohne Reparaturformular bleiben unverändert; „Variablen korrigieren…“ gibt es weiterhin für alles, was niemand vorhergesehen hat."
+      },
+      "link": {
+        "label": "ADR-0169",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0169-incident-repair-forms.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Incidents",
+          "de": "Incidents öffnen"
+        },
+        "route": "#/operations/incidents"
+      }
+    },
+    {
       "id": "migrating-an-instance-from-operations",
       "version": "Unreleased",
       "date": null,
@@ -327,34 +356,6 @@
           "de": "Organisation öffnen"
         },
         "route": "#/console/org"
-      }
-    },
-    {
-      "id": "a-mail-task-you-can-run-before-you-own-a-mail-server",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A mail task you can run before you own a mail server",
-        "de": "A mail task you can run before you own a mail server"
-      },
-      "summary": {
-        "en": "You can try out a mail step without setting up a real mail server first — a built-in preview provider captures the message so you can see what would be sent.",
-        "de": "Sie können einen Mail-Schritt ausprobieren, ohne zuerst einen echten Mailserver einzurichten — ein eingebauter Vorschau-Provider fängt die Nachricht ab, damit Sie sehen, was gesendet würde."
-      },
-      "link": {
-        "label": "ADR-0150",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0150-preview-mail-provider-and-visible-incidents.md"
-      },
-      "tags": [
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Outbox",
-          "de": "Postausgang öffnen"
-        },
-        "route": "#/operations/outbox"
       }
     }
   ]

@@ -1,6 +1,6 @@
 # ADR-0169: A form on the incident — repairing an instance with named fields instead of raw JSON
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -97,6 +97,28 @@ operator learns one interaction for repairing an incident, not two.
 When the incident is something else — and ADR-0160 exists because it often is — the
 operator still needs the whole variable set. So **✎ Fix variables…** does not go away;
 a task with a repair form gets a second action beside it, not a replacement.
+
+### As built
+
+Two things the record left open, settled by building it:
+
+**The binding is a parallel slice on the node, not a field on each task detail.** The
+record said "the compiler interns it into the task's detail as `FormId`", which would
+have meant the same field on `ServiceTaskDetail`, `ConnectorTaskDetail`,
+`BusinessRuleTaskDetail` and every detail type a parkable task compiles to — four places
+to keep in step, and a fifth the day another task kind gains one. It is instead one
+`repairForms []int32` parallel to `nodes`, exactly as `elementDocs` already carries
+`<bpmn:documentation>` (ADR-0025): one field, one accessor, and it works for whatever
+node type the task compiled to without the compiler having to care which. It also keeps
+`CompiledNode` — read on every activation — the size it was.
+
+**The dialog submits only the keys the form binds.** This is not a detail. The override
+endpoint sets exactly the keys it is given, so a dialog that sent back the whole variable
+set would rewrite untouched variables under the operator's name and put values they never
+saw into the audit trail — quietly turning ADR-0098's "who changed this" into a lie.
+Narrowing to the form's own fields is what makes the form safe to be an *editor* over
+that write path rather than a second one. The e2e test asserts the submitted key set
+exactly, and fails when the narrowing is removed.
 
 ### Consequences
 

@@ -204,6 +204,12 @@ type runtimeIncident struct {
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
 	ConnectorID   string `json:"connectorId,omitempty"`
+	// RepairForm is the form the modeler bound to this task for repairing a parked
+	// instance of it (ADR-0169) — the fields worth looking at when this task goes wrong,
+	// instead of the whole variable set as raw JSON. Empty when the task names none, in
+	// which case the raw editor is the only way, exactly as before. It is a better
+	// editor over the audited operator override (ADR-0098), never a second write path.
+	RepairForm string `json:"repairForm,omitempty"`
 }
 
 type runtimeResp struct {
@@ -474,6 +480,12 @@ type incidentView struct {
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
 	ConnectorID   string `json:"connectorId,omitempty"`
+	// RepairForm is the form the modeler bound to this task for repairing a parked
+	// instance of it (ADR-0169) — the fields worth looking at when this task goes wrong,
+	// instead of the whole variable set as raw JSON. Empty when the task names none, in
+	// which case the raw editor is the only way, exactly as before. It is a better
+	// editor over the audited operator override (ADR-0098), never a second write path.
+	RepairForm string `json:"repairForm,omitempty"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -1168,6 +1180,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				Message:            v.Message,
 			}
 			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
+			inc.RepairForm = d.cp.RepairForm(v.ElementId)
 			resp.Incidents = append(resp.Incidents, inc)
 			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
@@ -3778,6 +3791,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			if ctx.cp != nil {
 				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
 				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
+				view.RepairForm = ctx.cp.RepairForm(v.ElementId)
 			}
 			list = append(list, view)
 			return nil
