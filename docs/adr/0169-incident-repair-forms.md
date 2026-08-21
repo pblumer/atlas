@@ -112,6 +112,16 @@ to keep in step, and a fifth the day another task kind gains one. It is instead 
 node type the task compiled to without the compiler having to care which. It also keeps
 `CompiledNode` — read on every activation — the size it was.
 
+**The Modeler offers the binding, on the same picker.** The record listed Modeler
+support as a follow-up; shipping without it would have meant a feature only reachable by
+hand-editing XML, which is not a feature. The task kinds that can park behind a
+repairable incident — service, send, business rule — get a **Repair form** section
+rendering the very `#f-form` picker a user task's work form uses, so the existing change
+handler and forms fetch drive both and the extension written is byte-identical. A user
+task deliberately does not get one: its `zeebe:formDefinition` *is* its work form, and
+two meanings for one extension on one element would be ambiguous in the model as much as
+on screen.
+
 **The dialog submits only the keys the form binds.** This is not a detail. The override
 endpoint sets exactly the keys it is given, so a dialog that sent back the whole variable
 set would rewrite untouched variables under the operator's name and put values they never
@@ -139,8 +149,10 @@ exactly, and fails when the narrowing is removed.
   connector dialog's job (ADR-0160), and a form must not pretend otherwise.
 - **Follow-ups / risks to watch:** **a form on the connector kind** (option 3) is the
   natural second step — a mail incident's repair form is the same everywhere, and
-  binding it per task would mean copying it into every model. **The Modeler has to offer
-  the binding**, or the feature exists only for people who hand-edit XML. **A default
+  binding it per task would mean copying it into every model. **A form on the connector kind** is now the only
+  structural gap of the three: the Modeler offers the binding as built, on the task
+  kinds that can park, reusing the same `#f-form` picker a user task's work form uses —
+  a repair form is authored where the task is. **A default
   repair form derived from the task's input mappings** would give an operator named
   fields with no authoring at all, and is worth exploring before asking anyone to write
   forms by hand. And if repair forms become common, the incident dialog should say

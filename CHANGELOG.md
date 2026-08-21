@@ -27,9 +27,12 @@ _Changed_ / _Removed_ for each version.
   up on the replay, and **only the keys the form binds are sent** — sending the whole
   variable set back would rewrite untouched values under the operator's name. The binding
   is compiled into the model, so it is versioned with the task, costs nothing at runtime,
-  and rides an instance's migration (ADR-0162). The raw editor never goes away: a form
-  covers the failure its author anticipated, and an incident nobody anticipated still has
-  to be repairable — a task that binds no form is exactly as it was.
+  and rides an instance's migration (ADR-0162). The Modeler offers it: the task kinds
+  that can park get a **Repair form** section in the Implement panel, picking from the
+  deployed forms — a repair form is authored where the task is, by the person who knows
+  what it needs. The raw editor never goes away: a form covers the failure its author
+  anticipated, and an incident nobody anticipated still has to be repairable — a task
+  that binds no form is exactly as it was.
 
 - **Migrating an instance from Operations**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): the plan endpoint and the
