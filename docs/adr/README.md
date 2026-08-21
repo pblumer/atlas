@@ -28,7 +28,7 @@ lives at 0139, 0140 and 0141). Once a test caught the collision, the cost became
 renumber on every merge instead: one record walked 0164 → 0169 across six of them
 without a word of its content changing. Assigning the number where the question has
 one answer removes both. The full argument is in
-[the record on merge-time numbering](draft-adr-numbers-assigned-at-merge.md).
+[the record on merge-time numbering](0170-adr-numbers-assigned-at-merge.md).
 
 A number, once assigned, is never reassigned — that is what makes `(ADR-0168)` in a
 comment safe to write.
@@ -206,6 +206,7 @@ comment safe to write.
 | [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Proposed |
+| [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted |
 
 ## Status values
 

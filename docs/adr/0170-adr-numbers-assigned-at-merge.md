@@ -1,4 +1,4 @@
-# ADR-DRAFT: ADR numbers are assigned at merge, not on a branch
+# ADR-0170: ADR numbers are assigned at merge, not on a branch
 
 - **Status:** Accepted
 - **Date:** 2026-08-21
