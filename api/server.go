@@ -759,6 +759,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// A store written before the reserved range reached these indices holds
+	// model-authored types on them. The table cannot keep such a record — the index
+	// belongs to a built-in now — but dropping it in silence is what would let jobs
+	// already on disk be read as the built-in's. So it is said out loud, once, with
+	// the name and what its index means now. The server still starts: the repair is
+	// not decided yet, and taking an instance down over it would be the larger harm.
+	for _, c := range jobTypes.Dropped() {
+		logging.Warn(logging.JobTypeIndexCollision,
+			"a stored job type sits on an index a built-in has since taken; its parked jobs would be read as that built-in's",
+			slog.String("jobType", c.Name), slog.Int("index", int(c.Index)),
+			slog.String("indexNowMeans", c.NowMeans))
+	}
 	drafts, err := newDraftStore(filepath.Join(dataDir, "drafts"))
 	if err != nil {
 		return nil, err

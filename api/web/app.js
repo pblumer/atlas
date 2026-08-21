@@ -3817,6 +3817,7 @@ async function viewWorkers() {
     <p class="muted">Who is doing the engine&rsquo;s work. A job type with a growing queue and no worker
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
+    <div class="card wk-card" id="wk-collisions" hidden></div>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
@@ -3824,6 +3825,7 @@ async function viewWorkers() {
 
   const types = document.getElementById("wk-types");
   const workers = document.getElementById("wk-workers");
+  const collisions = document.getElementById("wk-collisions");
   const gaps = document.getElementById("wk-gaps");
   const supervised = document.getElementById("wk-supervised");
   let showAllTypes = false;
@@ -3869,6 +3871,7 @@ async function viewWorkers() {
       types.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
       workers.innerHTML = "";
       gaps.hidden = true;
+      collisions.hidden = true;
       return;
     }
     const allTypes = (data && data.types) || [];
@@ -3948,6 +3951,35 @@ async function viewWorkers() {
         <b>In flight</b> is what a worker holds a lease on right now. <b>Connectors held</b> is what a
         worker reports it has credentials for &mdash; only it knows, since Atlas holds none for a kind
         it has handed over.</p>`;
+
+    // Job types whose stored index a built-in has since taken. This is a data-directory
+    // condition rather than a worker one, but it belongs where job types are shown, and
+    // it has to be visible somewhere other than a container log: the server warns at
+    // startup and `atlas check-job-types` answers offline, and neither reaches someone
+    // running the engine on a machine they would rather not shell into.
+    const collided = (data && data.jobTypeCollisions) || [];
+    if (collided.length) {
+      collisions.hidden = false;
+      collisions.innerHTML = `
+        <div class="wk-head"><b>Job types on an index a built-in has taken</b>
+          <span class="muted small">${collided.length} type${collided.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Job type</th><th class="wk-num">Index</th><th>That index now means</th></tr></thead>
+          <tbody>${collided.map((c) => `<tr class="wk-stuck">
+            <td><b>${esc(c.name)}</b></td>
+            <td class="wk-num">${c.index}</td>
+            <td><span class="pill-kv">${esc(c.nowMeans)}</span></td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">These types were given their index before a built-in connector claimed it.
+          Jobs already parked under it still carry it, so the engine would hand them to the built-in
+          named above, while new jobs of the same type get a fresh index. Nothing is lost yet and the
+          server runs normally &mdash; but do not treat these queues as healthy, and say so before the
+          next deploy.</p>`;
+    } else {
+      collisions.hidden = true;
+      collisions.innerHTML = "";
+    }
 
     // Connectors nothing can serve. This is the gap handing a credential to a worker
     // opens up: Atlas used to refuse an unconfigured connector when it held every
