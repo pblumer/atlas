@@ -34,7 +34,10 @@ func restart(t *testing.T, srv *Server, id string) (int, []byte) {
 	return serveInternal(t, srv, http.MethodPost, "/api/v1/workers/"+id+"/restart", "", "")
 }
 
-// The console's restart button, end to end over HTTP. The supervisor's own loop
+// The console's restart button, end to end over HTTP. The "this server supervises
+// nothing" 409 is not repeated here: main's TestRestartWorkerEndpoint already pins
+// it, and it wires the supervisor without starting a child. What this adds is the
+// half that needs a real process. The supervisor's own loop
 // brings the worker back, so a button press and a crash take the identical path —
 // which is why the assertion is on the *start count* rather than on some separate
 // "restarted" flag: proving it came back the ordinary way is the point.
@@ -74,17 +77,6 @@ func TestRestartingAnUnknownWorkerIsNotFound(t *testing.T) {
 	code, raw := restart(t, srv, "no-such-worker")
 	if code != http.StatusNotFound {
 		t.Errorf("restart of an unknown worker: status=%d body=%s, want 404", code, raw)
-	}
-}
-
-// A worker running in someone else's cluster cannot be restarted from here, and the
-// answer says so rather than pretending. This is the case the Workers view keeps
-// apart by reporting supervised workers separately from ones merely seen pulling.
-func TestRestartingWhenThisServerSupervisesNothingIsAConflict(t *testing.T) {
-	srv := newServerForErrors(t)
-	code, raw := restart(t, srv, "somebody-elses-worker")
-	if code != http.StatusConflict {
-		t.Errorf("restart with no supervisor: status=%d body=%s, want 409", code, raw)
 	}
 }
 

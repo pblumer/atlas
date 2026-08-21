@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 )
 
-// Connector kinds this worker can serve out of process (ADR-0167).
+// Connector kinds this worker can serve out of process (ADR-0168).
 //
 // A connector job arrives already resolved: the engine found the task's detail in
 // the compiled process and evaluated it against the instance's variables, because it
@@ -20,7 +20,7 @@ import (
 // CSV import is the first kind to move because no credential is involved in it at
 // all, so the mechanism could be built and reviewed before any secret rode on it.
 // The kinds that follow are the ones whose endpoint and credential this worker will
-// hold, which is the substance of ADR-0167's decision.
+// hold, which is the substance of ADR-0168's decision.
 
 // BuiltinConnectors returns handlers for the named connector kinds, keyed by the
 // job type each serves. An unknown name yields nothing: a worker is configured from

@@ -454,6 +454,45 @@ func TestExportApplicationSourceFiltersOtherApplications(t *testing.T) {
 	}
 }
 
+// TestHandleExportApplicationSourceHTTP drives the export handler over HTTP. An
+// unknown application is a 404 — the authorize step answers before any export runs,
+// which is the branch the inner-function tests never reach — and a real one streams
+// a gzip archive that reads back to the application's own manifest.
+func TestHandleExportApplicationSourceHTTP(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	// Unknown application: hidden as a 404 before the export runs.
+	if code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/applications/nope/source", "", ""); code != http.StatusNotFound {
+		t.Fatalf("export an unknown application = %d %s, want 404", code, body)
+	}
+
+	if err := srv.projects.Save(project{ID: "app1", Name: "Meine", Key: "meine"}); err != nil {
+		t.Fatalf("save project: %v", err)
+	}
+	if err := srv.drafts.Save(draft{ProcessID: "mine", Name: "Meins", ProjectID: "app1", XML: "<a/>"}); err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+
+	code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/applications/app1/source", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("export a real application = %d %s, want 200", code, body)
+	}
+	files, err := readSourceArchive(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("the streamed archive is not a readable gzip tar: %v", err)
+	}
+	man, _, err := parseSourceTree(files)
+	if err != nil {
+		t.Fatalf("parseSourceTree: %v", err)
+	}
+	if man.Key != "meine" {
+		t.Errorf("archived manifest key = %q, want the application's own key", man.Key)
+	}
+	if len(man.Processes) != 1 || man.Processes[0].ID != "mine" {
+		t.Errorf("archived processes = %+v, want the application's own draft", man.Processes)
+	}
+}
+
 // TestApplySourceTreeRefusals covers the four refusals, each of which means the
 // tree and this server disagree about who owns something.
 func TestApplySourceTreeRefusals(t *testing.T) {

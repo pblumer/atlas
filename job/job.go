@@ -142,7 +142,7 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 }
 
 // Unhandle removes the in-process worker for a job type, so its jobs park for an
-// external one instead (ADR-0167).
+// external one instead (ADR-0168).
 //
 // It exists as a removal rather than a condition at each registration site because
 // the registrations are spread across the server — a managed connector kind

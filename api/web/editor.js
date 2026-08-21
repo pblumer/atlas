@@ -480,20 +480,20 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
         <div class="etabs">
-          <button data-tab="design" class="active">Design</button>
-          <button data-tab="implement">Implement</button>
+          <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
+          <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
         </div>
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
         <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
-        <button class="btn neutral" id="save">Save</button>
-        <button class="btn neutral" id="export">Export XML</button>
+        <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
+        <button class="btn neutral" id="export" title="Download this diagram as BPMN XML">Export XML</button>
         <button class="btn neutral" id="docexport" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)">Documentation</button>
         <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
-        <button class="btn play" id="sim-play">&#9654; Play</button>
+        <button class="btn play" id="sim-play" title="Play the token simulation">&#9654; Play</button>
         <button class="btn neutral" id="sim-step" title="Advance one token by a single step">Step</button>
         <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
         <label class="sim-speed">Speed
@@ -521,8 +521,8 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <label class="field"><span>Note for this version</span>
           <input id="doc-note" placeholder="What changed, or what this version was signed off for"/></label>
         <div class="row">
-          <button class="btn" id="doc-publish">Publish version</button>
-          <button class="btn neutral" id="doc-cancel">Close</button>
+          <button class="btn" id="doc-publish" title="Publish a new documentation version as a PDF">Publish version</button>
+          <button class="btn neutral" id="doc-cancel" title="Close the documentation panel">Close</button>
           <span class="err" id="doc-err"></span>
         </div>
         <div class="doc-history" id="doc-history"></div>
@@ -530,9 +530,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
         <div class="row" id="deploy-actions">
-          <button class="btn" id="deploy-run">Deploy &amp; run</button>
-          <button class="btn neutral" id="deploy-only">Deploy only</button>
-          <button class="btn neutral" id="deploy-cancel">Cancel</button>
+          <button class="btn" id="deploy-run" title="Deploy this diagram and start an instance">Deploy &amp; run</button>
+          <button class="btn neutral" id="deploy-only" title="Deploy this diagram without starting an instance">Deploy only</button>
+          <button class="btn neutral" id="deploy-cancel" title="Close without deploying">Cancel</button>
           <span class="err" id="deploy-err"></span>
         </div>
       </div>
@@ -561,9 +561,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <span class="prob-summary" id="prob-summary"></span>
         <span style="flex:1"></span>
         <span class="prob-filters" id="prob-filters" hidden>
-          <button type="button" data-sev="all" class="active">All</button>
-          <button type="button" data-sev="error">Errors</button>
-          <button type="button" data-sev="warning">Warnings</button>
+          <button type="button" data-sev="all" class="active" title="Show all validation messages">All</button>
+          <button type="button" data-sev="error" title="Show only errors">Errors</button>
+          <button type="button" data-sev="warning" title="Show only warnings">Warnings</button>
         </span>
         <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
         <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
@@ -1615,7 +1615,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
-  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
+  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test title="Test this expression against sample variables">Test</button>';
   wrap.after(hint);
   if (!evaluate) return;
 
@@ -1627,7 +1627,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   panel.innerHTML = `
     <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
     <div class="feel-test-row">
-      <button type="button" class="btn neutral feel-test-run">Run</button>
+      <button type="button" class="btn neutral feel-test-run" title="Evaluate the expression">Run</button>
       <span class="feel-test-out" aria-live="polite"></span>
     </div>`;
   hint.after(panel);
@@ -2449,7 +2449,7 @@ function stKindFieldsHTML(cur, ext) {
       fields += `<div class="field"><span>${esc(f.label)}</span>
         <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
           <div class="st-map-rows">${rowsHTML}</div>
-          <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
+          <button type="button" class="st-map-add" style="margin-top:2px" title="Add a mapping">+ Add</button>
         </div></div>`;
     } else if (f.type === "number") {
       // A count, not free text (the retry budget): a spinner with the engine's own
@@ -3004,7 +3004,7 @@ function messagesManagerHTML(modeler) {
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
   return `<h3>Messages</h3>
     <div class="msg-list">${rows}</div>
-    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px">＋ Add message</button>
+    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="Add a message">＋ Add message</button>
     <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
 }
 
@@ -3273,7 +3273,7 @@ function signalsManagerHTML(modeler) {
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
   return `<h3>Signals</h3>
     <div class="sig-list">${rows}</div>
-    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px">＋ Add signal</button>
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="Add a signal">＋ Add signal</button>
     <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
 }
 
@@ -3394,7 +3394,7 @@ function errorsManagerHTML(modeler) {
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
   return `<h3>Errors</h3>
     <div class="err-list">${rows}</div>
-    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px">＋ Add error</button>
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="Add an error">＋ Add error</button>
     <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
 }
 
@@ -3543,7 +3543,7 @@ function escalationsManagerHTML(modeler) {
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
   return `<h3>Escalations</h3>
     ${rows}
-    <button type="button" class="btn ghost" id="esc-add">＋ Add escalation</button>
+    <button type="button" class="btn ghost" id="esc-add" title="Add an escalation">＋ Add escalation</button>
     <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
 }
 
@@ -3873,9 +3873,9 @@ function groupifyPanel(body, ctl) {
   if (total >= 2 && !body.querySelector(".pgroup-tools")) {
     const tools = document.createElement("div");
     tools.className = "pgroup-tools";
-    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand">Expand all</button>`
+    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="Expand all groups">Expand all</button>`
       + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
-      + `<button type="button" class="pgroup-all" data-all="collapse">Collapse all</button>`;
+      + `<button type="button" class="pgroup-all" data-all="collapse" title="Collapse all groups">Collapse all</button>`;
     tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
     tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
     body.insertBefore(tools, body.firstChild);
@@ -3969,7 +3969,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
         <h3>Process</h3>
         <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
-        <button type="button" class="btn" id="f-addproc" style="margin-top:6px">+ Add a process</button>`;
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="Add a process to this collaboration">+ Add a process</button>`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
@@ -3985,7 +3985,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       startVarsHTML = `
         <h3>Start variables</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
         <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
     }
     body.innerHTML = `${poolFields}
@@ -4044,7 +4044,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           startVarsHTML = `
             <h3>Start variables</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
             <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. The engine ignores the declaration; it's authoring metadata.</p>`;
         }
         body.innerHTML = `
@@ -4288,7 +4288,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
                 <label class="field"><span>Test — sample variables (JSON)</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
                 <div class="feel-test-row">
-                  <button type="button" class="btn neutral ps-run">Run</button>
+                  <button type="button" class="btn neutral ps-run" title="Run this script against the sample variables">Run</button>
                   <span class="feel-test-out ps-run-out" aria-live="polite"></span>
                 </div>
                 <pre class="ps-run-detail" hidden></pre>
@@ -4331,8 +4331,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ Neue Decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Bearbeiten</button>
             </div>
             <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
@@ -4431,7 +4431,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Process ID</span>
             <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
             <datalist id="f-call-proc-list"></datalist></label>
-          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc">&#43; Create new process</button></div>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button></div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -5898,8 +5898,8 @@ function wireActions(root, modeler, api, toast, projectId) {
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl
         ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
-           <button class="btn neutral small" data-unshare="${esc(v.id)}">Revoke</button>`
-        : `<button class="btn neutral small" data-share="${esc(v.id)}">Share…</button>`;
+           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="Revoke the shared link for this version">Revoke</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="Share a link to this documentation version">Share…</button>`;
       return `<div class="doc-version">
         <div class="doc-version-head">
           <b>v${v.version}</b>
@@ -5920,7 +5920,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       docHistory.innerHTML += `<div class="doc-prune row">
         <span class="muted">Keep newest</span>
         <input id="doc-keep" type="number" min="1" value="5" style="width:4em"/>
-        <button class="btn neutral small" id="doc-prune">Prune older versions</button>
+        <button class="btn neutral small" id="doc-prune" title="Delete older documentation versions">Prune older versions</button>
       </div>`;
     }
   };
@@ -6077,7 +6077,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       ${warned}
       <div class="row">
         <a class="btn" href="${href}">Open in Operations →</a>
-        <button type="button" class="btn neutral" id="deploy-done">Close</button>
+        <button type="button" class="btn neutral" id="deploy-done" title="Close this dialog">Close</button>
       </div>
     </div>`;
     const done = dbody.querySelector("#deploy-done");
@@ -6186,11 +6186,11 @@ export async function mountLive(root, { api, toast, key, instance }) {
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
-        <button class="btn" id="start">Start instance</button>
-        <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
+        <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
+        <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
-        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="refresh" title="Reload the live view">Refresh</button>
         <button class="btn neutral" id="vars-toggle" aria-pressed="true" title="Show or hide the variables panel">Variables</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
@@ -6199,8 +6199,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
         <div class="row">
-          <button class="btn" id="start-go">Start instance</button>
-          <button class="btn neutral" id="start-cancel">Cancel</button>
+          <button class="btn" id="start-go" title="Start the instance with these variables">Start instance</button>
+          <button class="btn neutral" id="start-cancel" title="Close without starting">Cancel</button>
           <span class="err" id="start-err"></span>
         </div>
       </div>
@@ -6480,7 +6480,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
                   const n = scopeAllActive ? allActive : picked.size;
                   return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
                  <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
-                 <button class="btn neutral sm" data-term-off>Done</button>`;
+                 <button class="btn neutral sm" data-term-off title="Leave selection mode">Done</button>`;
                 })()
               : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
             </span>
@@ -6819,8 +6819,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
               <input id="term-confirm-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
           </div>
           <div class="modal-foot">
-            <button class="btn neutral" data-term-cancel>Cancel</button>
-            <button class="btn danger" data-term-confirm ${gated ? "disabled" : ""}>Terminate ${count}</button>
+            <button class="btn neutral" data-term-cancel title="Close without terminating">Cancel</button>
+            <button class="btn danger" data-term-confirm ${gated ? "disabled" : ""} title="Terminate the selected instances">Terminate ${count}</button>
           </div>
         </div>`;
       document.body.appendChild(ov);
@@ -7027,12 +7027,12 @@ export async function mountCollaboration(root, { api, toast, key }) {
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="collab-title">Collaboration</b></span>
         <div style="flex:1"></div>
-        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="refresh" title="Reload the message flow">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="flow-count">0</b>&nbsp;messages</span>
       </div>
       <div class="replay-bar">
-        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn play" id="play" title="Play the message sequence">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous message">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next message">&#9197;</button>
         <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Message timeline"/>
@@ -7355,7 +7355,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
       <div class="replay-bar">
-        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn play" id="play" title="Play the replay">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous step">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next step">&#9197;</button>
         <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Replay frames"/>
@@ -7380,9 +7380,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
         <div class="ops-detail">
           <div class="ops-tabs" id="rp-tabs">
-            <button data-tab="details" class="active">Details</button>
-            <button data-tab="variables">Variables</button>
-            <button data-tab="decisions">Decisions</button>
+            <button data-tab="details" class="active" title="Show this step’s details">Details</button>
+            <button data-tab="variables" title="Show the process variables at this step">Variables</button>
+            <button data-tab="decisions" title="Show the decisions evaluated at this step">Decisions</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
@@ -7395,7 +7395,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <span class="var-modal-title mono" id="var-modal-title"></span>
             <span class="vtag obj" id="var-modal-tag"></span>
             <span style="flex:1"></span>
-            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="">Copy JSON</button>
+            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="" title="Copy all variables as JSON">Copy JSON</button>
             <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
           </div>
           <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>

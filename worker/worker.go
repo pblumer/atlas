@@ -52,7 +52,7 @@ type Job struct {
 	LeaseToken         uint64         `json:"leaseToken"`
 	Variables          map[string]any `json:"variables"`
 	// Connector is a connector task the engine resolved into plain values, present
-	// only for a kind the server no longer serves itself (ADR-0167). Nil for a plain
+	// only for a kind the server no longer serves itself (ADR-0168). Nil for a plain
 	// job-worker task, whose work is the customer's own command.
 	Connector *ConnectorPayload `json:"connector,omitempty"`
 }

@@ -176,7 +176,8 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0164](0164-no-in-process-service-tasks.md) | No in-process service tasks — the core loop must never be able to get stuck | Accepted |
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Proposed |
 | [0166](0166-active-directory-connector.md) | Active Directory connector | Proposed |
-| [0167](0167-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
+| [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed |
+| [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
 
 ## Status values
 

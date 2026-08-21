@@ -133,9 +133,12 @@ function parseChangelog(text) {
     if (!bullet) continue;
     const title = bullet[1].replace(/\s+/g, " ").trim();
     // Prose = everything after the bold title (and an optional "(ref):" lead-in).
+    // The lead-in regularly *contains* a parenthesis — "([ADR-0163](docs/adr/….md))"
+    // — so a naive \([^)]*\) stops at the markdown link's own closing paren and
+    // leaves the summary starting "): …". Allow one level of nesting.
     const prose = block
       .replace(/^-\s+\*\*.+?\*\*/, "")
-      .replace(/^\s*\([^)]*\)\s*[:—-]?\s*/, "")
+      .replace(/^\s*\((?:[^()]|\([^()]*\))*\)\s*[:—-]?\s*/, "")
       .replace(/^\s*[:—-]\s*/, "")
       .trim();
 
@@ -210,7 +213,13 @@ function main() {
     if (entries.length >= MAX_ENTRIES) break;
   }
 
-  const doc = { generatedAt: new Date().toISOString().slice(0, 10), entries };
+  // generatedAt is derived from the CHANGELOG, not the wall clock: the output is a
+  // committed file, and CI re-runs this generator to check the commit is current
+  // (.github/workflows/ci.yml). A wall-clock stamp would make every such run differ
+  // from the commit and fail the check on the date alone. The newest dated release
+  // section is what the feed actually reflects.
+  const newestDate = changelog.match(/^## \[[^\]]+\]\s+[—-]\s+(\d{4}-\d{2}-\d{2})/m);
+  const doc = { generatedAt: newestDate ? newestDate[1] : null, entries };
   writeFileSync(OUT, JSON.stringify(doc, null, 2) + "\n");
   console.log(`whats-new: wrote ${entries.length} entries to ${OUT}`);
 }

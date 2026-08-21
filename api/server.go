@@ -1057,7 +1057,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, func(rd state.Reader) job.Handler { return s.userConnectorHandler(rd) })
 	}
 	// Kinds the operator moved to a worker lose their in-process handler here, after
-	// every registration path has run (ADR-0167).
+	// every registration path has run (ADR-0168).
 	if err := s.applyOffloadedKinds(); err != nil {
 		return nil, err
 	}
@@ -1605,7 +1605,7 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 
 // WithOffloadedConnectorKinds names the managed connector kinds this server must
 // NOT serve itself, so their jobs park for an external worker instead
-// (ADR-0167/0164).
+// (ADR-0168/0164).
 //
 // This is the operative act of relocating a kind. The type-keyed pull refuses a job
 // type an in-process handler is registered for — that refusal is what keeps one job

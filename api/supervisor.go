@@ -121,6 +121,13 @@ func (s *supervisor) add(spec SuperviseSpec, args []string) {
 	})
 }
 
+// count is how many workers are supervised.
+func (s *supervisor) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.children)
+}
+
 // start runs every registered worker, each in its own goroutine.
 func (s *supervisor) start() {
 	s.mu.Lock()

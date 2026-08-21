@@ -196,7 +196,7 @@ func runServe(args []string) error {
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
-	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for an external worker instead (ADR-0167). An unknown kind is refused at startup rather than ignored")
+	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. mail,rest): their jobs park for an external worker instead (ADR-0168). An unknown kind is refused at startup rather than ignored")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
@@ -634,7 +634,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0167)")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0168)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
