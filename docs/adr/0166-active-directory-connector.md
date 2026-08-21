@@ -1,8 +1,51 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-08-21 — the operation set now covers the whole
+  lifecycle; see the amendment note below)
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-08-21): the lifecycle is complete.** The original decision shipped
+> six operations — create-user, set-password, enable, disable, and add/remove a group
+> member — chosen because each is an AD-specific encoding the generic LDAP connector
+> cannot express. That was the right filter for *why a connector exists* and the wrong
+> one for *what a process needs*. `docs/comparisons/mim.md` put it plainly: a
+> joiner/mover/leaver process cannot be modelled without changing an attribute, moving
+> an entry, or deleting one, and a **mover in a directory literally is a DN change**.
+> Four operations are added:
+>
+> - **update-attributes** replaces exactly the attributes the authored object names,
+>   leaving the rest of the entry alone. The changes are sent in a stable order, so a
+>   replayed job (delivery is at-least-once) produces an identical request.
+> - **move** takes one target `newDN` — how a person thinks about it — and the
+>   connector splits it into the relative name and the new parent that LDAP's ModifyDN
+>   wants, respecting backslash escapes so a comma inside a value does not split the
+>   name in the wrong place. `deleteOldRDN` is true; keeping an entry's former names as
+>   spare attribute values is a directory slowly filling with history nobody asked for.
+> - **delete** removes the entry at `dn`. There is no separate delete-user and
+>   delete-group because LDAP's delete does not distinguish them, and inventing two
+>   names for one operation would be a fiction the connector then has to maintain.
+> - **create-group** joins create-user. The two are the same LDAP add, and they are
+>   separate operations because they differ in the one thing that matters: each
+>   supplies its own `objectClass` chain when the authored attributes omit one. AD
+>   rejects an add without `objectClass`, and forgetting it is the single most common
+>   way a first create fails — not a business decision worth making every author
+>   repeat. An authored `objectClass` always wins.
+>
+> **Three of the four are not AD-specific**, so the original decision's own reasoning
+> would have left them with the generic LDAP connector. That is rejected on use rather
+> than on purity: an identity process that must drop the AD connector and pick up the
+> LDAP one to rename an account has been handed two ways to bind to the same
+> directory, two places to configure a credential, and a seam in the middle of one
+> lifecycle. A little overlap between the two connectors is the cheaper mistake.
+>
+> **Still not here, and still deliberately:** search and read stay with the LDAP
+> connector (ADR-0154), as the *Negative* note below says. The follow-ups below are
+> unchanged — Kerberos/NTLM bind, userAccountControl helpers beyond enable/disable
+> (unlock, must-change-password-at-next-logon), a delta/DirSync read, and a marketplace
+> element-template — as is the fact that this connector still runs **in process**,
+> which [ADR-0164](0164-no-in-process-service-tasks.md) deprecates. Moving it onto a
+> worker is a migration in its own right and is not part of this amendment.
 
 ## Context and problem statement
 
@@ -58,7 +101,9 @@ Concretely:
 - `<atlas:adConnector url bindDN bindSecret startTLS operation dn memberDN
   entryVariable newPassword>` on a service task. `url`/`bindDN`/`dn`/`memberDN`/
   `newPassword` are literal-or-FEEL values; `operation` is one of create-user /
-  set-password / enable / disable / add-group-member / remove-group-member.
+  create-group / update-attributes / set-password / enable / disable / move / delete /
+  add-group-member / remove-group-member (the last four added by the 2026-08-21
+  amendment, which also adds the `newDN` attribute a move targets).
 - The worker dials/binds like the LDAP connector (go-ldap, bounded by
   `nettimeout.Default`) and maps each operation: **set-password** replaces `unicodePwd`
   with the UTF-16LE quote-wrapped encoding (LDAPS/STARTTLS); **enable/disable** read

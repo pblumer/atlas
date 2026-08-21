@@ -1967,6 +1967,7 @@ type xmlAdConnector struct {
 	MemberDN      string `xml:"memberDN,attr"`
 	EntryVariable string `xml:"entryVariable,attr"`
 	NewPassword   string `xml:"newPassword,attr"`
+	NewDN         string `xml:"newDN,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

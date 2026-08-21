@@ -108,3 +108,94 @@ func TestGoDialerStartTLSError(t *testing.T) {
 		t.Fatal("Dial with STARTTLS against a plain server: err = nil, want error")
 	}
 }
+
+// TestGoConnModifyDN drives the real go-ldap adapter's ModifyDN against the test
+// directory, so the wire path a move actually takes in production is exercised — the
+// Conn fake the worker tests use never reaches this code.
+func TestGoConnModifyDN(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.ModifyDN("cn=Arno,ou=users,dc=x", "cn=Arno Meier", "ou=extern,dc=x"); err != nil {
+		t.Fatalf("ModifyDN: %v", err)
+	}
+	if ops, dns := d.seen(); !hasOp(ops, "modifydn") {
+		t.Errorf("ops = %v (dns %v), want a modifydn", ops, dns)
+	}
+
+	// A server that refuses reports the failure rather than swallowing it.
+	bad := startTestDirectory(t, &testDirectory{result: 32}) // noSuchObject
+	c2, err := NewDialer().Dial(bad.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer c2.Close()
+	if err := c2.ModifyDN("cn=weg,dc=x", "cn=neu", "dc=x"); err == nil {
+		t.Error("a refused ModifyDN must be an error")
+	}
+}
+
+// TestGoConnDelete drives the real adapter's Delete against the test directory.
+func TestGoConnDelete(t *testing.T) {
+	d := startTestDirectory(t, nil)
+	conn, err := NewDialer().Dial(d.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.Delete("cn=Alt,ou=users,dc=x"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	ops, dns := d.seen()
+	if !hasOp(ops, "delete") {
+		t.Errorf("ops = %v, want a delete", ops)
+	}
+	if !hasDN(dns, "cn=Alt,ou=users,dc=x") {
+		t.Errorf("dns = %v, want the deleted entry's dn on the wire", dns)
+	}
+
+	bad := startTestDirectory(t, &testDirectory{result: 32})
+	c2, err := NewDialer().Dial(bad.URL, "cn=svc,dc=x", "pw", false)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer c2.Close()
+	if err := c2.Delete("cn=weg,dc=x"); err == nil {
+		t.Error("a refused Delete must be an error")
+	}
+}
+
+// TestSplitDN pins the DN split a move depends on, including the escape rule that
+// keeps a comma inside a value from splitting the name in the wrong place.
+func TestSplitDN(t *testing.T) {
+	for _, tc := range []struct{ in, rdn, superior string }{
+		{"cn=Arno,ou=users,dc=x", "cn=Arno", "ou=users,dc=x"},
+		{`cn=Meier\, Arno,ou=users,dc=x`, `cn=Meier\, Arno`, "ou=users,dc=x"},
+		{"dc=x", "dc=x", ""},
+		{" cn=A , ou=u,dc=x ", "cn=A", "ou=u,dc=x"},
+		{"", "", ""},
+		// A trailing backslash cannot escape anything; it must not run past the end.
+		{`cn=odd\`, `cn=odd\`, ""},
+	} {
+		rdn, sup := splitDN(tc.in)
+		if rdn != tc.rdn || sup != tc.superior {
+			t.Errorf("splitDN(%q) = %q / %q, want %q / %q", tc.in, rdn, sup, tc.rdn, tc.superior)
+		}
+	}
+}
+
+func hasOp(ops []string, want string) bool { return hasDN(ops, want) }
+
+func hasDN(vals []string, want string) bool {
+	for _, v := range vals {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}

@@ -96,6 +96,14 @@ func (d *testDirectory) handle(conn net.Conn) {
 		case goldap.ApplicationModifyRequest:
 			d.record("modify", seqChildString(op, 0))
 			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationModifyResponse, d.codeFor(false)))
+		case goldap.ApplicationModifyDNRequest:
+			d.record("modifydn", seqChildString(op, 0))
+			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationModifyDNResponse, d.codeFor(false)))
+		case goldap.ApplicationDelRequest:
+			// A del request carries the DN as the operation's own value, not as a
+			// child sequence, so it is read directly rather than through seqChildString.
+			d.record("delete", delRequestDN(op))
+			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationDelResponse, d.codeFor(false)))
 		default:
 			return
 		}
@@ -182,4 +190,20 @@ func searchEntryPacket(id int64, dn string, attributes map[string][]string) []by
 	ent.AppendChild(attrs)
 	msg.AppendChild(ent)
 	return msg.Bytes()
+}
+
+// delRequestDN reads the DN out of a DelRequest. Unlike the other operations the DN
+// is not a child of a sequence but the request packet's own primitive payload, so it
+// is read from the raw data rather than through seqChildString.
+func delRequestDN(op *ber.Packet) string {
+	if s, ok := op.Value.(string); ok && s != "" {
+		return s
+	}
+	if len(op.ByteValue) > 0 {
+		return string(op.ByteValue)
+	}
+	if op.Data != nil {
+		return op.Data.String()
+	}
+	return ""
 }

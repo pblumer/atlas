@@ -287,9 +287,45 @@ func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
 }
 
 // adOps is the set of Active Directory provisioning operations a connector task can
-// author. Each is an AD-specific primitive the generic LDAP connector cannot express
-// directly (unicodePwd, userAccountControl, incremental group membership).
-var adOps = map[string]bool{"create-user": true, "set-password": true, "enable": true, "disable": true, "add-group-member": true, "remove-group-member": true}
+// author, and what each requires of a model.
+//
+// Most are AD-specific primitives the generic LDAP connector cannot express directly
+// (unicodePwd, userAccountControl, incremental group membership). The lifecycle
+// operations added later — update-attributes, move, delete, create-group — are not,
+// and they are here anyway: an identity process that has to leave the AD connector
+// and pick up the LDAP one to rename an account has been handed two ways to bind to
+// the same directory, which is a worse answer than a little overlap (ADR-0166,
+// amended).
+type adOp struct {
+	needsEntry    bool // an entryVariable naming the attribute object
+	needsPassword bool
+	needsMember   bool
+	needsNewDN    bool
+}
+
+var adOps = map[string]adOp{
+	"create-user":         {needsEntry: true},
+	"create-group":        {needsEntry: true},
+	"update-attributes":   {needsEntry: true},
+	"set-password":        {needsPassword: true},
+	"enable":              {},
+	"disable":             {},
+	"move":                {needsNewDN: true},
+	"delete":              {},
+	"add-group-member":    {needsMember: true},
+	"remove-group-member": {needsMember: true},
+}
+
+// adOpNames lists the operations, sorted, for the error messages that say what was
+// expected.
+func adOpNames() []string {
+	out := make([]string, 0, len(adOps))
+	for n := range adOps {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // compileAdConnectorTask compiles an <atlas:adConnector> task: it performs an Active
 // Directory operation against a model-authored server via the job path (ADR-0166), not
@@ -304,27 +340,28 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id)
+		return 0, fmt.Errorf("compiler: ad connector task %q needs an operation (%s)", st.Id, strings.Join(adOpNames(), ", "))
 	}
-	if !adOps[op] {
-		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want create-user, set-password, enable, disable, add-group-member, or remove-group-member)", st.Id, cn.Operation)
+	spec, ok := adOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
 	}
+	// Every operation addresses an existing or to-be-created entry by dn — including
+	// move, where dn is the entry being moved and newDN where it lands.
 	if strings.TrimSpace(cn.DN) == "" {
 		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
 	}
-	switch op {
-	case "create-user":
-		if strings.TrimSpace(cn.EntryVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation create-user needs an entryVariable naming the attribute object", st.Id)
-		}
-	case "set-password":
-		if strings.TrimSpace(cn.NewPassword) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation set-password needs a newPassword", st.Id)
-		}
-	case "add-group-member", "remove-group-member":
-		if strings.TrimSpace(cn.MemberDN) == "" {
-			return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
-		}
+	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	}
+	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newPassword", st.Id, op)
+	}
+	if spec.needsMember && strings.TrimSpace(cn.MemberDN) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a memberDN", st.Id, op)
+	}
+	if spec.needsNewDN && strings.TrimSpace(cn.NewDN) == "" {
+		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
 	}
 	url, err := connectorValue(st.Id, "ad connector", "url", cn.URL)
 	if err != nil {
@@ -335,6 +372,10 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		return 0, err
 	}
 	dn, err := connectorValue(st.Id, "ad connector", "dn", cn.DN)
+	if err != nil {
+		return 0, err
+	}
+	newDN, err := connectorValue(st.Id, "ad connector", "newDN", cn.NewDN)
 	if err != nil {
 		return 0, err
 	}
@@ -356,6 +397,7 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		MemberDN:    memberDN,
 		EntryVar:    strings.TrimSpace(cn.EntryVariable),
 		NewPassword: newPassword,
+		NewDN:       newDN,
 		Retries:     retries,
 	}), nil
 }

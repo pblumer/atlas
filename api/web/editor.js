@@ -2163,21 +2163,30 @@ const SERVICE_TASK_KINDS = [
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [
           { v: "create-user", l: "Create user" },
+          { v: "create-group", l: "Create group" },
+          { v: "update-attributes", l: "Update attributes" },
           { v: "set-password", l: "Set password (unicodePwd)" },
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
+          { v: "move", l: "Move / rename" },
+          { v: "delete", l: "Delete entry" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
         ],
       },
       {
         key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
-        hint: "The user entry for create/password/enable/disable, or the group entry for a membership change. May be a FEEL expression (fx).",
+        hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user",
-        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName, objectClass).",
+        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "update-attributes",
+        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, objectClass is supplied for you unless you set it yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
+      },
+      {
+        key: "newDN", label: "New DN", placeholder: "cn=Arno Meier,ou=extern,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "move",
+        hint: "Where the entry now lives. A directory has no separate move and rename — an entry's place in the tree is its name — so one target DN expresses both. May be a FEEL expression (fx).",
       },
       {
         key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,

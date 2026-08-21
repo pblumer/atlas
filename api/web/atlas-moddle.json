@@ -152,6 +152,7 @@
         { "name": "memberDN", "type": "String", "isAttr": true },
         { "name": "entryVariable", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
+        { "name": "newDN", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

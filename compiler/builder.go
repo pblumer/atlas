@@ -1148,6 +1148,7 @@ type AdConfig struct {
 	EntryVar    string
 	NewPassword RestExpr
 	Retries     int32
+	NewDN       RestExpr
 }
 
 // AddAdConnectorTask adds an Active Directory connector task and returns its element
@@ -1180,6 +1181,7 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdMemberDN:    cfg.MemberDN,
 		AdEntryVar:    b.intern(cfg.EntryVar),
 		AdNewPassword: cfg.NewPassword,
+		AdNewDN:       cfg.NewDN,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

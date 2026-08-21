@@ -612,7 +612,8 @@ type ConnectorTaskDetail struct {
 	// AdBindSecret is the interned name of the server-side bind-password secret (interned
 	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
 	// operation ("create-user"|"set-password"|"enable"|"disable"|"add-group-member"|
-	// "remove-group-member"). AdDN is the target user or group entry; AdMemberDN is the
+	// "remove-group-member", "update-attributes", "move", "delete", "create-group").
+	// AdDN is the target user or group entry; AdMemberDN is the
 	// member added/removed for the group operations; AdEntryVar is the interned name of
 	// the process variable holding the create-user attribute object; AdNewPassword is the
 	// set-password value. Each is the zero value for a non-AD task. Read only by the
@@ -626,6 +627,10 @@ type ConnectorTaskDetail struct {
 	AdMemberDN    RestExpr
 	AdEntryVar    int32
 	AdNewPassword RestExpr
+	// AdNewDN is the move operation's target distinguished name (literal-or-FEEL): the
+	// entry's new place in the tree, new relative name, or both — a mover in a
+	// directory *is* a DN change, so one value expresses all three.
+	AdNewDN RestExpr
 	// Generic SQL connector fields (JobType == SqlJobType, ADR-0170). Connector
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is

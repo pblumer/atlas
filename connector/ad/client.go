@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"unicode/utf16"
 
 	goldap "github.com/go-ldap/ldap/v3"
@@ -60,6 +61,12 @@ type Conn interface {
 	// ReadAttr returns one attribute's values for an entry (a base-object read), used
 	// for the userAccountControl read-modify-write. Missing → an empty slice, no error.
 	ReadAttr(dn, attr string) ([]string, error)
+	// ModifyDN moves and/or renames an entry. In a directory those are one operation:
+	// an entry's place in the tree *is* its name, so a mover is a DN change.
+	ModifyDN(dn, newRDN, newSuperior string) error
+	// Delete removes an entry. AD refuses to delete a container that still has
+	// children, which is the behaviour a leaver process wants.
+	Delete(dn string) error
 	Close() error
 }
 
@@ -171,4 +178,43 @@ func (c *goConn) ReadAttr(dn, attr string) ([]string, error) {
 	return res.Entries[0].GetAttributeValues(attr), nil
 }
 
+func (c *goConn) ModifyDN(dn, newRDN, newSuperior string) error {
+	// deleteOldRDN is true: a rename that kept the old relative name as a spare
+	// attribute value is a directory slowly filling with an entry's former names.
+	req := goldap.NewModifyDNRequest(dn, newRDN, true, newSuperior)
+	if err := c.conn.ModifyDN(req); err != nil {
+		return fmt.Errorf("ad: modifydn %s: %w", dn, err)
+	}
+	return nil
+}
+
+func (c *goConn) Delete(dn string) error {
+	if err := c.conn.Del(goldap.NewDelRequest(dn, nil)); err != nil {
+		return fmt.Errorf("ad: delete %s: %w", dn, err)
+	}
+	return nil
+}
+
 func (c *goConn) Close() error { return c.conn.Close() }
+
+// splitDN separates a distinguished name into its relative name and its parent,
+// respecting backslash escapes so a comma *inside* a value — "cn=Meier\, Arno,ou=…" —
+// does not split the name in the wrong place.
+//
+// It exists because the model authors a move as one target DN, which is how a person
+// thinks about it ("this entry now lives here"), while LDAP's ModifyDN wants the two
+// halves separately.
+func splitDN(dn string) (rdn, superior string) {
+	escaped := false
+	for i, r := range dn {
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case r == ',':
+			return strings.TrimSpace(dn[:i]), strings.TrimSpace(dn[i+1:])
+		}
+	}
+	return strings.TrimSpace(dn), ""
+}

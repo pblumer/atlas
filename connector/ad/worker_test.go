@@ -24,13 +24,16 @@ func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
 // fakeConn records the operation the worker performed and returns canned results.
 type fakeConn struct {
-	err    error    // returned by every operation
-	uac    []string // returned by ReadAttr (the current userAccountControl)
-	addDN  string
-	addAt  map[string][]string
-	modDN  string
-	mods   []ad.Mod
-	closed bool
+	err   error    // returned by every operation
+	uac   []string // returned by ReadAttr (the current userAccountControl)
+	addDN string
+	addAt map[string][]string
+	modDN string
+	mods  []ad.Mod
+	// mdnDN/mdnRDN/mdnSuperior record a ModifyDN; delDN records a Delete.
+	mdnDN, mdnRDN, mdnSuperior string
+	delDN                      string
+	closed                     bool
 }
 
 func (c *fakeConn) Add(dn string, attrs map[string][]string) error {
@@ -42,7 +45,12 @@ func (c *fakeConn) Modify(dn string, mods []ad.Mod) error {
 	return c.err
 }
 func (c *fakeConn) ReadAttr(dn, attr string) ([]string, error) { return c.uac, c.err }
-func (c *fakeConn) Close() error                               { c.closed = true; return nil }
+func (c *fakeConn) ModifyDN(dn, newRDN, newSuperior string) error {
+	c.mdnDN, c.mdnRDN, c.mdnSuperior = dn, newRDN, newSuperior
+	return c.err
+}
+func (c *fakeConn) Delete(dn string) error { c.delDN = dn; return c.err }
+func (c *fakeConn) Close() error           { c.closed = true; return nil }
 
 type fakeDialer struct {
 	conn                      *fakeConn
@@ -444,4 +452,143 @@ func decodeUTF16LE(s string) string {
 		u16 = append(u16, uint16(b[i])|uint16(b[i+1])<<8)
 	}
 	return string(utf16.Decode(u16))
+}
+
+// TestAdUpdateAttributes proves an update replaces exactly the attributes the model
+// named, and leaves the rest of the entry alone.
+func TestAdUpdateAttributes(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "update-attributes", DN: lit("cn=Arno,ou=users,dc=x"), EntryVar: "aenderungen",
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "aenderungen", Kind: model.VarJSON,
+			Text: `{"department":"IT","title":"Ingenieur"}`})
+
+	if conn.modDN != "cn=Arno,ou=users,dc=x" {
+		t.Errorf("modify dn = %q", conn.modDN)
+	}
+	if len(conn.mods) != 2 {
+		t.Fatalf("mods = %+v, want one per named attribute", conn.mods)
+	}
+	// Sorted, so a replayed job produces an identical request rather than one that
+	// merely means the same thing.
+	if conn.mods[0].Attr != "department" || conn.mods[1].Attr != "title" {
+		t.Errorf("mods = %+v, want them in a stable order", conn.mods)
+	}
+	for _, m := range conn.mods {
+		if m.Op != uint(goldap.ReplaceAttribute) {
+			t.Errorf("mod %q op = %v, want replace", m.Attr, m.Op)
+		}
+	}
+}
+
+// An update naming nothing is a modelling mistake, not a no-op request to AD.
+func TestAdUpdateAttributesEmpty(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "update-attributes", DN: lit("cn=Arno,dc=x"), EntryVar: "leer",
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "leer", Kind: model.VarJSON, Text: `{}`})
+	if len(conn.mods) != 0 {
+		t.Errorf("mods = %+v, want no request sent", conn.mods)
+	}
+	if mustActiveProcs(t, store) != 1 {
+		t.Error("want the job parked on an incident")
+	}
+}
+
+// TestAdMove proves a mover: the model authors one target DN — how a person thinks
+// about it — and the connector splits it into the relative name and the new parent
+// that LDAP's ModifyDN wants.
+func TestAdMove(t *testing.T) {
+	for _, tc := range []struct{ name, newDN, wantRDN, wantSuperior string }{
+		{"move and rename", "cn=Arno Meier,ou=extern,dc=x", "cn=Arno Meier", "ou=extern,dc=x"},
+		{"rename only", "cn=A. Meier,ou=users,dc=x", "cn=A. Meier", "ou=users,dc=x"},
+		// A comma inside a value must not split the name in the wrong place.
+		{"escaped comma", `cn=Meier\, Arno,ou=users,dc=x`, `cn=Meier\, Arno`, "ou=users,dc=x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			log, store := openStore(t)
+			cp, jobType := adProcess(t, compiler.AdConfig{
+				URL: lit(adURL), Op: "move", DN: lit("cn=Arno,ou=users,dc=x"), NewDN: lit(tc.newDN),
+			}, false)
+			conn := &fakeConn{}
+			drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+			if conn.mdnDN != "cn=Arno,ou=users,dc=x" {
+				t.Errorf("modifydn dn = %q", conn.mdnDN)
+			}
+			if conn.mdnRDN != tc.wantRDN || conn.mdnSuperior != tc.wantSuperior {
+				t.Errorf("rdn/superior = %q / %q, want %q / %q",
+					conn.mdnRDN, conn.mdnSuperior, tc.wantRDN, tc.wantSuperior)
+			}
+		})
+	}
+}
+
+func TestAdDelete(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "delete", DN: lit("cn=Alt,ou=users,dc=x"),
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+	if conn.delDN != "cn=Alt,ou=users,dc=x" {
+		t.Errorf("delete dn = %q", conn.delDN)
+	}
+}
+
+// A create supplies the objectClass chain the operation implies when the model does
+// not, because AD rejects an add without one and forgetting it is not a business
+// decision worth making every author repeat.
+func TestAdCreateSuppliesObjectClass(t *testing.T) {
+	for _, tc := range []struct {
+		op, entry string
+		want      []string
+	}{
+		{"create-user", `{"sAMAccountName":"arno"}`, []string{"top", "person", "organizationalPerson", "user"}},
+		{"create-group", `{"sAMAccountName":"team"}`, []string{"top", "group"}},
+		// An authored objectClass always wins.
+		{"create-group", `{"objectClass":["top","group","posixGroup"]}`, []string{"top", "group", "posixGroup"}},
+	} {
+		t.Run(tc.op+"/"+tc.entry, func(t *testing.T) {
+			log, store := openStore(t)
+			cp, jobType := adProcess(t, compiler.AdConfig{
+				URL: lit(adURL), Op: tc.op, DN: lit("cn=X,dc=x"), EntryVar: "entry",
+			}, false)
+			conn := &fakeConn{}
+			drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+				model.VariableValue{Name: "entry", Kind: model.VarJSON, Text: tc.entry})
+			got := conn.addAt["objectClass"]
+			if len(got) != len(tc.want) {
+				t.Fatalf("objectClass = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("objectClass = %v, want %v", got, tc.want)
+					break
+				}
+			}
+		})
+	}
+}
+
+// A move whose newDN resolves to nothing fails the job rather than issuing a
+// ModifyDN with an empty name.
+func TestAdMoveEmptyNewDN(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "move", DN: lit("cn=Arno,dc=x"), NewDN: lit(""),
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+	if conn.mdnDN != "" {
+		t.Errorf("a ModifyDN was issued with no target: %q", conn.mdnDN)
+	}
+	if mustActiveProcs(t, store) != 1 {
+		t.Error("want the job parked on an incident")
+	}
 }

@@ -3,6 +3,7 @@ package ad
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,8 +29,19 @@ const (
 	attrUnicodePwd        = "unicodePwd"
 	attrUserAccountCtl    = "userAccountControl"
 	attrMember            = "member"
+	attrObjectClass       = "objectClass"
 	uacNormalAccount      = 0x200
 	uacAccountDisableFlag = 0x2
+)
+
+// Default object classes for the two create operations. AD requires objectClass on
+// every entry and rejects an add without it, so the connector supplies the standard
+// chain when the authored attributes do not — a forgotten objectClass is the single
+// most common way a first create-user fails, and it is not a business decision worth
+// making the author repeat. An authored objectClass always wins.
+var (
+	userObjectClass  = []string{"top", "person", "organizationalPerson", "user"}
+	groupObjectClass = []string{"top", "group"}
 )
 
 // Handler builds a job handler that performs an Active Directory connector task.
@@ -88,12 +100,47 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, op string, scope uint64, scopeVars map[string]model.VariableValue, conn Conn) error {
 	dn := resolveValue(detail.AdDN, scope, scopeVars)
 	switch op {
-	case "create-user":
+	case "create-user", "create-group":
 		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
 		if err != nil {
 			return err
 		}
+		defaultClass := userObjectClass
+		if op == "create-group" {
+			defaultClass = groupObjectClass
+		}
+		if _, authored := attrs[attrObjectClass]; !authored {
+			attrs[attrObjectClass] = defaultClass
+		}
 		return conn.Add(dn, attrs)
+	case "update-attributes":
+		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
+		if err != nil {
+			return err
+		}
+		if len(attrs) == 0 {
+			return fmt.Errorf("ad: update-attributes resolved no attributes to change")
+		}
+		// Replace, not add: the authored object states what each named attribute
+		// should now be. Attributes it does not mention are left alone, so an update
+		// is a change to some of an entry rather than a redefinition of all of it.
+		mods := make([]Mod, 0, len(attrs))
+		for _, name := range sortedKeys(attrs) {
+			mods = append(mods, Mod{Op: modReplace, Attr: name, Vals: attrs[name]})
+		}
+		return conn.Modify(dn, mods)
+	case "move":
+		newDN := resolveValue(detail.AdNewDN, scope, scopeVars)
+		if newDN == "" {
+			return fmt.Errorf("ad: move resolved an empty newDN")
+		}
+		rdn, superior := splitDN(newDN)
+		if rdn == "" {
+			return fmt.Errorf("ad: move newDN %q has no relative name", newDN)
+		}
+		return conn.ModifyDN(dn, rdn, superior)
+	case "delete":
+		return conn.Delete(dn)
 	case "set-password":
 		newPassword := resolveValue(detail.AdNewPassword, scope, scopeVars)
 		if newPassword == "" {
@@ -113,6 +160,18 @@ func dispatch(cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail
 	default:
 		return fmt.Errorf("ad: unknown operation %q", op)
 	}
+}
+
+// sortedKeys returns a map's keys in a stable order, so an update sends its changes
+// the same way every time — a replayed job (delivery is at-least-once) then produces
+// an identical request rather than one that merely means the same thing.
+func sortedKeys(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // accountControl computes the new userAccountControl value for an enable/disable: it
