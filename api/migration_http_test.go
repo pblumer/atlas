@@ -464,3 +464,20 @@ func TestMigrateInstancesReportsRefusals(t *testing.T) {
 		}
 	}
 }
+
+// migrateV3BPMN is a third version, so a test can walk a *chain* of migrations: the
+// definition in force between two hops is named by neither the instance record nor the
+// first migration, only by the second one's source.
+const migrateV3BPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="migrating" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="triage" name="Triage"/>
+    <userTask id="verify" name="Verify"/>
+    <userTask id="review" name="Review"/>
+    <endEvent id="done"/>
+    <sequenceFlow id="f0" sourceRef="start" targetRef="triage"/>
+    <sequenceFlow id="fa" sourceRef="triage" targetRef="verify"/>
+    <sequenceFlow id="f1" sourceRef="verify" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="done"/>
+  </process>
+</definitions>`
