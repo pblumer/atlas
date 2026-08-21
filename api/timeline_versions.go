@@ -130,6 +130,14 @@ func (v *versionAt) isType(pos uint64, idx int32, t compiler.BpmnType) bool {
 	return ok && n.Type == t
 }
 
+// isLoop reports whether the element at an index is a looping activity — multi-instance
+// or a standard loop — at a log position (ADR-0077/0133). An unresolvable definition
+// answers false, the same as isType: an element nobody can identify carries no loop.
+func (v *versionAt) isLoop(pos uint64, idx int32) bool {
+	n, ok := v.node(pos, idx)
+	return ok && n.MultiInstance >= 0
+}
+
 // flowSource is the element index a flow leaves from at a log position, and whether it
 // resolved. Used both to name the element a token came from and to link a deferred
 // completion to the activation that succeeds it.

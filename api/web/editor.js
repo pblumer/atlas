@@ -8068,6 +8068,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
       <dt>Element ID</dt><dd class="mono">${esc(s.elementId)}</dd>
+      ${s.iteration ? `<dt>Iteration</dt><dd>Round ${esc(String(s.iteration))} of this loop</dd>` : ""}
       <dt>Element Instance Key</dt><dd class="mono">${esc(String(s.elementInstanceKey || "—"))}</dd>
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
@@ -8117,7 +8118,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // subprocess it lives in; label it so it reads apart from a process variable
     // (ADR-0074). A process-scope variable has no scope and no chip.
     const scopeChip = v.scope
-      ? ` <span class="c-scope" title="Local to subprocess ${esc(v.scope)}">${esc(v.scope)}</span>`
+      ? ` <span class="c-scope" title="${v.local
+        ? `Local to this element — its input mapping, or the round's loop counter`
+        : `Local to subprocess ${esc(v.scope)}`}">${esc(v.scope)}</span>`
       : "";
     // A value the process did not compute: an operator set it by hand on the running
     // instance (ADR-0098). The audit log has carried who did it since that landed and
@@ -8200,7 +8203,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     changedNames = null;
     if (selEik) {
       const s = stepByEik(selEik);
-      const entry = (s && s.variables) || [];
+      // What the element could see on entry is its whole scope chain: the process (and
+      // subprocess) fold, plus the locals of its own scope — its input mappings, and for
+      // one round of a loop that round's loopCounter and item (ADR-0068/0077/0133).
+      // Without the locals a loop iteration reported only the process variables, which is
+      // why six rounds of one task all read identically.
+      const entry = [...((s && s.variables) || []), ...localsOf(s)];
       const after = (s && s.variablesAfter) || null;
       // Offer the two sides only for an element that has finished; while it is still
       // running there is no "after" to show. Landing on Output when the element saw
@@ -8369,6 +8377,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // name with one in an enclosing scope — so the scope belongs in the key (ADR-0074).
   const varRef = (v) => v.scope + "\u0000" + v.name;
 
+  // localsOf is what lives in the element instance's own scope: its evaluated input
+  // mappings and, for one round of a loop, that round's counter and item. They are
+  // labeled with the element's id so they read apart from the process variables they sit
+  // among, the same way a subprocess-local does (ADR-0074).
+  const localsOf = (s) => ((s && s.inputs) || []).map((v) => ({ ...v, scope: s.elementId, local: true }));
+
   // writtenBy is what an element itself contributed: every value it added or rewrote
   // between its activation and its completion. null while it is still running — there
   // is no "after" yet, which is a different statement from "it wrote nothing".
@@ -8497,10 +8511,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const inc = incidentByEik(s.elementInstanceKey);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
       const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
+      // A loop runs the same node again and again, so without its round number every
+      // iteration is an identical row and the operator cannot tell which one they are
+      // reading (ADR-0077/0133).
+      const round = s.iteration
+        ? ` <span class="ops-hiter" title="Round ${s.iteration} of this loop">#${s.iteration}</span>`
+        : "";
       return `<div class="ops-hrow${inc ? " inc" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}"${
         inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
         <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}</span>
+        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");
