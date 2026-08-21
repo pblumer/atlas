@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        whats-new docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        whats-new adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -51,6 +51,15 @@ check: build vet fmt-check race cover
 # scripts/whats-new/README.md.
 whats-new:
 	node scripts/whats-new/gen.mjs
+
+# Assign a number to every ADR still in flight (docs/adr/draft-<slug>.md): rename it
+# to NNNN-<slug>.md, fix its heading, add its index row, and rewrite every
+# ADR-draft-<slug> citation in the tree. Run this on main — that is the only place
+# "the next free number" has one answer. .github/workflows/adr-number.yml does it
+# automatically after a merge; this target is the same thing by hand. No-op when
+# there are no drafts. See docs/adr/README.md § Writing a record.
+adr-number:
+	go run ./docs/adr/cmd/adrnum
 
 tidy:
 	go mod tidy
