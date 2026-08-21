@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"strconv"
 )
 
@@ -625,7 +626,145 @@ func runtimeTools() []Tool {
 				return asText(c.post("/api/v1/incidents/"+strconv.FormatUint(key, 10)+"/resolve", "application/json", body))
 			},
 		},
+		{
+			Name: "atlas_migration_plan",
+			Description: "Answer what migrating a running instance to another version of its process would " +
+				"do — without changing anything. Returns {instanceKey, fromProcessDefKey, fromVersion, " +
+				"toProcessDefKey, toVersion, mapping, problems, migratable}: 'mapping' pairs BPMN element ids " +
+				"matched between the two versions, and 'problems' is every reason the migration would be " +
+				"refused (a token on an element the target does not have, a changed element type or scope, a " +
+				"catch waiting on a different message). Call this before atlas_migrate_instance — the mapping " +
+				"is derived from two graphs and 'which of my tokens would be stranded' is not answerable by " +
+				"eye (ADR-0162).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":                 map[string]any{"type": "integer", "description": "The running instance key to plan a migration for."},
+					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate to — another version of the same process."},
+					"mapping":             migrationMappingSchema(),
+				},
+				"required": []any{"key", "targetProcessDefKey"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := migrationBody(args, false)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/instances/"+strconv.FormatUint(key, 10)+"/migrate/plan", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_migrate_instance",
+			Description: "Rebind a running instance to another version of its process, keeping its variables, " +
+				"jobs, history and element instance keys — the alternative to cancelling and restarting it " +
+				"when a model fix cannot otherwise reach an instance that is already running. A 'reason' is " +
+				"required and recorded as an operator action with the caller's identity. Refused (409) with " +
+				"the same plan atlas_migration_plan returns when the mapping does not hold; nothing is " +
+				"written in that case (ADR-0162).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":                 map[string]any{"type": "integer", "description": "The running instance key to migrate."},
+					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate to — another version of the same process."},
+					"reason":              map[string]any{"type": "string", "description": "Why this instance is being migrated. Recorded in the instance's audit trail and shown on its replay."},
+					"mapping":             migrationMappingSchema(),
+				},
+				"required": []any{"key", "targetProcessDefKey", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := migrationBody(args, true)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/instances/"+strconv.FormatUint(key, 10)+"/migrate", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_migrate_instances",
+			Description: "Migrate a bounded batch of one deployed definition's running instances to another " +
+				"version of the same process. Each instance is migrated independently, so a refusal on one " +
+				"does not roll back the others: returns {toProcessDefKey, migrated, refused, remaining}, " +
+				"where 'refused' carries a full plan per instance that could not move. Repeat while " +
+				"'remaining' is true. A 'reason' is required (ADR-0162).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":                 map[string]any{"type": "integer", "description": "The deployed definition key whose running instances to migrate."},
+					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate them to."},
+					"reason":              map[string]any{"type": "string", "description": "Why these instances are being migrated. Recorded per instance in its audit trail."},
+					"limit":               map[string]any{"type": "integer", "minimum": 1, "description": "Maximum instances to migrate in this call (default 500, capped at 5000)."},
+					"mapping":             migrationMappingSchema(),
+				},
+				"required": []any{"key", "targetProcessDefKey", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := migrationBody(args, true)
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/migrate-instances"
+				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if present {
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				return asText(c.post(path, "application/json", body))
+			},
+		},
 	}
+}
+
+// migrationMappingSchema describes the optional element-id overrides all three
+// migration tools accept. Ids, never compiled indices: an index is an internal encoding
+// that shifts between versions, and pairing by the id a modeler wrote is what makes the
+// default mapping work at all (ADR-0162).
+func migrationMappingSchema() map[string]any {
+	return map[string]any{
+		"type": "array",
+		"description": "Optional element-id overrides, for elements whose BPMN id changed between the two " +
+			"versions. Elements whose ids match are paired automatically and need no entry here.",
+		"items": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"from": map[string]any{"type": "string", "description": "BPMN element id in the source version."},
+				"to":   map[string]any{"type": "string", "description": "BPMN element id in the target version."},
+			},
+			"required": []any{"from", "to"},
+		},
+	}
+}
+
+// migrationBody assembles the shared request body for the migration tools. withReason
+// is true for the two that actually write, where the API requires one.
+func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
+	target, err := argUint(args, "targetProcessDefKey")
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]any{"targetProcessDefKey": target}
+	if withReason {
+		reason, err := argString(args, "reason")
+		if err != nil {
+			return nil, err
+		}
+		body["reason"] = reason
+	}
+	if raw, ok := args["mapping"]; ok && raw != nil {
+		body["mapping"] = raw
+	}
+	return json.Marshal(body)
 }
 
 // asText adapts a client call's (body, error) into a tool handler's

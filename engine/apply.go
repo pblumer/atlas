@@ -345,6 +345,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordOperatorAction(h.Timestamp, h.Position, &v.operatorAct)
 		}
 
+	case model.VTProcessMigration:
+		if h.Intent == model.IntentMigrated {
+			// Rebind a running instance to another deployed version of its process
+			// (ADR-0162). Everything the rewrite needs — both definition keys and the
+			// whole element mapping — is on the event, so this fold computes nothing and
+			// replay reproduces it exactly (invariants I4/I6). It is idempotent: the
+			// rewrite is skipped unless the instance is still on the source version, so a
+			// re-applied event moves no counter twice.
+			return tx.MigrateInstance(&v.migration)
+		}
+
 	case model.VTDecisionEvaluation:
 		if h.Intent == model.IntentDecisionEvaluated {
 			// Retain how a business rule task's decision was made — its inputs, outputs
