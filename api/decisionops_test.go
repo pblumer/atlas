@@ -369,3 +369,28 @@ func getDeployed(t *testing.T, x deployTestHarness, decisionID string) deployedD
 	t.Fatalf("decision %q not listed; body=%s", decisionID, b)
 	return deployedDecision{}
 }
+
+// TestDecisionAggNoteKeepsLatestVersionPerProcess pins the one-row-per-process rollup
+// that note() implements: a decision referenced by several deployed versions of the
+// same process collapses to a single reference at the highest version, while distinct
+// processes each keep their own. A nil deployment is ignored rather than panicking.
+func TestDecisionAggNoteKeepsLatestVersionPerProcess(t *testing.T) {
+	a := &decisionAgg{procs: map[string]decisionProcessRef{}}
+
+	a.note(nil) // must be a no-op, not a panic
+	a.note(&deployment{ProcessID: "order", Name: "Order v1", Key: 10, Version: 1})
+	a.note(&deployment{ProcessID: "order", Name: "Order v3", Key: 30, Version: 3})
+	a.note(&deployment{ProcessID: "order", Name: "Order v2", Key: 20, Version: 2}) // older: dropped
+	a.note(&deployment{ProcessID: "invoice", Name: "Invoice v1", Key: 40, Version: 1})
+
+	if len(a.procs) != 2 {
+		t.Fatalf("process references = %d, want 2 (one per process id)", len(a.procs))
+	}
+	order := a.procs["order"]
+	if order.Version != 3 || order.Name != "Order v3" || order.Key != 30 {
+		t.Errorf("order reference = %+v, want the v3 deployment", order)
+	}
+	if inv := a.procs["invoice"]; inv.Version != 1 || inv.Name != "Invoice v1" {
+		t.Errorf("invoice reference = %+v, want the v1 deployment", inv)
+	}
+}
