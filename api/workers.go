@@ -220,11 +220,13 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 				Type:            e.Name,
 				Index:           e.Index,
 				ServedInProcess: inProcess,
-				BuiltIn:         e.Index < compiler.FirstDynamicJobTypeIndex(),
-				Leasable:        !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
-				InFlight:        s.workers.inFlightOf(e.Name),
-				Incidents:       incidents[e.Index],
-				Processes:       users[e.Index],
+				// The reserved count, not the dynamic floor: a legacy assignment sits
+				// between the two and is model-authored, not built in.
+				BuiltIn:   e.Index < compiler.ReservedJobTypeCount(),
+				Leasable:  !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
+				InFlight:  s.workers.inFlightOf(e.Name),
+				Incidents: incidents[e.Index],
+				Processes: users[e.Index],
 			}
 			if err := s.store.ActivatableJobs(e.Index, func(uint64) error {
 				if st.Parked >= maxTypeScan {

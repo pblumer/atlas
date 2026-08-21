@@ -3,6 +3,8 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -249,3 +251,60 @@ func TestAWorkersConnectorNamesReachTheWorkersView(t *testing.T) {
 		t.Errorf("unserved = %+v, want office365 named as reachable by nothing", view.Unserved)
 	}
 }
+
+// TestWorkerScrapesAnOffloadedPage is the third shape of the split, and the one that
+// shows the seam carrying a result back. No credential is involved — what the worker
+// contributes is network reach — and the scraped values land in the instance as a
+// variable, so the engine sees the outcome of work it did not do.
+func TestWorkerScrapesAnOffloadedPage(t *testing.T) {
+	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><h2 class="q">first</h2><h2 class="q">second</h2></body></html>`))
+	}))
+	defer page.Close()
+
+	ts := liveAtlasWith(t, scrapeConnectorModel, `{"target":"`+page.URL+`"}`,
+		api.WithOffloadedConnectorKinds([]string{"webscrape"}))
+
+	built, err := worker.BuiltinConnectors(nil, "webscrape")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Names) != 0 {
+		t.Errorf("names = %v, want none: a scrape holds no credential to report", built.Names)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "scraper-1", Handlers: built.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the scrape job was not completed", running)
+	}
+	vars := instanceVariables(t, ts)
+	got, ok := vars["quotes"]
+	if !ok {
+		t.Fatalf("the result variable was not written; variables = %v", vars)
+	}
+	list, ok := got.([]any)
+	if !ok || len(list) != 2 || list[0] != "first" || list[1] != "second" {
+		t.Errorf("quotes = %v, want the two scraped headings", got)
+	}
+}
+
+const scrapeConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="scrape" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:webscrapeConnector url="=target" selector="h2.q" resultVariable="quotes"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`

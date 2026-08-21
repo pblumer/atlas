@@ -304,10 +304,16 @@ func TestAllListsTheWholeTableInIndexOrder(t *testing.T) {
 	if len(all) != len(compiler.ReservedJobTypes())+1 {
 		t.Fatalf("All() has %d entries, want the %d reserved plus one", len(all), len(compiler.ReservedJobTypes()))
 	}
-	for i, e := range all {
-		if e.Index != int32(i) {
-			t.Errorf("All()[%d] has index %d, want the listing in index order", i, e.Index)
+	// Sorted by index, not contiguous: dynamic names are issued from a fixed floor
+	// well above the reserved range, so there is a deliberate gap in the middle.
+	for i := 1; i < len(all); i++ {
+		if all[i].Index <= all[i-1].Index {
+			t.Errorf("All()[%d] index %d does not follow %d; the listing is not in index order",
+				i, all[i].Index, all[i-1].Index)
 		}
+	}
+	if first := all[0].Index; first != 0 {
+		t.Errorf("All()[0] has index %d, want the first reserved type at 0", first)
 	}
 	if last := all[len(all)-1]; last.Name != "send-email" {
 		t.Errorf("last entry = %q, want the newly registered send-email", last.Name)

@@ -11,6 +11,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/webscrape"
 )
 
 // Connector kinds this worker can serve out of process (ADR-0168).
@@ -50,6 +51,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		switch kind {
 		case "csv":
 			built.Handlers[compiler.CsvImportJobType] = ExecFunc(runCSV)
+		case "webscrape":
+			// Nothing to configure: the reach is the worker's network position, not a
+			// credential, so there is no environment to read and nothing to report as
+			// a held connector name.
+			client := webscrape.NewHTTPClient()
+			built.Handlers[compiler.WebScrapeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return runWebScrape(ctx, j, client)
+			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
 			if err != nil {
@@ -185,4 +194,35 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 		return nil, fmt.Errorf("csv: parsed rows are not JSON: %w", err)
 	}
 	return map[string]any{res.ResultVariable: rows, "rowCount": res.RowCount}, nil
+}
+
+// runWebScrape fetches a resolved scrape and returns the variable it completes with.
+// It shares [webscrape.Run] with the in-process path, so the two cannot disagree
+// about what a selector or an attribute means.
+func runWebScrape(ctx context.Context, j Job, client webscrape.Client) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("webscrape: the job carried no resolved connector detail; is this server offloading the webscrape kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task webscrape.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("webscrape: cannot read the resolved detail: %w", err)
+	}
+	res, err := webscrape.Run(ctx, task, client)
+	if err != nil {
+		return nil, err
+	}
+	if res.ResultVariable == "" {
+		return nil, nil // the task writes nothing back
+	}
+	// The values travel as a plain list; the engine stores it the same way the
+	// in-process path does.
+	items := make([]any, len(res.Values))
+	for i, v := range res.Values {
+		items[i] = v
+	}
+	return map[string]any{res.ResultVariable: items}, nil
 }

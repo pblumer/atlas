@@ -49,8 +49,13 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 			t.Errorf("%q sits at position %d but its constant says %d", name, i, idx)
 		}
 	}
-	if got := FirstDynamicJobTypeIndex(); got != int32(len(reserved)) {
-		t.Errorf("FirstDynamicJobTypeIndex() = %d, want %d", got, len(reserved))
+	if got := ReservedJobTypeCount(); got != int32(len(reserved)) {
+		t.Errorf("ReservedJobTypeCount() = %d, want %d", got, len(reserved))
+	}
+	// The engine-wide floor is deliberately *not* one past the reserved range: it is
+	// fixed, so adding a built-in can never reach an index already issued.
+	if got := FirstDynamicJobTypeIndex(); got <= ReservedJobTypeCount() {
+		t.Errorf("FirstDynamicJobTypeIndex() = %d, which leaves the reserved range no room to grow", got)
 	}
 }
 
@@ -65,9 +70,13 @@ func TestReservedJobTypesAreInternedByEveryBuilder(t *testing.T) {
 			t.Errorf("intern(%q) = %d in a fresh builder, want %d", name, got, i)
 		}
 	}
-	if got := b.intern("send-email"); got < FirstDynamicJobTypeIndex() {
-		t.Errorf("a model-authored job type interned to %d, which collides with the reserved range below %d",
-			got, FirstDynamicJobTypeIndex())
+	// A builder's table is per process and separate from the engine-wide registry:
+	// here a model-authored name simply follows the reserved ones, and it is
+	// ResolveJobTypes that maps it to a global index at or above the dynamic floor.
+	// The check is therefore against the reserved count, not that floor.
+	if got := b.intern("send-email"); got < ReservedJobTypeCount() {
+		t.Errorf("a model-authored job type interned to %d, inside the reserved range below %d",
+			got, ReservedJobTypeCount())
 	}
 }
 

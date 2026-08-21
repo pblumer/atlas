@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -4457,6 +4458,17 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+		}}
+	case compiler.WebScrapeJobTypeIndex:
+		// No credential at all here — what the worker adds is network reach. A page
+		// only reachable from somewhere the engine is not is the case for moving it.
+		j, err := webscrape.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "webscrape", Fields: map[string]any{
+			"url": j.URL, "selector": j.Selector, "attribute": j.Attribute,
+			"resultVariable": j.Result,
 		}}
 	}
 	return nil
