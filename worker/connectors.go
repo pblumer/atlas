@@ -216,9 +216,7 @@ func runCSV(_ context.Context, j Job) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var rows any
-	if err := json.Unmarshal([]byte(res.RowsJSON), &rows); err != nil {
-		return nil, fmt.Errorf("csv: parsed rows are not JSON: %w", err)
-	}
-	return map[string]any{res.ResultVariable: rows, "rowCount": res.RowCount}, nil
+	// Result decides what a job completes with, so a read's rows and a write's
+	// rendered file take the same path here as in the engine.
+	return res.Variables()
 }

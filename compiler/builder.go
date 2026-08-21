@@ -1411,6 +1411,12 @@ type CsvConfig struct {
 	HasHeader bool
 	Columns   []string
 	Retries   int32
+	// Format is the file format and Operation the direction; empty means csv and
+	// read. Widths carries each column's character width for a fixed-width file,
+	// positionally alongside Columns.
+	Format    string
+	Operation string
+	Widths    []int32
 }
 
 // AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
@@ -1439,6 +1445,9 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 		Auth:         -1,
 		CsvSource:    b.intern(cfg.Source),
 		CsvResult:    b.intern(cfg.Result),
+		CsvFormat:    b.intern(cfg.Format),
+		CsvOperation: b.intern(cfg.Operation),
+		CsvWidths:    cfg.Widths,
 		CsvDelimiter: b.intern(cfg.Delimiter),
 		CsvHasHeader: cfg.HasHeader,
 		CsvColumns:   cols,

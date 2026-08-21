@@ -95,9 +95,9 @@ on a worker, so a database credential never enters the engine (ADR-0164/0170).
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Generic CSV Connector / Delimited text file | `csv` (ADR-0139) | **Partial** — CSV-to-JSON *import* only. No export/write side. |
-| Fixed-Width text file | — | **Missing** |
-| Attribute-Value Pair text file | — | **Missing** |
+| Generic CSV Connector / Delimited text file | `csv` (ADR-0139, amended) | **Implemented** — read and write. |
+| Fixed-Width text file | `csv` format `fixed-width` | **Implemented** — read and write, columns authored as `name:width`. |
+| Attribute-Value Pair text file | `csv` format `avp` | **Implemented** — read and write. |
 | LDAP Data Interchange Format (LDIF) | — | **Missing** |
 | Directory Services Mark-up Language (DSML) | — | **Missing** |
 

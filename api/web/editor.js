@@ -2458,22 +2458,56 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "csv", name: "CSV to JSON", desc: "Parse an uploaded CSV into a JSON rows array", icon: "T",
-    // A grid/table mark on a teal tile reads "tabular data → rows" at a glance — the
-    // CSV connector's counterpart to REST's globe and mail's envelope. The
+    id: "csv", name: "Text File Connector", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
+    // file connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white grid strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:CsvConnector",
     fields: [
-      { group: "Source" },
-      { key: "source", label: "Source variable", placeholder: "csvText", hint: "Name of the process variable holding the raw CSV text (e.g. from the upload task)." },
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Delimited (CSV)" },
+          { v: "fixed-width", l: "Fixed-width" },
+          { v: "avp", l: "Attribute-value pairs" },
+        ],
+        hint: "All three describe a table of records in a text file and produce the same rows; they differ only in how a record is delimited and how a field is found inside it.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to rows" }, { v: "write", l: "Write — rows to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "csvText",
+        hint: "Reading: the variable holding the raw file text. Writing: the variable holding the rows, as a JSON array of objects.",
+      },
       { group: "Layout" },
-      { key: "delimiter", label: "Delimiter", type: "select", options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }] },
-      { key: "hasHeader", label: "Header row", type: "select", options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }] },
-      { key: "columns", label: "Columns", placeholder: "email, group, license", hint: "Comma-separated field names. Leave empty to derive them from the header row; required when there is no header." },
+      {
+        key: "delimiter", label: "Delimiter", type: "select", showIf: (v) => !v.format,
+        options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }],
+      },
+      {
+        key: "hasHeader", label: "Header row", type: "select", showIf: (v) => v.format !== "avp",
+        options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }],
+      },
+      {
+        key: "columns", label: "Columns", placeholder: "email, group, license",
+        hint: "Comma-separated field names. For a delimited file leave empty to derive them from the header row (required when there is none); an attribute-value file names its own fields, so a layout only narrows what is picked out.",
+        showIf: (v) => v.format !== "fixed-width",
+      },
+      {
+        key: "columns", label: "Columns and widths", placeholder: "personalnr:8, name:30, abteilung:10",
+        hint: "Comma-separated name:width entries. A fixed-width field is found by position, so every column needs its character count — and a value wider than its column is cut on write, because the format has no way to hold it.",
+        showIf: (v) => v.format === "fixed-width",
+      },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "rows", hint: "The parsed JSON array of rows is written into this process variable (rowCount is also set)." },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "rows",
+        hint: "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set.",
+      },
     ],
   },
   {

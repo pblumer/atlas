@@ -2118,25 +2118,100 @@ type xmlCsvConnector struct {
 	HasHeader      string `xml:"hasHeader,attr"`
 	Columns        string `xml:"columns,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
-	Retries        string `xml:"retries,attr"`
+	// Format is the file format ("csv" | "fixed-width" | "avp"; blank is csv) and
+	// Operation the direction ("read" | "write"; blank is read) — ADR-0139, amended.
+	Format    string `xml:"format,attr"`
+	Operation string `xml:"operation,attr"`
+	Retries   string `xml:"retries,attr"`
+}
+
+// The file formats and directions a csvConnector can author. They are spelled here
+// as well as in connector/csvimport because the compiler cannot import the connector
+// (the dependency runs the other way); TestCsvFormatsMatchTheConnector guards the seam.
+const (
+	csvimportFormatCSV        = "csv"
+	csvimportFormatFixedWidth = "fixed-width"
+	csvimportFormatAVP        = "avp"
+	csvimportOperationRead    = "read"
+	csvimportOperationWrite   = "write"
+)
+
+// csvFormatAndOperation reads the authored format and direction, applying the
+// defaults that keep every model written before either existed meaning exactly what
+// it meant then.
+func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, error) {
+	format := strings.ToLower(strings.TrimSpace(rawFormat))
+	if format == "" {
+		format = csvimportFormatCSV
+	}
+	switch format {
+	case csvimportFormatCSV, csvimportFormatFixedWidth, csvimportFormatAVP:
+	default:
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown format %q (want %s, %s, or %s)",
+			taskID, rawFormat, csvimportFormatAVP, csvimportFormatCSV, csvimportFormatFixedWidth)
+	}
+	op := strings.ToLower(strings.TrimSpace(rawOp))
+	if op == "" {
+		op = csvimportOperationRead
+	}
+	if op != csvimportOperationRead && op != csvimportOperationWrite {
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown operation %q (want %s or %s)",
+			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
+	}
+	return format, op, nil
 }
 
 // splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
-// trimmed list of field names, dropping empty entries so a trailing comma or an
-// unset attribute yields no phantom column. An empty result means "derive the
-// columns from the header row" (ADR-0139).
-func splitCSVColumns(s string) []string {
+// trimmed list of field names and, for a fixed-width file, their character widths.
+//
+// An entry is "name" or "name:width". The width is required for fixed-width, where a
+// field is found by position and there is nothing else to find it by, and rejected
+// for the other formats — an authored width the connector would ignore is an author
+// believing something untrue. An empty result means "derive the columns" (ADR-0139).
+func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
 	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if name := strings.TrimSpace(p); name != "" {
-			out = append(out, name)
+		if format == csvimportFormatFixedWidth {
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
 		}
+		return nil, nil, nil
 	}
-	return out
+	var (
+		names  []string
+		widths []int32
+	)
+	for _, p := range strings.Split(s, ",") {
+		entry := strings.TrimSpace(p)
+		if entry == "" {
+			continue // a trailing comma names no column
+		}
+		name, rawWidth, hasWidth := strings.Cut(entry, ":")
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		var width int32
+		switch {
+		case hasWidth && format != csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
+		case hasWidth:
+			n, err := strconv.Atoi(strings.TrimSpace(rawWidth))
+			if err != nil {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q has a non-numeric width for column %q", taskID, name)
+			}
+			if n <= 0 {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
+			}
+			width = int32(n)
+		case format == csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
+		}
+		names = append(names, name)
+		widths = append(widths, width)
+	}
+	if format != csvimportFormatFixedWidth {
+		widths = nil
+	}
+	return names, widths, nil
 }
 
 // csvHasHeader interprets a csvConnector's hasHeader attribute, defaulting to true

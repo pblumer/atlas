@@ -509,6 +509,14 @@ type ConnectorTaskDetail struct {
 	CsvDelimiter int32
 	CsvHasHeader bool
 	CsvColumns   []int32
+	// CsvFormat is the interned file format ("csv" | "fixed-width" | "avp"; interned
+	// "" is csv, which is what every model authored before formats existed) and
+	// CsvOperation the direction ("read" | "write"; interned "" is read). CsvWidths
+	// holds each column's character width for a fixed-width file, positionally
+	// alongside CsvColumns (ADR-0139, amended).
+	CsvFormat    int32
+	CsvOperation int32
+	CsvWidths    []int32
 	// SharePoint connector fields (JobType == SharePointJobType, ADR-0141). Connector
 	// (above) names the server-registered SharePoint provider (its Graph base and
 	// OAuth credential live server-side). Site and List address the target list (a

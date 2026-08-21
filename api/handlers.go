@@ -4323,6 +4323,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "csv", Fields: map[string]any{
 			"source": j.Source, "delimiter": j.Delimiter, "hasHeader": j.HasHeader,
 			"columns": j.Columns, "resultVariable": j.Result,
+			"format": j.Format, "operation": j.Operation,
 		}}
 	case compiler.MailJobTypeIndex:
 		// The message travels; the SMTP host and password do not. What names the
