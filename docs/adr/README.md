@@ -175,6 +175,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0163](0163-deleting-a-referenced-connector.md) | Deleting a connector deployed models still reference — and keeping a table inside its card | Accepted |
 | [0164](0164-no-in-process-service-tasks.md) | No in-process service tasks — the core loop must never be able to get stuck | Accepted |
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Proposed |
+| [0166](0166-active-directory-connector.md) | Active Directory connector | Proposed |
 
 ## Status values
 
