@@ -317,6 +317,24 @@ textarea::placeholder {
 .ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-manual-reason { margin-top: 6px !important; font-style: italic; }
 
+/* The migration boundary on the replay history (ADR-0162): the steps above it and below
+   it ran on different versions of the process, so it is drawn as a rule across the list
+   rather than as another element row — a reader scanning the column should not be able
+   to mistake it for a step the token walked. */
+.ops-hrow.mig {
+  border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+.ops-hrow.mig .ops-hname { font-style: italic; }
+.ops-hicon.mig { color: var(--accent); }
+.ops-mig {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--accent-soft);
+}
+.ops-mig h4 { margin: 0 0 4px; font-size: 12px; color: var(--accent); }
+.ops-mig p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
+.ops-mig-reason { margin-top: 6px !important; font-style: italic; }
+
 /* Why a stored connector is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);

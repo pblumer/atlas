@@ -241,6 +241,30 @@ difference between an instance whose behavior changed mid-flight for a reason an
 that appears to have changed by itself. A reason is required, as it is for manual
 completion.
 
+Two things the reader had to settle that this section did not anticipate, both found
+building it:
+
+**A source version can be deleted.** The API refuses to delete a definition with running
+instances — but once an instance migrates away, the version it left has no instances on
+it and may be deleted outright. So a historical definition is genuinely, routinely
+absent, not merely absent in theory. The reader answers such a step with *no* element id
+rather than falling back to the current graph: a step labelled with the wrong element is
+worse than one labelled with none, because only the second is visibly missing. The one
+place that must not degrade to "unknown" is the frame fold's leaf test, which decides
+whether a token is dropped or held waiting for a successor — an unresolvable element
+answers "leaf" there, so a token whose successor can never be identified is dropped
+rather than stranded on the replay forever (the ghost [ADR-0136](0136-terminated-tokens-in-the-replay.md)
+removed).
+
+**Two indices from different versions cannot be compared.** The frame fold links a
+deferred completion to the activation that succeeds it by comparing the completed node
+against the activation's incoming-flow source — an index comparison, exact within one
+definition and meaningless across two. Across a boundary it falls back to the BPMN
+element id, the same identity the mapping pairs elements by. Deliberately only across a
+boundary: a process built through the builder API rather than parsed from XML has no
+BPMN ids at all, so making the id comparison the default would make every element equal
+to every other.
+
 The per-definition analytics stay split on purpose: `elVisit`/`elVisAgg` are keyed by
 definition key, so version *n* keeps the visits that happened under it and version
 *n+1* accrues its own. That is what actually happened.

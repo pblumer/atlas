@@ -300,6 +300,42 @@ type timelineStep struct {
 	// its own (ADR-0159) — who completed the parked job by hand, and why. Absent for
 	// every ordinary step, so its presence alone marks the intervention.
 	Manual *manualActionView `json:"manual,omitempty"`
+	// Migration marks the one step that is not an element activation at all: the point
+	// at which an operator rebound this instance to another version of its process
+	// (ADR-0162). It sits in the ordered step list at the log position the migration
+	// happened, because that is the whole point — the steps before it name elements of
+	// the version the instance left, and only the boundary explains why. Absent on
+	// every ordinary step; present only with Action "migrate".
+	Migration *migrationView `json:"migration,omitempty"`
+}
+
+// migrationView renders one migration on the replay timeline (ADR-0162): which version
+// the instance left, which it arrived on, who moved it and why. Both sides are named the
+// way an operator reads a process — its version number and tag — rather than by the
+// definition keys the log actually stores. A side whose definition has since been
+// deleted keeps its key and reports no version, which is the honest answer: the record
+// says the instance was there, and nothing left can say what "there" looked like.
+type migrationView struct {
+	FromProcessDefKey uint64 `json:"fromProcessDefKey"`
+	FromVersion       int32  `json:"fromVersion,omitempty"`
+	FromVersionTag    string `json:"fromVersionTag,omitempty"`
+	ToProcessDefKey   uint64 `json:"toProcessDefKey"`
+	ToVersion         int32  `json:"toVersion,omitempty"`
+	ToVersionTag      string `json:"toVersionTag,omitempty"`
+	Actor             string `json:"actor,omitempty"`
+	Reason            string `json:"reason"`
+	At                int64  `json:"at"`
+}
+
+// migrationRow is one migration as read off the log, before it is resolved into the
+// view above: the target version is not on the record, it is the source of the next
+// migration (or the definition the instance is on now).
+type migrationRow struct {
+	pos    uint64
+	at     int64
+	from   uint64
+	actor  string
+	reason string
 }
 
 // manualActionView renders one operator intervention on a step for the operator UI
@@ -339,6 +375,12 @@ type instanceTimelineResp struct {
 	State         string          `json:"state"`
 	Steps         []timelineStep  `json:"steps"`
 	Frames        []timelineFrame `json:"frames"`
+	// Migrated says this instance has been rebound to another version at least once
+	// (ADR-0162), so its earlier steps were recorded against a definition other than
+	// the one named above — which is the definition the diagram shows. A reader that
+	// ignores this still gets correct per-step element ids; one that honours it can say
+	// why a step names an element the diagram does not contain.
+	Migrated bool `json:"migrated,omitempty"`
 }
 
 type instanceResp struct {
@@ -1419,6 +1461,46 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return nil
 			})
 		}
+		// Operator interventions (ADR-0159): who forced a step by hand, and why. Keyed by
+		// the element instance the action was applied to, so it attaches to that element's
+		// step below — the element id is resolved from the step, never read off the log
+		// (invariant I5 keeps ids interned, so the record carries only keys).
+		// The same scan yields the migrations (ADR-0162). A migration is instance-wide,
+		// so its record carries no element instance and never lands in manualByElement;
+		// what it carries is the definition the instance left and the position it left
+		// it at, which is what every element index below has to be read through.
+		manualByElement := map[uint64]manualActionView{}
+		var migrations []migrationBoundary
+		var migrationRows []migrationRow
+		if scanErr == nil {
+			scanErr = s.store.OperatorActionHistory(key, func(ts int64, pos uint64, v *model.OperatorActionValue) error {
+				if v.Kind == model.OperatorActionMigrate {
+					migrations = append(migrations, migrationBoundary{pos: pos, from: v.FromProcessDefKey})
+					migrationRows = append(migrationRows, migrationRow{
+						pos: pos, at: ts, from: v.FromProcessDefKey, actor: v.Actor, reason: v.Reason,
+					})
+					return nil
+				}
+				if v.ElementInstanceKey != 0 {
+					manualByElement[v.ElementInstanceKey] = manualActionView{
+						Action: v.Kind.String(), Actor: v.Actor, Reason: v.Reason, At: ts,
+					}
+				}
+				return nil
+			})
+		}
+		// Every element index below is resolved through the definition in force at its
+		// own log position rather than through the one the instance is on now. For an
+		// instance that never migrated the two are the same and this costs one map
+		// lookup per row; for one that did, it is the difference between naming the
+		// element that ran and naming whichever element now holds that index.
+		ver := newVersionAt(migrations, pi.ProcessDefKey, func(defKey uint64) *compiler.CompiledProcess {
+			if dd, ok := s.deployments[defKey]; ok {
+				return dd.cp
+			}
+			return nil
+		})
+		resp.Migrated = ver.migrated()
 		// Reverse call-activity link: a child instance records the call-activity element
 		// instance that started it (ParentElementInstanceKey, ADR-0076). Build the map
 		// once — only if this definition actually has call activities — so a call
@@ -1426,7 +1508,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// Covers active and completed children (the child usually outlives the caller's
 		// step but may already be done).
 		var childByParent map[uint64]uint64
-		if scanErr == nil && len(d.cp.CallActivities()) > 0 {
+		if scanErr == nil && ver.anyHasCallActivities() {
 			childByParent = map[uint64]uint64{}
 			link := func(childKey uint64, v *model.ProcessInstanceValue) error {
 				if v.ParentElementInstanceKey != 0 {
@@ -1453,11 +1535,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		subScopes := map[uint64]*scopeSpan{}
 		var subScopeList []*scopeSpan
 		for _, rr := range replayRows {
-			if d.cp.Node(rr.v.ElementID).Type != compiler.TypeSubProcess {
+			if !ver.isType(rr.pos, rr.v.ElementID, compiler.TypeSubProcess) {
 				continue
 			}
 			if rr.v.Action == 1 { // the subprocess scope opened
-				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: d.cp.ElementBpmnId(rr.v.ElementID), endPos: noEnd}
+				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: ver.elementID(rr.pos, rr.v.ElementID), endPos: noEnd}
 				subScopes[rr.v.ElementInstanceKey] = sp
 				subScopeList = append(subScopeList, sp)
 			} else if sp := subScopes[rr.v.ElementInstanceKey]; sp != nil { // it completed/terminated
@@ -1472,25 +1554,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// keyed by the process instance cover every scope. An audit with no identity
 		// (auth off) is skipped — there is no actor to surface.
 		actorByPos := map[uint64]string{}
-		manualByElement := map[uint64]manualActionView{}
 		if scanErr == nil {
 			scanErr = s.store.VariableAuditHistory(key, func(_ int64, pos uint64, v *model.VariableAuditValue) error {
 				if v.Actor != "" && pos > 0 {
 					actorByPos[pos-1] = v.Actor
-				}
-				return nil
-			})
-		}
-		// Operator interventions (ADR-0159): who forced a step by hand, and why. Keyed by
-		// the element instance the action was applied to, so it attaches to that element's
-		// step below — the element id is resolved from the step, never read off the log
-		// (invariant I5 keeps ids interned, so the record carries only keys).
-		if scanErr == nil {
-			scanErr = s.store.OperatorActionHistory(key, func(ts int64, _ uint64, v *model.OperatorActionValue) error {
-				if v.ElementInstanceKey != 0 {
-					manualByElement[v.ElementInstanceKey] = manualActionView{
-						Action: v.Kind.String(), Actor: v.Actor, Reason: v.Reason, At: ts,
-					}
 				}
 				return nil
 			})
@@ -1544,7 +1611,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// successor would leave a ghost token parked on it forever, outliving the
 		// instance itself (ADR-0136).
 		active := map[uint64]timelineToken{}
-		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
+		pending := map[uint64]pendingCompletion{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
 		endAt := map[uint64]int64{}   // element instance key → completion timestamp (Action==2)
 		endPos := map[uint64]uint64{} // element instance key → completion log position (ADR-0159)
@@ -1568,23 +1635,21 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				activations[rr.pos] = v
 				// This activation is the successor of any deferred completion on its
 				// incoming flow's source node: those tokens move into it now.
-				if v.SourceFlowID >= 0 {
-					src := d.cp.Flow(v.SourceFlowID).Source
+				if src, ok := ver.flowSource(rr.pos, v.SourceFlowID); ok {
 					for eik, pc := range pending {
-						if pc.ElementID == src {
+						if ver.sameElement(pc.pos, pc.v.ElementID, rr.pos, src) {
 							delete(pending, eik)
 							delete(active, eik)
 						}
 					}
 				}
-				node := d.cp.Node(v.ElementID)
 				stateName := "active"
-				if node.Type == compiler.TypeParallelGateway && node.IncomingCount > 1 {
+				if n, ok := ver.node(rr.pos, v.ElementID); ok && n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
 					stateName = "waiting"
 				}
-				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
+				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: ver.elementID(rr.pos, v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			case v.Action == state.ReplayTerminated, d.cp.Node(v.ElementID).OutgoingCount == 0:
+			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID):
 				// Nothing will activate from here — a termination hands its token on to
 				// no one, and a leaf has no successor to move into — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
@@ -1596,7 +1661,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				// Defer: keep the token visible until its successor activates.
 				endAt[v.ElementInstanceKey] = rr.at
 				endPos[v.ElementInstanceKey] = rr.pos
-				pending[v.ElementInstanceKey] = v
+				pending[v.ElementInstanceKey] = pendingCompletion{v: v, pos: rr.pos}
 			}
 		}
 		// A finished instance holds no element instance, so it can hold no token: drop
@@ -1623,14 +1688,18 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// also carries values its own behavior parked there (a script result awaiting its
 		// output mapping, a multi-instance loop counter), which are not inputs.
 		inputsByEIK := map[uint64][]variableView{}
-		for _, v := range activations {
-			ins := d.cp.IOInputs(v.ElementID)
+		for actPos, v := range activations {
+			acp := ver.cp(actPos)
+			if acp == nil {
+				continue // its definition is gone; nothing can say what it declared
+			}
+			ins := acp.IOInputs(v.ElementID)
 			if len(ins) == 0 || v.ElementInstanceKey == 0 {
 				continue
 			}
 			targets := make(map[string]struct{}, len(ins))
 			for _, m := range ins {
-				targets[d.cp.Intern(m.Target)] = struct{}{}
+				targets[acp.Intern(m.Target)] = struct{}{}
 			}
 			byName := map[string]variableView{}
 			if scanErr = s.store.VariableSnapshotHistory(v.ElementInstanceKey, func(_ int64, pos uint64, vv *model.VariableValue) error {
@@ -1689,8 +1758,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			step := timelineStep{
 				At:        sr.at,
 				Position:  sr.pos,
-				ElementID: d.cp.ElementBpmnId(sr.elementID),
-				Type:      d.cp.Node(sr.elementID).Type.String(),
+				ElementID: ver.elementID(sr.pos, sr.elementID),
+				Type:      ver.nodeType(sr.pos, sr.elementID),
 				Variables: vars,
 				Action:    "activate",
 			}
@@ -1704,7 +1773,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 				// A call activity carries the child instance it started, so the replay
 				// can drill from the caller into the child (ADR-0076).
-				if childByParent != nil && d.cp.Node(sr.elementID).Type == compiler.TypeCallActivity {
+				if childByParent != nil && ver.isType(sr.pos, sr.elementID, compiler.TypeCallActivity) {
 					step.ChildInstanceKey = childByParent[rv.ElementInstanceKey]
 				}
 				// The completion of this same element instance (Action==2) gives the
@@ -1715,17 +1784,59 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				// from (the flow's source node). The frontend animates the token dot
 				// along that real edge — for a fork branch the predecessor is the
 				// gateway, not the previous row in the linear step list.
-				if rv.SourceFlowID >= 0 {
-					step.SourceElementID = d.cp.ElementBpmnId(d.cp.Flow(rv.SourceFlowID).Source)
+				if src, ok := ver.flowSource(sr.pos, rv.SourceFlowID); ok {
+					step.SourceElementID = ver.elementID(sr.pos, src)
 				}
 				if rv.ParentTokenID != 0 {
 					step.Relation = "fork"
 				}
-				if n := d.cp.Node(rv.ElementID); n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
+				if n, ok := ver.node(sr.pos, rv.ElementID); ok && n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
 					step.Relation = "join-arrival"
 				}
 			}
 			resp.Steps = append(resp.Steps, step)
+		}
+
+		// The migrations take their place in the same ordered list (ADR-0162). A
+		// migration is not an element activation — it has no token, no element instance
+		// and no variables of its own — but it is the fact that explains why the steps
+		// on either side of it name elements of different versions, so leaving it out of
+		// the sequence would leave that unexplained. Its target is read off the chain:
+		// the definition it moved *to* is the one the next migration moved *from*, and
+		// for the last migration it is the definition the instance is on now.
+		version := func(defKey uint64) (int32, string) {
+			dd, ok := s.deployments[defKey]
+			if !ok {
+				return 0, "" // deleted since; the key is all that is left of it
+			}
+			if dd.cp == nil {
+				return dd.Version, ""
+			}
+			return dd.Version, dd.cp.VersionTag()
+		}
+		sort.Slice(migrationRows, func(i, j int) bool { return migrationRows[i].pos < migrationRows[j].pos })
+		for i, m := range migrationRows {
+			to := pi.ProcessDefKey
+			if i+1 < len(migrationRows) {
+				to = migrationRows[i+1].from
+			}
+			fromVer, fromTag := version(m.from)
+			toVer, toTag := version(to)
+			resp.Steps = append(resp.Steps, timelineStep{
+				At:        m.at,
+				Position:  m.pos,
+				Type:      "migration",
+				Action:    "migrate",
+				Variables: []variableView{},
+				Migration: &migrationView{
+					FromProcessDefKey: m.from, FromVersion: fromVer, FromVersionTag: fromTag,
+					ToProcessDefKey: to, ToVersion: toVer, ToVersionTag: toTag,
+					Actor: m.actor, Reason: m.reason, At: m.at,
+				},
+			})
+		}
+		if len(migrationRows) > 0 {
+			sort.Slice(resp.Steps, func(i, j int) bool { return resp.Steps[i].Position < resp.Steps[j].Position })
 		}
 
 		// A second sweep for the variables as they stood once each element *finished*

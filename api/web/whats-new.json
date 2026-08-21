@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-19",
   "entries": [
     {
+      "id": "a-migrated-instance-s-replay-reads-under-the-version-each-st",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A migrated instance's replay shows what really happened",
+        "de": "Der Replay einer migrierten Instanz zeigt, was wirklich passiert ist"
+      },
+      "summary": {
+        "en": "When an instance has been moved to a newer version of its process, its replay now labels each step with the element it actually ran on, not with whatever sits in that spot in the new model. The move itself appears in the history as a marked boundary — which version the instance left, which it arrived on, who moved it and why — so it is clear that the steps above it belong to a different model.",
+        "de": "Wurde eine Instanz auf eine neuere Version ihres Prozesses umgestellt, beschriftet der Replay jeden Schritt jetzt mit dem Element, auf dem er tatsächlich lief — nicht mit dem, was im neuen Modell an dieser Stelle steht. Die Umstellung selbst erscheint als markierte Grenze im Verlauf: von welcher Version auf welche, durch wen und warum. So ist erkennbar, dass die Schritte darüber zu einem anderen Modell gehören."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "process-instance-migration-the-api-and-the-mcp-tools",
       "version": "Unreleased",
       "date": null,
@@ -321,46 +349,6 @@
       "tags": [
         "Operations"
       ]
-    },
-    {
-      "id": "a-connector-can-be-checked-before-it-is-trusted-with-anythin",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A connector can be checked before it is trusted with anything",
-        "de": "A connector can be checked before it is trusted with anything"
-      },
-      "summary": {
-        "en": "Before a connector runs real work, you can test its configuration and see whether it can actually reach the target system.",
-        "de": "Bevor ein Connector echte Arbeit ausführt, können Sie seine Konfiguration testen und sehen, ob er das Zielsystem tatsächlich erreicht."
-      },
-      "link": {
-        "label": "ADR-0150",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0150-preview-mail-provider-and-visible-incidents.md"
-      },
-      "tags": [
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console › Organization and pick a connector.",
-          "Use its Check / Test action.",
-          "Read the result — a green check, or the exact reason it cannot connect."
-        ],
-        "de": [
-          "Öffnen Sie Console › Organisation und wählen Sie einen Connector.",
-          "Nutzen Sie dessen Prüfen-/Test-Aktion.",
-          "Lesen Sie das Ergebnis — ein grüner Haken oder der genaue Grund, warum keine Verbindung zustande kommt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }

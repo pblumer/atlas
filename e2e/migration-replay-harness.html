@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas migration boundary on the replay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`,
+         with a timeline that crosses a migration (ADR-0162): the steps before the
+         boundary name v1's elements, the boundary itself is a step with action
+         "migrate", and the steps after it name v2's. The diagram is v2 — the version
+         the instance is on now — so a pre-migration step names an element that is NOT
+         on it, which is exactly the situation the boundary row exists to explain. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const INSTANCE = "281474978841611";
+      window.__INSTANCE = INSTANCE;
+
+      // v2 — the version the instance is on now, and so the one the replay renders. It
+      // has a "triage" task that this instance never touched, and no "legacy_review":
+      // that element only ever existed in v1.
+      const V2_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_m" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="migrating" name="Migrating Process" isExecutable="true">
+    <bpmn:startEvent id="start" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="triage" name="Triage"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:userTask>
+    <bpmn:userTask id="review" name="Review"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="done" name="Done"><bpmn:incoming>f2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="start" targetRef="triage"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="triage" targetRef="review"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="done"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="migrating">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="triage_di" bpmnElement="triage"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="580" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      function step(elementId, type, i, pos) {
+        return {
+          elementId, type,
+          elementInstanceKey: String(1000 + i),
+          at: ns(T + i * 1000),
+          endAt: ns(T + i * 1000 + 500),
+          position: pos,
+          tokenId: "1",
+          variables: [],
+        };
+      }
+
+      // The instance walked start → legacy_review on v1, was migrated, then went on to
+      // review → done on v2. "legacy_review" is not on the v2 diagram at all.
+      const STEPS = [
+        step("start", "bpmn:StartEvent", 0, 1),
+        step("legacy_review", "bpmn:UserTask", 1, 2),
+        {
+          elementId: "", type: "migration", action: "migrate",
+          at: ns(T + 1500), position: 3, variables: [],
+          migration: {
+            fromProcessDefKey: "1001", fromVersion: 1, fromVersionTag: "",
+            toProcessDefKey: "1002", toVersion: 2, toVersionTag: "hotfix",
+            actor: "dana", reason: "the tax rate was wrong", at: ns(T + 1500),
+          },
+        },
+        step("review", "bpmn:UserTask", 2, 4),
+        step("done", "bpmn:EndEvent", 3, 5),
+      ];
+      window.__MIG_ROW = 2; // index of the boundary in STEPS
+
+      const FRAMES = [
+        { position: 1, at: ns(T), tokens: [{ elementId: "start", tokenId: "1", state: "active" }] },
+        { position: 2, at: ns(T + 1000), tokens: [{ elementId: "legacy_review", tokenId: "1", state: "active" }] },
+        { position: 4, at: ns(T + 2000), tokens: [{ elementId: "review", tokenId: "1", state: "active" }] },
+        { position: 5, at: ns(T + 3000), tokens: [] },
+      ];
+
+      const TIMELINE = {
+        processDefKey: "1002", processId: "migrating", version: 2, versionTag: "hotfix",
+        state: "completed", migrated: true, steps: STEPS, frames: FRAMES,
+      };
+
+      const api = async (method, url) => {
+        if (url.match(/\/instances\/\d+\/timeline$/)) return TIMELINE;
+        if (url.match(/\/processes\/[\w-]+\/xml$/)) return V2_XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (url.match(/\/instances\/\d+\/decisions$/)) return [];
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: INSTANCE });
+      window.__ready = true;
+    </script>
+  </body>
+</html>
