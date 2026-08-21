@@ -1968,6 +1968,16 @@ type xmlAdConnector struct {
 	EntryVariable string `xml:"entryVariable,attr"`
 	NewPassword   string `xml:"newPassword,attr"`
 	NewDN         string `xml:"newDN,attr"`
+	// The sync (DirSync) operation reads changes since a cookie: BaseDN is the naming
+	// context root, Filter narrows what is reported, CookieVariable names the variable
+	// the cookie is read from *and written back to*, MaxEntries caps one pass, and
+	// ObjectSecurity selects the flag a non-privileged sync account needs (ADR-0166).
+	BaseDN         string `xml:"baseDN,attr"`
+	Filter         string `xml:"filter,attr"`
+	CookieVariable string `xml:"cookieVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	MaxEntries     string `xml:"maxEntries,attr"`
+	ObjectSecurity string `xml:"objectSecurity,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

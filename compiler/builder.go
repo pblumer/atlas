@@ -1158,6 +1158,13 @@ type AdConfig struct {
 	NewPassword RestExpr
 	Retries     int32
 	NewDN       RestExpr
+	// The sync (DirSync) operation's own fields.
+	BaseDN         RestExpr
+	Filter         RestExpr
+	CookieVar      string
+	ResultVar      string
+	MaxEntries     int32
+	ObjectSecurity bool
 }
 
 // AddAdConnectorTask adds an Active Directory connector task and returns its element
@@ -1171,26 +1178,33 @@ type AdConfig struct {
 func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:       b.intern(AdJobType),
-		Connector:     -1, // AD carries its endpoint in the model, not a registry name
-		Subject:       -1, // not a clio task
-		EventType:     -1,
-		ClioQuery:     -1,
-		ReduceSpec:    -1,
-		Method:        -1, // the AD operation, not an HTTP method, is authored
-		Auth:          -1, // the bind password is a dedicated secret ref, not RestAuth
-		ResultVar:     -1, // AD operations write to the directory, not back to a variable
-		Retries:       cfg.Retries,
-		AdURL:         cfg.URL,
-		AdBindDN:      cfg.BindDN,
-		AdBindSecret:  b.intern(cfg.BindSecret),
-		AdStartTLS:    cfg.StartTLS,
-		AdOp:          b.intern(cfg.Op),
-		AdDN:          cfg.DN,
-		AdMemberDN:    cfg.MemberDN,
-		AdEntryVar:    b.intern(cfg.EntryVar),
-		AdNewPassword: cfg.NewPassword,
-		AdNewDN:       cfg.NewDN,
+		JobType:    b.intern(AdJobType),
+		Connector:  -1, // AD carries its endpoint in the model, not a registry name
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // the AD operation, not an HTTP method, is authored
+		Auth:       -1, // the bind password is a dedicated secret ref, not RestAuth
+		// Every AD operation but sync writes to the directory rather than back to a
+		// variable, so this interns "" (-1) for all of them.
+		ResultVar:        b.intern(cfg.ResultVar),
+		Retries:          cfg.Retries,
+		AdURL:            cfg.URL,
+		AdBindDN:         cfg.BindDN,
+		AdBindSecret:     b.intern(cfg.BindSecret),
+		AdStartTLS:       cfg.StartTLS,
+		AdOp:             b.intern(cfg.Op),
+		AdDN:             cfg.DN,
+		AdMemberDN:       cfg.MemberDN,
+		AdEntryVar:       b.intern(cfg.EntryVar),
+		AdNewPassword:    cfg.NewPassword,
+		AdNewDN:          cfg.NewDN,
+		AdBaseDN:         cfg.BaseDN,
+		AdFilter:         cfg.Filter,
+		AdCookieVar:      b.intern(cfg.CookieVar),
+		AdMaxEntries:     cfg.MaxEntries,
+		AdObjectSecurity: cfg.ObjectSecurity,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

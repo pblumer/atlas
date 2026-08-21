@@ -2,9 +2,13 @@ package ad
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
+	goldap "github.com/go-ldap/ldap/v3"
+
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -49,6 +53,17 @@ type Job struct {
 	// Attributes is the resolved entry for create-user, create-group and
 	// update-attributes.
 	Attributes map[string][]string `json:"attributes,omitempty"`
+	// The sync operation's own fields. Cookie is base64 of the server's opaque resume
+	// token, because a process variable holds text and the token is binary.
+	// CookieVariable is where the *new* cookie is written back, which is what lets a
+	// reconciliation loop carry itself forward without any state in the connector.
+	BaseDN         string `json:"baseDN,omitempty"`
+	Filter         string `json:"filter,omitempty"`
+	Cookie         string `json:"cookie,omitempty"`
+	CookieVariable string `json:"cookieVariable,omitempty"`
+	MaxEntries     int    `json:"maxEntries,omitempty"`
+	ObjectSecurity bool   `json:"objectSecurity,omitempty"`
+	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
 // Resolve turns a compiled AD connector task into a [Job]: the authored values
@@ -82,6 +97,19 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		}
 		j.Attributes = attrs
 	}
+	if op == "sync" {
+		j.BaseDN = resolveValue(detail.AdBaseDN, scope, scopeVars)
+		j.Filter = resolveValue(detail.AdFilter, scope, scopeVars)
+		j.MaxEntries = int(detail.AdMaxEntries)
+		j.ObjectSecurity = detail.AdObjectSecurity
+		j.ResultVariable = cp.Intern(detail.ResultVar)
+		j.CookieVariable = cp.Intern(detail.AdCookieVar)
+		// An unset cookie variable is the first pass, not an error: a reconciliation
+		// starts by reading everything, and the variable exists from then on.
+		if v, ok := scopeVars[j.CookieVariable]; ok && v.Kind == model.VarString {
+			j.Cookie = v.Text
+		}
+	}
 	return j, nil
 }
 
@@ -99,21 +127,83 @@ func needsEntry(op string) bool {
 // secret store, dials and binds, performs the operation, and closes. It is the whole
 // of the worker's half, and the in-process path calls it too, so there is one
 // definition of what a resolved AD task means rather than two that drift.
-func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver) error {
+func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver) (map[string]any, error) {
 	if j.URL == "" {
-		return fmt.Errorf("ad: %s has an empty url", j.Operation)
+		return nil, fmt.Errorf("ad: %s has an empty url", j.Operation)
 	}
 	bindPassword := ""
 	if j.BindSecret != "" {
 		bindPassword = resolveSecret(secret, j.BindSecret)
 		if bindPassword == "" {
-			return fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN where this job runs)", j.BindSecret)
+			return nil, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN where this job runs)", j.BindSecret)
 		}
 	}
 	conn, err := dialer.Dial(j.URL, j.BindDN, bindPassword, j.StartTLS)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer conn.Close()
-	return dispatch(j, conn)
+	if j.Operation == "sync" {
+		return runSync(j, conn)
+	}
+	return nil, dispatch(j, conn)
+}
+
+// runSync performs one DirSync pass and returns the variables it completes with: the
+// changes, and the cookie the *next* pass must present.
+//
+// The cookie is written back into the same variable it was read from, so a
+// reconciliation modelled as a loop — sync, handle the changes, wait on a timer,
+// sync again — carries its own position forward with no state anywhere in the
+// connector or the engine.
+func runSync(j Job, conn Conn) (map[string]any, error) {
+	cookie, err := base64.StdEncoding.DecodeString(j.Cookie)
+	if err != nil {
+		return nil, fmt.Errorf("ad: the sync cookie in %q is not the value a previous pass wrote: %w", j.CookieVariable, err)
+	}
+	var flags int64
+	if j.ObjectSecurity {
+		flags |= goldap.DirSyncObjectSecurity
+	}
+	res, err := conn.DirSync(DirSyncRequest{
+		BaseDN:     j.BaseDN,
+		Filter:     j.Filter,
+		Cookie:     cookie,
+		Flags:      flags,
+		MaxEntries: int32(j.MaxEntries),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{
+		j.ResultVariable: map[string]any{
+			"entries": entriesToJSON(res.Entries),
+			// more says the server has further changes waiting right now, so a loop
+			// can go straight round again instead of waiting for its timer.
+			"more": res.More,
+		},
+	}
+	if j.CookieVariable != "" {
+		out[j.CookieVariable] = base64.StdEncoding.EncodeToString(res.Cookie)
+	}
+	return out, nil
+}
+
+// entriesToJSON turns delta entries into a JSON-ready slice: each entry is
+// {"dn": …, "attributes": {name: [values]}}, the same shape the LDAP connector's
+// search writes, so a process reads both the same way.
+//
+// A deleted object arrives here like any other entry, carrying isDeleted=TRUE — AD
+// reports a deletion as a change rather than as an absence, and flattening that away
+// would lose the only signal a leaver has.
+func entriesToJSON(entries []Entry) any {
+	out := make([]any, 0, len(entries))
+	for _, e := range entries {
+		attrs := make(map[string]any, len(e.Attributes))
+		for name, vals := range e.Attributes {
+			attrs[name] = vals
+		}
+		out = append(out, map[string]any{"dn": e.DN, "attributes": attrs})
+	}
+	return out
 }

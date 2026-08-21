@@ -4362,7 +4362,10 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"url": j.URL, "bindDN": j.BindDN, "bindSecretRef": j.BindSecret,
 			"startTLS": j.StartTLS, "operation": j.Operation, "dn": j.DN,
 			"memberDN": j.MemberDN, "newDN": j.NewDN, "newPassword": j.NewPassword,
-			"attributes": j.Attributes,
+			"attributes": j.Attributes, "baseDN": j.BaseDN, "filter": j.Filter,
+			"cookie": j.Cookie, "cookieVariable": j.CookieVariable,
+			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not

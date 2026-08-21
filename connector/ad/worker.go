@@ -77,7 +77,11 @@ func Handler(store state.Reader, lookup ProcessLookup, dialer Dialer, secret Sec
 		// The same Resolve/Run pair the worker uses (ADR-0168), so relocating the work
 		// cannot change what a resolved AD task means — only which process holds the
 		// bind password behind the reference.
-		return nil, Run(context.Background(), task, dialer, secret)
+		out, err := Run(context.Background(), task, dialer, secret)
+		if err != nil {
+			return nil, err
+		}
+		return variablesFrom(out), nil
 	}
 }
 
@@ -139,6 +143,38 @@ func dispatch(j Job, conn Conn) error {
 	default:
 		return fmt.Errorf("ad: unknown operation %q", op)
 	}
+}
+
+// variablesFrom turns what an operation completed with into process variables. Only
+// sync produces any: every other AD operation's effect is in the directory.
+func variablesFrom(out map[string]any) []model.VariableValue {
+	if len(out) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(out))
+	for name := range out {
+		names = append(names, name)
+	}
+	sort.Strings(names) // a stable order, so a replay writes the same events
+	vars := make([]model.VariableValue, 0, len(names))
+	for _, name := range names {
+		vars = append(vars, responseVariable(name, out[name]))
+	}
+	return vars
+}
+
+// responseVariable encodes a value as the process variable it becomes: a plain string
+// stays a string (the cookie), and anything structured becomes JSON so the result
+// nests real objects and arrays rather than a stringified blob.
+func responseVariable(name string, body any) model.VariableValue {
+	if s, ok := body.(string); ok {
+		return model.VariableValue{Name: name, Kind: model.VarString, Text: s}
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return model.VariableValue{Name: name, Kind: model.VarNull}
+	}
+	return model.VariableValue{Name: name, Kind: model.VarJSON, Text: string(raw)}
 }
 
 // sortedKeys returns a map's keys in a stable order, so an update sends its changes

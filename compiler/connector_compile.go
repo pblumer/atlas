@@ -301,6 +301,7 @@ type adOp struct {
 	needsPassword bool
 	needsMember   bool
 	needsNewDN    bool
+	isSync        bool // reads a subtree delta rather than acting on one entry
 }
 
 var adOps = map[string]adOp{
@@ -314,7 +315,16 @@ var adOps = map[string]adOp{
 	"delete":              {},
 	"add-group-member":    {needsMember: true},
 	"remove-group-member": {needsMember: true},
+	// sync is the only AD operation that reads rather than writes, and the only one
+	// that addresses a subtree instead of an entry — so it is also the only one that
+	// does not take a dn.
+	"sync": {isSync: true},
 }
+
+// defaultAdSyncMaxEntries caps one DirSync pass when the model authors no cap. A pass
+// is resumable by construction — the cookie says where it got to — so a bound here
+// costs nothing but a second pass, unlike a plain search where it costs the answer.
+const defaultAdSyncMaxEntries = 1000
 
 // adOpNames lists the operations, sorted, for the error messages that say what was
 // expected.
@@ -346,10 +356,25 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if !ok {
 		return 0, fmt.Errorf("compiler: ad connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(adOpNames(), ", "))
 	}
-	// Every operation addresses an existing or to-be-created entry by dn — including
-	// move, where dn is the entry being moved and newDN where it lands.
-	if strings.TrimSpace(cn.DN) == "" {
+	// Every operation but sync addresses an existing or to-be-created entry by dn —
+	// including move, where dn is the entry being moved and newDN where it lands.
+	// sync addresses a naming context instead, so it takes a baseDN.
+	if spec.isSync {
+		if strings.TrimSpace(cn.BaseDN) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a baseDN (the naming context root the delta is read from)", st.Id)
+		}
+		if strings.TrimSpace(cn.CookieVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a cookieVariable; without one every pass re-reads the whole directory", st.Id)
+		}
+		if strings.TrimSpace(cn.ResultVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad connector task %q operation sync needs a resultVariable to receive the changes", st.Id)
+		}
+	} else if strings.TrimSpace(cn.DN) == "" {
 		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs a dn", st.Id, op)
+	}
+	maxEntries, err := adSyncMaxEntries(st.Id, op, spec.isSync, cn.MaxEntries)
+	if err != nil {
+		return 0, err
 	}
 	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
 		return 0, fmt.Errorf("compiler: ad connector task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
@@ -379,6 +404,14 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if err != nil {
 		return 0, err
 	}
+	baseDN, err := connectorValue(st.Id, "ad connector", "baseDN", cn.BaseDN)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "ad connector", "filter", cn.Filter)
+	if err != nil {
+		return 0, err
+	}
 	memberDN, err := connectorValue(st.Id, "ad connector", "memberDN", cn.MemberDN)
 	if err != nil {
 		return 0, err
@@ -388,18 +421,48 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		return 0, err
 	}
 	return b.AddAdConnectorTask(AdConfig{
-		URL:         url,
-		BindDN:      bindDN,
-		BindSecret:  strings.TrimSpace(cn.BindSecret),
-		StartTLS:    strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
-		Op:          op,
-		DN:          dn,
-		MemberDN:    memberDN,
-		EntryVar:    strings.TrimSpace(cn.EntryVariable),
-		NewPassword: newPassword,
-		NewDN:       newDN,
-		Retries:     retries,
+		URL:            url,
+		BindDN:         bindDN,
+		BindSecret:     strings.TrimSpace(cn.BindSecret),
+		StartTLS:       strings.EqualFold(strings.TrimSpace(cn.StartTLS), "true"),
+		Op:             op,
+		DN:             dn,
+		MemberDN:       memberDN,
+		EntryVar:       strings.TrimSpace(cn.EntryVariable),
+		NewPassword:    newPassword,
+		NewDN:          newDN,
+		BaseDN:         baseDN,
+		Filter:         filter,
+		CookieVar:      strings.TrimSpace(cn.CookieVariable),
+		ResultVar:      strings.TrimSpace(cn.ResultVariable),
+		MaxEntries:     maxEntries,
+		ObjectSecurity: strings.EqualFold(strings.TrimSpace(cn.ObjectSecurity), "true"),
+		Retries:        retries,
 	}), nil
+}
+
+// adSyncMaxEntries reads the authored cap for one DirSync pass. It applies to sync
+// alone; on any other operation it is an author believing something the connector
+// will not do, reported rather than ignored.
+func adSyncMaxEntries(taskID, op string, isSync bool, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if isSync {
+			return defaultAdSyncMaxEntries, nil
+		}
+		return 0, nil
+	}
+	if !isSync {
+		return 0, fmt.Errorf("compiler: ad connector task %q sets maxEntries on operation %q, which returns no entries (maxEntries applies to sync)", taskID, op)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: ad connector task %q has a non-numeric maxEntries %q", taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: ad connector task %q has a negative maxEntries %d", taskID, n)
+	}
+	return int32(n), nil
 }
 
 // soapVersions is the set of SOAP protocol versions a connector task can author. 1.1

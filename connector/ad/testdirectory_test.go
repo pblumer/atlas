@@ -32,6 +32,11 @@ type testDirectory struct {
 	searchAttrs map[string][]string
 	result      uint16
 	bindResult  uint16
+	// dirsync makes the search-done carry a DirSync response control, which is how a
+	// domain controller answers a DirSync request.
+	dirsync   bool
+	cookieOut []byte
+	moreOut   bool
 }
 
 func startTestDirectory(t *testing.T, d *testDirectory) *testDirectory {
@@ -89,7 +94,11 @@ func (d *testDirectory) handle(conn net.Conn) {
 					_, _ = conn.Write(searchEntryPacket(id, dn, attrs))
 				}
 			}
-			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationSearchResultDone, code))
+			if d.dirSync() {
+				_, _ = conn.Write(searchDoneWithDirSync(id, code, d.syncCookie(), d.syncMore()))
+			} else {
+				_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationSearchResultDone, code))
+			}
 		case goldap.ApplicationAddRequest:
 			d.record("add", seqChildString(op, 0))
 			_, _ = conn.Write(d.resultPacket(id, goldap.ApplicationAddResponse, d.codeFor(false)))
@@ -206,4 +215,54 @@ func delRequestDN(op *ber.Packet) string {
 		return op.Data.String()
 	}
 	return ""
+}
+
+func (d *testDirectory) dirSync() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.dirsync
+}
+
+func (d *testDirectory) syncCookie() []byte {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]byte(nil), d.cookieOut...)
+}
+
+func (d *testDirectory) syncMore() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.moreOut
+}
+
+// searchDoneWithDirSync builds a SearchResultDone carrying the DirSync response
+// control: SEQUENCE { MoreResults, unused, CookieServer }. The first field is
+// MoreResults even though go-ldap's struct calls it Flags — the response reuses the
+// request's shape and the names do not survive the trip.
+func searchDoneWithDirSync(id int64, code uint16, cookie []byte, more bool) []byte {
+	msg := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAPMessage")
+	msg.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, id, "MessageID"))
+	res := ber.Encode(ber.ClassApplication, ber.TypeConstructed, ber.Tag(goldap.ApplicationSearchResultDone), nil, "Response")
+	res.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, int64(code), "resultCode"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN"))
+	res.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "diagnosticMessage"))
+	msg.AppendChild(res)
+
+	moreVal := int64(0)
+	if more {
+		moreVal = 1
+	}
+	val := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "DirSync Control Value")
+	val.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, moreVal, "MoreResults"))
+	val.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, int64(0), "unused"))
+	val.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(cookie), "CookieServer"))
+
+	ctrl := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "Control")
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, goldap.ControlTypeDirSync, "Control Type"))
+	ctrl.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, string(val.Bytes()), "Control Value"))
+
+	ctrls := ber.Encode(ber.ClassContext, ber.TypeConstructed, 0, nil, "Controls")
+	ctrls.AppendChild(ctrl)
+	msg.AppendChild(ctrls)
+	return msg.Bytes()
 }

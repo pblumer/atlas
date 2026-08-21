@@ -2186,10 +2186,38 @@ const SERVICE_TASK_KINDS = [
           { v: "delete", l: "Delete entry" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "sync", l: "Read changes (DirSync)" },
         ],
       },
       {
+        key: "baseDN", label: "Base DN", placeholder: "dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "(objectClass=user)", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
+      },
+      {
+        key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
+        showIf: (v) => v.operation === "sync",
+        hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000",
+        showIf: (v) => v.operation === "sync",
+        hint: "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
+      },
+      {
+        key: "objectSecurity", label: "Object security", type: "select",
+        showIf: (v) => v.operation === "sync",
+        options: [{ v: "", l: "No — the account replicates directory changes" }, { v: "true", l: "Yes — report only what the account may read" }],
+        hint: "DirSync normally needs the 'Replicating Directory Changes' right. Turn this on for an account that does not have it: the pass then reports only the objects the account can read.",
+      },
+      {
         key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation !== "sync",
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
@@ -2211,6 +2239,12 @@ const SERVICE_TASK_KINDS = [
         key: "memberDN", label: "Member DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
         showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
         hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
+      },
+      { group: "Output", showIf: (v) => v.operation === "sync" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "aenderungen",
+        showIf: (v) => v.operation === "sync",
+        hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
       },
     ],
   },

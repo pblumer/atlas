@@ -2,6 +2,8 @@ package ad_test
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"unicode/utf16"
@@ -33,6 +35,8 @@ type fakeConn struct {
 	// mdnDN/mdnRDN/mdnSuperior record a ModifyDN; delDN records a Delete.
 	mdnDN, mdnRDN, mdnSuperior string
 	delDN                      string
+	syncReq                    *ad.DirSyncRequest
+	syncRes                    ad.DirSyncResult
 	closed                     bool
 }
 
@@ -50,7 +54,11 @@ func (c *fakeConn) ModifyDN(dn, newRDN, newSuperior string) error {
 	return c.err
 }
 func (c *fakeConn) Delete(dn string) error { c.delDN = dn; return c.err }
-func (c *fakeConn) Close() error           { c.closed = true; return nil }
+func (c *fakeConn) DirSync(req ad.DirSyncRequest) (ad.DirSyncResult, error) {
+	c.syncReq = &req
+	return c.syncRes, c.err
+}
+func (c *fakeConn) Close() error { c.closed = true; return nil }
 
 type fakeDialer struct {
 	conn                      *fakeConn
@@ -591,4 +599,132 @@ func TestAdMoveEmptyNewDN(t *testing.T) {
 	if mustActiveProcs(t, store) != 1 {
 		t.Error("want the job parked on an incident")
 	}
+}
+
+// TestAdSync is the delta read end to end: the cookie goes out of a variable and the
+// server's new one comes back into the same variable, so a reconciliation modelled as
+// a loop carries its own position forward with no state in the connector.
+func TestAdSync(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "sync", BaseDN: lit("dc=example,dc=com"),
+		Filter: lit("(objectClass=user)"), CookieVar: "cookie", ResultVar: "aenderungen",
+		MaxEntries: 250, ObjectSecurity: true,
+	}, true)
+
+	conn := &fakeConn{syncRes: ad.DirSyncResult{
+		Entries: []ad.Entry{
+			{DN: "cn=Arno,ou=users,dc=x", Attributes: map[string][]string{"cn": {"Arno"}}},
+			{DN: "cn=Weg,ou=users,dc=x", Attributes: map[string][]string{"isDeleted": {"TRUE"}}},
+		},
+		Cookie: []byte{0xDE, 0xAD},
+		More:   true,
+	}}
+	// The previous pass's cookie, as the connector wrote it: base64 of the opaque token.
+	prev := base64.StdEncoding.EncodeToString([]byte{0xBE, 0xEF})
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "cookie", Kind: model.VarString, Text: prev})
+
+	if conn.syncReq == nil {
+		t.Fatal("no DirSync was performed")
+	}
+	if conn.syncReq.BaseDN != "dc=example,dc=com" || conn.syncReq.Filter != "(objectClass=user)" {
+		t.Errorf("request = %+v", conn.syncReq)
+	}
+	if string(conn.syncReq.Cookie) != string([]byte{0xBE, 0xEF}) {
+		t.Errorf("cookie sent = %v, want the decoded previous one", conn.syncReq.Cookie)
+	}
+	if conn.syncReq.MaxEntries != 250 {
+		t.Errorf("maxEntries = %d, want 250", conn.syncReq.MaxEntries)
+	}
+	if conn.syncReq.Flags == 0 {
+		t.Error("objectSecurity did not reach the DirSync flags")
+	}
+
+	// The new cookie replaces the old one in the same variable, and the changes land
+	// in the result — including the deletion, which AD reports as a change.
+	vars := instanceVars(t, store)
+	if got := vars["cookie"]; got != base64.StdEncoding.EncodeToString([]byte{0xDE, 0xAD}) {
+		t.Errorf("cookie variable = %q, want the server's new cookie", got)
+	}
+	var res struct {
+		Entries []struct {
+			DN         string              `json:"dn"`
+			Attributes map[string][]string `json:"attributes"`
+		} `json:"entries"`
+		More bool `json:"more"`
+	}
+	if err := json.Unmarshal([]byte(vars["aenderungen"]), &res); err != nil {
+		t.Fatalf("result is not JSON: %v (%s)", err, vars["aenderungen"])
+	}
+	if len(res.Entries) != 2 || res.Entries[0].DN != "cn=Arno,ou=users,dc=x" {
+		t.Fatalf("entries = %+v", res.Entries)
+	}
+	if res.Entries[1].Attributes["isDeleted"][0] != "TRUE" {
+		t.Errorf("the tombstone lost its isDeleted marker: %+v", res.Entries[1])
+	}
+	if !res.More {
+		t.Error("more = false, want the server's more-results signal passed through")
+	}
+}
+
+// The first pass has no cookie yet, which is a full read rather than an error.
+func TestAdSyncFirstPass(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "sync", BaseDN: lit("dc=x"), CookieVar: "cookie", ResultVar: "r",
+	}, true)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log) // no cookie variable set
+
+	if conn.syncReq == nil {
+		t.Fatal("no DirSync was performed")
+	}
+	if len(conn.syncReq.Cookie) != 0 {
+		t.Errorf("cookie = %v, want empty for a first pass", conn.syncReq.Cookie)
+	}
+}
+
+// A cookie variable holding something no pass ever wrote fails the job, rather than
+// silently starting over and handing the process a full directory it believes to be
+// a change set.
+func TestAdSyncRejectsACorruptCookie(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "sync", BaseDN: lit("dc=x"), CookieVar: "cookie", ResultVar: "r",
+	}, false)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "cookie", Kind: model.VarString, Text: "not base64!!"})
+
+	if conn.syncReq != nil {
+		t.Error("a DirSync ran despite an unreadable cookie")
+	}
+	if mustActiveProcs(t, store) != 1 {
+		t.Error("want the job parked on an incident")
+	}
+}
+
+// instanceVars reads the sole live instance's variables as their text form, which is
+// how a sync's result and cookie are asserted.
+func instanceVars(t *testing.T, s *state.Store) map[string]string {
+	t.Helper()
+	var keys []uint64
+	if err := s.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("live instances = %d, want exactly 1", len(keys))
+	}
+	out := map[string]string{}
+	if err := s.VariablesOfScope(keys[0], func(v *model.VariableValue) error {
+		out[v.Name] = v.Text
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	return out
 }

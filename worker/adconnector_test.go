@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -33,13 +34,14 @@ func (d *recordingDialer) Dial(url, bindDN, bindPassword string, startTLS bool) 
 }
 
 type recordingConn struct {
-	addDN  string
-	addAt  map[string][]string
-	modDN  string
-	mods   []ad.Mod
-	delDN  string
-	mdnDN  string
-	closed bool
+	addDN   string
+	addAt   map[string][]string
+	modDN   string
+	mods    []ad.Mod
+	delDN   string
+	mdnDN   string
+	syncReq *ad.DirSyncRequest
+	closed  bool
 }
 
 func (c *recordingConn) Add(dn string, attrs map[string][]string) error {
@@ -55,7 +57,15 @@ func (c *recordingConn) ReadAttr(string, string) ([]string, error) {
 }
 func (c *recordingConn) ModifyDN(dn, _, _ string) error { c.mdnDN = dn; return nil }
 func (c *recordingConn) Delete(dn string) error         { c.delDN = dn; return nil }
-func (c *recordingConn) Close() error                   { c.closed = true; return nil }
+func (c *recordingConn) DirSync(req ad.DirSyncRequest) (ad.DirSyncResult, error) {
+	c.syncReq = &req
+	return ad.DirSyncResult{
+		Entries: []ad.Entry{{DN: "cn=Arno,dc=x", Attributes: map[string][]string{"cn": {"Arno"}}}},
+		Cookie:  []byte{0x01, 0x02},
+		More:    true,
+	}, nil
+}
+func (c *recordingConn) Close() error { c.closed = true; return nil }
 
 // The AD kind registers a handler and needs no startup configuration — its server is
 // model-authored and its bind password is a per-task reference, so unlike mail, SQL
@@ -190,4 +200,36 @@ func TestRunADJobErrors(t *testing.T) {
 // adJob wraps resolved fields the way a leased job carries them.
 func adJob(fields map[string]any) Job {
 	return Job{Connector: &ConnectorPayload{Kind: "ad", Fields: fields}}
+}
+
+// A sync job round-trips through the payload and comes back with what the worker must
+// hand the engine: the changes, and the cookie the next pass presents.
+func TestRunADJobSync(t *testing.T) {
+	dialer := &recordingDialer{}
+	out, err := RunADJob(context.Background(), adJob(map[string]any{
+		"url": "ldaps://dc", "operation": "sync", "baseDN": "dc=x",
+		"cookieVariable": "cookie", "resultVariable": "aenderungen",
+		"cookie": base64.StdEncoding.EncodeToString([]byte{0xBE, 0xEF}),
+	}), dialer, adSecretFromEnv(envMap(nil)))
+	if err != nil {
+		t.Fatalf("RunADJob: %v", err)
+	}
+	if dialer.conn.syncReq == nil {
+		t.Fatal("no DirSync was performed")
+	}
+	if string(dialer.conn.syncReq.Cookie) != string([]byte{0xBE, 0xEF}) {
+		t.Errorf("cookie sent = %v, want the decoded one from the payload", dialer.conn.syncReq.Cookie)
+	}
+	// The new cookie replaces the old one in the same variable, which is what lets a
+	// reconciliation loop carry its own position forward.
+	if got := out["cookie"]; got != base64.StdEncoding.EncodeToString([]byte{0x01, 0x02}) {
+		t.Errorf("cookie variable = %v, want the server's new one", got)
+	}
+	res, ok := out["aenderungen"].(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v", out["aenderungen"])
+	}
+	if res["more"] != true {
+		t.Errorf("more = %v, want the server's signal passed through", res["more"])
+	}
 }

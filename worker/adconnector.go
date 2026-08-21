@@ -51,6 +51,7 @@ func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretReso
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("ad: cannot read the resolved detail: %w", err)
 	}
-	// An AD operation writes to the directory, not back to a variable.
-	return nil, ad.Run(ctx, task, dialer, secret)
+	// Every AD operation but sync writes to the directory rather than back to a
+	// variable, and returns nothing; sync returns the changes and the next cookie.
+	return ad.Run(ctx, task, dialer, secret)
 }

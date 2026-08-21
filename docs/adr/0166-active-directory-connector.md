@@ -1,7 +1,8 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Proposed (amended 2026-08-21 twice — the operation set now covers the
-  whole lifecycle, and the connector runs on a worker; see the amendment notes below)
+- **Status:** Proposed (amended 2026-08-21 three times — the operation set covers the
+  whole lifecycle, the connector runs on a worker, and it can read a DirSync delta;
+  see the amendment notes below)
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -84,6 +85,59 @@
 > the relocation did not alter behaviour. The kind stays registered in process by
 > default and is turned off per ADR-0157's switch — `--offload-connectors ad` — so no
 > running installation is disturbed.
+
+> **Amendment (2026-08-21, third): the delta read.** [ADR-0154](0154-ldap-connector.md)
+> listed a sync/delta cookie as a follow-up for the *generic LDAP* connector and its
+> hardening amendment declined to build it there, on the grounds that a delta read is
+> not one feature but two vendor protocols — DirSync for Active Directory, RFC 4533
+> content sync elsewhere — and that a generic connector guessing which server it is
+> talking to is the wrong shape. This is the AD half, and it lands here for the same
+> reason everything else in this record does: it is Microsoft's own mechanism, not
+> LDAP's.
+>
+> A `sync` operation performs one DirSync pass (MS-ADTS `LDAP_SERVER_DIRSYNC_OID`). It
+> is the only AD operation that reads rather than writes and the only one that
+> addresses a naming context rather than an entry, so it takes a `baseDN` and a
+> `filter` instead of a `dn`. AD answers DirSync only at a naming context root and only
+> for the whole subtree, so there is no scope for a model to author.
+>
+> **The cookie is the design.** `cookieVariable` names *one* process variable that the
+> operation reads and writes: the pass presents the cookie it finds and writes the
+> server's new one back. A reconciliation modelled as a loop — sync, handle the
+> changes, wait on a timer, sync again — therefore carries its own position forward,
+> and **no sync state lives in the connector or the engine at all**. The alternative
+> was a server-side cursor keyed by something, which would have made a stateless
+> connector stateful to save a model one variable. The cookie is opaque binary and a
+> process variable holds text, so it travels base64-encoded; a value no pass ever wrote
+> fails the job rather than silently starting over and handing the process a full
+> directory it believes to be a change set.
+>
+> Three smaller decisions worth recording:
+>
+> - **A response without the DirSync control is an error.** It usually means the bind
+>   account lacks the *Replicating Directory Changes* right, or the base is not a
+>   naming context root. AD answers such a request as an ordinary search, and returning
+>   those entries would be the same failure as a bad cookie: a full directory presented
+>   as a delta.
+> - **`objectSecurity`** exposes the one DirSync flag that decides whether an account
+>   without that right can use the operation at all — it then reports only the objects
+>   the account can read. It is an operational blocker rather than a tuning knob, which
+>   is why it is in the model and the other flags are not.
+> - **`maxEntries` caps a pass and defaults to 1000.** Unlike a plain search's cap
+>   (ADR-0154 amended, ADR-0170) this costs nothing but a second pass, because a pass
+>   is resumable by construction: the cookie says where it got to. The result carries
+>   `more`, the server's own signal that further changes are already waiting, so a loop
+>   can go straight round again instead of waiting for its timer.
+>
+> A deleted object arrives as an entry carrying `isDeleted=TRUE`. AD reports a deletion
+> as a change rather than as an absence, and flattening that away would remove the only
+> signal a leaver process has.
+>
+> **Not built:** `LDAP_DIRSYNC_INCREMENTAL_VALUES`, which returns only the changed
+> values of a multi-valued attribute rather than the whole attribute. It matters for a
+> group with tens of thousands of members, and it is left out deliberately rather than
+> forgotten: it changes the *shape* of what comes back (ranged attribute names), so how
+> that shape reaches a model deserves its own decision rather than a flag.
 
 ## Context and problem statement
 

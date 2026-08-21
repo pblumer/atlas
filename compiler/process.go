@@ -641,6 +641,18 @@ type ConnectorTaskDetail struct {
 	// entry's new place in the tree, new relative name, or both — a mover in a
 	// directory *is* a DN change, so one value expresses all three.
 	AdNewDN RestExpr
+	// DirSync fields (AdOp == "sync", ADR-0166 amended). AdBaseDN is the naming
+	// context the delta is read from and AdFilter narrows it — literal-or-FEEL values.
+	// AdCookieVar is the interned name of the variable holding the opaque resume
+	// cookie, which the operation reads *and writes back* so a loop carries itself
+	// forward. AdMaxEntries caps one pass (0 = the connector's default), and
+	// AdObjectSecurity sets the DirSync flag that lets an account without the
+	// replication right read the changes it can see.
+	AdBaseDN         RestExpr
+	AdFilter         RestExpr
+	AdCookieVar      int32
+	AdMaxEntries     int32
+	AdObjectSecurity bool
 	// Generic SQL connector fields (JobType == SqlJobType, ADR-0170). Connector
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is

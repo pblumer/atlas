@@ -206,3 +206,67 @@ func TestAdLifecycleValidation(t *testing.T) {
 		})
 	}
 }
+
+// The sync operation reads a subtree delta rather than acting on one entry, so it is
+// the one AD operation that takes a base rather than a dn (ADR-0166, amended).
+func TestParseAdSync(t *testing.T) {
+	cp, d := adDetail(t, `url="ldaps://dc" bindSecret="AD_BIND" operation="sync"
+	    baseDN="dc=example,dc=com" filter="(objectClass=user)" cookieVariable="dirsyncCookie"
+	    resultVariable="aenderungen" maxEntries="250" objectSecurity="true"`)
+	if got := cp.Intern(d.AdOp); got != "sync" {
+		t.Errorf("operation = %q, want sync", got)
+	}
+	if d.AdBaseDN.Literal != "dc=example,dc=com" || d.AdFilter.Literal != "(objectClass=user)" {
+		t.Errorf("base/filter = %+v / %+v", d.AdBaseDN, d.AdFilter)
+	}
+	if got := cp.Intern(d.AdCookieVar); got != "dirsyncCookie" {
+		t.Errorf("cookieVariable = %q", got)
+	}
+	if got := cp.Intern(d.ResultVar); got != "aenderungen" {
+		t.Errorf("resultVariable = %q", got)
+	}
+	if d.AdMaxEntries != 250 || !d.AdObjectSecurity {
+		t.Errorf("maxEntries/objectSecurity = %d / %v", d.AdMaxEntries, d.AdObjectSecurity)
+	}
+	// A sync addresses a naming context, not an entry.
+	if d.AdDN.Literal != "" {
+		t.Errorf("dn = %q, want none for a sync", d.AdDN.Literal)
+	}
+}
+
+// The cap defaults on, and costs nothing: a pass is resumable by construction, so a
+// bound only means a second pass rather than a lost answer.
+func TestAdSyncMaxEntriesDefault(t *testing.T) {
+	_, d := adDetail(t, `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r"`)
+	if d.AdMaxEntries != defaultAdSyncMaxEntries {
+		t.Errorf("maxEntries = %d, want the default %d", d.AdMaxEntries, defaultAdSyncMaxEntries)
+	}
+	// Every other operation carries no cap at all.
+	_, d2 := adDetail(t, `url="ldaps://dc" operation="disable" dn="cn=a"`)
+	if d2.AdMaxEntries != 0 {
+		t.Errorf("maxEntries = %d, want 0 for a non-sync", d2.AdMaxEntries)
+	}
+}
+
+func TestAdSyncValidation(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"no baseDN", `url="ldaps://dc" operation="sync" cookieVariable="c" resultVariable="r"`, "baseDN"},
+		{"no cookie variable", `url="ldaps://dc" operation="sync" baseDN="dc=x" resultVariable="r"`, "cookieVariable"},
+		{"no result variable", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c"`, "resultVariable"},
+		{"maxEntries on a write", `url="ldaps://dc" operation="disable" dn="cn=a" maxEntries="5"`, "maxEntries"},
+		{"maxEntries not a number", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r" maxEntries="viele"`, "maxEntries"},
+		{"maxEntries negative", `url="ldaps://dc" operation="sync" baseDN="dc=x" cookieVariable="c" resultVariable="r" maxEntries="-1"`, "maxEntries"},
+		{"bad FEEL baseDN", `url="ldaps://dc" operation="sync" baseDN="=" cookieVariable="c" resultVariable="r"`, "baseDN"},
+		{"bad FEEL filter", `url="ldaps://dc" operation="sync" baseDN="dc=x" filter="=" cookieVariable="c" resultVariable="r"`, "filter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
