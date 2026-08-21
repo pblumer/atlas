@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -253,9 +254,18 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	if s.supervisor != nil {
 		supervised = s.supervisor.list()
 	}
+	// Job types whose stored index a built-in has since taken. Read straight off the
+	// registry rather than recomputed: it is what the load actually had to discard,
+	// and it does not change while the server runs. The server also warns about it at
+	// startup and `atlas check-job-types` answers offline, but neither reaches an
+	// operator whose engine runs in a container they would rather not shell into.
+	collisions := s.jobTypes.Dropped()
+	if collisions == nil {
+		collisions = []jobtype.Collision{}
+	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"workers": list, "types": types, "supervised": supervised,
-		"unservedConnectors": unserved,
+		"unservedConnectors": unserved, "jobTypeCollisions": collisions,
 	})
 }
 
