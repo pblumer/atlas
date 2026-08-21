@@ -107,6 +107,11 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
+	// a memory tail rather than a record. An agent debugging a run asks from the
+	// instance side, where atlas_instance_jobs and the timeline answer the same
+	// question durably and without an admin gate.
+	"GET /api/v1/workers/{id}/jobs": "operator diagnostics about a worker process, not an agent action",
 
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.

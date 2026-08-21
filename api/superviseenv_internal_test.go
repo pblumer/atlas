@@ -146,15 +146,75 @@ func TestAServerWithNoMailConnectorsHandsOverNothing(t *testing.T) {
 	}
 }
 
-// Only a worker that serves mail is given mail's configuration. A --supervise worker
-// running someone's Python handler has no business holding an SMTP password.
-func TestOnlyAWorkerServingMailIsGivenMailsConfiguration(t *testing.T) {
+// TestAScriptWorkerIsNeverGivenTheMailCredential is why the default supervises one
+// worker per kind rather than one for all of them, and it is a security property
+// rather than a tidiness one.
+//
+// A script task runs an interpreter that inherits its worker's whole environment
+// (connector/script.CmdExec appends to os.Environ), so a model-authored script on a
+// worker that also holds the mail credential could simply read the SMTP password out
+// of it. Separate processes are what stop that: the secret is rendered only into the
+// environment of the worker that sends mail.
+func TestAScriptWorkerIsNeverGivenTheMailCredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	if fn := srv.superviseEnv(SuperviseSpec{ID: "scripts", Connectors: []string{"script", "csv"}}); fn != nil {
-		t.Error("a worker serving no mail was given an environment")
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "post", Kind: connectorKindMail, Provider: "smtp",
+		Endpoint: "mx:587", Sender: "bot@x", CredentialsRef: "smtp-pw", Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
 	}
-	if fn := srv.superviseEnv(SuperviseSpec{ID: "connectors", Connectors: []string{"csv", connectorKindMail}}); fn == nil {
-		t.Error("a worker serving mail was given no environment")
+	t.Setenv("ATLAS_CONNECTOR_SMTP_PW_TOKEN", "hunter2")
+
+	scripts := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "script", Connectors: []string{"script"}})())
+	for name, value := range scripts {
+		if strings.HasPrefix(name, mailEnvPrefix) {
+			t.Errorf("a script worker was handed %s=%q", name, value)
+		}
+	}
+
+	// And the worker that does send mail holds it, so the boundary is a separation
+	// rather than the credential having gone missing.
+	mailer := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "mail", Connectors: []string{connectorKindMail}})())
+	if got := mailer["ATLAS_MAIL_POST_SECRET"]; got != "hunter2" {
+		t.Errorf("the mail worker's secret = %q, want it to hold the credential", got)
+	}
+}
+
+// A supervised worker on a server that requires authentication is given a token, or
+// it is refused at every poll and Atlas has started a worker that can do nothing.
+func TestASupervisedWorkerOnAnAuthenticatedServerIsGivenAToken(t *testing.T) {
+	srv, _ := newValidateServer(t, WithAuth())
+	if srv.InternalToken() == "" {
+		t.Fatal("an authenticated server has no internal token to hand over")
+	}
+
+	env := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "csv", Connectors: []string{"csv"}})())
+	if got := env["ATLAS_TOKEN"]; got != srv.InternalToken() {
+		t.Errorf("ATLAS_TOKEN = %q, want this server's own token", got)
+	}
+}
+
+// An operator who chose an identity for their workers keeps it: replacing their
+// ATLAS_TOKEN would silently undo that choice.
+func TestAnOperatorsOwnWorkerTokenIsNotReplaced(t *testing.T) {
+	srv, _ := newValidateServer(t, WithAuth())
+	t.Setenv("ATLAS_TOKEN", "the-operators-own")
+
+	env := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "csv", Connectors: []string{"csv"}})())
+	if _, overridden := env["ATLAS_TOKEN"]; overridden {
+		t.Error("the operator's own ATLAS_TOKEN was overridden")
+	}
+}
+
+// A server that requires no authentication hands over no token: there is nothing to
+// authenticate with, and a variable that looks like a credential but is not one is
+// worse than none.
+func TestAnUnauthenticatedServerHandsOverNoToken(t *testing.T) {
+	srv, _ := newValidateServer(t)
+
+	env := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "csv", Connectors: []string{"csv"}})())
+	if _, handed := env["ATLAS_TOKEN"]; handed {
+		t.Error("an unauthenticated server handed a worker a token")
 	}
 }
 

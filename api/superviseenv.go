@@ -2,6 +2,7 @@ package api
 
 import (
 	"log/slog"
+	"os"
 	"sort"
 	"strings"
 
@@ -146,20 +147,46 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 	return map[string]func() []string{connectorKindMail: s.mailWorkerEnv}
 }
 
-// superviseEnv is the environment a supervised worker is spawned with, for the kinds
-// it serves. It returns nil for a worker that serves no provisioned kind — every
-// worker an operator configured with --supervise, which inherits this process's
-// environment unchanged, exactly as before.
+// workerTokenEnv is the credential a supervised worker authenticates to this server
+// with, when this server requires one.
+//
+// Without it a supervised worker under --auth is refused at every poll — it holds no
+// token, and the job pull is authenticated like every other endpoint. That was a
+// hole nobody fell into while offloading was opt-in; making it the default turned it
+// into "Atlas starts a worker that cannot do anything" on every authenticated
+// server, which is the worst kind of default.
+//
+// It is this server's own internal token (ADR-0049), the same one the MCP adapter
+// uses over loopback. That is the right credential for the same reason the mail
+// configuration is: a supervised worker is this process's own child on this host,
+// not a third party, and the token reaches it through its environment rather than
+// argv. The principal it resolves to is deliberately not an admin, and a job is
+// attributed to the worker's --id rather than to the principal, so the Workers view
+// still says which worker did what.
+//
+// An operator who set ATLAS_TOKEN themselves keeps it: they have chosen an identity
+// for their workers, and silently replacing it would undo that choice.
+func (s *Server) workerTokenEnv() []string {
+	if !s.authEnabled || s.internalToken == "" {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv("ATLAS_TOKEN")) != "" {
+		return nil
+	}
+	return []string{"ATLAS_TOKEN=" + s.internalToken}
+}
+
+// superviseEnv is the environment a supervised worker is spawned with: the token it
+// authenticates with, and the configuration for the kinds it serves. It returns nil
+// when neither applies — an unauthenticated server's --supervise worker inherits
+// this process's environment unchanged, exactly as before.
 func (s *Server) superviseEnv(spec SuperviseSpec) func() []string {
+	render := []func() []string{s.workerTokenEnv}
 	provisioned := s.provisionedConnectorKinds()
-	var render []func() []string
 	for _, k := range spec.Connectors {
 		if fn, ok := provisioned[strings.TrimSpace(k)]; ok {
 			render = append(render, fn)
 		}
-	}
-	if len(render) == 0 {
-		return nil
 	}
 	return func() []string {
 		var env []string
