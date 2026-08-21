@@ -281,11 +281,14 @@ func (s *Server) jobTypeUsers() map[int32][]typeUser {
 				byID = map[string]typeUser{}
 				newest[jobType] = byID
 			}
-			if prev, seen := byID[d.ProcessID]; seen && prev.Version >= d.Version {
-				continue
-			}
-			byID[d.ProcessID] = typeUser{
-				ProcessDefKey: key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
+			// Keep the highest version per (jobType, processId). Phrased as a positive
+			// assignment guard rather than an early `continue`, so the branch that is
+			// or isn't taken carries no statement whose coverage would swing with
+			// s.deployments' (randomized) map-iteration order.
+			if prev, seen := byID[d.ProcessID]; !seen || d.Version > prev.Version {
+				byID[d.ProcessID] = typeUser{
+					ProcessDefKey: key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
+				}
 			}
 		}
 	}

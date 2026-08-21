@@ -3,9 +3,11 @@ package worker_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -227,5 +229,76 @@ func TestWorkerSurvivesAJobTypeThatIsNotDeployedYet(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the worker did not stop when its context was cancelled")
+	}
+}
+
+// TestWorkerRunOnceSurfacesATransportError pins the transport-error return in the
+// worker's HTTP call: a poll against a server it cannot reach fails the poll rather
+// than hanging or panicking. Covering it deterministically here keeps that error path
+// out of the timing-dependent coverage of the long-running Run loop, where whether an
+// in-flight request or the back-off wait sees the cancellation is a race.
+func TestWorkerRunOnceSurfacesATransportError(t *testing.T) {
+	w := worker.New(worker.Options{
+		Server: "http://127.0.0.1:0", // port 0 never accepts a connection
+		ID:     "unreachable",
+		Handlers: map[string]worker.Exec{
+			"send-email": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) { return nil, nil }),
+		},
+	})
+	if err := w.RunOnce(context.Background()); err == nil {
+		t.Fatal("RunOnce against an unreachable server returned nil, want a transport error")
+	}
+}
+
+// TestWorkerRunContinuesPastAnEmptyPollThenStopsOnCancel deterministically covers the
+// two timing-sensitive arms of the Run poll loop that TestWorkerSurvivesAJobTypeThat
+// IsNotDeployedYet only reaches by chance: the fast-path `continue` after a poll that
+// returns no error, and the ctx.Done arm of the retry back-off. The stub answers the
+// first activation with an empty job list (a clean poll → continue), then errors every
+// later one so the worker enters its back-off wait; a very long Retry parks the
+// goroutine there, so cancelling unblocks it through ctx.Done rather than the timer —
+// no matter the scheduling.
+func TestWorkerRunContinuesPastAnEmptyPollThenStopsOnCancel(t *testing.T) {
+	var polls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.AddInt32(&polls, 1) == 1 {
+			_, _ = w.Write([]byte(`{"jobs":[]}`)) // first poll: a clean, empty result
+			return
+		}
+		http.Error(w, `{"error":"boom"}`, http.StatusInternalServerError) // later polls fail
+	}))
+	defer ts.Close()
+
+	wk := worker.New(worker.Options{
+		Server: ts.URL, ID: "looper",
+		Retry: time.Hour, // once a poll fails, it parks in the back-off until cancelled
+		Handlers: map[string]worker.Exec{
+			"send-email": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) { return nil, nil }),
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- wk.Run(ctx) }()
+
+	// Wait until the worker has polled at least twice: the empty poll (which runs the
+	// `continue`) and the first failing poll (which parks it in the hour-long back-off).
+	deadline := time.Now().Add(5 * time.Second)
+	for atomic.LoadInt32(&polls) < 2 {
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("the worker did not poll twice; the loop is not running as expected")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancel() // unblock the back-off through ctx.Done, never the (hour-long) timer
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v after cancellation, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the worker did not stop promptly when cancelled — the ctx.Done arm never fired")
 	}
 }
