@@ -44,32 +44,14 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handle
 		if err != nil {
 			return fmt.Errorf("mail: %w", err)
 		}
-		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
-			return reg.Unresolved("mail", name)
-		}
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: every recipient/subject/body FEEL value
-		// evaluates against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
+		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
+		// changes only *where* the registry comes from, never what a resolved mail
+		// task means — which is the point of routing both paths through one pair.
+		resolved, err := Resolve(store, cp, detail, ei.ProcessInstanceKey, j.Key)
 		if err != nil {
-			return fmt.Errorf("mail: read variables for element %d: %w", j.ElementInstanceKey, err)
+			return err
 		}
-		to := splitAddrs(resolveValue(detail.To, scope, scopeVars))
-		if len(to) == 0 {
-			return fmt.Errorf("mail: task resolved no recipient")
-		}
-		return client.Send(context.Background(), Message{
-			From:      resolveValue(detail.From, scope, scopeVars),
-			To:        to,
-			Cc:        splitAddrs(resolveValue(detail.Cc, scope, scopeVars)),
-			Bcc:       splitAddrs(resolveValue(detail.Bcc, scope, scopeVars)),
-			Subject:   resolveValue(detail.MailSubject, scope, scopeVars),
-			Body:      resolveValue(detail.Body, scope, scopeVars),
-			HTML:      resolveValue(detail.BodyHTML, scope, scopeVars),
-			MessageID: strconv.FormatUint(j.Key, 10),
-		})
+		return Run(context.Background(), resolved, reg)
 	}
 }
 

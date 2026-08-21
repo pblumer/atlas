@@ -634,14 +634,17 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0168)")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: csv, mail). The server must be offloading them with --offload-connectors, or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus ATLAS_MAIL_<NAME>_ENDPOINT and the optional _USERNAME, _PASSWORD and _FROM")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	kinds := splitList(*connectors)
-	builtin := worker.BuiltinConnectors(kinds...)
+	builtin, err := worker.BuiltinConnectors(os.Getenv, kinds...)
+	if err != nil {
+		return err
+	}
 	if len(builtin) != len(kinds) {
-		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv), got %q", *connectors)
+		return fmt.Errorf("--connector names a kind this worker does not implement (have: csv, mail), got %q", *connectors)
 	}
 	if len(handles) == 0 && len(builtin) == 0 {
 		return errors.New("nothing to do: give at least one --handle type=command or --connector kind")
@@ -673,11 +676,11 @@ func runWorker(args []string) error {
 	// reported rather than abandoned to its lease.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	err := w.Run(ctx)
+	runErr := w.Run(ctx)
 	if ctx.Err() != nil {
 		return nil // interrupted, which is an ordinary exit
 	}
-	return err
+	return runErr
 }
 
 // sortedKeys is the handled job types in a stable order, for the startup line.
