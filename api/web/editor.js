@@ -2165,7 +2165,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Event", showIf: (v) => !v.operation || v.operation === "write" },
       { key: "subject", label: "Subject", placeholder: "orders/new", showIf: (v) => !v.operation || v.operation === "write" || v.operation === "read", hint: "The clio subject the event lands under (write) or is read from (read/get_state)." },
-      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The instance's variables are sent as the event body." },
+      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The input mappings below are the event body. With none, every variable the task sees is sent." },
       { group: "Query", showIf: (v) => v.operation === "query" },
       { key: "query", label: "Query", placeholder: "leave empty for get_state", showIf: (v) => v.operation === "query", hint: "A run_query query string. If empty, get_state is read for the subject above." },
       { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },

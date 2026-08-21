@@ -9,6 +9,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -591,5 +592,125 @@ func TestClioReadTaskWritesEvents(t *testing.T) {
 	events := readVar(t, store, scope, "events")
 	if events == nil || events.Kind != model.VarJSON {
 		t.Fatalf("events variable = %+v, want a VarJSON array", events)
+	}
+}
+
+// mustCompile compiles a FEEL expression for an I/O mapping source, failing the
+// test rather than the mapping if it does not compile.
+func mustCompile(t *testing.T, src string) *expr.Compiled {
+	t.Helper()
+	c, err := expr.CompileAuto(src)
+	if err != nil {
+		t.Fatalf("CompileAuto(%q): %v", src, err)
+	}
+	return c
+}
+
+// driveClio deploys cp, drives its clio write job with a recording client, and
+// returns the client so a test can assert on the event that was written. vars seed
+// the process instance.
+func driveClio(t *testing.T, cp *compiler.CompiledProcess, jobType int32, vars ...model.VariableValue) *recordingClient {
+	t.Helper()
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+
+	rc := &recordingClient{}
+	reg := clio.NewRegistry()
+	reg.Register("orders-clio", rc)
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	lookup := func(uint64) *compiler.CompiledProcess { return cp }
+	runner := job.NewRunner(store, p)
+	runner.Handle(jobType, func(rd state.Reader) job.Handler { return clio.Handler(rd, lookup, reg) })
+
+	p.CreateInstance(cp.Key, vars...)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.events) != 1 {
+		t.Fatalf("events written = %d, want 1", len(rc.events))
+	}
+	return rc
+}
+
+// TestWriteEventBodyIsTheInputMappings proves a write-events task's zeebe:ioMapping
+// inputs *are* the event body: the mapped locals are sent, and the process variables
+// they were computed from are not — the model says exactly what leaves the process
+// (ADR-draft-clio-event-payload-is-the-input-mapping). Before this, the worker read
+// the process-instance scope only, so a task whose payload came from input mappings
+// wrote an empty body.
+func TestWriteEventBodyIsTheInputMappings(t *testing.T) {
+	b := compiler.NewBuilder(connDefKey, "orders", 1)
+	start := b.AddStartEvent()
+	write := b.AddClioWriteTask("orders-clio", "orders/new", "OrderPlaced", 3)
+	b.AddInputMapping(write, "id", mustCompile(t, `orderId`))
+	b.AddInputMapping(write, "label", mustCompile(t, `"order " + orderId`))
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(write).Detail).JobType
+
+	rc := driveClio(t, cp, jobType,
+		model.VariableValue{Name: "orderId", Kind: model.VarString, Text: "c-1"},
+		model.VariableValue{Name: "internalNote", Kind: model.VarString, Text: "do not ship"})
+
+	data := rc.events[0].Data
+	if data["id"] != "c-1" || data["label"] != "order c-1" {
+		t.Errorf("event data = %#v, want the two input-mapped values", data)
+	}
+	if len(data) != 2 {
+		t.Errorf("event data = %#v, want exactly the mapped inputs (no process variables)", data)
+	}
+}
+
+// TestWriteEventBodyWithoutMappingsIsTheVisibleScope covers the unmapped default: a
+// task with no input mappings still sends every variable it *sees*, resolved up its
+// scope chain (ADR-0068) — here a subprocess-scoped local alongside a process-level
+// one, where reading the process-instance scope alone would have dropped the local.
+func TestWriteEventBodyWithoutMappingsIsTheVisibleScope(t *testing.T) {
+	b := compiler.NewBuilder(connDefKey, "orders", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	b.AddInputMapping(sub, "innerVal", mustCompile(t, `orderId + "-inner"`))
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	write := b.AddClioWriteTask("orders-clio", "orders/new", "OrderPlaced", 3)
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, write)
+	b.Connect(write, iEnd)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(write).Detail).JobType
+
+	rc := driveClio(t, cp, jobType, model.VariableValue{Name: "orderId", Kind: model.VarString, Text: "c-7"})
+
+	data := rc.events[0].Data
+	if data["orderId"] != "c-7" {
+		t.Errorf("event data orderId = %#v, want c-7 (inherited from the process scope)", data["orderId"])
+	}
+	if data["innerVal"] != "c-7-inner" {
+		t.Errorf("event data innerVal = %#v, want c-7-inner (the enclosing subprocess scope)", data["innerVal"])
 	}
 }
