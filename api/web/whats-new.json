@@ -1,361 +1,350 @@
 {
-  "generatedAt": "2026-08-19",
+  "generatedAt": "2026-08-21",
   "entries": [
     {
-      "id": "a-form-on-the-incident-repairing-an-instance-with-named-fiel",
-      "version": "Unreleased",
-      "date": null,
+      "id": "atlas-worker-the-same-binary-working-jobs-outside-the-engine",
+      "version": "0.3.0",
+      "date": "2026-08-21",
       "category": "Added",
       "title": {
-        "en": "Repair a stuck task through named fields, not raw JSON",
-        "de": "Eine hängende Aufgabe über benannte Felder reparieren statt über rohes JSON"
+        "en": "A task's work can run outside the engine",
+        "de": "Die Arbeit einer Aufgabe kann außerhalb der Engine laufen"
       },
       "summary": {
-        "en": "In the Modeler you can now give a task a repair form: the fields worth looking at if that task ever gets stuck. When it does, the incident offers Repair — the form, already filled in with the instance's current values — instead of the whole variable set as a JSON document. Only the fields on the form are written, and the change is recorded with your name as before. Tasks without a repair form are unchanged; Fix variables… is still there for anything nobody saw coming.",
-        "de": "Im Modeler können Sie einer Aufgabe jetzt ein Reparaturformular mitgeben: die Felder, die zählen, falls diese Aufgabe einmal hängen bleibt. Passiert das, bietet der Incident „Reparieren“ an — das Formular, bereits mit den aktuellen Werten der Instanz gefüllt — statt des gesamten Variablensatzes als JSON-Dokument. Geschrieben werden nur die Felder des Formulars, und die Änderung wird wie bisher mit Ihrem Namen protokolliert. Aufgaben ohne Reparaturformular bleiben unverändert; „Variablen korrigieren…“ gibt es weiterhin für alles, was niemand vorhergesehen hat."
+        "en": "The work behind a service task no longer has to run inside Atlas itself. The same binary, started as a worker, asks Atlas for the jobs it was told to handle, does them and reports back — so a slow or unreachable system occupies the worker instead of the engine. A worker that dies mid-job does not lose it: the job is offered again once its hold expires, and a worker that comes back too late can no longer complete work that has been given to someone else.",
+        "de": "Die Arbeit hinter einer Service-Aufgabe muss nicht mehr in Atlas selbst laufen. Dieselbe Binärdatei, als Worker gestartet, fragt Atlas nach den Aufgabentypen, für die sie zuständig ist, erledigt sie und meldet das Ergebnis zurück — ein langsames oder nicht erreichbares System blockiert damit den Worker statt die Engine. Stirbt ein Worker mitten in der Arbeit, geht sie nicht verloren: Der Job wird nach Ablauf seiner Reservierung erneut angeboten, und ein zu spät zurückkehrender Worker kann Arbeit, die inzwischen jemand anderem gehört, nicht mehr abschließen."
       },
       "link": {
-        "label": "ADR-0169",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0169-incident-repair-forms.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "migrating-an-instance-from-operations",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Move a running instance onto a fixed version, from Operations",
-        "de": "Eine laufende Instanz aus Operations heraus auf eine korrigierte Version umstellen"
-      },
-      "summary": {
-        "en": "When a model turns out to be wrong, the instances that are already running no longer have to be cancelled. Open an instance's replay and use Migrate: it shows what the move would do before anything is written — which elements pair up, and every reason it would be refused — and will not let you submit one that cannot work. A whole version's instances can be moved at once from the process list; any that cannot be moved are listed by key, still running and unchanged.",
-        "de": "Wenn sich ein Modell als falsch herausstellt, müssen die bereits laufenden Instanzen nicht mehr abgebrochen werden. Öffnen Sie den Replay einer Instanz und wählen Sie Migrieren: Vorab wird gezeigt, was die Umstellung bewirken würde — welche Elemente einander zugeordnet werden und jeder Grund, aus dem sie abgelehnt würde. Eine nicht durchführbare Umstellung lässt sich gar nicht erst abschicken. Aus der Prozessliste heraus lassen sich alle Instanzen einer Version auf einmal umstellen; was nicht umgestellt werden kann, wird mit Schlüssel aufgeführt und läuft unverändert weiter."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-migrated-instance-s-replay-reads-under-the-version-each-st",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A migrated instance's replay shows what really happened",
-        "de": "Der Replay einer migrierten Instanz zeigt, was wirklich passiert ist"
-      },
-      "summary": {
-        "en": "When an instance has been moved to a newer version of its process, its replay now labels each step with the element it actually ran on, not with whatever sits in that spot in the new model. The move itself appears in the history as a marked boundary — which version the instance left, which it arrived on, who moved it and why — so it is clear that the steps above it belong to a different model.",
-        "de": "Wurde eine Instanz auf eine neuere Version ihres Prozesses umgestellt, beschriftet der Replay jeden Schritt jetzt mit dem Element, auf dem er tatsächlich lief — nicht mit dem, was im neuen Modell an dieser Stelle steht. Die Umstellung selbst erscheint als markierte Grenze im Verlauf: von welcher Version auf welche, durch wen und warum. So ist erkennbar, dass die Schritte darüber zu einem anderen Modell gehören."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "process-instance-migration-the-api-and-the-mcp-tools",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Move a running instance onto a newer version of its process",
-        "de": "Eine laufende Instanz auf eine neuere Version ihres Prozesses umstellen"
-      },
-      "summary": {
-        "en": "A running instance no longer has to be cancelled when its model is fixed. It can be rebound to another deployed version and keeps its variables, its tasks and everything already done. A dry run says first exactly which tokens would move where, and anything that cannot be mapped safely is refused rather than guessed. Available over the HTTP API and as MCP tools; the Operations screen for it follows.",
-        "de": "Eine laufende Instanz muss nicht mehr abgebrochen werden, wenn das Modell korrigiert wird. Sie lässt sich auf eine andere bereitgestellte Version umstellen und behält dabei ihre Variablen, ihre Aufgaben und alles bereits Erledigte. Ein Probelauf zeigt vorab genau, welche Tokens wohin wandern; was sich nicht sicher zuordnen lässt, wird abgelehnt statt geraten. Verfügbar über die HTTP-API und als MCP-Tools; die Oberfläche in Operations folgt."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-connector-says-what-it-is-for-and-deleting-one-that-models",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A connector says what it is for, and deleting one that models use is refused",
-        "de": "A connector says what it is for, and deleting one that models use is refused"
-      },
-      "summary": {
-        "en": "Each connector now shows which processes use it and how many instances are running on them, and deleting one that is still in use is refused instead of quietly breaking those processes.",
-        "de": "Jeder Connector zeigt jetzt, welche Prozesse ihn nutzen und wie viele Instanzen darauf laufen. Einen noch benutzten Connector zu löschen wird abgelehnt, statt diese Prozesse stillschweigend lahmzulegen."
-      },
-      "link": {
-        "label": "ADR-0163",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0163-deleting-a-referenced-connector.md"
-      },
-      "tags": [
-        "Organization",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "the-connector-behind-an-incident-can-be-reconfigured-from-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The connector behind an incident can be reconfigured from the incident",
-        "de": "The connector behind an incident can be reconfigured from the incident"
-      },
-      "summary": {
-        "en": "When a step is stuck because the system it calls is unreachable, you can now fix that connector directly from the incident — test the connection, save, and retry in one place. The change takes effect immediately, no redeploy.",
-        "de": "Wenn ein Schritt hängt, weil das angesprochene System nicht erreichbar ist, können Sie den Connector jetzt direkt aus dem Incident heraus korrigieren — Verbindung testen, speichern und erneut versuchen an einer Stelle. Die Änderung wirkt sofort, ohne erneutes Deployment."
-      },
-      "link": {
-        "label": "ADR-0160",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
+        "label": "ADR-0157",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
       },
       "tags": [
         "Operations",
         "Connectors"
       ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Incidents and find the stuck incident.",
-          "Click ⚙ Connector… — its configuration opens prefilled, with the reason it failed.",
-          "Correct the settings, use Test connection, then Save & retry."
-        ],
-        "de": [
-          "Öffnen Sie Betrieb › Incidents und suchen Sie den hängenden Incident.",
-          "Klicken Sie auf ⚙ Connector… — die Konfiguration öffnet sich vorausgefüllt, samt Fehlergrund.",
-          "Einstellungen korrigieren, Verbindung testen, dann Speichern & erneut versuchen."
-        ]
-      },
       "try": {
         "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
+          "en": "Open Workers",
+          "de": "Workers öffnen"
         },
-        "route": "#/operations/incidents"
+        "route": "#/operations/workers"
       }
     },
     {
-      "id": "a-stored-connector-has-a-real-edit-form",
-      "version": "Unreleased",
-      "date": null,
+      "id": "atlas-supervises-its-own-worker-processes",
+      "version": "0.3.0",
+      "date": "2026-08-21",
       "category": "Added",
       "title": {
-        "en": "A stored connector has a real edit form",
-        "de": "A stored connector has a real edit form"
+        "en": "Atlas starts and restarts its workers itself",
+        "de": "Atlas startet und überwacht seine Worker selbst"
       },
       "summary": {
-        "en": "Editing a connector now uses a proper form showing only the fields that kind actually needs — including the enabled switch and the connection test — instead of two generic prompt boxes.",
-        "de": "Einen Connector zu bearbeiten läuft jetzt über ein richtiges Formular mit genau den Feldern, die diese Art tatsächlich braucht — inklusive Aktiv-Schalter und Verbindungstest — statt über zwei generische Eingabeboxen."
+        "en": "Running work outside the engine does not mean running a second deployment. Started with --supervise, Atlas launches the worker as its own child process, restarts it if it stops, captures its output and shuts it down with the server — so the install stays one binary and one command. It is off unless you ask for it, because under systemd or Kubernetes the platform should own that.",
+        "de": "Arbeit außerhalb der Engine bedeutet nicht, ein zweites Deployment zu betreiben. Mit --supervise startet Atlas den Worker als eigenen Kindprozess, startet ihn nach einem Abbruch neu, fängt seine Ausgabe auf und beendet ihn zusammen mit dem Server — die Installation bleibt eine Datei und ein Befehl. Standardmäßig aus, denn unter systemd oder Kubernetes gehört der Prozess-Lebenszyklus der Plattform."
       },
       "link": {
-        "label": "ADR-0160",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
-      },
-      "tags": [
-        "Organization",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "a-parked-connector-task-now-says-what-is-actually-wrong",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A parked connector task now says what is actually wrong",
-        "de": "A parked connector task now says what is actually wrong"
-      },
-      "summary": {
-        "en": "When a step that calls an external system (a \"connector\", e.g. sending mail) gets stuck, Atlas now tells you the real reason — disabled, misconfigured, or a missing credential — instead of one confusing message.",
-        "de": "Wenn ein Schritt, der ein externes System anspricht (ein „Connector\", z.B. Mailversand), hängen bleibt, nennt Atlas jetzt den echten Grund — deaktiviert, falsch konfiguriert oder fehlende Zugangsdaten — statt einer verwirrenden Sammelmeldung."
-      },
-      "link": {
-        "label": "ADR-0158",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0158-a-connector-reference-that-explains-itself.md"
-      },
-      "tags": [
-        "Operations",
-        "Connectors"
-      ]
-    },
-    {
-      "id": "a-deploy-warns-about-connector-references-that-will-not-reso",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A deploy warns about connector references that will not resolve",
-        "de": "A deploy warns about connector references that will not resolve"
-      },
-      "summary": {
-        "en": "Publishing a model that points at a connector which does not exist yet no longer fails silently later — the Modeler shows a warning right next to the success message.",
-        "de": "Ein Modell zu veröffentlichen, das auf einen noch nicht vorhandenen Connector verweist, scheitert nicht mehr stumm erst später — der Modeler zeigt die Warnung direkt neben der Erfolgsmeldung."
-      },
-      "link": {
-        "label": "ADR-0158",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0158-a-connector-reference-that-explains-itself.md"
-      },
-      "tags": [
-        "Modeler"
-      ]
-    },
-    {
-      "id": "an-incident-can-be-fixed-not-just-retried",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An incident can be fixed, not just retried",
-        "de": "An incident can be fixed, not just retried"
-      },
-      "summary": {
-        "en": "A stuck instance can now be repaired, not just retried: open the incident, correct the process variables, and resolve it in one step. The change is recorded with your name.",
-        "de": "Eine hängende Instanz lässt sich jetzt reparieren, nicht nur erneut versuchen: Incident öffnen, die Prozessvariablen korrigieren und in einem Schritt auflösen. Die Änderung wird mit Ihrem Namen protokolliert."
-      },
-      "link": {
-        "label": "ADR-0158",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0158-a-connector-reference-that-explains-itself.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Incidents (or the step-by-step replay of the instance).",
-          "On the stuck incident, click ✎ Fix variables…",
-          "Correct the values, tick \"resolve\" if the fix is complete, and save."
-        ],
-        "de": [
-          "Öffnen Sie Betrieb › Incidents (oder das Schritt-für-Schritt-Replay der Instanz).",
-          "Klicken Sie beim hängenden Incident auf ✎ Variablen korrigieren…",
-          "Werte anpassen, „auflösen\" ankreuzen wenn die Korrektur vollständig ist, und speichern."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "the-operations-nav-counts-what-is-stuck",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The Operations nav counts what is stuck",
-        "de": "The Operations nav counts what is stuck"
-      },
-      "summary": {
-        "en": "The Incidents menu entry now carries a red count of how many tokens are stuck, so a problem finds you instead of waiting to be discovered.",
-        "de": "Der Menüpunkt Incidents trägt jetzt eine rote Zahl, wie viele Tokens hängen — so findet ein Problem Sie, statt darauf zu warten, entdeckt zu werden."
-      },
-      "link": {
-        "label": "ADR-0151",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0151-incidents-beyond-the-live-diagram.md"
+        "label": "ADR-0157",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
       },
       "tags": [
         "Operations"
       ],
       "try": {
         "label": {
-          "en": "Open Operations",
-          "de": "Betrieb öffnen"
+          "en": "Open Workers",
+          "de": "Workers öffnen"
         },
-        "route": "#/operations"
+        "route": "#/operations/workers"
       }
     },
     {
-      "id": "the-secrets-panel-says-what-a-value-has-to-be",
-      "version": "Unreleased",
-      "date": null,
+      "id": "the-workers-view-what-is-queued-what-is-in-flight-and-who-is",
+      "version": "0.3.0",
+      "date": "2026-08-21",
       "category": "Added",
       "title": {
-        "en": "The Secrets panel says what a value has to be",
-        "de": "The Secrets panel says what a value has to be"
+        "en": "See what is queued, and who is working on it",
+        "de": "Sehen, was wartet — und wer daran arbeitet"
       },
       "summary": {
-        "en": "When you store a secret (like an API token), the form now tells you up front what shape the value should have — because a write-only secret cannot be checked afterwards.",
-        "de": "Wenn Sie ein Geheimnis speichern (z.B. ein API-Token), sagt Ihnen das Formular jetzt vorab, welche Form der Wert haben muss — denn ein nur-schreibbares Geheimnis lässt sich nachträglich nicht prüfen."
+        "en": "A new Workers view in Operations shows every job type with how much is waiting, how much is being worked on right now, and which workers are doing it. The case it is built to make obvious is the one that used to be invisible: a queue that keeps growing with nothing in flight and no worker behind it. Open a worker to see the jobs it ran, and restart one Atlas supervises.",
+        "de": "Die neue Ansicht „Workers“ in Operations zeigt zu jedem Aufgabentyp, wie viel wartet, wie viel gerade bearbeitet wird und welche Worker das tun. Sichtbar werden soll vor allem der Fall, den man bisher gar nicht sehen konnte: eine wachsende Warteschlange, an der nichts in Arbeit ist und hinter der kein Worker steht. Ein Klick auf einen Worker zeigt die Jobs, die er ausgeführt hat; einen von Atlas überwachten Worker können Sie dort neu starten."
       },
       "link": {
-        "label": "ADR-0155",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0155-secret-shape-hints.md"
+        "label": "ADR-0157",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
       },
       "tags": [
-        "Organization",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
+      "id": "a-connector-task-runs-on-a-worker-credential-and-all",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "A connector's credential can live where the system is",
+        "de": "Die Zugangsdaten eines Konnektors können dort liegen, wo das System steht"
+      },
+      "summary": {
+        "en": "Connector tasks can now run on a worker, and the password goes with them: the worker that sits next to your mail relay or your ERP holds the credential for it, and Atlas never stores it. A model still names a connector and never a secret, exactly as before — what changed is which process holds the value behind the name. Workers that Atlas starts itself are handed their configuration automatically, so a single-server install needs no extra setup.",
+        "de": "Konnektor-Aufgaben können jetzt auf einem Worker laufen — und das Passwort wandert mit: Der Worker, der neben Ihrem Mailrelay oder Ihrem ERP steht, hält die Zugangsdaten dafür, Atlas speichert sie nicht. Ein Modell benennt weiterhin nur einen Konnektor und nie ein Geheimnis; geändert hat sich lediglich, welcher Prozess den Wert hinter dem Namen hält. Worker, die Atlas selbst startet, bekommen ihre Konfiguration automatisch mit, eine Einzelserver-Installation braucht also keine zusätzliche Einrichtung."
+      },
+      "link": {
+        "label": "ADR-0168",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0168-connector-work-on-a-worker.md"
+      },
+      "tags": [
+        "Connectors",
         "Secrets"
       ],
-      "tutorial": {
-        "en": [
-          "Open Console › Organization and go to the Secrets panel.",
-          "Enter a secret name that matches a connector's token reference.",
-          "Read the hint that appears — it names the connector and the expected value."
-        ],
-        "de": [
-          "Öffnen Sie Console › Organisation und gehen Sie zum Bereich Secrets.",
-          "Geben Sie einen Secret-Namen ein, der zur Token-Referenz eines Connectors passt.",
-          "Lesen Sie den erscheinenden Hinweis — er nennt den Connector und den erwarteten Wert."
-        ]
-      },
       "try": {
         "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
+          "en": "Open Workers",
+          "de": "Workers öffnen"
         },
-        "route": "#/console/org"
+        "route": "#/operations/workers"
+      }
+    },
+    {
+      "id": "an-active-directory-connector-that-speaks-ad-not-ldap",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Active Directory as ready-made process steps",
+        "de": "Active Directory als fertige Prozessschritte"
+      },
+      "summary": {
+        "en": "A process can now create a user or a group in Active Directory, set a password, enable, disable, move or delete an account, and add or remove a group member — picked from a list instead of hand-built from LDAP rules that are easy to get subtly wrong. A sync step reads only what has changed since the last run, so a process can react to the directory instead of re-reading all of it.",
+        "de": "Ein Prozess kann jetzt in Active Directory Benutzer oder Gruppen anlegen, Passwörter setzen, Konten aktivieren, deaktivieren, verschieben oder löschen und Gruppenmitglieder hinzufügen oder entfernen — auswählbar aus einer Liste statt zusammengebaut aus LDAP-Regeln, bei denen sich leicht unbemerkt Fehler einschleichen. Ein Sync-Schritt liest nur, was sich seit dem letzten Lauf geändert hat, sodass ein Prozess auf das Verzeichnis reagieren kann, statt es jedes Mal komplett zu lesen."
+      },
+      "link": {
+        "label": "ADR-0166",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-microsoft-entra-id-connector",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Microsoft Entra ID as ready-made process steps",
+        "de": "Microsoft Entra ID als fertige Prozessschritte"
+      },
+      "summary": {
+        "en": "The same idea for the cloud directory: create, read, update or delete a user, enable or disable an account, and add or remove a group member in Entra ID (formerly Azure AD) — you pick the operation, and the connector knows the Graph call behind it. The credentials for it live on the worker, so Atlas itself never holds an app registration that could disable accounts across your whole tenant.",
+        "de": "Dasselbe Prinzip für das Cloud-Verzeichnis: Benutzer anlegen, lesen, ändern oder löschen, Konten aktivieren oder deaktivieren und Gruppenmitglieder hinzufügen oder entfernen in Entra ID (früher Azure AD) — Sie wählen die Operation, den passenden Graph-Aufruf kennt der Konnektor. Die Zugangsdaten liegen auf dem Worker; Atlas selbst hält also keine App-Registrierung, mit der sich Konten im gesamten Tenant deaktivieren ließen."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-generic-ldap-connector",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Any LDAP directory, from a process",
+        "de": "Jedes LDAP-Verzeichnis, direkt aus einem Prozess"
+      },
+      "summary": {
+        "en": "Search, add, modify and delete entries, or change a password, in any LDAP directory. Searches are paged and bounded, so a directory answering with fifty thousand entries neither overwhelms the worker nor quietly returns half an answer, and a modify can change a single value instead of replacing a whole attribute. Sign in anonymously, with a stored password, or with a client certificate.",
+        "de": "Einträge in beliebigen LDAP-Verzeichnissen suchen, anlegen, ändern und löschen oder ein Passwort setzen. Suchen laufen seitenweise und begrenzt, damit ein Verzeichnis mit fünfzigtausend Treffern den Worker weder überlastet noch stillschweigend nur die Hälfte liefert, und eine Änderung kann einen einzelnen Wert betreffen statt ein ganzes Attribut zu ersetzen. Die Anmeldung erfolgt anonym, mit hinterlegtem Passwort oder per Client-Zertifikat."
+      },
+      "link": {
+        "label": "ADR-0154",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0154-ldap-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "directory-files-ldif-and-dsml",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Read and write directory files (LDIF, DSML)",
+        "de": "Verzeichnisdateien lesen und schreiben (LDIF, DSML)"
+      },
+      "summary": {
+        "en": "Directory entries exported to a file can be read into a process, and written back out, in either LDIF or DSML. They arrive in exactly the shape a live directory search returns, so the same process steps handle a file export and a real directory without being written twice.",
+        "de": "In eine Datei exportierte Verzeichniseinträge lassen sich in einen Prozess einlesen und wieder herausschreiben — wahlweise als LDIF oder DSML. Sie kommen in genau der Form an, die auch eine Suche im laufenden Verzeichnis liefert; dieselben Prozessschritte verarbeiten damit einen Dateiexport und ein echtes Verzeichnis, ohne zweimal geschrieben werden zu müssen."
+      },
+      "link": {
+        "label": "ADR-0171",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0171-directory-file-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Import"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "three-sql-connectors-sql-server-mariadb-postgresql",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Query a database from a process",
+        "de": "Aus einem Prozess eine Datenbank abfragen"
+      },
+      "summary": {
+        "en": "Microsoft SQL Server, MariaDB and PostgreSQL each get their own connector: read rows into a variable, read a single row, or run a statement and get back how many rows it changed. Values are passed as parameters rather than pasted into the statement. The connection details live on the worker, so a database password never reaches the model or the engine.",
+        "de": "Microsoft SQL Server, MariaDB und PostgreSQL bekommen jeweils einen eigenen Konnektor: Zeilen in eine Variable lesen, eine einzelne Zeile lesen oder eine Anweisung ausführen und die Zahl der geänderten Zeilen zurückbekommen. Werte werden als Parameter übergeben und nicht in die Anweisung hineingeschrieben. Die Verbindungsdaten liegen auf dem Worker, ein Datenbankpasswort erreicht also weder das Modell noch die Engine."
+      },
+      "link": {
+        "label": "ADR-0173",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0173-generic-sql-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-scim-2-0-provisioning-connector",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Provision users over SCIM 2.0",
+        "de": "Benutzer über SCIM 2.0 bereitstellen"
+      },
+      "summary": {
+        "en": "A process can create, read, replace, patch, delete and search users or groups in any system that speaks SCIM 2.0 — the standard most cloud applications offer for user provisioning. When the far side refuses, its own explanation becomes the reason on the task instead of a bare error code.",
+        "de": "Ein Prozess kann Benutzer oder Gruppen in jedem System anlegen, lesen, ersetzen, ändern, löschen und suchen, das SCIM 2.0 spricht — den Standard, den die meisten Cloud-Anwendungen für die Benutzerbereitstellung anbieten. Lehnt die Gegenstelle ab, erscheint ihre eigene Begründung an der Aufgabe statt eines nackten Fehlercodes."
+      },
+      "link": {
+        "label": "ADR-0153",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0153-scim-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-soap-web-services-connector",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "Call a SOAP web service",
+        "de": "Einen SOAP-Webservice aufrufen"
+      },
+      "summary": {
+        "en": "Older systems that only offer SOAP can now be called directly from a process: you author the request, and the connector handles the envelope, the version-specific headers and the fault handling. A fault comes back as the task's failure reason, so it is visible where every other problem is.",
+        "de": "Ältere Systeme, die nur SOAP anbieten, lassen sich jetzt direkt aus einem Prozess aufrufen: Sie formulieren die Anfrage, um Envelope, versionsabhängige Header und Fehlerbehandlung kümmert sich der Konnektor. Ein Fault erscheint als Fehlergrund der Aufgabe — also dort, wo auch jedes andere Problem sichtbar wird."
+      },
+      "link": {
+        "label": "ADR-0165",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0165-soap-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "oauth2-client-credentials-for-the-rest-connector",
+      "version": "0.3.0",
+      "date": "2026-08-21",
+      "category": "Added",
+      "title": {
+        "en": "REST calls that sign in with OAuth2",
+        "de": "REST-Aufrufe, die sich per OAuth2 anmelden"
+      },
+      "summary": {
+        "en": "An API that expects an OAuth2 token no longer needs a token step modelled by hand. Give the REST connector the token URL, the client id and the stored client secret, and it fetches the token, reuses it until shortly before it expires, and refuses to call the API unauthenticated if the exchange fails.",
+        "de": "Für eine API, die ein OAuth2-Token erwartet, muss der Tokenschritt nicht mehr von Hand modelliert werden. Geben Sie dem REST-Konnektor Token-URL, Client-ID und das hinterlegte Client-Secret — er holt das Token, verwendet es bis kurz vor Ablauf weiter und ruft die API nicht ohne Anmeldung auf, wenn der Tausch fehlschlägt."
+      },
+      "link": {
+        "label": "ADR-0152",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0152-rest-connector-oauth2.md"
+      },
+      "tags": [
+        "Connectors",
+        "Secrets"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
       }
     }
   ]
