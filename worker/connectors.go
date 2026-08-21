@@ -11,6 +11,8 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/webscrape"
 )
 
@@ -58,6 +60,33 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			client := webscrape.NewHTTPClient()
 			built.Handlers[compiler.WebScrapeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return runWebScrape(ctx, j, client)
+			})
+		case "script":
+			// One handler per language, because a worker subscribes per job type: a
+			// Python worker and a PowerShell worker are simply two workers, each on a
+			// machine that has that interpreter installed. Nothing to configure — what
+			// this worker contributes is the interpreter, not a credential.
+			for name, lang := range map[string]script.Lang{
+				compiler.PwshJobType:   script.PowerShell,
+				compiler.PythonJobType: script.Python,
+				compiler.JsJobType:     script.JavaScript,
+			} {
+				exec := script.New(lang)
+				built.Handlers[name] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return runScript(ctx, j, exec)
+				})
+			}
+		case "rest":
+			// The authored auth arrives with the job; the secret behind its reference
+			// is read here, from this process's own environment, under the same
+			// ATLAS_CONNECTOR_<REF>_TOKEN name the engine uses — so a secret moves by
+			// being set on the worker instead, not by being spelled differently.
+			client := rest.NewHTTPClient()
+			secret := rest.SecretResolver(func(ref string) string {
+				return env("ATLAS_CONNECTOR_" + envFold(ref) + "_TOKEN")
+			})
+			built.Handlers[compiler.RestJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return runREST(ctx, j, client, secret)
 			})
 		case "mail":
 			reg, names, err := mailRegistryFromEnv(env)
@@ -124,13 +153,17 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, err
 func envFold(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))
+	pendingSep := false
 	for _, r := range strings.ToUpper(name) {
-		switch {
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('_')
+			}
+			pendingSep = false
 			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
+			continue
 		}
+		pendingSep = true
 	}
 	return b.String()
 }
@@ -225,4 +258,55 @@ func runWebScrape(ctx context.Context, j Job, client webscrape.Client) (map[stri
 		items[i] = v
 	}
 	return map[string]any{res.ResultVariable: items}, nil
+}
+
+// runScript runs a resolved script task through this worker's interpreter. It shares
+// [script.Run] with the in-process path, so the two cannot disagree about what a
+// script sees or what its output means.
+func runScript(ctx context.Context, j Job, exec script.Exec) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("script: the job carried no resolved source; is this server offloading the script kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task script.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("script: cannot read the resolved detail: %w", err)
+	}
+	res, err := script.Run(ctx, task, exec)
+	if err != nil {
+		return nil, err
+	}
+	if res.ResultVariable == "" {
+		return nil, nil // the task writes nothing back
+	}
+	return map[string]any{res.ResultVariable: res.Output}, nil
+}
+
+// runREST calls a resolved REST task with this worker's own credential. It shares
+// [rest.Run] with the in-process path; only whose secret store is in reach differs.
+func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretResolver) (map[string]any, error) {
+	if j.Connector == nil {
+		return nil, fmt.Errorf("rest: the job carried no resolved connector detail; is this server offloading the rest kind?")
+	}
+	raw, err := json.Marshal(j.Connector.Fields)
+	if err != nil {
+		return nil, err
+	}
+	var task rest.Job
+	if err := json.Unmarshal(raw, &task); err != nil {
+		return nil, fmt.Errorf("rest: cannot read the resolved detail: %w", err)
+	}
+	// No token provider: OAuth2 client-credentials would need one, and a worker that
+	// silently sent an unauthenticated call would be worse than one that says so.
+	res, err := rest.Run(ctx, task, client, secret, nil)
+	if err != nil {
+		return nil, err
+	}
+	if res.ResultVariable == "" {
+		return nil, nil // the model discards the response
+	}
+	return map[string]any{res.ResultVariable: res.Body}, nil
 }

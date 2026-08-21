@@ -308,3 +308,120 @@ const scrapeConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// TestWorkerRunsAnOffloadedScript is the shape where moving the work is most
+// obviously right: a script task needs an *interpreter on the machine*, and until
+// now that meant installing every one of them beside the engine. Here the engine
+// hands over the source and the variables the script may see, and the worker runs
+// it — so a runaway script pegs the worker's host, not the one the run loop is on.
+func TestWorkerRunsAnOffloadedScript(t *testing.T) {
+	if _, err := lookPath("node"); err != nil {
+		t.Skip("no node on this machine")
+	}
+	ts := liveAtlasWith(t, scriptConnectorModel, `{"amount":21}`,
+		api.WithOffloadedConnectorKinds([]string{"script"}))
+
+	built, err := worker.BuiltinConnectors(nil, "script")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Names) != 0 {
+		t.Errorf("names = %v, want none: an interpreter is not a credential", built.Names)
+	}
+	// A short wait because RunOnce polls each of the three languages in turn, and two
+	// of them have nothing: continuous Run gives each its own goroutine instead.
+	w := worker.New(worker.Options{
+		Server: ts.URL, ID: "scripts-1", Handlers: built.Handlers,
+		Wait: 100 * time.Millisecond,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the script job was not completed", running)
+	}
+	if got := instanceVariables(t, ts)["doubled"]; got != float64(42) {
+		t.Errorf("doubled = %v, want 42 — the script saw the instance's variables and wrote back", got)
+	}
+}
+
+// TestWorkerCallsAnOffloadedRestApiWithItsOwnSecret is ADR-0168's rule at its
+// sharpest. The engine resolved everything the model authored — method, url,
+// headers, body — and the auth *configuration* including the reference naming the
+// secret. The secret itself is configured only on this side, and the API refuses a
+// call that arrives without it, so the assertion is real rather than incidental.
+func TestWorkerCallsAnOffloadedRestApiWithItsOwnSecret(t *testing.T) {
+	var sawAuth string
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		if sawAuth != "Bearer s3cr3t" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"no credential"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer apiSrv.Close()
+
+	ts := liveAtlasWith(t, restConnectorModel(apiSrv.URL), `{}`,
+		api.WithOffloadedConnectorKinds([]string{"rest"}))
+
+	// The credential lives here and nowhere else: the engine above was given none.
+	built, err := worker.BuiltinConnectors(fakeEnv(map[string]string{
+		"ATLAS_CONNECTOR_BILLING_API_TOKEN": "s3cr3t",
+	}), "rest")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "rest-1", Handlers: built.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if sawAuth != "Bearer s3cr3t" {
+		t.Fatalf("the API saw Authorization %q, want the worker's own token", sawAuth)
+	}
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the REST job was not completed", running)
+	}
+}
+
+const scriptConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="calc" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:scriptTask id="t">
+      <bpmn:extensionElements>
+        <atlas:jobScript language="javascript" resultVariable="doubled">result = amount * 2;</atlas:jobScript>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+func restConnectorModel(url string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="charge" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET" url="` + url + `" resultVariable="reply"
+          authType="bearer" authSecret="billing-api"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+}

@@ -17,6 +17,8 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -4432,6 +4434,19 @@ type connectorPayload struct {
 // registry are readable.
 func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
 	node := cp.Node(ei.ElementId)
+	// A script task is its own node type rather than a connector task, but it resolves
+	// the same way and for the same reason: the source is in the compiled process and
+	// the variables it sees come from walking the scope chain, neither of which a
+	// worker has. What it needs on the far side is an interpreter, not a credential.
+	if node.Type == compiler.TypeScriptJobTask {
+		j, err := script.Resolve(s.store, cp, cp.ScriptJobTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "script", Fields: map[string]any{
+			"source": j.Source, "input": j.Input, "resultVariable": j.Result,
+		}}
+	}
 	if node.Type != compiler.TypeConnectorTask {
 		return nil // a plain job-worker task: nothing authored to resolve
 	}
@@ -4468,6 +4483,19 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}
 		return &connectorPayload{Kind: "webscrape", Fields: map[string]any{
 			"url": j.URL, "selector": j.Selector, "attribute": j.Attribute,
+			"resultVariable": j.Result,
+		}}
+	case compiler.RestJobTypeIndex:
+		// The authored auth travels — its type, username, api-key header name, OAuth
+		// endpoint and the *reference* naming the secret. The secret behind that
+		// reference does not: the worker resolves it from its own store.
+		j, err := rest.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei.ProcessInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "rest", Fields: map[string]any{
+			"method": j.Method, "url": j.URL, "headers": j.Headers, "query": j.Query,
+			"body": j.Body, "auth": j.Auth, "idempotencyKey": j.IdempotencyKey,
 			"resultVariable": j.Result,
 		}}
 	}
