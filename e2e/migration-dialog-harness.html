@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas instance migration dialog e2e harness</title>
+    <!-- Drives the real api/web/migrationdialog.js flows against a mock `api` that
+         answers the way the server does (ADR-0162): the plan endpoint writes nothing
+         and reports the derived mapping plus every refusal, the migrate endpoint
+         refuses with 409 carrying that same plan, and the batch endpoint hands back
+         bounded pages with a `remaining` flag. The page scaffolding is the test's own —
+         app.js boots the whole console on import and cannot be loaded here — so this
+         proves the flows, not app.js's wiring of them. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="toast" hidden></div>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="mig-ok">Migrate migratable instance</button>
+      <button class="btn" id="mig-bad">Migrate stranded instance</button>
+      <button class="btn" id="mig-only">Migrate (only one version)</button>
+      <button class="btn" id="mig-batch">Migrate batch</button>
+    </div>
+    <script type="module">
+      import { migrateInstanceFlow, migrateProcessFlow, planSummary, otherVersions } from "/migrationdialog.js";
+
+      // Three deployed versions of one process, and an unrelated process that must never
+      // appear in the picker.
+      const PROCESSES = [
+        { key: 101, processId: "migrating", name: "Migrating", version: 1 },
+        { key: 102, processId: "migrating", name: "Migrating", version: 2 },
+        { key: 103, processId: "migrating", name: "Migrating", version: 3, versionTag: "hotfix" },
+        { key: 900, processId: "unrelated", name: "Unrelated", version: 1 },
+      ];
+      window.__PROCESSES = PROCESSES;
+
+      const OK_PLAN = (to) => ({
+        instanceKey: "5001", fromProcessDefKey: 101, fromVersion: 1,
+        toProcessDefKey: to, toVersion: to === 103 ? 3 : 2,
+        migratable: true,
+        mapping: [
+          { from: "start", to: "start" },
+          { from: "review", to: "review_v2" },
+          { from: "done", to: "done" },
+        ],
+      });
+      const BAD_PLAN = (to) => ({
+        instanceKey: "5002", fromProcessDefKey: 101, fromVersion: 1,
+        toProcessDefKey: to, toVersion: to === 103 ? 3 : 2,
+        migratable: false,
+        mapping: [{ from: "start", to: "start" }],
+        problems: [
+          { elementInstanceKey: "9001", elementId: "review", reason: "no element in the target version is mapped to it, so its token would be stranded" },
+        ],
+      });
+
+      window.__calls = [];   // every write the flow issued, in order
+      window.__result = null;
+      let batchPage = 0;
+
+      const toast = (msg, kind) => {
+        const t = document.getElementById("toast");
+        t.textContent = msg; t.className = kind || ""; t.hidden = false;
+        window.__toast = { msg, kind };
+      };
+
+      const api = async (method, url, body) => {
+        if (method === "GET" && url === "/api/v1/processes") return PROCESSES;
+        window.__calls.push({ method, url, body });
+
+        if (url.endsWith("/migrate/plan")) {
+          const stranded = url.includes("/5002/");
+          return stranded ? BAD_PLAN(body.targetProcessDefKey) : OK_PLAN(body.targetProcessDefKey);
+        }
+        if (url.match(/\/instances\/\d+\/migrate$/)) {
+          if (url.includes("/5002/")) {
+            const err = new Error("migration refused");
+            err.status = 409;
+            err.body = BAD_PLAN(body.targetProcessDefKey);
+            throw err;
+          }
+          return { ok: true };
+        }
+        if (url.includes("/migrate-instances")) {
+          // Two pages, so the caller's "repeat while remaining" loop is exercised; the
+          // second page carries a refusal, so the outcome dialog has something to list.
+          batchPage++;
+          if (batchPage === 1) return { toProcessDefKey: body.targetProcessDefKey, migrated: 2, remaining: true };
+          return {
+            toProcessDefKey: body.targetProcessDefKey, migrated: 1, remaining: false,
+            refused: [{ instanceKey: "7007", migratable: false, problems: [{ elementId: "review", reason: "is a bpmn:UserTask but maps to gate, which is a bpmn:ExclusiveGateway" }] }],
+          };
+        }
+        return {};
+      };
+
+      const reset = () => { window.__calls = []; window.__result = null; window.__toast = null; batchPage = 0; };
+
+      document.getElementById("mig-ok").addEventListener("click", async () => {
+        reset();
+        window.__result = await migrateInstanceFlow({
+          api, toast, instanceKey: "5001", processId: "migrating", fromVersion: 1, fromProcessDefKey: 101,
+        });
+      });
+      document.getElementById("mig-bad").addEventListener("click", async () => {
+        reset();
+        window.__result = await migrateInstanceFlow({
+          api, toast, instanceKey: "5002", processId: "migrating", fromVersion: 1, fromProcessDefKey: 101,
+        });
+      });
+      document.getElementById("mig-only").addEventListener("click", async () => {
+        reset();
+        // The unrelated process has exactly one deployed version: there is nowhere to go.
+        window.__result = await migrateInstanceFlow({
+          api, toast, instanceKey: "6001", processId: "unrelated", fromVersion: 1, fromProcessDefKey: 900,
+        });
+      });
+      document.getElementById("mig-batch").addEventListener("click", async () => {
+        reset();
+        window.__result = await migrateProcessFlow({
+          api, toast, processId: "migrating", processName: "Migrating",
+          versions: PROCESSES.filter((p) => p.processId === "migrating"),
+          runningOf: (v) => (v.key === 101 ? 3 : 0),
+        });
+      });
+
+      // Exported pure helpers, checked directly rather than through the DOM.
+      window.__planSummary = planSummary;
+      window.__otherVersions = otherVersions;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

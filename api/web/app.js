@@ -15,6 +15,7 @@ import {
   incidentConnectorChip,
 } from "./incidents.js";
 import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
+import { migrateProcessFlow } from "./migrationdialog.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -3104,6 +3105,16 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
+// runningByDefinition keeps the per-*version* running counts the rollup above sums
+// away. The overview only ever shows the process-level total, but migrating drains one
+// deployed version onto another, so its picker has to say which version is actually
+// holding instances — a choice the summed number cannot answer (ADR-0162).
+function runningByDefinition(rows) {
+  const byDef = new Map();
+  for (const r of rows) byDef.set(String(r.processDefKey), r.active || 0);
+  return byDef;
+}
+
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -3150,6 +3161,7 @@ async function viewInstances() {
 
   let allGroups = [];
   let summary = new Map();
+  let runningByDef = new Map();
   // Unresolved incidents, bucketed for the two tables below: by definition (the
   // per-process rows) and by instance (the variable-search results). Keys are
   // stringified so a JSON number and a string key can't miss each other (ADR-0151).
@@ -3264,6 +3276,12 @@ async function viewInstances() {
       const openHref = `#/operations/p/${g.latest.key}`;
       const menuItems = [{ label: "Open", icon: "→", href: openHref }];
       if (s.running) {
+        // Migrating sits above terminating deliberately: both drain a version, but one
+        // keeps the work and the other discards it, and the one that keeps it should be
+        // the one an operator reaches first (ADR-0162).
+        if (g.versions.length > 1) {
+          menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
+        }
         menuItems.push(
           { sep: true },
           { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
@@ -3289,6 +3307,23 @@ async function viewInstances() {
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
   onMenuAction(tbody, async (act, b) => {
+    // Move a version's running instances onto another version rather than discarding
+    // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
+    if (act === "migrate") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await migrateProcessFlow({
+        api, toast,
+        processId: g.processId,
+        processName: g.latest.name || g.processId,
+        versions: g.versions,
+        // How many instances a version holds: the per-version running counts the
+        // overview already read, so the picker says which one is worth draining.
+        runningOf: (v) => runningByDef.get(String(v.key)) || 0,
+        onDone: load,
+      });
+      return;
+    }
     if (act !== "term") return;
     const proc = b.dataset.proc;
     const g = allGroups.find((x) => x.processId === proc);
@@ -3320,6 +3355,7 @@ async function viewInstances() {
       ]);
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
+      runningByDef = runningByDefinition(rows);
       renderRows();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;

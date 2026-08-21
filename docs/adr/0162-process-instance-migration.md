@@ -284,6 +284,31 @@ Explicit overrides name elements by BPMN id on both sides, never by compiled ind
 server resolves them to indices when it builds the command, and only the resolved
 indices reach the log (I5: no model strings in the log).
 
+### 6. The surface leads with the plan, and refuses before it asks
+
+The plan endpoint is not an optional extra on the way to migrating — it is what the
+Operations dialog opens with. An operator picks a target version and reads what that
+migration would do *before* a reason is even typed: which elements pair across a changed
+id, how many matched unchanged, and every reason it would be refused. A plan that cannot
+go through cannot be submitted at all; the confirm button is the gate rather than a later
+error, because a refusal an operator could have seen first is a round trip they should not
+have had to make. Changing the target re-reads the plan for *that* target — a plan shown
+beside a different selection is the one way this dialog could mislead about live state,
+which is precisely what the whole record exists to prevent.
+
+The batch has deliberately no dry run. A plan is per-instance, and pre-flighting hundreds
+of them to show a summary would be a second, slower implementation of what the batch
+already reports. Instead the batch's own answer is the report: both numbers, and every
+refused instance named by key with what is wrong with it. That list is a work queue, not
+an error — each named instance is still running, unchanged, on the version it was already
+on, and still needs a decision. Hiding it behind a success count would leave those
+instances silently behind, which is the failure mode a bulk operation on live process
+state most easily produces.
+
+Migration is offered only where it means something: on an instance that is still running,
+and on a process with more than one version deployed. Both are cases the engine would
+refuse anyway, and an affordance that leads to a refusal is worse than no affordance.
+
 ### Consequences
 
 - **Positive:** a model fix can reach the instances that motivated it. A long-running

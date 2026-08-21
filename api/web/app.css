@@ -317,6 +317,27 @@ textarea::placeholder {
 .ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-manual-reason { margin-top: 6px !important; font-style: italic; }
 
+/* Moving a running instance to another version of its process (ADR-0162). The plan is
+   the dialog's centre of gravity — the refusals in particular, since a migration that
+   cannot go through is the case the dry run exists for — so it reads as a block rather
+   than as a paragraph of the form around it. */
+.mig-modal .modal-body { max-width: 560px; }
+.mig-plan {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2, var(--surface));
+  max-height: 240px; overflow-y: auto;
+}
+.mig-verdict { margin: 0; font-size: 13px; font-weight: 600; }
+.mig-verdict.ok { color: var(--ok); }
+.mig-verdict.bad { color: var(--warn); }
+.mig-problems { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.mig-problems li { margin: 0 0 2px; }
+.mig-refused { max-height: 220px; overflow-y: auto; }
+.mig-map { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.mig-map h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+.mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.mig-err { color: var(--warn); }
+
 /* The migration boundary on the replay history (ADR-0162): the steps above it and below
    it ran on different versions of the process, so it is drawn as a rule across the list
    rather than as another element row — a reader scanning the column should not be able

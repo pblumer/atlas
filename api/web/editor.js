@@ -10,6 +10,7 @@ import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { migrateInstanceFlow } from "./migrationdialog.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -7351,6 +7352,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
@@ -7431,6 +7433,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // Migrating is offered only where it means something: an instance still running has
+  // tokens to rebind, a finished one has none, and the button would be an invitation to
+  // an action the engine would refuse (ADR-0162).
+  const migrateBtn = root.querySelector("#rp-migrate");
+  if (tl.state === "active") {
+    migrateBtn.hidden = false;
+    migrateBtn.addEventListener("click", () => migrateInstanceFlow({
+      api, toast,
+      instanceKey: key,
+      processId: tl.processId,
+      fromVersion: tl.version,
+      fromProcessDefKey: tl.processDefKey,
+      // The replay is a fold of the instance's history and the migration changes what
+      // that history means, so it is re-read from scratch rather than patched.
+      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+    }));
+  }
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;

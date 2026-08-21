@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-19",
   "entries": [
     {
+      "id": "migrating-an-instance-from-operations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Move a running instance onto a fixed version, from Operations",
+        "de": "Eine laufende Instanz aus Operations heraus auf eine korrigierte Version umstellen"
+      },
+      "summary": {
+        "en": "When a model turns out to be wrong, the instances that are already running no longer have to be cancelled. Open an instance's replay and use Migrate: it shows what the move would do before anything is written — which elements pair up, and every reason it would be refused — and will not let you submit one that cannot work. A whole version's instances can be moved at once from the process list; any that cannot be moved are listed by key, still running and unchanged.",
+        "de": "Wenn sich ein Modell als falsch herausstellt, müssen die bereits laufenden Instanzen nicht mehr abgebrochen werden. Öffnen Sie den Replay einer Instanz und wählen Sie Migrieren: Vorab wird gezeigt, was die Umstellung bewirken würde — welche Elemente einander zugeordnet werden und jeder Grund, aus dem sie abgelehnt würde. Eine nicht durchführbare Umstellung lässt sich gar nicht erst abschicken. Aus der Prozessliste heraus lassen sich alle Instanzen einer Version auf einmal umstellen; was nicht umgestellt werden kann, wird mit Schlüssel aufgeführt und läuft unverändert weiter."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-migrated-instance-s-replay-reads-under-the-version-each-st",
       "version": "Unreleased",
       "date": null,
@@ -328,27 +356,6 @@
         },
         "route": "#/operations/outbox"
       }
-    },
-    {
-      "id": "the-live-diagram-says-why-a-token-is-not-moving",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The live diagram says why a token is not moving",
-        "de": "The live diagram says why a token is not moving"
-      },
-      "summary": {
-        "en": "On the live process diagram, a token that is stuck now carries an overlay explaining why it is not moving — no need to dig through logs.",
-        "de": "Im Live-Prozessdiagramm trägt ein hängendes Token jetzt eine Einblendung, die erklärt, warum es sich nicht bewegt — kein Wühlen in Logs mehr nötig."
-      },
-      "link": {
-        "label": "ADR-0150",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0150-preview-mail-provider-and-visible-incidents.md"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }
