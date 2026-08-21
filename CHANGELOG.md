@@ -319,6 +319,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A looping activity that also has an I/O mapping no longer loops forever**
+  (ADR-0068 with ADR-0077/ADR-0133). A `zeebe:ioMapping` gives an activity a local
+  scope, dropped when it completes — and that is the same scope the engine binds a
+  loop's own `loopCounter` (and a multi-instance iteration's `item`) into. The drop
+  ran first, so the loop then looked for a counter that was no longer there and every
+  run read as the first one: a standard loop never reached its `loopMaximum` — a model
+  that said "at most 9" ran until someone terminated it, each run reporting
+  `loopCounter` 2 — and a sequential multi-instance re-ran its second element forever
+  instead of walking the collection. The same early drop emptied a loop *body*'s scope
+  before it was promoted, so the output collection an ∥/≡ activity had assembled, and
+  everything a ↻ activity's runs wrote — which is a standard loop's whole result —
+  were dropped instead of escaping into the process. The loop's element instances now
+  drop their scope where they always did, after the loop has read what it keeps there.
+  An activity without a loop marker is unchanged.
+
 - **A wide table no longer draws outside its card** (ADR-0163). A cell that cannot
   wrap makes a table's minimum width larger than the card holding it, and a table
   cannot be laid out narrower than that — so it was drawn past the card's right edge,
