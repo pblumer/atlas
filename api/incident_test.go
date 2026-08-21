@@ -66,6 +66,7 @@ type incidentRow struct {
 	Connector          string `json:"connector"`
 	ConnectorKind      string `json:"connectorKind"`
 	ConnectorID        string `json:"connectorId"`
+	RepairForm         string `json:"repairForm"`
 }
 
 func listIncidents(t *testing.T, ts *httptest.Server) []incidentRow {
@@ -414,5 +415,117 @@ func TestIncidentCarriesItsConnector(t *testing.T) {
 	}
 	if got := listIncidents(t, ts); len(got) != 1 || got[0].ConnectorID != rec.ID {
 		t.Errorf("connectorId = %q, want the configured record %q", got[0].ConnectorID, rec.ID)
+	}
+}
+
+// TestIncidentCarriesItsRepairForm is the binding reaching the operator (ADR-0169). The
+// modeler knows which variables a task's retry depends on; that knowledge had nowhere to
+// go, so the person repairing a stuck process at an awkward hour was handed the whole
+// variable set as JSON and left to work out which of it mattered. The incident now names
+// the form its author bound, so the surface can offer named fields instead.
+func TestIncidentCarriesItsRepairForm(t *testing.T) {
+	ts := newTestServer(t)
+
+	const repairBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+  <process id="notify" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="send">
+      <extensionElements>
+        <atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/>
+        <zeebe:formDefinition formId="fix-recipient"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="send"/>
+    <sequenceFlow id="f2" sourceRef="send" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", repairBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+
+	inc := listIncidents(t, ts)
+	if len(inc) != 1 {
+		t.Fatalf("incidents = %+v, want the parked mail task", inc)
+	}
+	if inc[0].RepairForm != "fix-recipient" {
+		t.Errorf("repairForm = %q, want the form the model bound", inc[0].RepairForm)
+	}
+	// It sits *beside* the connector rather than replacing it: one repairs the data, the
+	// other the integration, and an incident may well need both (ADR-0160/0169).
+	if inc[0].Connector != "Patrick Blumer" {
+		t.Errorf("connector = %q, want it still reported alongside the form", inc[0].Connector)
+	}
+
+	// The same fact on the other surface: the live diagram's runtime overlay, which the
+	// replay's incident panel reads. Two responses, one lookup — they must not disagree.
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime", deploy.Key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime: status=%d body=%s", code, body)
+	}
+	var rt struct {
+		Incidents []struct {
+			ElementID  string `json:"elementId"`
+			RepairForm string `json:"repairForm"`
+		} `json:"incidents"`
+	}
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	if len(rt.Incidents) != 1 {
+		t.Fatalf("runtime incidents = %+v, want one", rt.Incidents)
+	}
+	if rt.Incidents[0].RepairForm != "fix-recipient" {
+		t.Errorf("runtime incident repairForm = %q, want %q", rt.Incidents[0].RepairForm, "fix-recipient")
+	}
+}
+
+// TestIncidentWithoutARepairFormSaysSo keeps the addition from implying a form where the
+// modeler bound none: a repair form is anticipatory, and most tasks will never carry one.
+func TestIncidentWithoutARepairFormSaysSo(t *testing.T) {
+	ts := newTestServer(t)
+
+	const plainBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+  <process id="notify" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="send">
+      <extensionElements><atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="send"/>
+    <sequenceFlow id="f2" sourceRef="send" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", plainBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+	inc := listIncidents(t, ts)
+	if len(inc) != 1 {
+		t.Fatalf("incidents = %+v, want the parked mail task", inc)
+	}
+	if inc[0].RepairForm != "" {
+		t.Errorf("repairForm = %q, want empty for a task that bound none", inc[0].RepairForm)
 	}
 }

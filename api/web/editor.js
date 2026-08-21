@@ -3,6 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { copyText } from "./clipboard.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
@@ -10,6 +11,11 @@ import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { migrateInstanceFlow } from "./migrationdialog.js";
+// Which keys a form-js schema binds — the Developer View reads it to offer a linked
+// form's fields as variables, the incident's repair form reads it to know which keys a
+// submit may write (ADR-0169). One description of it, in one place.
+import { formFieldKeys } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -396,29 +402,6 @@ function copyAllBtn(list) {
 function prettyJSON(text) {
   try { return JSON.stringify(JSON.parse(text), null, 2); }
   catch { return String(text); }
-}
-
-// copyText writes text to the clipboard, falling back to a hidden textarea +
-// execCommand where the async Clipboard API isn't available (older browsers, or
-// insecure origins). Returns a promise that resolves once the copy is attempted.
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch { /* fall through to the legacy path */ }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch { return false; }
 }
 
 // bindVarCopy wires the delegated click on `.vcopy` buttons inside panel: it copies
@@ -1345,32 +1328,6 @@ function devViewContext(modeler, api, field) {
 // collectDiagramVariables reads it synchronously; ensureFormFields fills it.
 const formFieldCache = new Map();
 
-// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
-// Every form-js input component carries a `key` — the variable it reads and writes;
-// layout-only components (text, image, spacer, separator, …) have none. A repeating
-// container (dynamic list / group with a `path`) binds an array under that path, so
-// surface the path rather than descending into its per-row template. A plain group
-// is layout only, so recurse — its fields live in the enclosing scope. Each key
-// appears once, in document order.
-function formFieldKeys(schema) {
-  const keys = [];
-  const seen = new Set();
-  const add = (k) => {
-    k = (k || "").trim();
-    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
-  };
-  const walk = (comps) => {
-    for (const c of comps || []) {
-      if (!c || typeof c !== "object") continue;
-      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
-      if (typeof c.key === "string") add(c.key);
-      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
-    }
-  };
-  if (schema && Array.isArray(schema.components)) walk(schema.components);
-  return keys;
-}
-
 // linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
 // (start forms and user-task forms). Best-effort — a registry hiccup yields none.
 function linkedFormIds(modeler) {
@@ -2287,7 +2244,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Tenant" },
       {
         key: "connector", label: "Connector", placeholder: "contoso",
-        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0171).",
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-draft-entra-id-connector).",
       },
       { group: "Operation" },
       {
@@ -2333,7 +2290,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
       },
       { group: "Statement" },
       {
@@ -2371,7 +2328,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
       },
       { group: "Statement" },
       {
@@ -2409,7 +2366,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Database" },
       {
         key: "connector", label: "Connector", placeholder: "hr-db",
-        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-0170).",
+        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-draft-generic-sql-connector).",
       },
       { group: "Statement" },
       {
@@ -3090,6 +3047,42 @@ function loopMode(bo) {
   if (lc.$type === "bpmn:StandardLoopCharacteristics") return "loop";
   if (lc.$type === "bpmn:MultiInstanceLoopCharacteristics") return lc.isSequential ? "sequential" : "parallel";
   return "none";
+}
+
+// REPAIR_FORM_TYPES are the task kinds that can park behind an incident an operator
+// repairs by correcting variables — a service task and its send-task twin (both create a
+// job and wait) and a business rule task. A user task is deliberately not one: its
+// zeebe:formDefinition is its *work* form, the thing a person fills in to do the task,
+// and offering a second form binding on the same element under the same extension would
+// be ambiguous in the model as well as on screen.
+const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:BusinessRuleTask"]);
+
+// repairFormHTML is the repair-form binding on a task (ADR-0169): the form an operator
+// is shown when this task parks, instead of the instance's whole variable set as raw
+// JSON. Whoever is authoring the task is the one who knows which values its retry
+// depends on, which is why the binding is offered here rather than configured by an
+// operator later.
+//
+// It renders the same #f-form picker a user task's work form uses, and so is wired by
+// the same change handler and populated by the same forms fetch — the extension written
+// is identical (zeebe:formDefinition), only the element carrying it differs, which is
+// exactly what makes one the work form and the other the repair form. An element is one
+// type, so the two branches never both render and the id is never duplicated.
+function repairFormHTML(bo) {
+  if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
+  const fd = findExt(bo, "zeebe:FormDefinition") || {};
+  const cur = fd.formId || "";
+  return `<h3>Repair form</h3>
+    <label class="field"><span>Form</span>
+      <select id="f-form">
+        <option value="">&mdash; none &mdash;</option>
+        ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
+      </select></label>
+    <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
+      the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
+      change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
+      nothing specific to say. <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen
+      this to link it.</p>`;
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
@@ -4663,6 +4656,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
         }
+        // The repair form is offered on the task kinds that can park behind an incident
+        // an operator repairs by correcting variables (ADR-0169); repairFormHTML itself
+        // decides which those are, so the panel and the compiler agree on the set.
+        html += repairFormHTML(bo);
         // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
         // standard loop) — including the ones with no implementation of their own: an
         // undefined or manual task repeats its pass-through, a business rule task
@@ -7633,6 +7630,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
@@ -7713,6 +7711,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // Migrating is offered only where it means something: an instance still running has
+  // tokens to rebind, a finished one has none, and the button would be an invitation to
+  // an action the engine would refuse (ADR-0162).
+  const migrateBtn = root.querySelector("#rp-migrate");
+  if (tl.state === "active") {
+    migrateBtn.hidden = false;
+    migrateBtn.addEventListener("click", () => migrateInstanceFlow({
+      api, toast,
+      instanceKey: key,
+      processId: tl.processId,
+      fromVersion: tl.version,
+      fromProcessDefKey: tl.processDefKey,
+      // The replay is a fold of the instance's history and the migration changes what
+      // that history means, so it is re-read from scratch rather than patched.
+      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+    }));
+  }
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -7764,6 +7779,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // view reports "no variables" for an element that plainly produced some.
   let varSide = "in";
   let selElId = "";  // selected diagram element id (may cover several instances)
+  // A migration is the one history row that is not an element at all (ADR-0162), so it
+  // cannot be selected by element instance key like every other. Index into steps, -1
+  // for none.
+  let selMig = -1;
   let activeTab = "details";
   let showEnd = false; // history shows end date instead of start date
   let playing = false;
@@ -7796,6 +7815,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   };
 
   function stepLabel(s) {
+    if (s && s.action === "migrate") {
+      const m = s.migration || {};
+      // Name both ends the way an operator reads a process — by version — and fall back
+      // to the definition key when a side has since been deleted and nothing can say
+      // what version it was.
+      const side = (ver, k) => (ver ? `v${ver}` : `#${k}`);
+      return `Migrated ${side(m.fromVersion, m.fromProcessDefKey)} \u2192 ${side(m.toVersion, m.toProcessDefKey)}`;
+    }
     const el = registry.get(s.elementId);
     const bo = el && el.businessObject;
     return (bo && (bo.name || bo.id)) || s.elementId || "?";
@@ -7964,9 +7991,45 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </div>`;
   };
 
+  // migrationDetail is the Details tab for the one history row that is not an element:
+  // the point at which an operator rebound this instance to another version of its
+  // process (ADR-0162). It says what it says plainly, because the consequence is easy to
+  // misread — the steps above this row ran on a *different* model, so an element named
+  // there may not be on the diagram at all, and one that is may have changed.
+  function migrationDetail(s) {
+    const m = s.migration || {};
+    const side = (ver, tag, k) => {
+      if (!ver) return `<span class="mono">#${esc(String(k))}</span> <span class="hint">(no longer deployed)</span>`;
+      return `Version ${esc(String(ver))}${tag ? ` <span class="hint">(${esc(tag)})</span>` : ""}`;
+    };
+    const who = m.actor ? esc(m.actor) : "an operator";
+    return `<dl class="ops-props">
+      <dt>Event</dt><dd>Migrated to another version</dd>
+      <dt>From</dt><dd>${side(m.fromVersion, m.fromVersionTag, m.fromProcessDefKey)}</dd>
+      <dt>To</dt><dd>${side(m.toVersion, m.toVersionTag, m.toProcessDefKey)}</dd>
+      <dt>Date</dt><dd>${esc(fmtDateTime(m.at || s.at))}</dd>
+      <dt>By</dt><dd>${who}</dd>
+    </dl>
+    <div class="ops-mig">
+      <h4>&#8644; The model changed here</h4>
+      <p>This instance kept its variables, its tasks and everything already done, and
+        carried on under the newer version. The steps <b>above</b> this point ran on the
+        earlier one, so they name that version's elements — the diagram shows the version
+        the instance is on <b>now</b>.</p>
+      <p class="ops-mig-reason">${esc(m.reason || "")}</p>
+    </div>`;
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
+    // A migration selected in the history is not an element at all: it has no element
+    // instance and no diagram shape, so it is answered before either of the branches
+    // below — the first of which treats "no element instance" as "nothing selected".
+    if (selMig >= 0 && steps[selMig] && steps[selMig].migration) {
+      detailEl.innerHTML = migrationDetail(steps[selMig]);
+      return;
+    }
     if (!selEik) {
       // An element the operator clicked that this instance never reached has no step to
       // report — but it does have an identity and, often, the documentation explaining
@@ -8395,7 +8458,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const pos = steps[i] ? steps[i].position : 0;
       row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
       row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
-      row.classList.toggle("sel", steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0);
+      row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0) || i === selMig);
     });
     const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
@@ -8419,6 +8482,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       return;
     }
     const rows = steps.map((s, i) => {
+      if (s.action === "migrate") {
+        // Drawn as a rule across the list rather than another element row: the steps
+        // above it and below it are on different versions of the process, and that is
+        // the one thing this row exists to say.
+        return `<div class="ops-hrow mig" data-i="${i}" data-eik="0"
+            title="${esc((s.migration && s.migration.reason) || "Migrated to another version")}">
+          <span class="ops-hicon mig">&#8644;</span>
+          <span class="ops-hname">${esc(stepLabel(s))}</span>
+          <span class="ops-htime">${esc(fmtClock(s.at))}</span>
+        </div>`;
+      }
       const done = s.endAt > 0;
       const inc = incidentByEik(s.elementInstanceKey);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
@@ -8440,6 +8514,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       pause();
       if (i < 0) { selectElement("", 0); return; }
       const s = steps[i];
+      if (s.action === "migrate") {
+        // It names no element, so there is nothing to select on the diagram and nothing
+        // to animate — but the playhead still moves, so the surrounding steps read in
+        // the order they happened.
+        selMig = i; selElId = ""; selEik = 0;
+        renderOverlay(); renderInspector();
+        const at = frames.findIndex((f) => f.position >= s.position);
+        setPlayhead(at < 0 ? frames.length : at);
+        highlightHistory();
+        return;
+      }
       selectElement(s.elementId, s.elementInstanceKey || 0);
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
@@ -8451,6 +8536,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // selectElement cross-highlights the diagram, the history and the inspector for
   // one element instance (or clears the selection when elId is empty).
   function selectElement(elId, eik) {
+    selMig = -1;
     selElId = elId;
     // Without a specific instance, default to this element's last activation so the
     // inspector has facts to show (clicking the diagram picks the whole element).

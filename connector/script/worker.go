@@ -70,17 +70,18 @@ func Handler(store state.Reader, lookup ProcessLookup, exec Exec) job.OutputHand
 		if cp == nil {
 			return nil, fmt.Errorf("script: no compiled process for def %d", ei.ProcessDefKey)
 		}
-		detail := cp.ScriptJobTask(cp.Node(ei.ElementId).Detail)
-		input, err := scopeVars(store, j.ElementInstanceKey)
+		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
+		// changes only which machine holds the interpreter.
+		resolved, err := Resolve(store, cp, cp.ScriptJobTask(cp.Node(ei.ElementId).Detail), j.ElementInstanceKey)
 		if err != nil {
-			return nil, fmt.Errorf("script: read variables for element %d: %w", j.ElementInstanceKey, err)
+			return nil, err
 		}
-		result, err := exec.Run(context.Background(), cp.Intern(detail.Source), input)
+		res, err := Run(context.Background(), resolved, exec)
 		if err != nil {
-			return nil, fmt.Errorf("script: run script for element %d: %w", j.ElementInstanceKey, err)
+			return nil, fmt.Errorf("run script for element %d: %w", j.ElementInstanceKey, err)
 		}
-		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
-			return []model.VariableValue{outputVariable(resultVar, result)}, nil
+		if res.ResultVariable != "" {
+			return []model.VariableValue{outputVariable(res.ResultVariable, res.Output)}, nil
 		}
 		return nil, nil
 	}

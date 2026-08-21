@@ -10,11 +10,17 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { copyText } from "./clipboard.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixConnectorFlow,
   incidentConnectorChip,
+  repairFormFlow,
 } from "./incidents.js";
 import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
+import { migrateProcessFlow } from "./migrationdialog.js";
+// The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
+// import and one-time stylesheet injection live in one module rather than here.
+import { loadFormViewer } from "./formviewer.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 
 const view = document.getElementById("view");
@@ -863,6 +869,7 @@ async function viewConsoleLogs() {
         <h1>Server logs</h1>
         <div class="row" style="gap:12px; align-items:center">
           <label class="field inline" style="margin:0"><input type="checkbox" id="log-follow" checked> Auto-refresh</label>
+          <button class="btn neutral" id="log-copy" title="Copy the whole visible log to the clipboard">Copy</button>
           <button class="btn neutral" id="log-refresh" title="Reload the latest log lines now">Refresh</button>
         </div>
       </div>
@@ -889,6 +896,23 @@ async function viewConsoleLogs() {
   // now writes into a detached node, and don't overwrite the new view's cleanup.
   if (superseded(gen)) return;
   document.getElementById("log-refresh").addEventListener("click", load);
+  // Copying beats selecting here: the tail repaints every two seconds, so a
+  // hand-made selection is gone before it can be dragged to the end. The whole
+  // visible tail goes at once, which is also what someone pasting into an issue or
+  // a chat actually wants.
+  document.getElementById("log-copy").addEventListener("click", async () => {
+    const text = out.textContent || "";
+    if (!text.trim()) {
+      toast("Nothing to copy yet", "err");
+      return;
+    }
+    const lines = text.split("\n").length;
+    if (await copyText(text)) {
+      toast(`Copied ${lines} log line${lines === 1 ? "" : "s"}`);
+    } else {
+      toast("Could not copy \u2014 select the text and copy it by hand", "err");
+    }
+  });
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
 }
@@ -3104,6 +3128,16 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
+// runningByDefinition keeps the per-*version* running counts the rollup above sums
+// away. The overview only ever shows the process-level total, but migrating drains one
+// deployed version onto another, so its picker has to say which version is actually
+// holding instances — a choice the summed number cannot answer (ADR-0162).
+function runningByDefinition(rows) {
+  const byDef = new Map();
+  for (const r of rows) byDef.set(String(r.processDefKey), r.active || 0);
+  return byDef;
+}
+
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -3150,6 +3184,7 @@ async function viewInstances() {
 
   let allGroups = [];
   let summary = new Map();
+  let runningByDef = new Map();
   // Unresolved incidents, bucketed for the two tables below: by definition (the
   // per-process rows) and by instance (the variable-search results). Keys are
   // stringified so a JSON number and a string key can't miss each other (ADR-0151).
@@ -3264,6 +3299,12 @@ async function viewInstances() {
       const openHref = `#/operations/p/${g.latest.key}`;
       const menuItems = [{ label: "Open", icon: "→", href: openHref }];
       if (s.running) {
+        // Migrating sits above terminating deliberately: both drain a version, but one
+        // keeps the work and the other discards it, and the one that keeps it should be
+        // the one an operator reaches first (ADR-0162).
+        if (g.versions.length > 1) {
+          menuItems.push({ sep: true }, { label: "Migrate running instances…", icon: "⇄", act: "migrate", data: { proc: g.processId } });
+        }
         menuItems.push(
           { sep: true },
           { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
@@ -3289,6 +3330,23 @@ async function viewInstances() {
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
   onMenuAction(tbody, async (act, b) => {
+    // Move a version's running instances onto another version rather than discarding
+    // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
+    if (act === "migrate") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await migrateProcessFlow({
+        api, toast,
+        processId: g.processId,
+        processName: g.latest.name || g.processId,
+        versions: g.versions,
+        // How many instances a version holds: the per-version running counts the
+        // overview already read, so the picker says which one is worth draining.
+        runningOf: (v) => runningByDef.get(String(v.key)) || 0,
+        onDone: load,
+      });
+      return;
+    }
     if (act !== "term") return;
     const proc = b.dataset.proc;
     const g = allGroups.find((x) => x.processId === proc);
@@ -3320,6 +3378,7 @@ async function viewInstances() {
       ]);
       allGroups = groupByProcess(procs);
       summary = summarizeFromServer(rows);
+      runningByDef = runningByDefinition(rows);
       renderRows();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
@@ -3646,7 +3705,15 @@ function overrideCell(r) {
 // table past the width of its card (ADR-0163). Behind the menu, a fourth way out costs
 // no width at all.
 function incidentMenu(r, i) {
-  const items = [{ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } }];
+  const items = [];
+  // The modeler's own repair form leads, when the task named one (ADR-0169): it is the
+  // most specific thing on offer — the fields whoever wrote the task said matter, rather
+  // than the whole variable set. Most tasks name none, which is why the raw editor below
+  // it never goes away.
+  if (r.repairForm) {
+    items.push({ label: "Repair…", icon: "⚑", act: "repair", data: { row: i } });
+  }
+  items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
     items.push({ label: "Configure connector…", icon: "⚙", act: "fixconn", data: { row: i } });
   } else if (r.connector) {
@@ -3734,12 +3801,16 @@ async function viewIncidents() {
     // Correcting the variables first is the other half of resolving: a retry alone
     // repeats whatever failed (ADR-0158). Reconfiguring the connector is the third
     // way, for when the message is about the integration and not the data (ADR-0160).
+    // The repair form is the same correction as the first, through the fields the task's
+    // author named rather than through raw JSON (ADR-0169).
     const act = btn.dataset.act;
-    const changed = act === "fixvars"
-      ? !!(await fixVariablesFlow({ api, toast, incident }))
-      : act === "fixconn"
-        ? !!(await fixConnectorFlow({ api, toast, incident }))
-        : await resolveIncidentFlow({ api, toast, incident });
+    const changed = act === "repair"
+      ? !!(await repairFormFlow({ api, toast, incident }))
+      : act === "fixvars"
+        ? !!(await fixVariablesFlow({ api, toast, incident }))
+        : act === "fixconn"
+          ? !!(await fixConnectorFlow({ api, toast, incident }))
+          : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree
@@ -3781,6 +3852,7 @@ async function viewWorkers() {
     <p class="muted">Who is doing the engine&rsquo;s work. A job type with a growing queue and no worker
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
+    <div class="card wk-card" id="wk-collisions" hidden></div>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
@@ -3788,6 +3860,7 @@ async function viewWorkers() {
 
   const types = document.getElementById("wk-types");
   const workers = document.getElementById("wk-workers");
+  const collisions = document.getElementById("wk-collisions");
   const gaps = document.getElementById("wk-gaps");
   const supervised = document.getElementById("wk-supervised");
   let showAllTypes = false;
@@ -3833,6 +3906,7 @@ async function viewWorkers() {
       types.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
       workers.innerHTML = "";
       gaps.hidden = true;
+      collisions.hidden = true;
       return;
     }
     const allTypes = (data && data.types) || [];
@@ -3894,7 +3968,8 @@ async function viewWorkers() {
           <th class="wk-num">Completed</th><th class="wk-num">Failed</th><th class="wk-num">Last seen</th>
         </tr></thead>
         <tbody>${workerRows.map((w) => `<tr class="${isStale(w) ? "wk-stale" : ""}">
-          <td><b>${w.worker ? esc(w.worker) : `<span class="muted">(unnamed)</span>`}</b></td>
+          <td><b><a href="#" class="wk-open" data-worker="${esc(w.worker)}"
+            title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
           <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
@@ -3911,7 +3986,130 @@ async function viewWorkers() {
       <p class="wk-note">Counters are since this server started and are not restored on restart.
         <b>In flight</b> is what a worker holds a lease on right now. <b>Connectors held</b> is what a
         worker reports it has credentials for &mdash; only it knows, since Atlas holds none for a kind
-        it has handed over.</p>`;
+        it has handed over. Open a worker\u2019s name for the jobs it ran.</p>`;
+
+    // Opening a worker asks for its recent jobs. They are deliberately not part of the
+    // polled payload: the variables in them are process data, the endpoint is
+    // admin-only, and a view that refreshes every few seconds should not carry them.
+    workers.querySelectorAll(".wk-open").forEach((a) => {
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        showWorkerJobs(a.dataset.worker || "");
+      });
+    });
+
+  // showWorkerJobs opens one worker's recent jobs: what it leased, what it was handed,
+  // what it returned, and what failed.
+  //
+  // The counters above say how much; this says which. A failure that still has retries
+  // left raises no incident, so before this its message existed nowhere an operator
+  // could reach — the whole reason the dialog carries the error text at all.
+  //
+  // It is a tail in the server's memory, not history: a restart empties it, and a busy
+  // worker pushes older jobs out. The dialog says so rather than letting an operator
+  // read an empty list as "nothing ran".
+  async function showWorkerJobs(worker) {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal wkjobs-modal" role="dialog" aria-modal="true" aria-label="Worker jobs">
+        <div class="modal-head">
+          <h2>${worker ? esc(worker) : "(unnamed worker)"} \u2014 recent jobs</h2>
+          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">\u2715</button>
+        </div>
+        <div class="modal-body" id="wkjobs-body"><p class="empty">Loading\u2026</p></div>
+        <div class="modal-foot">
+          <span class="muted small">The last jobs this worker leased, newest first. Held in the
+            server\u2019s memory only \u2014 a restart empties it, and older jobs age out. The durable
+            account is the instance timeline.</span>
+          <button type="button" class="btn" data-done title="Close this dialog">Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+    ov.querySelector("[data-x]").addEventListener("click", close);
+    ov.querySelector("[data-done]").addEventListener("click", close);
+
+    const body = ov.querySelector("#wkjobs-body");
+    let jobs = [];
+    try {
+      const out = await api("GET", `/api/v1/workers/${encodeURIComponent(worker)}/jobs`);
+      jobs = (out && out.jobs) || [];
+    } catch (e) {
+      // The endpoint is admin-only, and "you may not see this" is a different answer
+      // from "nothing ran here" — saying which is the point.
+      body.innerHTML = `<p class="empty">${esc(String(e && e.message || e))}</p>`;
+      return;
+    }
+    if (!jobs.length) {
+      body.innerHTML = `<p class="empty">No jobs recorded for this worker in this run.</p>`;
+      return;
+    }
+    // Variables are shown collapsed: the list is for scanning outcomes, and a row of
+    // JSON per job would bury the one that failed.
+    const vars = (label, text) => text
+      ? `<details class="wkjob-vars"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
+      : `<span class="muted small">${label}: none</span>`;
+    body.innerHTML = `<div class="wkjob-list">${jobs.map((j) => {
+      const took = j.settledAt && j.leasedAt
+        ? `${Math.max(0, Math.round((j.settledAt - j.leasedAt) / 1e6))} ms` : "";
+      return `<div class="wkjob wkjob-${esc(j.outcome.replace(/ /g, "-"))}">
+        <div class="wkjob-head">
+          <b>${esc(j.type)}</b>
+          <span class="pill-kv">${esc(j.outcome)}</span>
+          ${took ? `<span class="muted small">${esc(took)}</span>` : ""}
+          ${j.elementId ? `<span class="muted small">${esc(j.elementId)}</span>` : ""}
+          ${j.processInstanceKey
+            ? `<a href="#/operations/i/${j.processInstanceKey}" title="Open the process instance">instance ${j.processInstanceKey}</a>`
+            : ""}
+        </div>
+        ${j.error ? `<div class="wkjob-err">
+          <div class="wkjob-attempts ${j.retries > 0 ? "" : "wkjob-parked"}">${j.retries > 0
+            ? `${j.retries} ${j.retries === 1 ? "attempt" : "attempts"} left`
+            : "No attempts left \u2014 this one has parked"}</div>
+          <pre>${esc(j.error)}</pre></div>` : ""}
+        <div class="wkjob-io">${vars("Handed in", j.in)}${vars("Returned", j.out)}</div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  // prettyJSON re-indents the stored JSON text for reading, and leaves it alone when it
+  // will not parse — a clipped value is still worth showing as the text it is.
+  function prettyJSON(text) {
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return text; }
+  }
+
+    // Job types whose stored index a built-in has since taken. This is a data-directory
+    // condition rather than a worker one, but it belongs where job types are shown, and
+    // it has to be visible somewhere other than a container log: the server warns at
+    // startup and `atlas check-job-types` answers offline, and neither reaches someone
+    // running the engine on a machine they would rather not shell into.
+    const collided = (data && data.jobTypeCollisions) || [];
+    if (collided.length) {
+      collisions.hidden = false;
+      collisions.innerHTML = `
+        <div class="wk-head"><b>Job types on an index a built-in has taken</b>
+          <span class="muted small">${collided.length} type${collided.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Job type</th><th class="wk-num">Index</th><th>That index now means</th></tr></thead>
+          <tbody>${collided.map((c) => `<tr class="wk-stuck">
+            <td><b>${esc(c.name)}</b></td>
+            <td class="wk-num">${c.index}</td>
+            <td><span class="pill-kv">${esc(c.nowMeans)}</span></td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">These types were given their index before a built-in connector claimed it.
+          Jobs already parked under it still carry it, so the engine would hand them to the built-in
+          named above, while new jobs of the same type get a fresh index. Nothing is lost yet and the
+          server runs normally &mdash; but do not treat these queues as healthy, and say so before the
+          next deploy.</p>`;
+    } else {
+      collisions.hidden = true;
+      collisions.innerHTML = "";
+    }
 
     // Connectors nothing can serve. This is the gap handing a credential to a worker
     // opens up: Atlas used to refuse an unconfigured connector when it held every
@@ -4257,25 +4455,6 @@ const TASK_FOLDERS = [
   { id: "unassigned", label: "Unassigned", match: (t) => !t.assignee },
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
-
-// loadFormViewer lazily imports the vendored form-js viewer (ADR-0013 vendoring
-// pattern) and injects its stylesheet once, the first time a task with a form is
-// opened — so users who never open a form never pay for the 86 KB CSS or the
-// bundle. The promise is cached so repeated opens reuse the one import.
-let _formViewer = null;
-function loadFormViewer() {
-  if (!_formViewer) {
-    if (!document.getElementById("form-js-css")) {
-      const link = document.createElement("link");
-      link.id = "form-js-css";
-      link.rel = "stylesheet";
-      link.href = "vendor/form-js/form-js.css";
-      document.head.appendChild(link);
-    }
-    _formViewer = import("./vendor/form-js/form-viewer.js");
-  }
-  return _formViewer;
-}
 
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth

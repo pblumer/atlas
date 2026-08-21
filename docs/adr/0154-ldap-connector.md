@@ -12,7 +12,7 @@
 >   a legitimate search — an author who has never met that limit has no reason to know
 >   the control exists, so paging defaults *on* at 500. `maxEntries` caps what may
 >   land in a process variable and defaults to 1000; exceeding it **fails** rather
->   than truncating, for the reason [ADR-0170](0170-generic-sql-connector.md) gives
+>   than truncating, for the reason [ADR-draft-generic-sql-connector](draft-generic-sql-connector.md) gives
 >   about rows: a short result set is a wrong answer, not a partial one. `0` is the
 >   authored way to say unbounded for either. The compiler writes the effective value
 >   into the compiled process, so the runtime interprets nothing (I5).

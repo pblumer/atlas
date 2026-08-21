@@ -110,6 +110,31 @@ before any security decision rides on it. Then one credential-bearing kind end t
 end, then the rest. A kind that has not moved keeps its in-process handler and its
 deprecation notice.
 
+**The supervised worker is the operator.** Configuration leaving the Console is the
+right answer for a worker somebody else runs, and the wrong one for a worker Atlas
+runs itself. A supervised worker is this process's own child — same host, same user,
+started from the same command line, already inheriting the whole environment. So for
+those, and only those, the engine writes the connector's configuration into the
+child's environment at spawn: the operator setting the worker up, done by the program
+instead of by hand. The secret goes neither over the wire nor into a job payload, so
+the rule above is untouched — a [mail.Job] still has nowhere to put a password — and
+the variables written are the same ones an external worker's operator sets, so there
+is no private channel between parent and child that could quietly become the only
+tested path (ADR-0157).
+
+That is what lets a *managed* kind be offloaded by default. Mail's endpoint and
+password live in the connector store rather than the environment, so until the engine
+could hand them over, defaulting mail to a worker would have handed every mail task to
+a worker with no mailbox. It is also the kind where the stall is worst: an SMTP
+handshake against a slow relay is the delay an operator actually notices, because
+every other caller's job progress waits behind that round of work.
+
+The preview provider (ADR-0150) is the one that does not simply follow. Its output is
+a message an operator reads in *this* server's Operations › Outbox, so a preview
+connector framing its message in a child process has nowhere to put it. The worker
+posts it back to the server's outbox instead — the framing is the same code in both
+processes, so what a preview run proves about a message stays true wherever it ran.
+
 **A prerequisite this exposes.** The type-keyed pull refuses a job type an
 in-process worker is registered for, which is what keeps work from being done twice.
 So a kind cannot move until its in-process handler can be turned off — ADR-0157's
@@ -122,8 +147,11 @@ per-kind switch, listed there as a follow-up and never built. It comes first.
   them. The engine keeps FEEL and the compiled process — the things only it can have
   — and the worker gets a payload it can act on with no engine concepts in it.
 - **Negative / trade-offs accepted:** connector configuration leaves the Console for
-  every kind that moves, and an operator now configures two things unless the worker
-  is supervised. A resolved payload is larger on the wire than a reference would be.
+  every kind that moves onto a worker somebody else runs, and that operator now
+  configures two things. A supervised worker is handed its configuration at spawn, so
+  a credential that used to exist only in the connector store now also exists in a
+  child process's environment on the same host — reachable by anything that could
+  already read the store or the vault key beside it, and by nothing that could not. A resolved payload is larger on the wire than a reference would be.
   And the resolution happens at lease time rather than at call time, so a variable
   changed in between is not seen — the same instant the in-process handler already
   read, moved earlier by the length of one lease.

@@ -1,5 +1,66 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "a-form-on-the-incident-repairing-an-instance-with-named-fiel": {
+    "tags": [
+      "Operations",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Repair a stuck task through named fields, not raw JSON",
+      "de": "Eine hängende Aufgabe über benannte Felder reparieren statt über rohes JSON"
+    },
+    "summary": {
+      "en": "In the Modeler you can now give a task a repair form: the fields worth looking at if that task ever gets stuck. When it does, the incident offers Repair — the form, already filled in with the instance's current values — instead of the whole variable set as a JSON document. Only the fields on the form are written, and the change is recorded with your name as before. Tasks without a repair form are unchanged; Fix variables… is still there for anything nobody saw coming.",
+      "de": "Im Modeler können Sie einer Aufgabe jetzt ein Reparaturformular mitgeben: die Felder, die zählen, falls diese Aufgabe einmal hängen bleibt. Passiert das, bietet der Incident „Reparieren“ an — das Formular, bereits mit den aktuellen Werten der Instanz gefüllt — statt des gesamten Variablensatzes als JSON-Dokument. Geschrieben werden nur die Felder des Formulars, und die Änderung wird wie bisher mit Ihrem Namen protokolliert. Aufgaben ohne Reparaturformular bleiben unverändert; „Variablen korrigieren…“ gibt es weiterhin für alles, was niemand vorhergesehen hat."
+    },
+    "try": {
+      "label": {
+        "en": "Open Incidents",
+        "de": "Incidents öffnen"
+      },
+      "route": "#/operations/incidents"
+    }
+  },
+  "migrating-an-instance-from-operations": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "Move a running instance onto a fixed version, from Operations",
+      "de": "Eine laufende Instanz aus Operations heraus auf eine korrigierte Version umstellen"
+    },
+    "summary": {
+      "en": "When a model turns out to be wrong, the instances that are already running no longer have to be cancelled. Open an instance's replay and use Migrate: it shows what the move would do before anything is written — which elements pair up, and every reason it would be refused — and will not let you submit one that cannot work. A whole version's instances can be moved at once from the process list; any that cannot be moved are listed by key, still running and unchanged.",
+      "de": "Wenn sich ein Modell als falsch herausstellt, müssen die bereits laufenden Instanzen nicht mehr abgebrochen werden. Öffnen Sie den Replay einer Instanz und wählen Sie Migrieren: Vorab wird gezeigt, was die Umstellung bewirken würde — welche Elemente einander zugeordnet werden und jeder Grund, aus dem sie abgelehnt würde. Eine nicht durchführbare Umstellung lässt sich gar nicht erst abschicken. Aus der Prozessliste heraus lassen sich alle Instanzen einer Version auf einmal umstellen; was nicht umgestellt werden kann, wird mit Schlüssel aufgeführt und läuft unverändert weiter."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
+  },
+  "a-migrated-instance-s-replay-reads-under-the-version-each-st": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "A migrated instance's replay shows what really happened",
+      "de": "Der Replay einer migrierten Instanz zeigt, was wirklich passiert ist"
+    },
+    "summary": {
+      "en": "When an instance has been moved to a newer version of its process, its replay now labels each step with the element it actually ran on, not with whatever sits in that spot in the new model. The move itself appears in the history as a marked boundary — which version the instance left, which it arrived on, who moved it and why — so it is clear that the steps above it belong to a different model.",
+      "de": "Wurde eine Instanz auf eine neuere Version ihres Prozesses umgestellt, beschriftet der Replay jeden Schritt jetzt mit dem Element, auf dem er tatsächlich lief — nicht mit dem, was im neuen Modell an dieser Stelle steht. Die Umstellung selbst erscheint als markierte Grenze im Verlauf: von welcher Version auf welche, durch wen und warum. So ist erkennbar, dass die Schritte darüber zu einem anderen Modell gehören."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
+  },
   "process-instance-migration-the-api-and-the-mcp-tools": {
     "tags": [
       "Operations"

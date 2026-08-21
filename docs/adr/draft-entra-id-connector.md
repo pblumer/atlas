@@ -1,4 +1,4 @@
-# ADR-0171: A Microsoft Entra ID connector
+# ADR-DRAFT: A Microsoft Entra ID connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-21
@@ -26,7 +26,7 @@ So: how should a BPMN process provision an identity in Entra ID?
   rejected "just use the generic LDAP connector" because AD's primitives are
   encodings a modeler should not hand-author. Entra's are the same shape.
 - **[ADR-0164](0164-no-in-process-service-tasks.md) decides where it runs.** New
-  connector kinds are built worker-first; [ADR-0170](0170-generic-sql-connector.md)
+  connector kinds are built worker-first; [ADR-draft-generic-sql-connector](draft-generic-sql-connector.md)
   took that to its conclusion for the first time.
 - **Don't write the OAuth2 token flow a third time.**
 - **Testable without a tenant.**
@@ -63,7 +63,7 @@ factored out (see below).
 
 ### Worker-only, and why it matters more here
 
-Like the SQL connectors (ADR-0170) and unlike everything built before them, this kind
+Like the SQL connectors (ADR-draft-generic-sql-connector) and unlike everything built before them, this kind
 has **no in-process handler**. Reserved job type `io.atlas.entra` at index 23; the
 engine resolves the task (`entra.Resolve`) and a worker performs it (`entra.Run`)
 with a tenant credential from its own environment — `ATLAS_ENTRA_CONNECTORS` names
@@ -159,7 +159,7 @@ move did not alter behaviour.
 - repeats [ADR-0166](0166-active-directory-connector.md)'s argument — a vendor's
   primitives deserve named operations — for the cloud directory
 - follows [ADR-0164](0164-no-in-process-service-tasks.md) and
-  [ADR-0170](0170-generic-sql-connector.md): built worker-first, with no in-process half
+  [ADR-draft-generic-sql-connector](draft-generic-sql-connector.md): built worker-first, with no in-process half
 - uses [ADR-0168](0168-connector-work-on-a-worker.md)'s resolved-detail-on-the-job
   mechanism and its environment-held worker credentials
 - factors out the token flow shared with [ADR-0093](0093-native-mail-providers.md)

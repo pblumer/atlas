@@ -100,6 +100,13 @@ func (o *Outbox) Add(m OutboxMessage) OutboxMessage {
 	return m
 }
 
+// Deliver stores a message, satisfying [Sink]. It cannot fail: the outbox is this
+// process's own memory, and the error exists for the sinks that reach another one.
+func (o *Outbox) Deliver(m OutboxMessage) error {
+	o.Add(m)
+	return nil
+}
+
 // Messages returns the newest limit messages, newest first, and whether older ones
 // were left behind — by this limit, or earlier by the capacity bound. A limit below
 // one returns everything the outbox holds.
@@ -142,16 +149,34 @@ func clipField(s string) string {
 	return s[:maxOutboxField] + "\n… [truncated by the preview outbox]"
 }
 
+// Sink is where a preview connector delivers. [Outbox] is the one that lives in the
+// server's own memory, and for as long as mail was an in-process connector it was
+// the only one there could be.
+//
+// It is an interface because mail now runs on a worker (ADR-0168), and a preview
+// connector that framed its message in another process and appended it to *that*
+// process's memory would have previewed into a window nobody can open. A worker
+// binds a sink that hands the message back to the engine's outbox instead, so where
+// the framing happened stops being visible to the person reading Operations › Outbox
+// — which is the whole promise of the preview provider (ADR-0150).
+type Sink interface {
+	// Deliver stores a message, or reports why it could not be stored. The in-process
+	// outbox never fails; a sink that has to reach another process can, and a preview
+	// task whose message did not arrive must fail rather than report a send nobody
+	// can find.
+	Deliver(OutboxMessage) error
+}
+
 // PreviewClient is the [Client] for [ProviderPreview]: it frames the message and
-// delivers it to an outbox.
+// delivers it to a sink.
 type PreviewClient struct {
-	outbox    *Outbox
+	outbox    Sink
 	connector string // the connector name, so one outbox can serve several of them
 	sender    string // the connector's default From
 }
 
-// NewPreviewClient binds a preview connector to the outbox it delivers into.
-func NewPreviewClient(outbox *Outbox, connector, sender string) *PreviewClient {
+// NewPreviewClient binds a preview connector to the sink it delivers into.
+func NewPreviewClient(outbox Sink, connector, sender string) *PreviewClient {
 	return &PreviewClient{outbox: outbox, connector: connector, sender: sender}
 }
 
@@ -170,7 +195,7 @@ func (c *PreviewClient) Send(ctx context.Context, m Message) error {
 	if c.outbox == nil {
 		return fmt.Errorf("mail: preview: connector %q has no outbox", c.connector)
 	}
-	c.outbox.Add(OutboxMessage{
+	return c.outbox.Deliver(OutboxMessage{
 		Connector: c.connector,
 		From:      from,
 		To:        append([]string(nil), m.To...),
@@ -182,5 +207,4 @@ func (c *PreviewClient) Send(ctx context.Context, m Message) error {
 		MessageID: m.MessageID,
 		Raw:       string(buildRFC822(m, from)),
 	})
-	return nil
 }

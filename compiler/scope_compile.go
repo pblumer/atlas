@@ -70,6 +70,16 @@ func (r *registrar) node(id string, nodeID int32) {
 	r.b.SetElementDocumentation(nodeID, r.docs[id]) // the author's prose about this element (ADR-0025)
 }
 
+// taskNode registers a task's node and records the repair form it named (ADR-0169) — the
+// form an operator is offered when a token parks on it with an incident. It is a
+// separate entry point rather than a parameter on node() because only a task that can
+// park has anywhere to put one: a gateway or a flow never raises an incident a person
+// repairs by editing variables.
+func (r *registrar) taskNode(id string, nodeID int32, formID string) {
+	r.node(id, nodeID)
+	r.b.SetRepairForm(nodeID, formID)
+}
+
 // reject keeps the first rejection; later ones are almost always its fallout.
 func (r *registrar) reject(err error) {
 	if r.err == nil {
@@ -152,7 +162,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			reg.node(st.Id, id)
+			reg.taskNode(st.Id, id, st.Form.FormId)
 			return nil
 		}
 		// A service task (or send task) bearing a connector extension delegates to a
@@ -175,7 +185,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			reg.node(st.Id, id)
+			reg.taskNode(st.Id, id, st.Form.FormId)
 			return nil
 		}
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
@@ -215,7 +225,7 @@ func registerScope(
 				Widths:    widths,
 				Retries:   retries,
 			})
-			reg.node(st.Id, id)
+			reg.taskNode(st.Id, id, st.Form.FormId)
 			return nil
 		}
 		if st.TaskDefinition.Type == "" {
@@ -227,7 +237,7 @@ func registerScope(
 			}
 			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
-		reg.node(st.Id, plain(st.TaskDefinition.Type, retries))
+		reg.taskNode(st.Id, plain(st.TaskDefinition.Type, retries), st.Form.FormId)
 		return nil
 	}
 	for _, st := range c.ServiceTasks {
@@ -335,7 +345,7 @@ func registerScope(
 		if err != nil {
 			return err
 		}
-		reg.node(brt.Id, node)
+		reg.taskNode(brt.Id, node, brt.Form.FormId)
 	}
 	for _, ut := range c.UserTasks {
 		retries := int32(defaultRetries)

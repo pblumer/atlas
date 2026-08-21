@@ -43,26 +43,21 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client) job.Output
 		if err != nil {
 			return nil, fmt.Errorf("webscrape: %w", err)
 		}
-		scope := ei.ProcessInstanceKey
-		// Read the instance's variables once: both the url and selector FEEL values
-		// evaluate against them, off the hot path.
-		scopeVars, err := readScopeVars(store, scope)
-		if err != nil {
-			return nil, fmt.Errorf("webscrape: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		values, err := client.Scrape(context.Background(), Request{
-			URL:       resolveValue(detail.Url, scope, scopeVars),
-			Selector:  resolveValue(detail.ScrapeSelector, scope, scopeVars),
-			Attribute: cp.Intern(detail.ScrapeAttribute),
-		})
+		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
+		// changes only where the network reach comes from, never what a resolved
+		// scrape means.
+		resolved, err := Resolve(store, cp, detail, ei.ProcessInstanceKey)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
+		res, err := Run(context.Background(), resolved, client)
+		if err != nil {
+			return nil, err
+		}
+		if res.ResultVariable == "" {
 			return nil, nil // no result variable authored; nothing to write back
 		}
-		return []model.VariableValue{resultVariable(resultVar, values)}, nil
+		return []model.VariableValue{resultVariable(res.ResultVariable, res.Values)}, nil
 	}
 }
 

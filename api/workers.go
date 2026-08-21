@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -56,7 +57,10 @@ type workerRegistry struct {
 	// inferred because the completion and failure handlers already hold the job, and
 	// so know its type.
 	inFlight map[string]int64
-	now      func() int64
+	// jobs holds each worker's most recent jobs, so the console can answer "which
+	// ones" after the counters have answered "how many" (see workerjobs.go).
+	jobs map[string]*jobRunRing
+	now  func() int64
 }
 
 // newWorkerRegistry builds an empty registry over a clock, injected so the
@@ -65,7 +69,12 @@ func newWorkerRegistry(now func() int64) *workerRegistry {
 	if now == nil {
 		now = func() int64 { return time.Now().UnixNano() }
 	}
-	return &workerRegistry{byName: map[string]*workerStat{}, inFlight: map[string]int64{}, now: now}
+	return &workerRegistry{
+		byName:   map[string]*workerStat{},
+		inFlight: map[string]int64{},
+		jobs:     map[string]*jobRunRing{},
+		now:      now,
+	}
 }
 
 // seen returns the worker's record, creating it on first sight. A worker that
@@ -219,11 +228,13 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 				Type:            e.Name,
 				Index:           e.Index,
 				ServedInProcess: inProcess,
-				BuiltIn:         e.Index < compiler.FirstDynamicJobTypeIndex(),
-				Leasable:        !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
-				InFlight:        s.workers.inFlightOf(e.Name),
-				Incidents:       incidents[e.Index],
-				Processes:       users[e.Index],
+				// The reserved count, not the dynamic floor: a legacy assignment sits
+				// between the two and is model-authored, not built in.
+				BuiltIn:   e.Index < compiler.ReservedJobTypeCount(),
+				Leasable:  !inProcess && e.Index != compiler.UserTaskJobTypeIndex,
+				InFlight:  s.workers.inFlightOf(e.Name),
+				Incidents: incidents[e.Index],
+				Processes: users[e.Index],
 			}
 			if err := s.store.ActivatableJobs(e.Index, func(uint64) error {
 				if st.Parked >= maxTypeScan {
@@ -253,9 +264,18 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	if s.supervisor != nil {
 		supervised = s.supervisor.list()
 	}
+	// Job types whose stored index a built-in has since taken. Read straight off the
+	// registry rather than recomputed: it is what the load actually had to discard,
+	// and it does not change while the server runs. The server also warns about it at
+	// startup and `atlas check-job-types` answers offline, but neither reaches an
+	// operator whose engine runs in a container they would rather not shell into.
+	collisions := s.jobTypes.Dropped()
+	if collisions == nil {
+		collisions = []jobtype.Collision{}
+	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"workers": list, "types": types, "supervised": supervised,
-		"unservedConnectors": unserved,
+		"unservedConnectors": unserved, "jobTypeCollisions": collisions,
 	})
 }
 

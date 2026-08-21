@@ -1,4 +1,4 @@
-# ADR-0172: A directory-file connector — LDIF and DSML
+# ADR-DRAFT: A directory-file connector — LDIF and DSML
 
 - **Status:** Proposed
 - **Date:** 2026-08-21

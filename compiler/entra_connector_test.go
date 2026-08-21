@@ -33,7 +33,7 @@ func entraDetail(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDe
 }
 
 // A service task bearing <atlas:entraConnector> is an Entra ID connector task
-// (ADR-0171): it names a tenant connector and a lifecycle operation, never an
+// (ADR-draft-entra-id-connector): it names a tenant connector and a lifecycle operation, never an
 // address or a credential.
 func TestParseEntraConnectorTask(t *testing.T) {
 	cp, d := entraDetail(t, `connector="contoso" operation="disable" userId="=person.upn" resultVariable="konto"`)

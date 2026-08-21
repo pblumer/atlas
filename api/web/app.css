@@ -317,6 +317,56 @@ textarea::placeholder {
 .ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-manual-reason { margin-top: 6px !important; font-style: italic; }
 
+/* The repair form on an incident (ADR-0169): the modeler's own fields, in place of the
+   raw JSON document. The form-js viewer brings its own field styling, so this only gives
+   it room to breathe and a scroll of its own — a repair form may be long, and the modal
+   must not grow past the viewport because of it. */
+.repair-modal .modal-body { max-width: 560px; }
+.repair-form { margin-top: 10px; max-height: 46vh; overflow-y: auto; }
+.repair-err { color: var(--warn); }
+/* Which form is being shown, so an operator can tell a stale binding from a wrong one
+   without leaving the dialog. */
+.repair-which { font-size: 12px; }
+
+/* Moving a running instance to another version of its process (ADR-0162). The plan is
+   the dialog's centre of gravity — the refusals in particular, since a migration that
+   cannot go through is the case the dry run exists for — so it reads as a block rather
+   than as a paragraph of the form around it. */
+.mig-modal .modal-body { max-width: 560px; }
+.mig-plan {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2, var(--surface));
+  max-height: 240px; overflow-y: auto;
+}
+.mig-verdict { margin: 0; font-size: 13px; font-weight: 600; }
+.mig-verdict.ok { color: var(--ok); }
+.mig-verdict.bad { color: var(--warn); }
+.mig-problems { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.mig-problems li { margin: 0 0 2px; }
+.mig-refused { max-height: 220px; overflow-y: auto; }
+.mig-map { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.mig-map h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+.mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.mig-err { color: var(--warn); }
+
+/* The migration boundary on the replay history (ADR-0162): the steps above it and below
+   it ran on different versions of the process, so it is drawn as a rule across the list
+   rather than as another element row — a reader scanning the column should not be able
+   to mistake it for a step the token walked. */
+.ops-hrow.mig {
+  border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+.ops-hrow.mig .ops-hname { font-style: italic; }
+.ops-hicon.mig { color: var(--accent); }
+.ops-mig {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--accent-soft);
+}
+.ops-mig h4 { margin: 0 0 4px; font-size: 12px; color: var(--accent); }
+.ops-mig p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
+.ops-mig-reason { margin-top: 6px !important; font-style: italic; }
+
 /* Why a stored connector is not usable, under its status pill (ADR-0158). */
 .conn-problem {
   margin-top: 3px; max-width: 340px; color: var(--danger);
@@ -2748,4 +2798,38 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .stkind-notice code {
   font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
+}
+
+/* One worker's recent jobs (ADR-0157). The list is for scanning outcomes, so a failed
+   job is the thing that stands out and its variables stay folded until asked for. */
+.wkjobs-modal { width: min(860px, 94vw); }
+.wkjobs-modal .modal-body { max-height: 62vh; overflow: auto; }
+.wkjob-list { display: flex; flex-direction: column; gap: 8px; }
+.wkjob { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.wkjob-completed { border-left-color: var(--ok, #2e7d32); }
+.wkjob-failed { border-left-color: var(--danger); }
+/* Still out with the worker: neither good news nor bad, and the age is what tells a
+   job still being worked from a lease whose worker has gone. */
+.wkjob-in-flight { border-left-color: #b26b00; }
+.wkjob-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+/* A worker's own error text. It is usually an interpreter's stack trace, so the line
+   breaks in it are the readable part and must survive; a tall one scrolls inside its
+   own box rather than pushing the rest of the list off the screen. */
+.wkjob-err { margin: 6px 0 0; }
+.wkjob-err pre {
+  margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto;
+  background: var(--danger-soft, var(--bg)); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--danger); font-size: 12px; white-space: pre-wrap; word-break: break-word;
+}
+/* Whether this failure still has attempts behind it. On its own line because it is
+   the first thing to read, and the stack trace below it is the second. */
+.wkjob-attempts { font-size: 12px; color: var(--muted); font-weight: 600; }
+.wkjob-parked { color: var(--danger); }
+.wkjob-io { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; }
+.wkjob-vars summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.wkjob-vars summary:hover { color: var(--accent); }
+.wkjob-vars pre {
+  margin: 6px 0 0; padding: 8px; max-height: 220px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  font-size: 12px; white-space: pre-wrap; word-break: break-word;
 }

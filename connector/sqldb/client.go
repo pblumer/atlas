@@ -16,7 +16,7 @@ import (
 const DefaultMaxRows = 1000
 
 // Registry resolves a connector name to the database behind it. It is the worker's
-// own map — the engine never holds one for this kind (ADR-0170).
+// own map — the engine never holds one for this kind (ADR-draft-generic-sql-connector).
 type Registry = clientreg.Registry[*Client]
 
 // NewRegistry creates an empty registry.

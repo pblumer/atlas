@@ -271,7 +271,7 @@ const AdJobType = "io.atlas.ad"
 // LdapJobTypeIndex (ADR-0166).
 const AdJobTypeIndex int32 = 19
 
-// The three SQL connector job types (ADR-0170). They are one connector in three
+// The three SQL connector job types (ADR-draft-generic-sql-connector). They are one connector in three
 // faces: the same task shape, the same engine-side resolution and the same worker
 // code, differing only in the driver behind them — and therefore in the placeholder
 // syntax a statement must use. That difference is why the product is part of the
@@ -323,7 +323,7 @@ const EntraJobType = "io.atlas.entra"
 const EntraJobTypeIndex int32 = 23
 
 // LdifJobType is the reserved job type a directory-file connector task carries: LDIF
-// (RFC 2849) or DSML v1, read or written (ADR-0172).
+// (RFC 2849) or DSML v1, read or written (ADR-draft-directory-file-connector).
 //
 // It has an in-process handler as well as a worker one, and that is not a lapse from
 // ADR-0164: parsing a file is pure computation with no network and no credential, the
@@ -375,10 +375,34 @@ var reservedJobTypes = []string{
 // re-point every job already written under them.
 func ReservedJobTypes() []string { return slices.Clone(reservedJobTypes) }
 
+// ReservedJobTypeCount is how many built-in job types exist in this build, and so
+// the exclusive upper bound of the reserved index range. It grows whenever a
+// connector is added, which is exactly why it is not the same number as
+// [FirstDynamicJobTypeIndex].
+func ReservedJobTypeCount() int32 { return int32(len(reservedJobTypes)) }
+
+// dynamicJobTypeFloor is the lowest index a model-authored job type may be issued.
+//
+// It is a fixed number rather than one past the reserved range, and that is the
+// whole point. Adding a built-in connector grows the reserved range; when the two
+// were the same number, that growth walked over indices already issued to
+// model-authored types, and the jobs parked under them kept an index that had come
+// to mean something else. SOAP and Active Directory did exactly that to 18 and 19.
+//
+// With a fixed floor the reserved range can grow by hundreds of connectors and never
+// reach an issued index. The gap is dead space in an int32, which costs nothing:
+// indices are dense only in the sense that they are compared, never iterated.
+//
+// Note what this does *not* mean: an index below the floor is not thereby invalid.
+// Stores written before the floor existed hold perfectly good assignments between
+// [ReservedJobTypeCount] and here, and only an index inside the reserved range is a
+// collision.
+const dynamicJobTypeFloor int32 = 1000
+
 // FirstDynamicJobTypeIndex is the lowest index available to a model-authored job
-// type (a <zeebe:taskDefinition type>), i.e. one past the reserved range. The
-// engine-wide registry assigns from here up.
-func FirstDynamicJobTypeIndex() int32 { return int32(len(reservedJobTypes)) }
+// type (a <zeebe:taskDefinition type>). The engine-wide registry assigns from here
+// up; see [dynamicJobTypeFloor] for why it is not simply one past the reserved range.
+func FirstDynamicJobTypeIndex() int32 { return dynamicJobTypeFloor }
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
@@ -423,6 +447,7 @@ type Builder struct {
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
 	elementDocs        []int32          // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
+	repairForms        []int32          // interned repair form id per node, -1 if none (ADR-0169)
 	lanes              []LaneDetail     // organizational lanes (ADR-0121)
 	documentation      int32            // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
@@ -491,6 +516,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	})
 	b.elementIds = append(b.elementIds, -1)   // kept in lockstep with nodes
 	b.elementDocs = append(b.elementDocs, -1) // likewise: -1 = undocumented
+	b.repairForms = append(b.repairForms, -1) // likewise: -1 = no repair form
 	return id
 }
 
@@ -623,6 +649,19 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 func (b *Builder) SetElementDocumentation(nodeID int32, text string) {
 	if b.validNode(nodeID) {
 		b.elementDocs[nodeID] = b.intern(text)
+	}
+}
+
+// SetRepairForm records the form an operator should be shown when a token parks on this
+// node with an incident (ADR-0169) — the modeler's answer to "if this task goes wrong,
+// these are the values worth looking at". Design-time metadata exactly like the
+// documentation above: the processor never reads it, so it changes no execution, and it
+// is carried in the compiled process so the incident surface can read it without
+// re-parsing the model (invariant I5) and so it moves with an instance that migrates
+// (ADR-0162). An empty id interns to -1, so a node without one costs nothing.
+func (b *Builder) SetRepairForm(nodeID int32, formID string) {
+	if b.validNode(nodeID) {
+		b.repairForms[nodeID] = b.intern(formID)
 	}
 }
 
@@ -1223,7 +1262,7 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-0170),
+// SqlConfig is the deploy-time configuration of a SQL connector task (ADR-draft-generic-sql-connector),
 // shared by all three products. JobType is the product's reserved job type
 // (MsSqlJobType, MariaDBJobType or PostgresJobType) — the one field that differs
 // between them, and what decides which driver the worker opens.
@@ -1275,7 +1314,7 @@ func (b *Builder) AddSqlConnectorTask(cfg SqlConfig) int32 {
 }
 
 // LdifConfig is the deploy-time configuration of a directory-file connector task
-// (ADR-0172). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
+// (ADR-draft-directory-file-connector). Format is "ldif" or "dsml" and Operation "read" or "write"; Source
 // names the variable holding the file text (read) or the entries (write), and Result
 // the variable receiving the entries (read) or the rendered file (write).
 type LdifConfig struct {
@@ -1312,7 +1351,7 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 }
 
 // EntraConfig is the deploy-time configuration of a Microsoft Entra ID connector
-// task (ADR-0171). Connector names the tenant the worker is configured for — a task
+// task (ADR-draft-entra-id-connector). Connector names the tenant the worker is configured for — a task
 // carries no tenant id and no client secret, because they never enter the engine. Op
 // is the lifecycle operation. UserID and GroupID are literal-or-FEEL values
 // addressing the user (a UPN or object id) and the group; AttributesVar names the
@@ -2396,6 +2435,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
 		elementDocs:        b.elementDocs,
+		repairForms:        b.repairForms,
 		lanes:              b.lanes,
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,

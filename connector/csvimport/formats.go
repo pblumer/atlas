@@ -16,7 +16,7 @@ import (
 // gets back is a list of row objects whichever format the file arrived in.
 //
 // They are formats of one connector rather than three connectors for the same
-// reason: unlike the SQL products (ADR-0170), nothing here can be pointed at the
+// reason: unlike the SQL products (ADR-draft-generic-sql-connector), nothing here can be pointed at the
 // wrong one silently. A fixed-width layout applied to an LDIF file does not quietly
 // produce plausible rows; it fails on the first record, loudly, at the moment the
 // file is read.

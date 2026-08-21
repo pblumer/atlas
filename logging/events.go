@@ -131,7 +131,12 @@ var (
 
 // Identity, secrets, and provisioning (ADR-0044/0070/0123).
 var (
-	VaultKeyGenerated            = newEvent("vault.key_generated")
+	VaultKeyGenerated = newEvent("vault.key_generated")
+
+	// JobTypeIndexCollision reports a stored job-type assignment whose index the
+	// reserved range has since grown over. Warned at startup rather than swallowed:
+	// jobs already on disk carry the old index, so the drop is not cosmetic.
+	JobTypeIndexCollision        = newEvent("jobtype.index_collision")
 	AuthAdminSeeded              = newEvent("auth.admin_seeded")
 	AuthPasswordReset            = newEvent("auth.password_reset")
 	UserProvisioningUserCreated  = newEvent("user_provisioning.user_created")

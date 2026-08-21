@@ -27,7 +27,7 @@ import (
 //
 // The DSN comes from the environment and not from a flag because argv is readable by
 // anyone who can list processes — and unlike every other connector's endpoint, a DSN
-// *is* the credential (ADR-0170).
+// *is* the credential (ADR-draft-generic-sql-connector).
 func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Registry, []string, error) {
 	prefix := "ATLAS_" + envFold(p.Name) + "_"
 	names := splitAndTrim(env(prefix + "CONNECTORS"))

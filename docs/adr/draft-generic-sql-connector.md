@@ -1,4 +1,4 @@
-# ADR-0170: Three SQL connectors, and the first kinds born on a worker
+# ADR-DRAFT: Three SQL connectors, and the first kinds born on a worker
 
 - **Status:** Proposed
 - **Date:** 2026-08-21

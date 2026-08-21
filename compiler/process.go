@@ -661,7 +661,7 @@ type ConnectorTaskDetail struct {
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool
-	// Generic SQL connector fields (JobType == SqlJobType, ADR-0170). Connector
+	// Generic SQL connector fields (JobType == SqlJobType, ADR-draft-generic-sql-connector). Connector
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is
 	// the interned operation ("query"|"query-one"|"execute").
@@ -682,7 +682,7 @@ type ConnectorTaskDetail struct {
 	SqlStatement int32
 	SqlParamsVar int32
 	SqlMaxRows   int32
-	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0171).
+	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-draft-entra-id-connector).
 	// Connector (above) names the tenant the *worker* is configured for; a task
 	// carries no tenant id and no client secret, because they never enter the engine.
 	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
@@ -698,7 +698,7 @@ type ConnectorTaskDetail struct {
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraAttributesVar int32
-	// Directory-file connector fields (JobType == LdifJobType, ADR-0172). LdifFormat
+	// Directory-file connector fields (JobType == LdifJobType, ADR-draft-directory-file-connector). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the
 	// file text (read) or the entries (write); LdifResult the variable receiving the
@@ -1035,6 +1035,7 @@ type CompiledProcess struct {
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
 	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms        []int32      // interned repair form id per node id (-1 if none, ADR-0169)
 	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string     // intern table (index → string), for debug/export
@@ -1664,6 +1665,24 @@ func (p *CompiledProcess) ElementDocumentation(id int32) string {
 		return ""
 	}
 	return p.Intern(p.elementDocs[id])
+}
+
+// RepairForm returns the form an operator should be offered when a token parks on this
+// node with an incident (ADR-0169), or "" when the node names none or the index is out
+// of range.
+//
+// It is a *better editor over an existing write path*, not a new one: the form names the
+// variables worth looking at, and submitting it writes them through the same audited
+// operator override the raw JSON editor uses (ADR-0098). The binding lives here, in the
+// compiled model, because whoever authored the task is who knows which values its retry
+// depends on — so it is versioned with the model, costs nothing at runtime, and rides an
+// instance's migration (ADR-0162) rather than being runtime configuration that could
+// drift from the task it describes.
+func (p *CompiledProcess) RepairForm(id int32) string {
+	if id < 0 || int(id) >= len(p.repairForms) {
+		return ""
+	}
+	return p.Intern(p.repairForms[id])
 }
 
 // Documentation returns the process's own <bpmn:documentation> — the summary that

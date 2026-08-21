@@ -15,7 +15,7 @@ func envMap(m map[string]string) func(string) string {
 }
 
 // A SQL worker is configured entirely from its environment: the DSN is the credential
-// here, so it must never be reachable through argv (ADR-0170).
+// here, so it must never be reachable through argv (ADR-draft-generic-sql-connector).
 func TestBuiltinConnectorsRegistersEachSQLProduct(t *testing.T) {
 	for _, tc := range []struct{ kind, prefix, dsn, jobType string }{
 		{"mssql", "ATLAS_MSSQL_", "sqlserver://u:p@localhost:1433?database=hr", compiler.MsSqlJobType},
@@ -93,14 +93,17 @@ func TestBuiltinConnectorsStartsWithAnUnreachableDatabase(t *testing.T) {
 	}
 }
 
-// An unknown kind yields no handler, so the caller's count comparison catches it.
-func TestBuiltinConnectorsIgnoresAnUnknownKind(t *testing.T) {
-	got, err := BuiltinConnectors(envMap(nil), "db2")
-	if err != nil {
-		t.Fatalf("BuiltinConnectors: %v", err)
+// A kind this worker does not implement is refused at startup, naming what it does
+// implement. DB2 is the case that matters here: it is the one MIM database agent with
+// no pure-Go driver (ADR-0010), so an operator who reaches for it should be told so
+// while they are still watching.
+func TestBuiltinConnectorsRefusesAnUnimplementedKind(t *testing.T) {
+	_, err := BuiltinConnectors(envMap(nil), "db2")
+	if err == nil {
+		t.Fatal("an unimplemented kind must be refused at startup")
 	}
-	if len(got.Handlers) != 0 {
-		t.Errorf("handlers = %v, want none for an unimplemented kind", got.Handlers)
+	if !strings.Contains(err.Error(), "db2") || !strings.Contains(err.Error(), "mssql") {
+		t.Errorf("the error should name the kind and what is available, got: %v", err)
 	}
 }
 

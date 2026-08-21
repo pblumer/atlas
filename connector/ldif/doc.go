@@ -1,5 +1,5 @@
 // Package ldif reads and writes directory entries held in a file — LDIF (RFC 2849)
-// and DSML v1 (ADR-0172).
+// and DSML v1 (ADR-draft-directory-file-connector).
 //
 // # Why this is not the text-file connector
 //

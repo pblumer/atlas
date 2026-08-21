@@ -1753,6 +1753,13 @@ type xmlServiceTask struct {
 	// not supported. Inert on a service task.
 	OperationRef   string            `xml:"operationRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
+	// Form binds a *repair* form to this task (ADR-0169): the form an operator is shown
+	// when a token parks here with an incident, naming the variables worth looking at.
+	// It reuses zeebe:formDefinition, the same element a user task binds its work form
+	// with — the tag says "this element has a form", and what the form is *for* follows
+	// from the element that carries it. A service task never shows a form to a human in
+	// the normal course of things, so there is no ambiguity to resolve.
+	Form xmlFormDefinition `xml:"extensionElements>formDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
@@ -1810,7 +1817,7 @@ type xmlServiceTask struct {
 	// model-authored server through the job path.
 	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
 	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
-	// that product (ADR-0170): one statement against a database a *worker* is
+	// that product (ADR-draft-generic-sql-connector): one statement against a database a *worker* is
 	// configured for. They share a shape and differ only in the driver behind them,
 	// which is what decides the placeholder syntax a statement must use. They are the
 	// first kinds with no in-process handler at all.
@@ -1818,11 +1825,11 @@ type xmlServiceTask struct {
 	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
 	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
 	// Entra, when present, marks this service task a Microsoft Entra ID connector
-	// task (ADR-0171): one directory lifecycle operation through Graph, against a
+	// task (ADR-draft-entra-id-connector): one directory lifecycle operation through Graph, against a
 	// tenant a *worker* holds the app credential for.
 	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
 	// Ldif, when present, marks this service task a directory-file connector task
-	// (ADR-0172): LDIF or DSML entries read from, or written to, a variable.
+	// (ADR-draft-directory-file-connector): LDIF or DSML entries read from, or written to, a variable.
 	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
@@ -1988,7 +1995,7 @@ type xmlAdConnector struct {
 
 // xmlSqlConnector is the extension a SQL connector task carries, under whichever of
 // <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
-// its product (ADR-0170). The three share this shape exactly; only the element name,
+// its product (ADR-draft-generic-sql-connector). The three share this shape exactly; only the element name,
 // and so the driver, differs. connector names the database the worker holds the DSN
 // for — there is deliberately no url and no credential attribute, because the
 // connection string never enters the engine. operation is query / query-one / execute. statement is the
@@ -2008,7 +2015,7 @@ type xmlSqlConnector struct {
 }
 
 // xmlLdifConnector is the <atlas:ldifConnector> extension on a service task
-// (ADR-0172). format is "ldif" or "dsml" — required, because guessing a directory
+// (ADR-draft-directory-file-connector). format is "ldif" or "dsml" — required, because guessing a directory
 // file's format from its bytes is how a malformed file becomes a plausible-looking
 // empty result. operation is "read" (the default) or "write"; source names the
 // variable holding the file text or the entries, and resultVariable the one receiving
@@ -2024,7 +2031,7 @@ type xmlLdifConnector struct {
 }
 
 // xmlEntraConnector is the <atlas:entraConnector> extension on a service task
-// (ADR-0171). connector names the tenant the worker holds the app credential for —
+// (ADR-draft-entra-id-connector). connector names the tenant the worker holds the app credential for —
 // there is deliberately no tenantId, clientId or secret attribute, because none of
 // them enters the engine. operation is the lifecycle step; userId and groupId address
 // the objects (literal-or-FEEL); attributesVariable names the variable holding the
@@ -2376,10 +2383,12 @@ type xmlAtlasScript struct {
 //
 // The decision's result is written back into the resultVariable process variable.
 type xmlBusinessRuleTask struct {
-	Id             string               `xml:"id,attr"`
-	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
-	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
-	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
+	Id             string            `xml:"id,attr"`
+	CalledDecision xmlCalledDecision `xml:"extensionElements>calledDecision"`
+	// Form binds a repair form to this task, as on a service task (ADR-0169).
+	Form          xmlFormDefinition    `xml:"extensionElements>formDefinition"`
+	Inputs        []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
+	InputMappings []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
 	// TemisConnector, when present, marks this a central (connector) decision
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is

@@ -4,7 +4,34 @@ This directory records the significant architectural decisions made on Atlas, us
 
 An ADR captures a decision, the context that forced it, the options considered, and the consequences accepted. ADRs are immutable once accepted: if a decision changes, a new ADR supersedes the old one rather than editing it.
 
-A number belongs to exactly one decision. Take the next free one when you add a record — two branches each taking "the next number" is how 0090, 0103 and 0105 came to be shared by unrelated ADRs (the later record of each pair now lives at 0139, 0140 and 0141). `go test ./docs/adr` enforces unique, gapless numbers and keeps the index below in step with the directory: one row per record, carrying that record's own `# ADR-NNNN:` heading — the index is a table of contents, so what the decision *says* belongs in the record, not in the cell.
+A number belongs to exactly one decision, and it is assigned **when the record lands on `main`** — never on a branch. `go test ./docs/adr` enforces unique, gapless numbers, keeps the index below in step with the directory, and checks that every `ADR-NNNN` citation anywhere in the repository still resolves. The index is a table of contents: one row per record, carrying that record's own `# ADR-NNNN:` heading, so what the decision *says* belongs in the record, not in the cell.
+
+## Writing a record
+
+**Do not pick a number.** A record in flight carries none:
+
+1. Copy [`template.md`](template.md) to `docs/adr/draft-<slug>.md` — a kebab-case slug, no number.
+2. Keep the heading as `# ADR-DRAFT: Your title`, and fill in the record.
+3. Add **no** row to the index below.
+4. Cite it as `ADR-draft-<slug>` from code comments and docs, or link `draft-<slug>.md`.
+
+When the PR merges, a workflow on `main` runs `make adr-number`. That renames the
+file to `NNNN-<slug>.md`, rewrites the heading, appends the index row, and rewrites
+every citation of the draft to the number it just got. Nothing for you to remember;
+you can also run `make adr-number` by hand on `main`.
+
+Why the ceremony: the number used to be taken when the record was written, which is
+the earliest possible moment and the one with the least information. Two open
+branches both saw the same "next free" number and both took it — that is how 0090,
+0103 and 0105 came to be shared by unrelated ADRs (the later record of each pair now
+lives at 0139, 0140 and 0141). Once a test caught the collision, the cost became a
+renumber on every merge instead: one record walked 0164 → 0169 across six of them
+without a word of its content changing. Assigning the number where the question has
+one answer removes both. The full argument is in
+[the record on merge-time numbering](0170-adr-numbers-assigned-at-merge.md).
+
+A number, once assigned, is never reassigned — that is what makes `(ADR-0168)` in a
+comment safe to write.
 
 ## Index
 
@@ -178,10 +205,8 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0166](0166-active-directory-connector.md) | Active Directory connector | Proposed |
 | [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted |
-| [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Proposed |
-| [0170](0170-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Proposed |
-| [0171](0171-entra-id-connector.md) | A Microsoft Entra ID connector | Proposed |
-| [0172](0172-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Proposed |
+| [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted |
+| [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted |
 
 ## Status values
 

@@ -763,6 +763,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// A store written before the reserved range reached these indices holds
+	// model-authored types on them. The table cannot keep such a record — the index
+	// belongs to a built-in now — but dropping it in silence is what would let jobs
+	// already on disk be read as the built-in's. So it is said out loud, once, with
+	// the name and what its index means now. The server still starts: the repair is
+	// not decided yet, and taking an instance down over it would be the larger harm.
+	for _, c := range jobTypes.Dropped() {
+		logging.Warn(logging.JobTypeIndexCollision,
+			"a stored job type sits on an index a built-in has since taken; its parked jobs would be read as that built-in's",
+			slog.String("jobType", c.Name), slog.Int("index", int(c.Index)),
+			slog.String("indexNowMeans", c.NowMeans))
+	}
 	drafts, err := newDraftStore(filepath.Join(dataDir, "drafts"))
 	if err != nil {
 		return nil, err
@@ -1060,7 +1072,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		return webscrape.Handler(rd, s.processLookup, webscrape.NewHTTPClient())
 	})
-	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-0172).
+	// A directory-file connector task reads or writes LDIF/DSML entries (ADR-draft-directory-file-connector).
 	// Like CSV it is a pure transform — no network, no credential — so it runs here as
 	// well as on a worker, and neither placement can block the other.
 	s.jobRunner.HandleWithOutput(compiler.LdifJobTypeIndex, func(rd state.Reader) job.OutputHandler {
@@ -1137,9 +1149,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.exporter = exp
 	}
 
-	// Supervised workers, if the operator asked for any on the command line. They
-	// start before traffic is served, and stop with the server: the same `atlas
-	// worker` an operator could run by hand, just launched here (ADR-0157 step 7).
+	s.wg.Add(3)
+	go s.loop()
+
+	// Supervised workers, if the operator asked for any on the command line, or if the
+	// default opt-out set applies. They stop with the server: the same `atlas worker`
+	// an operator could run by hand, just launched here (ADR-0157 step 7).
+	//
+	// They are registered after the run loop is running because a worker's environment
+	// is read from the connector store, and the store is the loop's to read.
 	if len(s.SuperviseSpecs) > 0 {
 		s.supervisor = newSupervisor(quit)
 		for i, spec := range s.SuperviseSpecs {
@@ -1147,13 +1165,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			for _, h := range s.superviseHandles[i] {
 				args = append(args, "--handle", h)
 			}
-			s.supervisor.add(spec, args)
+			// A supervised worker may also serve built-in connector kinds. It is a
+			// child of this process, so it inherits the environment any of them read
+			// their configuration from — and for a kind whose configuration lives in
+			// the connector store instead, the engine adds it to that environment at
+			// spawn (see superviseEnv). Together that is what makes the default set
+			// work with nothing configured at all.
+			if len(spec.Connectors) > 0 {
+				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
+			}
+			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
 		s.supervisor.start()
 	}
-
-	s.wg.Add(3)
-	go s.loop()
 	go s.timerScheduler(time.Second)
 	// The collaboration reaper evicts idle detached session participants (MCP
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
