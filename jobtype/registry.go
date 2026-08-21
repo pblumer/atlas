@@ -48,6 +48,9 @@ type Registry struct {
 	// next is one past the highest index ever issued, so an index is never
 	// recycled even if the record that held it is gone.
 	next int32
+	// dropped are the stored assignments the reserved range had grown over by the
+	// time this table was loaded. See collision.go.
+	dropped []Collision
 }
 
 // NewRegistry opens (creating if needed) the directory backing the table, seeds
@@ -75,6 +78,9 @@ func NewRegistry(dir string) (*Registry, error) {
 	for _, e := range entries {
 		r.remember(e)
 	}
+	// What the load had to discard, kept so a caller can say so. Silence here is
+	// exactly what made a grown reserved range invisible.
+	r.dropped = collisionsIn(entries)
 	return r, nil
 }
 

@@ -34,6 +34,7 @@ import (
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/mimimport"
@@ -77,6 +78,10 @@ func main() {
 		if err := runImportMIM(args); err != nil {
 			fatal("atlas import-mim", err)
 		}
+	case "check-job-types":
+		if err := runCheckJobTypes(args); err != nil {
+			fatal("atlas check-job-types", err)
+		}
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -117,6 +122,7 @@ Usage:
   atlas worker         [flags]      Work service-task jobs for a running Atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
+  atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.
@@ -713,6 +719,62 @@ func defaultWorkerID() string {
 // By default it generates a strong password and prints it once; --password-stdin
 // reads one from stdin instead, keeping the secret out of the process arguments
 // (where `ps` or shell history would expose it).
+// runCheckJobTypes answers one question about a data directory: does its job-type
+// table hold a model-authored type on an index a built-in has since taken?
+//
+// Dynamic indices are issued from one past the reserved range, and that range grows
+// with every built-in connector added. A store written before such an addition has
+// names sitting where a built-in now sits, and the jobs already on disk under those
+// indices do not move — so they would be read as the built-in's. The table cannot
+// keep such a record, and until now it dropped it in silence.
+//
+// This reads the directory and reports; it changes nothing. It is deliberately a
+// separate command rather than only a startup warning, so the question can be
+// answered about a backup, or about a server one would rather not restart.
+func runCheckJobTypes(args []string) error {
+	fs := flag.NewFlagSet("check-job-types", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "atlas-data", "the server's data directory (its job-type table lives here); must match the running server's --data-dir")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: atlas check-job-types [flags]
+
+Report job types whose stored index a built-in job type has since taken. Reads the
+data directory and changes nothing; safe against a running server and against a copy
+of one.
+
+Exit status is 0 when the table is clean and 1 when it is not, so it can gate a
+deploy.
+
+Examples:
+  atlas check-job-types --data-dir /data
+
+Flags:
+`)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	found, err := jobtype.Collisions(filepath.Join(*dataDir, "jobtypes"))
+	if err != nil {
+		return err
+	}
+	if len(found) == 0 {
+		fmt.Printf("job-type table is clean: no stored type sits on a reserved index (%s)\n", *dataDir)
+		return nil
+	}
+	fmt.Printf("%d job type(s) sit on an index a built-in has since taken (%s):\n\n", len(found), *dataDir)
+	for _, c := range found {
+		fmt.Printf("  %-40s index %-4d now means %s\n", c.Name, c.Index, c.NowMeans)
+	}
+	fmt.Print(`
+Jobs already parked under these indices still carry them, so the engine would hand
+them to the built-in named above; new jobs of the same type get a fresh index. Do not
+deploy over this without a plan for the parked jobs.
+`)
+	os.Exit(1)
+	return nil
+}
+
 func runResetPassword(args []string) error {
 	fs := flag.NewFlagSet("reset-password", flag.ExitOnError)
 	dataDir := fs.String("data-dir", "atlas-data", "the server's data directory (its user store lives here); must match the running server's --data-dir")
