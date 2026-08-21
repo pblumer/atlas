@@ -3,6 +3,7 @@ package api
 import (
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -200,4 +201,65 @@ func TestAChildThatExitsCleanlyIsStillAFailure(t *testing.T) {
 	if got := sup.list()[0].LastExit; !strings.Contains(got, "should not do") {
 		t.Errorf("lastExit = %q, want it to say a worker should not exit on its own", got)
 	}
+}
+
+// A worker with nothing to serve is parked, not restarted. Before the default
+// supervised one worker per kind this could not happen — a combined worker always had
+// the other kinds to serve — and with it, a mail worker on a server whose operator has
+// not configured a mail connector yet would restart forever on a backoff, filling the
+// console with red for an ordinary state.
+func TestAWorkerWithNothingToServeIsParkedRatherThanRestarted(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh on this machine")
+	}
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe, sup.backoff = "sh", time.Millisecond
+	sup.add(SuperviseSpec{ID: "mail", Connectors: []string{connectorKindMail}},
+		[]string{"-c", "exit " + strconv.Itoa(ExitNothingToServe)}, nil)
+	sup.start()
+	t.Cleanup(func() { close(quit); sup.wait() })
+
+	waitFor(t, "the child to park", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].State == "idle"
+	})
+	parked := sup.list()[0].Starts
+
+	// It stays parked: a backoff loop would be visible as the count climbing.
+	time.Sleep(50 * sup.backoff)
+	if got := sup.list()[0].Starts; got != parked {
+		t.Errorf("starts = %d after parking at %d — it is restarting into the same emptiness", got, parked)
+	}
+	if why := sup.list()[0].LastExit; !strings.Contains(why, "nothing to serve") {
+		t.Errorf("lastExit = %q, want it to say why it is waiting", why)
+	}
+
+	// And the restart button brings it back, so an operator who has just configured
+	// the kind is not made to restart Atlas.
+	if err := sup.restart("mail"); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	waitFor(t, "the parked child to be started again", func() bool {
+		return sup.list()[0].Starts > parked
+	})
+}
+
+// A worker that exits for any other reason is still a failure and is still restarted:
+// parking is for the one status that says "nothing here to do", not for crashes.
+func TestAWorkerThatCrashesIsStillRestarted(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh on this machine")
+	}
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe, sup.backoff = "sh", time.Millisecond
+	sup.add(SuperviseSpec{ID: "crasher"}, []string{"-c", "exit 1"}, nil)
+	sup.start()
+	t.Cleanup(func() { close(quit); sup.wait() })
+
+	waitFor(t, "the child to be restarted after crashing", func() bool {
+		list := sup.list()
+		return len(list) == 1 && list[0].Starts > 1 && list[0].State == "failed"
+	})
 }
