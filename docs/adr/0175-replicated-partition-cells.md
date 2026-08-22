@@ -1,4 +1,4 @@
-# ADR-DRAFT: Replicated partition cells for horizontal scale-out
+# ADR-0175: Replicated partition cells for horizontal scale-out
 
 - **Status:** Proposed
 - **Date:** 2026-08-21
