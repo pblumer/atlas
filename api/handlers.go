@@ -1663,6 +1663,17 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		activations := map[uint64]state.ElementReplayValue{}
 		endAt := map[uint64]int64{}   // element instance key → completion timestamp (Action==2)
 		endPos := map[uint64]uint64{} // element instance key → completion log position (ADR-0159)
+		// One round of a loop hands its token to no one either: an inner iteration never
+		// takes the activity's outgoing flow — the body owns it and takes it once, when
+		// the loop ends (ADR-0077/0133). Deferring a finished round would therefore leave
+		// its token waiting for a successor that never comes, and a loop of N rounds would
+		// pile up N ghost tokens on its own shape for the rest of the replay. A round is
+		// recognised the same way the scope fold above finds the bodies: its token is
+		// named by one.
+		isLoopRound := func(v state.ElementReplayValue) bool {
+			_, ok := loopBodyTokens[v.ParentTokenID]
+			return ok
+		}
 		emitFrame := func(pos uint64, at int64) {
 			tokens := make([]timelineToken, 0, len(active))
 			for _, token := range active {
@@ -1697,9 +1708,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: ver.elementID(rr.pos, v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID):
+			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID), isLoopRound(v):
 				// Nothing will activate from here — a termination hands its token on to
-				// no one, and a leaf has no successor to move into — so remove it at once.
+				// no one, a leaf has no successor to move into, and a finished loop round
+				// leaves its activity's outgoing flow to the body — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
 				endPos[v.ElementInstanceKey] = rr.pos
 				delete(pending, v.ElementInstanceKey)

@@ -82,6 +82,13 @@ const (
 	// — such a loop is legal BPMN and often correct — and the engine's safety ceiling
 	// stops a runaway; the warning is what turns the bound into a stated decision.
 	RuleLoopUnbounded = "loop.unbounded"
+	// RuleLoopCounterMapping marks a looping activity whose zeebe:ioMapping writes the
+	// name the loop's own counter uses (ADR-0077/ADR-0133). An error: the mapping lands
+	// in the very scope the engine binds loopCounter into, so it overwrites the fact the
+	// loop reads to know which round just finished — every round then looks like the
+	// first, the loop never reaches its maximum, and it repeats until someone cancels
+	// the instance. Map to a different name and read loopCounter as it is.
+	RuleLoopCounterMapping = "loop.counter-mapping"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -129,6 +136,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
 	ps = append(ps, checkLoopBounds(cp)...)
+	ps = append(ps, checkLoopCounterMappings(cp)...)
 	return ps
 }
 
@@ -587,6 +595,43 @@ func checkLoopBounds(cp *CompiledProcess) []Problem {
 			fmt.Sprintf("%s repeats while its loop condition holds and sets no maximum: "+
 				"if the condition never turns false the engine stops it after %d runs with an incident. "+
 				"Set a loop maximum to state the bound.", describeNode(cp, int32(id)), SafeLoopCeiling)))
+	}
+	return ps
+}
+
+// checkLoopCounterMappings refuses a looping activity that maps a value onto the loop's
+// own counter variable (ADR-0077/ADR-0133). Each round's loopCounter lives in that
+// round's local scope — the same scope an ioMapping input writes into and an output
+// reads from — and the engine reads it back to know which round finished. A mapping
+// that targets the name overwrites it, so the loop loses count: it repeats one
+// collection element forever, or runs past its loopMaximum until the instance is
+// cancelled. There is no useful model behind it either — the counter is the engine's to
+// set — so this is an error at deploy rather than a puzzle at 3am.
+func checkLoopCounterMappings(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		if cp.nodes[id].MultiInstance < 0 {
+			continue
+		}
+		elementID := int32(id)
+		for _, dir := range []struct {
+			what     string
+			mappings []IOMapping
+		}{
+			{"input", cp.IOInputs(elementID)},
+			{"output", cp.IOOutputs(elementID)},
+		} {
+			for _, m := range dir.mappings {
+				if cp.Intern(m.Target) != LoopCounterVariable {
+					continue
+				}
+				ps = append(ps, problem(cp, elementID, SeverityError, RuleLoopCounterMapping,
+					fmt.Sprintf("%s loops and has an I/O mapping %s named %[3]q, the loop's own round counter: "+
+						"it would overwrite the count the loop keeps there and the loop would never end. "+
+						"Map to another name; %[3]q is readable as it is.",
+						describeNode(cp, elementID), dir.what, LoopCounterVariable)))
+			}
+		}
 	}
 	return ps
 }
