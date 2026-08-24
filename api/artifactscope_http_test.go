@@ -55,13 +55,18 @@ func TestArtifactScopeInheritance(t *testing.T) {
 		t.Fatalf("alice ungrouped draft: %d %s", code, b)
 	}
 
-	// Bob (non-member) cannot see the scoped draft, but the ungrouped one is open.
+	// Bob (non-member) sees neither the scoped draft nor Alice's personal ungrouped
+	// draft (ADR-0071: an ungrouped artifact is its creator's personal space).
 	bd := drafts(bob)
 	if bd["wip"] {
 		t.Fatal("bob must not see a draft in alice's private project")
 	}
-	if !bd["loose"] {
-		t.Fatal("ungrouped draft should be visible to everyone (open)")
+	if bd["loose"] {
+		t.Fatal("bob must not see alice's personal ungrouped draft")
+	}
+	// Alice sees her own ungrouped draft.
+	if !drafts(alice)["loose"] {
+		t.Fatal("alice should see her own ungrouped draft")
 	}
 	// Content read + writes on the hidden draft are refused (404 hides existence).
 	if code, _ := cReq(t, bob, ts, "GET", "/api/v1/drafts/wip/xml", ""); code != http.StatusNotFound {
@@ -116,6 +121,51 @@ func TestArtifactScopeInheritance(t *testing.T) {
 	// Overwriting her own ungrouped draft in place still works.
 	if code, _ := cReq(t, alice, ts, "POST", "/api/v1/drafts", projectDraftXML("loose", "Loose v2")); code != http.StatusOK {
 		t.Fatalf("alice overwrite ungrouped = %d, want 200", code)
+	}
+}
+
+// TestUngroupedPersonalSpace checks that an ungrouped artifact is its creator's
+// private space (ADR-0071): the owner and an admin may read and write it, a
+// stranger is refused with 404 (existence hidden), even on the content and
+// overwrite paths — not just the listing.
+func TestUngroupedPersonalSpace(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1"}`)
+	alice := newClient(t)
+	login(t, alice, ts, "alice", "password1")
+	bob := newClient(t)
+	login(t, bob, ts, "bob", "password1")
+
+	// Alice creates an ungrouped draft — her personal space.
+	if code, b := cReq(t, alice, ts, "POST", "/api/v1/drafts", projectDraftXML("mine", "Mine")); code != http.StatusOK {
+		t.Fatalf("alice create ungrouped: %d %s", code, b)
+	}
+
+	// A stranger is refused on every path, with 404 (existence hidden).
+	for _, op := range []struct{ method, path, body string }{
+		{"GET", "/api/v1/drafts/mine/xml", ""},
+		{"DELETE", "/api/v1/drafts/mine", ""},
+		{"PATCH", "/api/v1/drafts/mine", `{"projectId":""}`},
+		{"POST", "/api/v1/drafts", projectDraftXML("mine", "Hijack")}, // overwrite attempt
+	} {
+		if code, _ := cReq(t, bob, ts, op.method, op.path, op.body); code != http.StatusNotFound {
+			t.Fatalf("stranger %s %s = %d, want 404", op.method, op.path, code)
+		}
+	}
+
+	// The owner reads it, and an admin reads it too.
+	if code, _ := cReq(t, alice, ts, "GET", "/api/v1/drafts/mine/xml", ""); code != http.StatusOK {
+		t.Fatalf("owner read = %d, want 200", code)
+	}
+	if code, _ := cReq(t, admin, ts, "GET", "/api/v1/drafts/mine/xml", ""); code != http.StatusOK {
+		t.Fatalf("admin read = %d, want 200", code)
+	}
+	// The owner deletes it.
+	if code, _ := cReq(t, alice, ts, "DELETE", "/api/v1/drafts/mine", ""); code != http.StatusNoContent {
+		t.Fatalf("owner delete = %d, want 204", code)
 	}
 }
 

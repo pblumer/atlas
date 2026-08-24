@@ -14,6 +14,11 @@ type dmnRef struct {
 	Name      string `json:"name"`
 	ModelRef  string `json:"modelRef"` // the temis model handle this points at
 	ProjectID string `json:"projectId,omitempty"`
+	// OwnerID is the creator's user id, stamped on create (ADR-0071). It governs
+	// access only while the reference is Ungrouped (the owner's personal space);
+	// under a project, the project's scope governs. Empty (and open) on references
+	// that predate per-artifact ownership.
+	OwnerID   string `json:"ownerId,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 }
 

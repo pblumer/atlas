@@ -16,8 +16,15 @@ type draft struct {
 	// (the value for every draft that predates projects) means "Ungrouped"; so
 	// does an id that no longer names an existing project.
 	ProjectID string `json:"projectId,omitempty"`
-	SavedAt   int64  `json:"savedAt"`
-	XML       string `json:"xml"`
+	// OwnerID is the id of the user who created this draft, stamped on first save
+	// (ADR-0071). It governs access only while the draft is Ungrouped, where it is
+	// the owner's personal space; when the draft is filed into a project, that
+	// project's scope governs instead and this lies dormant. Empty on every draft
+	// that predates per-artifact ownership, which keeps such a draft open — no
+	// migration.
+	OwnerID string `json:"ownerId,omitempty"`
+	SavedAt int64  `json:"savedAt"`
+	XML     string `json:"xml"`
 }
 
 // draftStore is a durable store for diagram drafts, one JSON file per process id

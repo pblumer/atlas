@@ -58,7 +58,7 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
-	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, CreatedAt: time.Now().Unix()}
+	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, OwnerID: s.artifactOwnerOnCreate(r), CreatedAt: time.Now().Unix()}
 	// Filing a reference into a project needs editor on that project (ADR-0071),
 	// which also enforces that it exists (400 otherwise).
 	if rec.ProjectID != "" {
@@ -97,7 +97,7 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 			}
 			// Inherit the project's scope (ADR-0071): hide references the caller
 			// cannot view.
-			if !s.canViewArtifact(r, rec.ProjectID, projs) {
+			if !s.canViewArtifact(r, rec.ProjectID, rec.OwnerID, projs) {
 				continue
 			}
 			list = append(list, toDmnRefResp(rec))
@@ -161,7 +161,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 	}
 	// Editing (rename or move) needs editor on the reference's current scope; a
 	// move into a non-empty project also needs editor on that target (ADR-0071).
-	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}
@@ -194,6 +194,7 @@ func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
 	// an invisible reference 404s, an absent one still succeeds (idempotent).
 	var (
 		projectID string
+		ownerID   string
 		found     bool
 		getErr    error
 	)
@@ -205,13 +206,14 @@ func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
 		}
 		found = ok
 		projectID = rec.ProjectID
+		ownerID = rec.OwnerID
 	})
 	if getErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
 		return
 	}
 	if found {
-		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+		if code, msg := s.authorizeArtifact(r, projectID, ownerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
