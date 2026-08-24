@@ -213,3 +213,5 @@ it will be read by humans.
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
+| Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
+| See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |
