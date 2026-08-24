@@ -7,7 +7,49 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
+
+// TestUngroupedRole exercises every branch of the ungrouped access rule
+// (ADR-0071): auth off is open, admins are owner-equivalent, an ownerless legacy
+// artifact stays open, and otherwise only the owner has access.
+func TestUngroupedRole(t *testing.T) {
+	mk := func(authEnabled bool, p *httpapi.Principal) (*Server, *http.Request) {
+		s := &Server{authEnabled: authEnabled}
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		if p != nil {
+			r = r.WithContext(httpapi.WithPrincipal(r.Context(), p))
+		}
+		return s, r
+	}
+	owner := &httpapi.Principal{UserID: "usr_owner", Roles: []string{RoleUser}}
+	stranger := &httpapi.Principal{UserID: "usr_stranger", Roles: []string{RoleUser}}
+	admin := &httpapi.Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}
+
+	cases := []struct {
+		name        string
+		authEnabled bool
+		pr          *httpapi.Principal
+		ownerID     string
+		want        string
+	}{
+		{"auth off is open", false, nil, "usr_owner", ScopeRoleOwner},
+		{"nil principal under auth", true, nil, "usr_owner", ""},
+		{"admin is owner", true, admin, "usr_owner", ScopeRoleOwner},
+		{"owner match", true, owner, "usr_owner", ScopeRoleOwner},
+		{"stranger gets nothing", true, stranger, "usr_owner", ""},
+		{"legacy ownerless is open", true, stranger, "", ScopeRoleOwner},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, r := mk(tc.authEnabled, tc.pr)
+			if got := s.ungroupedRole(r, tc.ownerID); got != tc.want {
+				t.Fatalf("ungroupedRole = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 // scopeBPMN is a minimal draft with the given process id, so handleSaveDraft can
 // derive that id from the body.

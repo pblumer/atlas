@@ -49,7 +49,7 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 			}
 			// A reference the caller cannot view contributes no decisions (ADR-0071).
 			// Deployed decisions (below) stay: they are engine-wide runtime state.
-			if !s.canViewArtifact(r, rec.ProjectID, projs) {
+			if !s.canViewArtifact(r, rec.ProjectID, rec.OwnerID, projs) {
 				continue
 			}
 			refs = append(refs, rec)
@@ -136,7 +136,7 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
 		return
 	}
-	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleViewer); code != 0 {
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleViewer); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}

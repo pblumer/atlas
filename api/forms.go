@@ -93,13 +93,18 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existed {
-		if code, msg := s.authorizeArtifact(r, existing.ProjectID, ScopeRoleEditor); code != 0 {
+		// Preserve the original creator on overwrite; it governs the form only while
+		// Ungrouped (ADR-0071).
+		rec.OwnerID = existing.OwnerID
+		if code, msg := s.authorizeArtifact(r, existing.ProjectID, existing.OwnerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
+	} else {
+		rec.OwnerID = s.artifactOwnerOnCreate(r)
 	}
 	if rec.ProjectID != "" {
-		if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
@@ -150,7 +155,7 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 			// Inherit the project's scope (ADR-0071): hide forms the caller cannot
 			// view. Rendering a form to run a task is a separate, ungated runtime
 			// path (handleGetForm / the public form endpoints).
-			if !s.canViewArtifact(r, f.ProjectID, projs) {
+			if !s.canViewArtifact(r, f.ProjectID, f.OwnerID, projs) {
 				continue
 			}
 			list = append(list, metaOf(f))
@@ -200,6 +205,7 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 	// invisible form 404s, an absent one still succeeds (idempotent).
 	var (
 		projectID string
+		ownerID   string
 		found     bool
 		getErr    error
 	)
@@ -211,13 +217,14 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 		}
 		found = ok
 		projectID = rec.ProjectID
+		ownerID = rec.OwnerID
 	})
 	if getErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
 		return
 	}
 	if found {
-		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+		if code, msg := s.authorizeArtifact(r, projectID, ownerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}

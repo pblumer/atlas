@@ -14,8 +14,13 @@ type form struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	ProjectID string `json:"projectId,omitempty"`
-	SavedAt   int64  `json:"savedAt"`
-	Schema    string `json:"schema"`
+	// OwnerID is the creator's user id, stamped on first save (ADR-0071). It
+	// governs access only while the form is Ungrouped (the owner's personal space);
+	// under a project, the project's scope governs. Empty (and open) on forms that
+	// predate per-artifact ownership.
+	OwnerID string `json:"ownerId,omitempty"`
+	SavedAt int64  `json:"savedAt"`
+	Schema  string `json:"schema"`
 }
 
 // formStore is a durable store for form definitions, one JSON file per form id

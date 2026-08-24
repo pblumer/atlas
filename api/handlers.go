@@ -4123,7 +4123,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existed {
-		if code, msg := s.authorizeArtifact(r, existing.ProjectID, ScopeRoleEditor); code != 0 {
+		if code, msg := s.authorizeArtifact(r, existing.ProjectID, existing.OwnerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
@@ -4139,8 +4139,14 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Preserve the original creator on overwrite; stamp the signed-in user on a new
+	// draft, so an Ungrouped draft is their personal space (ADR-0071).
+	ownerID := existing.OwnerID
+	if !existed {
+		ownerID = s.artifactOwnerOnCreate(r)
+	}
 	stored, laidOut := layout.EnsureReport(body)
-	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, SavedAt: time.Now().Unix(), XML: string(stored)}
+	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), XML: string(stored)}
 	var (
 		saveErr, projErr error
 		protectedProject bool
@@ -4197,7 +4203,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 			}
 			// Membership inherits from the artifact's project (ADR-0071): hide a
 			// draft in a project the caller cannot view.
-			if !s.canViewArtifact(r, d.ProjectID, projs) {
+			if !s.canViewArtifact(r, d.ProjectID, d.OwnerID, projs) {
 				continue
 			}
 			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt})
@@ -4244,7 +4250,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
 	// and, when non-empty, the project it joins (which must exist).
-	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleEditor); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
 	}
@@ -4306,7 +4312,7 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 	default:
 		// The XML is the draft's content: reading it needs viewer on its project
 		// scope (ADR-0071).
-		if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleViewer); code != 0 {
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleViewer); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
@@ -4323,6 +4329,7 @@ func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 	// invisible draft 404s, an absent one still succeeds (idempotent).
 	var (
 		projectID string
+		ownerID   string
 		found     bool
 		getErr    error
 	)
@@ -4334,13 +4341,14 @@ func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = ok
 		projectID = rec.ProjectID
+		ownerID = rec.OwnerID
 	})
 	if getErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
 		return
 	}
 	if found {
-		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+		if code, msg := s.authorizeArtifact(r, projectID, ownerID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)
 			return
 		}
