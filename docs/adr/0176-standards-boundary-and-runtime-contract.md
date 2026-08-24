@@ -1,4 +1,4 @@
-# ADR-DRAFT: Standards boundary and the Atlas runtime contract
+# ADR-0176: Standards boundary and the Atlas runtime contract
 
 - **Status:** Proposed
 - **Date:** 2026-08-24
