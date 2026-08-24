@@ -699,6 +699,23 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("User id", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/groups", s.handleListGroups, apiOp{
+			summary: "List user groups (admin)", tag: "Groups", resp: jsonBody("Groups", tArray())}},
+		{"POST", "/api/v1/groups", s.handleCreateGroup, apiOp{
+			summary: "Create a user group (admin)", tag: "Groups", status: http.StatusCreated,
+			req:  jsonBody("New group", schemaObj(map[string]any{"name": tString()}, "name")),
+			resp: jsonBody("Created group", tObject())}},
+		{"PATCH", "/api/v1/groups/{id}", s.handleRenameGroup, apiOp{
+			summary: "Rename a user group (admin)", tag: "Groups",
+			req:  jsonBody("Group changes", schemaObj(map[string]any{"name": tString()}, "name")),
+			resp: jsonBody("Updated group", tObject())}},
+		{"DELETE", "/api/v1/groups/{id}", s.handleDeleteGroup, apiOp{
+			summary: "Delete a user group (admin)", tag: "Groups", status: http.StatusNoContent}},
+		{"PUT", "/api/v1/groups/{id}/members/{userId}", s.handleAddGroupMember, apiOp{
+			summary: "Add a user to a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
+		{"DELETE", "/api/v1/groups/{id}/members/{userId}", s.handleRemoveGroupMember, apiOp{
+			summary: "Remove a user from a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
 	}
 }
 

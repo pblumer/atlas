@@ -89,6 +89,7 @@ type session struct {
 	userID   string
 	username string
 	roles    []string
+	groupIDs []string
 	expires  time.Time
 }
 
@@ -107,15 +108,18 @@ func newSessionStore(ttl time.Duration) *sessionStore {
 	return &sessionStore{byToken: map[string]session{}, ttl: ttl, now: time.Now}
 }
 
-// create opens a session for a user and returns its opaque token.
-func (s *sessionStore) create(u User) (string, error) {
+// create opens a session for a user and returns its opaque token. Roles and group
+// ids are snapshotted here so a request can be authorized from the session alone
+// (see Principal); both take effect on the user's next login.
+func (s *sessionStore) create(u User, groupIDs []string) (string, error) {
 	token, err := randomHex(32)
 	if err != nil {
 		return "", err
 	}
 	roles := append([]string(nil), u.Roles...)
+	groups := append([]string(nil), groupIDs...)
 	s.mu.Lock()
-	s.byToken[token] = session{userID: u.ID, username: u.Username, roles: roles, expires: s.now().Add(s.ttl)}
+	s.byToken[token] = session{userID: u.ID, username: u.Username, roles: roles, groupIDs: groups, expires: s.now().Add(s.ttl)}
 	s.mu.Unlock()
 	return token, nil
 }
@@ -286,7 +290,7 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if !ok {
 		return nil
 	}
-	return &httpapi.Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles}
+	return &httpapi.Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles, GroupIDs: sess.groupIDs}
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header,

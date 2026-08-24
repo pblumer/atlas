@@ -314,6 +314,13 @@ var mcpOmittedRoutes = map[string]string{
 	"PATCH /api/v1/users/{id}":         "user administration is not an agent capability",
 	"POST /api/v1/users/{id}/password": "user administration is not an agent capability",
 	"DELETE /api/v1/users/{id}":        "user administration is not an agent capability",
+
+	"GET /api/v1/groups":                          "group administration is not an agent capability",
+	"POST /api/v1/groups":                         "group administration is not an agent capability",
+	"PATCH /api/v1/groups/{id}":                   "group administration is not an agent capability",
+	"DELETE /api/v1/groups/{id}":                  "group administration is not an agent capability",
+	"PUT /api/v1/groups/{id}/members/{userId}":    "group administration is not an agent capability",
+	"DELETE /api/v1/groups/{id}/members/{userId}": "group administration is not an agent capability",
 }
 
 // httpOperations fetches the live OpenAPI document from a running Atlas server

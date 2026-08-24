@@ -40,10 +40,14 @@ const (
 	ScopeRoleOwner  = "owner"
 )
 
-// PrincipalTypeUser is the only member reference type Phase 1 implements. The
-// type field exists so groups ("group") slot in later without a migration
-// (ADR-0071/0044 follow-up).
-const PrincipalTypeUser = "user"
+// Member reference types. A scope member is either a single user or a whole
+// group (ADR-draft-groups-as-members); a group grant applies its role to every
+// user in the group. The type field was reserved in ADR-0071 so groups slotted in
+// with no migration.
+const (
+	PrincipalTypeUser  = "user"
+	PrincipalTypeGroup = "group"
+)
 
 // principalRef names who a grant is for. Type is "user" today; carrying it now
 // is what lets a group grant ("group") be added later without rewriting stored
@@ -133,11 +137,24 @@ func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 	if pr.UserID != "" && pr.UserID == p.OwnerID {
 		return ScopeRoleOwner
 	}
-	if p.Visibility == VisibilityShared && pr.UserID != "" {
+	if p.Visibility == VisibilityShared {
+		// A user may match more than one grant — a direct grant and one or more
+		// group grants (ADR-draft-groups-as-members). The highest role wins.
+		best := ""
 		for _, m := range p.Members {
-			if m.Ref.Type == PrincipalTypeUser && m.Ref.ID == pr.UserID {
-				return m.Role
+			matches := false
+			switch m.Ref.Type {
+			case PrincipalTypeUser:
+				matches = pr.UserID != "" && m.Ref.ID == pr.UserID
+			case PrincipalTypeGroup:
+				matches = pr.InGroup(m.Ref.ID)
 			}
+			if matches && scopeRank(m.Role) > scopeRank(best) {
+				best = m.Role
+			}
+		}
+		if best != "" {
+			return best
 		}
 	}
 	return ""
@@ -201,6 +218,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 	}
 	var payload struct {
 		Role string `json:"role"`
+		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -208,6 +226,17 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 	}
 	if !isScopeRole(payload.Role) {
 		httpapi.Error(w, http.StatusBadRequest, `role must be "viewer" or "editor"`)
+		return
+	}
+	// A member is a user by default, or a whole group
+	// (ADR-draft-groups-as-members). The {userId} path value is the referenced
+	// id in either case.
+	refType := payload.Type
+	if refType == "" {
+		refType = PrincipalTypeUser
+	}
+	if refType != PrincipalTypeUser && refType != PrincipalTypeGroup {
+		httpapi.Error(w, http.StatusBadRequest, `member type must be "user" or "group"`)
 		return
 	}
 
@@ -220,29 +249,38 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, code, msg)
 		return
 	}
-	if userID == proj.OwnerID {
+	if refType == PrincipalTypeUser && userID == proj.OwnerID {
 		httpapi.Error(w, http.StatusBadRequest, "the owner already has full access and cannot be added as a member")
 		return
 	}
 
 	var (
-		userMissing     bool
+		targetMissing   bool
 		lookupErr, sErr error
 		view            projectView
 	)
 	s.do(func() {
 		if s.authEnabled {
-			// Only grant to a real identity. With auth off there is no user store
-			// to consult (and sharing is moot), so the check is skipped.
-			if _, ok, e := s.users.Get(userID); e != nil {
+			// Only grant to a real identity. With auth off there is no user/group
+			// store to consult (and sharing is moot), so the check is skipped.
+			var (
+				ok bool
+				e  error
+			)
+			if refType == PrincipalTypeGroup {
+				_, ok, e = s.groups.Get(userID)
+			} else {
+				_, ok, e = s.users.Get(userID)
+			}
+			if e != nil {
 				lookupErr = e
 				return
 			} else if !ok {
-				userMissing = true
+				targetMissing = true
 				return
 			}
 		}
-		proj.Members = upsertMember(proj.Members, userID, payload.Role)
+		proj.Members = upsertMember(proj.Members, refType, userID, payload.Role)
 		proj.Visibility = VisibilityShared
 		proj.UpdatedAt = time.Now().Unix()
 		if sErr = s.projects.Save(proj); sErr != nil {
@@ -257,9 +295,9 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case lookupErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "look up user: "+lookupErr.Error())
-	case userMissing:
-		httpapi.Error(w, http.StatusBadRequest, "no user with that id")
+		httpapi.Error(w, http.StatusInternalServerError, "look up member: "+lookupErr.Error())
+	case targetMissing:
+		httpapi.Error(w, http.StatusBadRequest, "no "+refType+" with that id")
 	case sErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "share project: "+sErr.Error())
 	default:
@@ -309,24 +347,25 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 	httpapi.JSON(w, http.StatusOK, view)
 }
 
-// upsertMember adds a user member with the given role, or updates the role if
-// the user is already a member. It never duplicates a user.
-func upsertMember(members []projectMember, userID, role string) []projectMember {
+// upsertMember adds a member of the given type with the given role, or updates
+// the role if that principal is already a member. It never duplicates a member.
+func upsertMember(members []projectMember, refType, id, role string) []projectMember {
 	for i, m := range members {
-		if m.Ref.Type == PrincipalTypeUser && m.Ref.ID == userID {
+		if m.Ref.Type == refType && m.Ref.ID == id {
 			members[i].Role = role
 			return members
 		}
 	}
-	return append(members, projectMember{Ref: principalRef{Type: PrincipalTypeUser, ID: userID}, Role: role})
+	return append(members, projectMember{Ref: principalRef{Type: refType, ID: id}, Role: role})
 }
 
-// removeMember drops a user member if present, returning the list unchanged
-// otherwise.
-func removeMember(members []projectMember, userID string) []projectMember {
+// removeMember drops the member with the given id if present, returning the list
+// unchanged otherwise. It matches by id alone: a user id and a group id never
+// collide (distinct "usr_"/"grp_" prefixes), so one revoke endpoint serves both.
+func removeMember(members []projectMember, id string) []projectMember {
 	out := members[:0]
 	for _, m := range members {
-		if m.Ref.Type == PrincipalTypeUser && m.Ref.ID == userID {
+		if m.Ref.ID == id {
 			continue
 		}
 		out = append(out, m)

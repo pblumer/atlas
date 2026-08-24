@@ -65,7 +65,7 @@ func TestSessionStoreLifecycle(t *testing.T) {
 	st := newSessionStore(time.Hour)
 	st.now = func() time.Time { return fixed }
 
-	tok, err := st.create(User{ID: "usr_1", Username: "alice", Roles: []string{"admin"}})
+	tok, err := st.create(User{ID: "usr_1", Username: "alice", Roles: []string{"admin"}}, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestSessionStoreExpiry(t *testing.T) {
 	now := time.Unix(1000, 0)
 	st := newSessionStore(time.Minute)
 	st.now = func() time.Time { return now }
-	tok, _ := st.create(User{ID: "usr_1"})
+	tok, _ := st.create(User{ID: "usr_1"}, nil)
 	now = now.Add(2 * time.Minute) // advance past the TTL
 	if _, ok := st.lookup(tok); ok {
 		t.Fatalf("expired session still resolves")
@@ -99,9 +99,9 @@ func TestSessionStoreExpiry(t *testing.T) {
 
 func TestSessionStoreDestroyUser(t *testing.T) {
 	st := newSessionStore(time.Hour)
-	t1, _ := st.create(User{ID: "usr_1"})
-	t2, _ := st.create(User{ID: "usr_1"})
-	t3, _ := st.create(User{ID: "usr_2"})
+	t1, _ := st.create(User{ID: "usr_1"}, nil)
+	t2, _ := st.create(User{ID: "usr_1"}, nil)
+	t3, _ := st.create(User{ID: "usr_2"}, nil)
 	st.destroyUser("usr_1")
 	if _, ok := st.lookup(t1); ok {
 		t.Fatalf("session 1 for destroyed user still resolves")
@@ -144,7 +144,7 @@ func TestRequiresAuth(t *testing.T) {
 
 func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 	s := &Server{authEnabled: true, sessions: newSessionStore(time.Hour)}
-	tok, _ := s.sessions.create(User{ID: "usr_1", Username: "alice", Roles: []string{"user"}})
+	tok, _ := s.sessions.create(User{ID: "usr_1", Username: "alice", Roles: []string{"user"}}, nil)
 
 	// A protected request with no cookie is rejected.
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

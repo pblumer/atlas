@@ -1166,6 +1166,55 @@ async function deleteUser(u, reload) {
   reload();
 }
 
+// ---------- Groups (ADR-draft-groups-as-members) ----------
+async function createGroup(reload) {
+  const name = window.prompt("Group name");
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Group name is required", "err"); return; }
+  try {
+    await api("POST", "/api/v1/groups", { name: trimmed });
+    toast(`Created group "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create group: " + e.message, "err"); }
+  reload();
+}
+
+async function renameGroup(g, reload) {
+  const name = window.prompt("Rename group", g.name);
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Group name is required", "err"); return; }
+  try {
+    await api("PATCH", `/api/v1/groups/${encodeURIComponent(g.id)}`, { name: trimmed });
+    toast("Renamed group", "ok");
+  } catch (e) { toast("could not rename group: " + e.message, "err"); }
+  reload();
+}
+
+async function deleteGroup(g, reload) {
+  if (!window.confirm(`Delete group "${g.name}"? Projects shared with it lose that access.`)) return;
+  try {
+    await api("DELETE", `/api/v1/groups/${encodeURIComponent(g.id)}`);
+    toast(`Deleted "${g.name}"`, "ok");
+  } catch (e) { toast("could not delete group: " + e.message, "err"); }
+  reload();
+}
+
+async function addGroupMember(groupId, userId, reload) {
+  if (!userId) return;
+  try {
+    await api("PUT", `/api/v1/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`);
+  } catch (e) { toast("could not add member: " + e.message, "err"); }
+  reload();
+}
+
+async function removeGroupMember(groupId, userId, reload) {
+  try {
+    await api("DELETE", `/api/v1/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`);
+  } catch (e) { toast("could not remove member: " + e.message, "err"); }
+  reload();
+}
+
 async function viewConsoleOrg() {
   const gen = navGen;
   const pill = (c) => c.status === "active"
@@ -1324,6 +1373,52 @@ async function viewConsoleOrg() {
         </table>
       </div>`;
 
+  // Groups (ADR-draft-groups-as-members): a named set of users a project can be
+  // shared with at once. Admin-gated like users, so only load when not denied.
+  let groups = [];
+  if (!denied) {
+    try { groups = (await api("GET", "/api/v1/groups")) || []; } catch { /* leave empty */ }
+  }
+  const usersById = new Map((users || []).map((u) => [u.id, u]));
+  const memberName = (id) => { const u = usersById.get(id); return u ? (u.displayName || u.username) : id; };
+  const groupRow = (g) => {
+    const memberIds = new Set(g.members || []);
+    const chips = (g.members || []).length
+      ? (g.members || []).map((uid) => `<span class="chip">${esc(memberName(uid))}<button type="button" class="chip-x" data-gact="rmmember" data-gid="${esc(g.id)}" data-uid="${esc(uid)}" title="Remove from group">✕</button></span>`).join(" ")
+      : `<span class="muted" style="font-size:12px">No members yet.</span>`;
+    const eligible = (users || []).filter((u) => !memberIds.has(u.id));
+    const addCtl = eligible.length
+      ? `<span class="add-row" style="display:inline-flex; gap:6px; margin-top:8px">
+           <select class="field" data-add-for="${esc(g.id)}" style="margin:0">
+             ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.displayName || u.username)}</option>`).join("")}
+           </select>
+           <button type="button" class="btn ghost" data-gact="addmember" data-gid="${esc(g.id)}">Add</button>
+         </span>`
+      : `<div class="muted" style="font-size:12px; margin-top:8px">Every user is a member.</div>`;
+    return `<tr data-id="${esc(g.id)}">
+      <td><span class="chip">${esc(g.name)}</span>
+        <div style="margin-top:6px">${chips}</div>
+        ${addCtl}</td>
+      <td style="text-align:right; white-space:nowrap; vertical-align:top">
+        <button class="btn ghost" data-gact="rename" title="Rename this group">Rename</button>
+        <button class="btn ghost danger" data-gact="delete" title="Delete this group">Delete</button>
+      </td></tr>`;
+  };
+  const groupsCard = denied ? "" : `
+    <div class="card" style="padding:0; margin-top:18px">
+      <div class="between" style="padding:16px 18px 0">
+        <h2>Groups</h2><button class="btn" id="new-group" title="Create a new group">New group</button>
+      </div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">A named set of users. Share a project
+      with a group and every member gets that role (ADR-draft-groups-as-members). A membership change
+      takes effect on the member's next sign-in.</p>
+      <table data-dt-key="groups">
+        <thead><tr><th>Group</th><th></th></tr></thead>
+        <tbody id="group-rows">${groups.map(groupRow).join("")
+          || `<tr><td colspan="2" class="muted" style="padding:14px 18px">No groups yet.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
   if (superseded(gen)) return; // navigated away while the roster/connectors/secrets loaded
   view.innerHTML = `
     <div class="card">
@@ -1333,6 +1428,7 @@ async function viewConsoleOrg() {
         : "Single-user mode: the API and UI are open. Enable login with <code>--auth</code> to enforce the accounts below."}</p>
     </div>
     ${usersCard}
+    ${groupsCard}
     ${appearanceCard()}
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0"><h2>Connectors</h2></div>
@@ -1379,6 +1475,24 @@ async function viewConsoleOrg() {
       case "password": resetUserPassword(u, reload); break;
       case "toggle": toggleUserDisabled(u, reload); break;
       case "delete": deleteUser(u, reload); break;
+    }
+  });
+
+  document.getElementById("new-group").addEventListener("click", () => createGroup(reload));
+  document.getElementById("group-rows").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-gact]");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const g = (groups || []).find((x) => x.id === (row && row.dataset.id));
+    switch (btn.dataset.gact) {
+      case "rename": if (g) renameGroup(g, reload); break;
+      case "delete": if (g) deleteGroup(g, reload); break;
+      case "addmember": {
+        const sel = row.querySelector(`select[data-add-for="${btn.dataset.gid}"]`);
+        if (sel) addGroupMember(btn.dataset.gid, sel.value, reload);
+        break;
+      }
+      case "rmmember": removeGroupMember(btn.dataset.gid, btn.dataset.uid, reload); break;
     }
   });
 }
@@ -2330,10 +2444,10 @@ function openShareModal(proj, users, degraded, reload) {
     const memberIds = new Set(members.map((m) => m.ref.id));
     const eligible = (users || []).filter((u) => u.id !== p.ownerId && !memberIds.has(u.id));
 
-    const personRow = (id, right, extra = "") => `
+    const personRow = (id, right, extra = "", isGroup = false) => `
       <div class="member-row"${extra}>
         <span class="avatar sm">${esc(initials(nameOf(id)))}</span>
-        <div class="member-id">${esc(nameOf(id))}${id === me ? ' <span class="muted">(you)</span>' : ""}</div>
+        <div class="member-id">${esc(nameOf(id))}${isGroup ? ' <span class="muted">· group</span>' : (id === me ? ' <span class="muted">(you)</span>' : "")}</div>
         ${right}
       </div>`;
 
@@ -2343,6 +2457,7 @@ function openShareModal(proj, users, degraded, reload) {
       `${roleSelect(m.role, `data-role-for="${esc(m.ref.id)}"`)}
        <button type="button" class="icon-btn danger" data-remove="${esc(m.ref.id)}" title="Remove access">✕</button>`,
       ` data-uid="${esc(m.ref.id)}"`,
+      m.ref.type === "group",
     )).join("");
 
     const addControl = degraded
@@ -2355,10 +2470,10 @@ function openShareModal(proj, users, degraded, reload) {
       : eligible.length
         ? `<div class="add-row">
              <select class="field" id="add-uid">
-               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
+               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}${u.type === "group" ? " (group)" : ""}</option>`).join("")}
              </select>
              ${roleSelect("viewer", 'id="add-role"')}
-             <button type="button" class="btn" id="add-btn" title="Give this person access">Add</button>
+             <button type="button" class="btn" id="add-btn" title="Give this person or group access">Add</button>
            </div>`
         : `<p class="muted small">Everyone already has access.</p>`;
 
@@ -2388,8 +2503,17 @@ function openShareModal(proj, users, degraded, reload) {
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
   const setVisibility = (v) => apply(() =>
     api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
+  // A member ref is a user by default, or a group; resolve the type from the
+  // existing member (role change) or the directory entry (fresh add), so the PUT
+  // records the right kind (ADR-draft-groups-as-members).
+  const memberType = (id) => {
+    const m = (p.members || []).find((x) => x.ref.id === id);
+    if (m) return m.ref.type;
+    const e = byId.get(id);
+    return e ? e.type : "user";
+  };
   const setMember = (uid, role) => uid && apply(() =>
-    api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
+    api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role, type: memberType(uid) }));
   const removeMember = (uid) => apply(() =>
     api("DELETE", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
 
