@@ -39,8 +39,34 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
+      # For the What's New generator below. Same version ci.yml pins, so the one
+      # generator cannot produce different output in the two places that run it.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Assign a number to every draft
-        run: go run ./docs/adr/cmd/adrnum
+        id: adrnum
+        run: |
+          go run ./docs/adr/cmd/adrnum
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "numbered=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Numbering rewrites every citation of a draft, and CHANGELOG.md carries them
+      # — while the Console's What's New feed is *generated from* that file and
+      # committed (ADR-0012 keeps the web UI buildless, so nothing regenerates it at
+      # build or run time). CI fails on a stale feed. Since this job's own push does
+      # not trigger CI, a numbering run that rewrote a changelog citation would leave
+      # main red at the next push that does — through no fault of that push.
+      #
+      # Only when there was something to number: with no drafts the tree is clean and
+      # must stay that way, or an unrelated staleness would be committed here under a
+      # message about numbering.
+      - name: Regenerate the What's New feed
+        if: steps.adrnum.outputs.numbered == 'true'
+        run: node scripts/whats-new/gen.mjs
 
       # A push made with GITHUB_TOKEN deliberately does not trigger another
       # workflow run — that is what keeps this job from waking itself, and it also
@@ -51,7 +77,17 @@ jobs:
         run: |
           go build ./...
           go vet ./...
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "The numbering rewrite left these files unformatted:"
+            echo "$out"
+            exit 1
+          fi
+          # The ADR package unfiltered, as before — TestCitationsResolveAcrossTheRepository
+          # and TestDraftsAreNotInTheIndex are the guards that matter right after a
+          # rewrite. Plus the one api test that reads the feed this job now writes.
           go test ./docs/adr/
+          go test ./api/ -run TestWhatsNewJSONIsValid
 
       - name: Commit and push
         run: |
@@ -64,8 +100,8 @@ jobs:
           git add -A
           git commit -m "Assign ADR numbers to the records merged into main"
           # Rebase first: a push that landed while this job ran would otherwise
-          # reject ours, and the numbering commit touches only docs/adr and the
-          # citations of the drafts it numbered.
+          # reject ours, and the numbering commit touches only docs/adr, the
+          # citations of the drafts it numbered, and the feed derived from them.
           git pull --rebase origin main
           if ! git push origin HEAD:main; then
             echo "::error::Could not push the ADR numbering commit to main."
