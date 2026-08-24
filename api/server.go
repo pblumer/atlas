@@ -1746,12 +1746,31 @@ func (s *Server) loadDeployments() error {
 	}
 	for _, rec := range recs {
 		// Recompile exactly the process this record represents (a collaboration's
-		// XML holds several), keyed as originally assigned (ADR-0019/0022).
-		cp, err := compiler.ParseNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
+		// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
+		// without the deploy-time validation gate
+		// (ADR-draft-reload-skips-the-deploy-gate). This definition passed the gate
+		// that existed when it was deployed and its instances have been running under
+		// it since; a rule added to the compiler afterwards is a reason to tell the
+		// operator, not to refuse to start. The model on disk did not change.
+		cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
 		if err != nil {
-			// A stored model that no longer compiles is a hard, actionable error
-			// rather than a silently dropped definition (ADR-0019).
-			return fmt.Errorf("api: reload deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+			// A stored model that no longer compiles *at all* is still a hard,
+			// actionable error rather than a silently dropped definition (ADR-0019):
+			// there is no definition to bring back, so its instances could not advance
+			// either way. Name the record, since acting on it means editing that file.
+			return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+		}
+		if len(problems) > 0 {
+			// Not silent: the model is drifting from what the compiler now asks for,
+			// and the next deploy of it will be refused. Named per deployment so the
+			// operator can go straight to the model that needs fixing.
+			logging.Warn(logging.DeploymentReloadedWithProblems,
+				"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+				slog.Uint64("deploymentKey", rec.Key),
+				slog.String("processId", rec.ProcessID),
+				slog.Int64("version", int64(rec.Version)),
+				slog.String("artifact", "bpmn"),
+				slog.String("problems", compiler.SummarizeProblems(problems)))
 		}
 		cp.Version = rec.Version
 		// Re-resolve the job types the same way the original deploy did. The registry
@@ -1766,8 +1785,24 @@ func (s *Server) loadDeployments() error {
 		// models are snapshotted in the deployment record (a legacy record carries a
 		// single model), so no temis reference has to be re-resolved here.
 		for _, dmnXML := range rec.dmnModels() {
-			if err := s.dmnRegistry.Deploy(rec.Key, []byte(dmnXML)); err != nil {
-				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
+			// The same split as the BPMN model above
+			// (ADR-draft-reload-skips-the-deploy-gate), for the same reason: refusing a
+			// snapshotted DMN model here undeploys nothing, it only keeps the server from
+			// starting. A decision that stopped compiling since the deploy fails when it
+			// is evaluated — a job error on a worker, which the engine has an answer for
+			// — while every other decision in the model keeps answering.
+			dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
+			if err != nil {
+				return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
+			}
+			if dmnProblems != "" {
+				logging.Warn(logging.DeploymentReloadedWithProblems,
+					"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
+					slog.Uint64("deploymentKey", rec.Key),
+					slog.String("processId", rec.ProcessID),
+					slog.Int64("version", int64(rec.Version)),
+					slog.String("artifact", "dmn"),
+					slog.String("problems", dmnProblems))
 			}
 		}
 		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and

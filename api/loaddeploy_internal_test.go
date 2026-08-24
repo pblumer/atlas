@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/engine"
@@ -14,6 +15,11 @@ import (
 // TestNewFailsOnUncompilableStoredDeployment covers loadDeployments' compile
 // error branch (ADR-0019): a persisted definition whose XML no longer compiles
 // makes New fail loudly rather than booting with a silently missing definition.
+// This is the line the reload path draws (ADR-draft-reload-skips-the-deploy-gate):
+// a model today's *validation* would refuse still loads, because it compiled and
+// its instances run; one that yields no compiled process at all does not, because
+// there is nothing to bring back. The failure names the record it read, since
+// acting on it means going to that file.
 func TestNewFailsOnUncompilableStoredDeployment(t *testing.T) {
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -47,5 +53,8 @@ func TestNewFailsOnUncompilableStoredDeployment(t *testing.T) {
 	if err == nil {
 		srv.Close()
 		t.Fatal("New with an uncompilable stored deployment: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(depDir, "1.json")) {
+		t.Fatalf("error does not name the record to fix: %v", err)
 	}
 }

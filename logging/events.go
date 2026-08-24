@@ -152,6 +152,15 @@ var (
 
 // Everything else the running server reports about itself.
 var (
+	// DeploymentReloadedWithProblems reports a stored definition — or a DMN model
+	// bundled with one, told apart by the artifact attribute — that today's
+	// deploy-time checks would refuse, brought back anyway because it passed the gate
+	// of the day it was deployed and its instances are running under it
+	// (ADR-draft-reload-skips-the-deploy-gate). Warned rather than swallowed: the
+	// model is drifting from what the compiler now asks for, and the next deploy of
+	// it will be refused with the author watching.
+	DeploymentReloadedWithProblems = newEvent("deployment.reloaded_with_problems")
+
 	ScriptWorkerEnabled      = newEvent("script_worker.enabled")
 	ScriptWorkerMissing      = newEvent("script_worker.binary_missing")
 	CallOverrideSkipped      = newEvent("call_override.skipped")

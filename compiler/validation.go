@@ -234,16 +234,34 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 // matching how the other compile failures read.
 type ValidationError struct {
 	Problems []Problem
+	// Process is the compiled process the gate refused. The model is fully compiled
+	// by the time stage 5 runs — validation decides whether it may be *deployed*, it
+	// does not decide whether it can run (I5) — so the reload path, which re-reads a
+	// definition that passed the gate of its own day, can take the process from here
+	// instead of losing it to the gate a second time
+	// (ADR-draft-reload-skips-the-deploy-gate). compileProcess always sets it; it is
+	// still the zero value of the field, so a caller checks it before use.
+	Process *CompiledProcess
 }
 
 func (e *ValidationError) Error() string {
+	return "compiler: validation failed: " + SummarizeProblems(e.Problems)
+}
+
+// SummarizeProblems renders the error-severity Problems into one line — the same
+// reading [ValidationError.Error] gives a refused deploy, available to a caller
+// that holds the findings rather than the error (the reload path logs them).
+// Warnings are left out: they name a smell, not a reason anything was refused.
+func SummarizeProblems(ps []Problem) string {
 	var b strings.Builder
-	b.WriteString("compiler: validation failed:")
-	for _, p := range e.Problems {
+	for _, p := range ps {
 		if p.Severity != SeverityError {
 			continue
 		}
-		fmt.Fprintf(&b, " %s (%s)", p.Message, p.Rule)
+		if b.Len() > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "%s (%s)", p.Message, p.Rule)
 	}
 	return b.String()
 }
