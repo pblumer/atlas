@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Konten-Rezertifizierung (Entra ID) — was `list-users` einem Prozess erlaubt.
+
+  Das Gegenstück zu entra-create-account.bpmn: dort legt ein Prozess ein Konto an,
+  hier *befragt* er das Verzeichnis. Genau das konnte der Entra-Konnektor bis
+  ADR-0172 (amended) nicht — er konnte ein Konto ändern, das der Prozess bereits
+  beim Namen kannte, aber keines finden.
+
+    Start "Review angefordert"
+     → Service-Task "Konten des Bereichs auflisten"   (atlas:entraConnector, list-users)
+     → Script-Task  "Mit dem Personalsystem abgleichen" (FEEL-Filter über die Liste)
+     → Exklusiv-Gateway "Verwaiste Konten?"
+          keine  → Ende "Alles rezertifiziert"
+          welche → Service-Task "Konto deaktivieren"  (Multi-Instance, entra disable)
+                    → Ende "Konten gesperrt"
+
+  Der Lehrsatz des Modells steht im Diagramm — als das, was *nicht* darin steht:
+  nirgends wird geblättert. Eine Graph-Collection kommt seitenweise hinter einem
+  @odata.nextLink, aber der Konnektor folgt diesen Seiten selbst, also erhält
+  `konten` die *ganze* Trefferliste als ein JSON-Array. Erst dadurch kann der
+  nächste Schritt ein einzelner FEEL-Filter sein statt einer Schleife über einen
+  Continuation-Token.
+
+  Läuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
+  Tenant-Credential liegt nie in der Engine. Beide Service-Tasks parken also, bis
+  ein Entra-Worker sie abholt — wie der zu starten ist, steht in der Dokumentation
+  des Prozesses selbst, damit es mit dem Modell reist.
+
+  Startvariablen:
+    bereich              "IT"                        — der zu prüfende Bereich
+    aktiveMitarbeitende  ["a@contoso.com", …]        — UPNs aus dem Personalsystem
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra_rezertifizierung"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="entra-konten-rezertifizierung" name="Konten-Rezertifizierung (Entra ID)" isExecutable="true">
+    <bpmn:documentation>Prüft die aktiven Entra-ID-Konten eines Bereichs gegen das Personalsystem und
+deaktiviert, was dort niemandem mehr gehört.
+
+Startet mit zwei Variablen: `bereich` (Zeichenkette, z. B. "IT") und
+`aktiveMitarbeitende` (Liste der UPNs, die laut Personalsystem noch beschäftigt
+sind). Ergebnis ist `zuSperren` — die Konten, die keiner aktiven Person mehr
+zugeordnet sind — und deren Deaktivierung im Verzeichnis.
+
+Der Prozess zeigt, was `list-users` möglich macht: das Verzeichnis zu *befragen*
+statt nur zu ändern. Die Trefferliste kommt als ein einziges JSON-Array an, weil
+der Konnektor Graphs Seitenwechsel selbst nachverfolgt — deshalb kommt der
+Abgleich mit einem FEEL-Ausdruck aus und braucht keine Schleife im Diagramm.
+
+Beide Service-Tasks parken, bis ein Entra-Worker sie abholt — der Konnektor ist
+worker-only, damit das Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
+
+    export ATLAS_ENTRA_CONNECTORS=contoso
+    export ATLAS_ENTRA_CONTOSO_TENANT_ID=… ATLAS_ENTRA_CONTOSO_CLIENT_ID=…
+    export ATLAS_ENTRA_CONTOSO_CLIENT_SECRET=…
+    atlas worker --server http://localhost:8080 --connector entra
+
+Die App-Registrierung braucht die Anwendungsberechtigungen User.Read.All (Lesen)
+und User.ReadWrite.All (Deaktivieren), jeweils mit Administratorzustimmung.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Review angefordert">
+      <bpmn:documentation>Ein einfaches (none) Start-Event, weil der Prozess bewusst angestoßen wird — von
+Hand, von einem Timer oder aus dem Personalsystem heraus. Die zu prüfende
+Abgrenzung kommt als Startvariable mit und steht nicht im Modell: derselbe
+Prozess rezertifiziert jeden Bereich.</bpmn:documentation>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="auflisten" name="Konten des Bereichs auflisten">
+      <bpmn:documentation>Ein Service-Task, weil hier ein Umsystem antwortet und kein Mensch — und ein
+*Konnektor*-Task statt eines generischen REST-Tasks, weil das Modell eine
+benannte Operation wählt ("list-users") statt eine URL und ein JSON-Fragment von
+Hand zu schreiben (ADR-0172).
+
+`filter` ist der OData-$filter und darf ein FEEL-Ausdruck sein — deshalb kann
+dieser Prozess den Bereich auflisten, um den es gerade geht, statt einen fest
+verdrahteten. `select` holt nur die vier Eigenschaften, die die folgenden
+Schritte lesen; das hält eine große Auflistung aus dem State-Store heraus.
+
+`pageSize` bestimmt nur, wie viele Konten pro Anfrage geholt werden — *jede*
+Seite wird gefolgt, `konten` erhält immer die vollständige Trefferliste. Und
+`maxUsers` deckelt, was in der Prozessvariablen landen darf: Wird die Grenze
+überschritten, **scheitert die Aufgabe, statt zu kürzen** (eine gekürzte Liste
+wäre eine falsche Antwort, keine halbe). Das ist ein fehlgeschlagener Job und
+damit ein Incident in der Operations-Ansicht, kein BPMN-Fehler — eine
+Error-Boundary würde hier also nicht auslösen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="list-users"
+                              filter="=&quot;department eq '&quot; + bereich + &quot;' and accountEnabled eq true&quot;"
+                              select="id,displayName,userPrincipalName,mail"
+                              pageSize="200" maxUsers="500"
+                              resultVariable="konten"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:scriptTask id="abgleich" name="Mit dem Personalsystem abgleichen">
+      <bpmn:documentation>Ein Script-Task mit Inline-FEEL, weil der Abgleich eine reine Rechnung auf schon
+vorhandenen Daten ist: kein Umsystem, keine Entscheidung, die jemand fachlich
+pflegen müsste (sonst wäre es ein Business-Rule-Task mit DMN).
+
+Der Filter behält jedes Konto, dessen UPN das Personalsystem nicht mehr führt:
+
+    konten[not(list contains(aktiveMitarbeitende, userPrincipalName))]
+
+Dass das ein einzelner Ausdruck sein kann, ist der eigentliche Gewinn von
+`list-users`: `konten` ist eine Liste, kein Seitenzeiger. Käme das Ergebnis
+seitenweise, stünde hier eine Schleife über einen Continuation-Token — also
+Graphs Paging-Protokoll im Diagramm.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=konten[not(list contains(aktiveMitarbeitende, userPrincipalName))]"
+                      resultVariable="zuSperren"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="gw_verwaist" name="Verwaiste Konten?" default="f6">
+      <bpmn:documentation>Ein exklusives Gateway, weil sich die beiden Fälle ausschließen: Entweder es gibt
+etwas zu sperren oder nicht. Der Leer-Fall bekommt einen eigenen sichtbaren
+Abschluss, statt still durch einen Deaktivierungs-Schritt zu laufen, der über
+eine leere Liste iteriert — im Log soll stehen, dass geprüft *und* nichts
+gefunden wurde.
+
+"keine" ist der Default-Flow: Er trägt bewusst keine Bedingung, damit kein Token
+hängen bleibt, wenn `zuSperren` einmal nicht das ist, was hier erwartet wird.</bpmn:documentation>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="deaktivieren" name="Konto deaktivieren">
+      <bpmn:documentation>Wieder ein Entra-Konnektor-Task, jetzt mit der Operation "disable" — in Graph ein
+PATCH von `accountEnabled` auf false, den niemand von Hand schreiben soll.
+
+Der Task ist eine **parallele Multi-Instance** über `zuSperren`: eine Instanz je
+Konto, `konto` ist das jeweilige Element, `userId` adressiert es über
+`=konto.id`. Genau hier zahlt sich aus, dass die Auflistung eine Liste ist — sie
+lässt sich unmittelbar als `inputCollection` verwenden.
+
+Die Operation ist bewusst `disable` und nicht `delete-user`: Ein deaktiviertes
+Konto ist umkehrbar, ein gelöschtes nicht, und eine Rezertifizierung darf sich
+irren.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="disable" userId="=konto.id"/>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=zuSperren" inputElement="konto"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="end_gesperrt" name="Konten gesperrt">
+      <bpmn:documentation>Getrennt vom Leer-Ende, weil die beiden Ausgänge fachlich verschieden sind: Hier
+wurde das Verzeichnis verändert, dort nur bestätigt. Wer die Instanzen später
+auswertet, sieht den Unterschied am Ende-Event statt an einer Variablen.</bpmn:documentation>
+      <bpmn:incoming>f5</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="end_ok" name="Alles rezertifiziert">
+      <bpmn:documentation>Der Leer-Fall: geprüft, nichts zu tun. Ein eigenes Ende-Event, damit die
+erfolgreiche Rezertifizierung ohne Änderung ein Ergebnis ist und kein
+Nicht-Ereignis.</bpmn:documentation>
+      <bpmn:incoming>f6</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="auflisten"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="auflisten" targetRef="abgleich"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="abgleich" targetRef="gw_verwaist"/>
+    <bpmn:sequenceFlow id="f4" name="verwaiste Konten" sourceRef="gw_verwaist" targetRef="deaktivieren">
+      <bpmn:conditionExpression>= count(zuSperren) &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f5" sourceRef="deaktivieren" targetRef="end_gesperrt"/>
+    <bpmn:sequenceFlow id="f6" name="keine" sourceRef="gw_verwaist" targetRef="end_ok"/>
+  </bpmn:process>
+
+  <!--
+    Hand-authored BPMN-DI (AGENTS.md): eine gerade Hauptachse auf y=200 mit 150px
+    Raster, der Leer-Zweig in einer eigenen Bahn auf y=340 mit orthogonalen
+    Stützpunkten. Nichts überlappt, keine Kante läuft durch einen Knoten.
+  -->
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="entra-konten-rezertifizierung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="125" y="222" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_auflisten" bpmnElement="auflisten">
+        <dc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_abgleich" bpmnElement="abgleich">
+        <dc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_verwaist" bpmnElement="gw_verwaist" isMarkerVisible="true">
+        <dc:Bounds x="565" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="530" y="136" width="120" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_deaktivieren" bpmnElement="deaktivieren">
+        <dc:Bounds x="730" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_gesperrt" bpmnElement="end_gesperrt">
+        <dc:Bounds x="902" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="878" y="222" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_ok" bpmnElement="end_ok">
+        <dc:Bounds x="712" y="322" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="682" y="362" width="96" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="340" y="200"/>
+        <di:waypoint x="390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="490" y="200"/>
+        <di:waypoint x="565" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="615" y="200"/>
+        <di:waypoint x="730" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="628" y="168" width="92" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="830" y="200"/>
+        <di:waypoint x="902" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="590" y="225"/>
+        <di:waypoint x="590" y="340"/>
+        <di:waypoint x="712" y="340"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="598" y="262" width="44" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

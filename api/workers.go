@@ -60,7 +60,10 @@ type workerRegistry struct {
 	// jobs holds each worker's most recent jobs, so the console can answer "which
 	// ones" after the counters have answered "how many" (see workerjobs.go).
 	jobs map[string]*jobRunRing
-	now  func() int64
+	// history, when an operator configured one, receives each settled job so the
+	// record outlives this process (see workerhistory.go). nil is the ordinary case.
+	history *historyExporter
+	now     func() int64
 }
 
 // newWorkerRegistry builds an empty registry over a clock, injected so the

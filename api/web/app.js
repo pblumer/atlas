@@ -4082,9 +4082,11 @@ async function viewWorkers() {
         </div>
         <div class="modal-body" id="wkjobs-body"><p class="empty">Loading\u2026</p></div>
         <div class="modal-foot">
-          <span class="muted small">The last jobs this worker leased, newest first. Held in the
-            server\u2019s memory only \u2014 a restart empties it, and older jobs age out. The durable
-            account is the instance timeline.</span>
+          <span class="muted small">The last jobs this worker leased, newest first. The top of the
+            list is the server\u2019s memory \u2014 a restart empties it, and older jobs age out.
+            Anything under \u201cEarlier\u201d comes from the configured job-history connector and
+            outlives a restart. The durable account of the run itself stays the instance
+            timeline.</span>
           <button type="button" class="btn" data-done title="Close this dialog">Done</button>
         </div>
       </div>`;
@@ -4108,9 +4110,19 @@ async function viewWorkers() {
       return;
     }
     if (!jobs.length) {
+      // Nothing in this run — but the history may still hold the failure someone came
+      // here to read, so the section below is still asked for.
       body.innerHTML = `<p class="empty">No jobs recorded for this worker in this run.</p>`;
+      await appendHistory(ov, worker);
       return;
     }
+    renderRuns(body, jobs);
+    await appendHistory(ov, worker);
+  }
+
+  // renderRuns draws a list of job runs. The ring and the clio history share it: they
+  // are the same rows, and showing them differently would suggest they are not.
+  function renderRuns(body, jobs) {
     // Variables are shown collapsed: the list is for scanning outcomes, and a row of
     // JSON per job would bury the one that failed.
     const vars = (label, text) => text
@@ -4137,6 +4149,54 @@ async function viewWorkers() {
         <div class="wkjob-io">${vars("Handed in", j.in)}${vars("Returned", j.out)}</div>
       </div>`;
     }).join("")}</div>`;
+  }
+
+  // appendHistory adds what the configured clio connector holds, under the ring.
+  //
+  // It is a second request rather than part of the first because it reaches another
+  // service: a dialog that waited on clio before showing anything would make the ring
+  // — which is always there — hostage to a store that may not be. So the memory tail
+  // renders first, and the history arrives under it or says why it did not.
+  async function appendHistory(ov, worker) {
+    const body = ov.querySelector("#wkjobs-body");
+    if (!body) return;
+    const box = document.createElement("div");
+    box.className = "wkjob-history";
+    box.innerHTML = `<div class="wkjob-history-head muted small">Loading the history\u2026</div>`;
+    body.appendChild(box);
+
+    let out;
+    try {
+      out = await api("GET", `/api/v1/workers/${encodeURIComponent(worker)}/history`);
+    } catch (e) {
+      box.innerHTML = `<div class="wkjob-history-head muted small">History unavailable: ${esc(String(e && e.message || e))}</div>`;
+      return;
+    }
+    if (!out || !out.configured) {
+      // Not a failure: this server was not asked to keep one. Naming the flag is more
+      // use than an empty section that reads as "nothing ever ran".
+      box.innerHTML = `<div class="wkjob-history-head muted small">${esc((out && out.note) || "No job history is configured on this server.")}</div>`;
+      return;
+    }
+    const jobs = out.jobs || [];
+    const head = `<div class="wkjob-history-head">
+      <b>Earlier, from ${esc(out.connector)}</b>
+      <span class="muted small">${jobs.length} entr${jobs.length === 1 ? "y" : "ies"}${
+        out.scope === "failed" ? ", failures only" : ""}${
+        out.truncated ? " \u2014 more than this window holds; query clio directly for the rest" : ""}${
+        out.dropped ? ` \u2014 ${out.dropped} dropped while clio was slow or unreachable` : ""}</span>
+    </div>`;
+    if (!jobs.length) {
+      box.innerHTML = head + `<p class="empty">Nothing in the history for this worker yet.</p>`;
+      return;
+    }
+    const list = document.createElement("div");
+    // The stored rows carry the same field names the ring does, so the same renderer
+    // draws them. Only `in`/`out` arrive as text either way, which is why the ring
+    // stores them as text in the first place.
+    renderRuns(list, jobs);
+    box.innerHTML = head;
+    box.appendChild(list.firstElementChild);
   }
 
   // prettyJSON re-indents the stored JSON text for reading, and leaves it alone when it
