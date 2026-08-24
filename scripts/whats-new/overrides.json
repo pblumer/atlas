@@ -1,5 +1,26 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "entra-id-can-be-asked-a-question-not-only-told-what-to-do": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Find accounts in Entra ID, not just change them",
+      "de": "Konten in Entra ID finden, nicht nur ändern"
+    },
+    "summary": {
+      "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them, and receives every match in a single process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+      "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert, und erhält alle Treffer in einer einzigen Prozessvariablen. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
   "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on": {
     "tags": [
       "Modeler"
@@ -825,5 +846,25 @@
   },
   "an-smtp-endpoint-written-without-a-port-is-completed-instead": {
     "hidden": true
+  },
+  "a-new-validation-rule-can-no-longer-take-down-a-running-serv": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "An upgrade no longer stops on a model you already deployed",
+      "de": "Ein Upgrade bleibt nicht mehr an einem bereits deployten Modell hängen"
+    },
+    "summary": {
+      "en": "Atlas recompiles every deployed definition when it starts, and it used to apply the deploy checks again while doing so. A check added to a later version therefore met models that were deployed before it existed, refused them, and the server stopped starting at all — over a model nobody had touched, with every other definition and every running instance out of reach behind it. Those checks decide whether a model may be deployed, not whether it may run, so they no longer run at startup. A definition that was accepted comes back and keeps running, and Atlas writes one warning per model naming what it would fail today, so you can fix it in the Modeler in your own time. The decision models deployed with a process are treated the same way: a decision that no longer compiles no longer stops the server — it fails only if something evaluates it, and the other decisions keep answering. Deploying such a model still refuses it, with the rule named.",
+      "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
   }
 }

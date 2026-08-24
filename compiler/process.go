@@ -703,12 +703,24 @@ type ConnectorTaskDetail struct {
 	// the interned name of the process variable holding the directory properties for
 	// create-user and update-user; ResultVar (above) receives what Graph returned.
 	//
+	// EntraFilter, EntraSelect, EntraPageSize and EntraMaxUsers configure list-users
+	// and are zero on every other operation, which the compiler enforces rather than
+	// ignores. EntraFilter is a literal-or-FEEL OData $filter and EntraSelect the
+	// interned $select projection. EntraPageSize is the $top asked of each request
+	// (0 leaves Graph its own page size) and EntraMaxUsers caps what may reach the
+	// result variable (0 is unbounded); the compiler has already applied the defaults,
+	// so the runtime interprets nothing (I5).
+	//
 	// Each is the zero value for a non-Entra task. No in-process worker reads these:
 	// they are resolved onto the job and read by a worker (ADR-0164/0168).
 	EntraOp            int32
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraAttributesVar int32
+	EntraFilter        RestExpr
+	EntraSelect        int32
+	EntraPageSize      int32
+	EntraMaxUsers      int32
 	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the

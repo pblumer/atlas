@@ -33,16 +33,22 @@ type Op struct {
 	NeedsUser       bool
 	NeedsGroup      bool
 	NeedsAttributes bool
+	// IsList marks the operation that returns a collection instead of one object or
+	// nothing. It is the one operation [Run] does not perform with a single call:
+	// a collection is paged, and following those pages is this connector's work
+	// rather than something a process has to model with a loop.
+	IsList bool
 	// Describes the operation for an error message.
 	Label string
 }
 
 // Ops is the operation table. The set covers a joiner/mover/leaver lifecycle: create
-// and read an account, change it, enable and disable it, delete it, and move it in
-// and out of groups.
+// and read an account, find accounts, change one, enable and disable it, delete it,
+// and move it in and out of groups.
 var Ops = map[string]Op{
 	"create-user":         {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":            {Method: "GET", NeedsUser: true, Label: "read a user"},
+	"list-users":          {Method: "GET", IsList: true, Label: "list users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
 	"delete-user":         {Method: "DELETE", NeedsUser: true, Label: "delete a user"},
 	"enable":              {Method: "PATCH", NeedsUser: true, Label: "enable an account"},
@@ -73,8 +79,17 @@ type Job struct {
 	UserID  string `json:"userId,omitempty"`
 	GroupID string `json:"groupId,omitempty"`
 	// Attributes is the resolved JSON body for create-user and update-user.
-	Attributes     map[string]any `json:"attributes,omitempty"`
-	ResultVariable string         `json:"resultVariable,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+	// Filter, Select, PageSize and MaxUsers configure list-users and are zero on
+	// every other operation. Filter is the resolved OData $filter and Select the
+	// $select projection; PageSize is the $top asked of each request (0 leaves Graph
+	// its own page size) and MaxUsers caps what may reach the result variable
+	// (0 unbounded). The compiler has already applied the defaults.
+	Filter         string `json:"filter,omitempty"`
+	Select         string `json:"select,omitempty"`
+	PageSize       int32  `json:"pageSize,omitempty"`
+	MaxUsers       int32  `json:"maxUsers,omitempty"`
+	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
 // Resolve turns a compiled Entra connector task into a [Job]: the authored ids
@@ -99,6 +114,10 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Operation:      op,
 		UserID:         resolveValue(detail.EntraUserID, elementInstanceKey, vars),
 		GroupID:        resolveValue(detail.EntraGroupID, elementInstanceKey, vars),
+		Filter:         resolveValue(detail.EntraFilter, elementInstanceKey, vars),
+		Select:         cp.Intern(detail.EntraSelect),
+		PageSize:       detail.EntraPageSize,
+		MaxUsers:       detail.EntraMaxUsers,
 		ResultVariable: cp.Intern(detail.ResultVar),
 	}
 	if spec.NeedsAttributes {
@@ -153,6 +172,13 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	if err := checkRequired(j, spec); err != nil {
 		return nil, err
 	}
+	if spec.IsList {
+		users, err := listUsers(ctx, j, client)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{j.ResultVariable: users}, nil
+	}
 	path, body := request(j, client.BaseURL())
 	res, err := client.Call(ctx, spec.Method, path, body)
 	if err != nil {
@@ -162,6 +188,106 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		return nil, nil
 	}
 	return map[string]any{j.ResultVariable: res}, nil
+}
+
+// nextLinkKey is the member Graph puts the continuation URL in. It is an OData
+// annotation rather than a property, which is why it is addressed by its literal
+// name and not by a struct tag.
+const nextLinkKey = "@odata.nextLink"
+
+// maxListPages bounds a listing that has no user cap of its own.
+//
+// Without it, a server that offers another page forever — broken, misconfigured, or
+// simply a directory nobody expected to be this large — would hold a worker until
+// the job's lease expired, which surfaces as a task that mysteriously retries rather
+// than as a listing that was too big. At Graph's own ceiling of 999 users per page
+// this is far above any listing that belongs in a process variable, so reaching it
+// means something is wrong and saying so is the useful outcome.
+const maxListPages = 1000
+
+// listUsers performs the whole listing: the first request this connector builds, and
+// then every continuation Graph hands back, until there is no next page.
+//
+// Following the pages here rather than exposing them is the point of the operation.
+// A model that had to loop over @odata.nextLink itself would be carrying Graph's
+// paging protocol in its diagram — the same thing ADR-0172 refused to make a modeler
+// hand-author for a $ref URL.
+func listUsers(ctx context.Context, j Job, client Client) ([]any, error) {
+	path, _ := request(j, client.BaseURL())
+	users := []any{}
+	for pages := 0; pages < maxListPages; pages++ {
+		res, err := client.Call(ctx, "GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+		batch, next, err := usersPage(res)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, batch...)
+		// The cap fails the job rather than truncating, for the reason the LDAP
+		// connector's does: a short result set is a wrong answer, not a partial one,
+		// and a process deciding something from it decides it confidently.
+		if j.MaxUsers > 0 && len(users) > int(j.MaxUsers) {
+			return nil, fmt.Errorf("entra: the listing returned more than the %d-user maxUsers cap; narrow the filter or raise maxUsers (truncating would be a wrong answer, not a partial one)", j.MaxUsers)
+		}
+		if next == "" {
+			return users, nil
+		}
+		path = next
+	}
+	return nil, fmt.Errorf("entra: the listing still offered another page after %d requests; narrow the filter, or set maxUsers so an oversized listing fails by its own bound", maxListPages)
+}
+
+// usersPage reads one Graph collection response: the users it carries and the link to
+// the next page, empty on the last one.
+//
+// A response that is not a collection is an error rather than an empty page, because
+// an empty page is indistinguishable from "no such users" — and a process that reads
+// a listing as empty acts on it.
+func usersPage(res any) ([]any, string, error) {
+	obj, ok := res.(map[string]any)
+	if !ok {
+		return nil, "", fmt.Errorf("entra: list-users expected a user collection, got %T", res)
+	}
+	raw, ok := obj["value"]
+	if !ok {
+		return nil, "", fmt.Errorf("entra: list-users response carries no %q collection", "value")
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, "", fmt.Errorf("entra: list-users response has a %q that is a %T, not a list of users", "value", raw)
+	}
+	next := ""
+	if nl, present := obj[nextLinkKey]; present {
+		s, ok := nl.(string)
+		if !ok {
+			return nil, "", fmt.Errorf("entra: list-users response has an %s that is a %T, not a URL", nextLinkKey, nl)
+		}
+		next = s
+	}
+	return list, next, nil
+}
+
+// listPath builds the first request of a listing. The parameter names are written
+// literally rather than through url.Values, which would percent-encode the leading
+// $ into %24: legal, decoded identically by Graph, and unreadable in a log or a
+// replay next to the documentation an operator is holding.
+func listPath(j Job) string {
+	var q []string
+	if f := strings.TrimSpace(j.Filter); f != "" {
+		q = append(q, "$filter="+url.QueryEscape(f))
+	}
+	if sel := strings.TrimSpace(j.Select); sel != "" {
+		q = append(q, "$select="+url.QueryEscape(sel))
+	}
+	if j.PageSize > 0 {
+		q = append(q, "$top="+strconv.FormatInt(int64(j.PageSize), 10))
+	}
+	if len(q) == 0 {
+		return "/users"
+	}
+	return "/users?" + strings.Join(q, "&")
 }
 
 // checkRequired repeats the compiler's shape rules on the worker. The compiler
@@ -178,6 +304,9 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsAttributes && len(j.Attributes) == 0 {
 		return fmt.Errorf("entra: operation %q resolved no attributes", j.Operation)
 	}
+	if spec.IsList && strings.TrimSpace(j.ResultVariable) == "" {
+		return fmt.Errorf("entra: operation %q resolved no resultVariable; a listing that discards its result is a directory read nothing asked for", j.Operation)
+	}
 	return nil
 }
 
@@ -191,6 +320,8 @@ func request(j Job, baseURL string) (path string, body any) {
 		return "/users", j.Attributes
 	case "get-user", "delete-user":
 		return "/users/" + user, nil
+	case "list-users":
+		return listPath(j), nil
 	case "update-user":
 		return "/users/" + user, j.Attributes
 	case "enable":
