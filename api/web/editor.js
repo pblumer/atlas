@@ -8516,7 +8516,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
     for (const [elId, list] of byEl) {
       const el = registry.get(elId);
-      const room = Math.max(1, Math.floor(((el.width || 100) - 14) / TOKEN_DOT_STEP));
+      const room = Math.max(1, Math.floor(((el.width || 100) - tokenDotInset(el) - 8) / TOKEN_DOT_STEP));
       const dots = list.length <= room ? list.length : Math.max(1, room - 1);
       list.slice(0, dots).forEach((token, i) => drawTokenDot(el, tokenColor(token.tokenId), i));
       if (list.length > dots) drawTokenCount(el, list.length - dots, dots);
@@ -8672,10 +8672,20 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // corner one.
   const TOKEN_DOT_STEP = 21;
 
+  // Where the row of dots starts. An element carrying an implementation badge — the icon
+  // saying this is a PowerShell script task, or which connector a service task calls —
+  // has that badge in its top-left corner, and a token drawn at the same place hid
+  // exactly the thing that says what the element does, leaving two overlapping discs
+  // that read as neither. So the row starts past it, but only on the elements that
+  // actually have one: an event, a gateway or a plain FEEL script task carries no badge
+  // and keeps the full width for its tokens.
+  const IMPL_BADGE_ROOM = 40; // 26px badge at left:2, plus the dot's own radius
+  const tokenDotInset = (el) => (implMarker(el.businessObject) ? IMPL_BADGE_ROOM : 6);
+
   function drawTokenDot(el, color, index) {
     const NS = "http://www.w3.org/2000/svg";
     const g = document.createElementNS(NS, "g");
-    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
+    g.setAttribute("transform", `translate(${el.x + tokenDotInset(el) + index * TOKEN_DOT_STEP} ${el.y + 6})`);
     const halo = document.createElementNS(NS, "circle");
     halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
     const dot = document.createElementNS(NS, "circle");
@@ -8691,7 +8701,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function drawTokenCount(el, count, index) {
     const NS = "http://www.w3.org/2000/svg";
     const g = document.createElementNS(NS, "g");
-    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
+    g.setAttribute("transform", `translate(${el.x + tokenDotInset(el) + index * TOKEN_DOT_STEP} ${el.y + 6})`);
     const pill = document.createElementNS(NS, "rect");
     pill.setAttribute("x", "-12"); pill.setAttribute("y", "-9");
     pill.setAttribute("width", "26"); pill.setAttribute("height", "18"); pill.setAttribute("rx", "9");
@@ -8707,12 +8717,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // highlightHistory marks how far the replay has walked (done / current / pending)
   // and which row is the selected element instance, and scrolls the current one in.
   function highlightHistory() {
+    // The playhead counts *frames*, and a frame is not a history row: every activation
+    // emits one, but so does every completion and termination, so a loop or a parallel
+    // branch produces far more frames than steps (18 steps, 30 frames on a five-round
+    // loop). Reading the frame number as a row number therefore marked a row further
+    // and further down the list the deeper into the instance you scrubbed — clicking a
+    // loop's second round highlighted its third, and its fourth round highlighted the
+    // task after the loop. The row the playhead is on is the last step it has reached.
+    const atPos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : -1;
+    let curIdx = -1;
+    for (let n = 0; n < steps.length; n++) if (steps[n].position <= atPos) curIdx = n;
     historyEl.querySelectorAll(".ops-hrow[data-i]").forEach((row) => {
       const i = Number(row.dataset.i);
       const pos = steps[i] ? steps[i].position : 0;
-      row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
-      row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
-      row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0) || i === selMig);
+      row.classList.toggle("done", atPos >= 0 && pos <= atPos);
+      row.classList.toggle("cur", i === curIdx);
+      row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0)
+        || (selMig >= 0 && i === selMig));
     });
     const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
