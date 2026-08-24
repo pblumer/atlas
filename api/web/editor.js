@@ -7836,13 +7836,36 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // drawBadges overlays each executed element with its cumulative execution count
   // (ADR-0022 visit history), like Operate's numbered badges. Data comes from the
   // per-instance runtime endpoint; a still-running instance's counts grow on poll.
+  //
+  // A looping activity is counted differently, because the raw number reads wrong there:
+  // the engine activates the activity once as the loop's *body* and once more per round,
+  // so a loop that ran five times badges 6 and leaves the reader to work out why. What a
+  // reader of a loop wants is how often it ran, so that is what the badge says — rounds,
+  // with the arithmetic in its tooltip. A loop that ran none says 0 rather than nothing:
+  // an activity reached and walked past is precisely the case worth seeing.
   function drawBadges() {
     for (const id of badges) { try { overlays.remove(id); } catch { /* gone */ } }
     badges = [];
-    for (const [elId, count] of Object.entries(visits)) {
-      if (!count || !registry.get(elId)) continue;
+    const rounds = {};   // looping element id → rounds run in this instance
+    const looping = {};  // looping element id → times the loop itself was entered
+    for (const s of steps) {
+      if (!s.loop) continue;
+      if (s.loop.round) rounds[s.elementId] = (rounds[s.elementId] || 0) + 1;
+      else looping[s.elementId] = (looping[s.elementId] || 0) + 1;
+    }
+    const ids = new Set([...Object.keys(visits), ...Object.keys(looping)]);
+    for (const elId of ids) {
+      if (!registry.get(elId)) continue;
+      const isLoop = looping[elId] > 0;
+      const count = isLoop ? (rounds[elId] || 0) : visits[elId];
+      if (!isLoop && !count) continue;
+      const title = isLoop
+        ? `${count} ${count === 1 ? "run" : "runs"} of this loop` +
+          (looping[elId] > 1 ? ` · the activity was entered ${looping[elId]} times` : "")
+        : `${count} ${count === 1 ? "execution" : "executions"}`;
       try {
-        badges.push(overlays.add(elId, { position: { top: -12, right: 12 }, html: `<span class="ops-badge">${count}</span>` }));
+        badges.push(overlays.add(elId, { position: { top: -12, right: 12 },
+          html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${isLoop ? "\u21BB " : ""}${count}</span>` }));
       } catch { /* element not in this diagram */ }
     }
   }
