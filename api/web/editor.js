@@ -8239,7 +8239,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // Rendered with the row and hidden, rather than built on the click: the rows are
     // rewritten on every poll and every frame, and an expansion that lived only in the
     // click handler would collapse under the reader every 1.5 seconds.
-    return row + `<tr class="v-struct" data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
+    return row + `<tr class="v-struct" data-dt-detail data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
       <pre class="vj-body">${highlightJSON(v.value)}</pre>
       <button class="v-big" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}"
         data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)} in a window">⤢ Open in a window</button>

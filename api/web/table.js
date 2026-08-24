@@ -18,6 +18,11 @@
 //              { sort:false } to make a column unsortable, { filter:false } to drop
 //              its filter input, or { type:"number"|"text" } to force the comparator.
 //              A header cell with no text (an actions column) is skipped automatically.
+//
+// A view that renders a collapsible detail row beneath a data row — an expanded JSON
+// value, a worker's log — marks it `data-dt-detail`. Such a row is not data: the helper
+// never sorts it on its own, never opens it, and only hides it along with the row it
+// belongs to when a filter removes that row. Whether it is open stays the view's to say.
 export function enhanceTable(table, opts = {}) {
   if (!table || table.dataset.dtEnhanced === "1") return;
   const thead = table.tHead;
@@ -132,7 +137,18 @@ export function enhanceTable(table, opts = {}) {
       });
       const active = filters.some(Boolean);
       funnel.classList.toggle("dt-has-filters", active);
-      const rows = [...tbody.rows].filter((r) => !r.dataset.dtEmpty);
+      // A detail row (data-dt-detail) is not a row of the table's own data: it belongs to
+      // the data row above it, and whether it is open is the *view's* business, not ours.
+      // Owning its `hidden` would force every collapsible detail open — this ran on every
+      // navigation and again on every tbody rewrite, so a view could not keep one closed.
+      const detailsOf = new Map();
+      let owner = null;
+      for (const r of tbody.rows) {
+        if (r.dataset.dtEmpty) continue;
+        if (r.hasAttribute("data-dt-detail")) { if (owner) detailsOf.get(owner).push(r); }
+        else { owner = r; detailsOf.set(r, []); }
+      }
+      const rows = [...detailsOf.keys()];
       let visible = 0;
       for (const r of rows) {
         let show = true;
@@ -142,6 +158,9 @@ export function enhanceTable(table, opts = {}) {
           }
         }
         r.hidden = !show;
+        // A detail of a row the filter removed goes with it; one whose row stays is left
+        // exactly as the view has it, open or closed.
+        if (!show) for (const d of detailsOf.get(r)) d.hidden = true;
         if (show) visible++;
       }
 
@@ -155,7 +174,12 @@ export function enhanceTable(table, opts = {}) {
           else c = va.localeCompare(vb, undefined, { numeric: true, sensitivity: "base" });
           return c * dir;
         });
-        for (const r of sorted) tbody.appendChild(r);
+        // A detail row travels with the row it details, or sorting scatters it under a
+        // stranger.
+        for (const r of sorted) {
+          tbody.appendChild(r);
+          for (const d of detailsOf.get(r)) tbody.appendChild(d);
+        }
       }
 
       ths.forEach((th, i) => {

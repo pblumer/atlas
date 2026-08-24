@@ -16,6 +16,7 @@
     <div id="view"></div>
     <script type="module">
       import { mountInstanceReplay } from "/editor.js";
+      import { enhanceTable } from "/table.js";
 
       const view = document.getElementById("view");
       const noop = () => {};
@@ -79,7 +80,14 @@
         return {};
       };
 
-      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      // The app enhances every table in the view once a route has mounted (app.js
+      // enhanceViewTables), and the Variables table is one of them. The harness does the
+      // same, because the enhancer and the expansion rows share the rows' `hidden` — and
+      // a harness that leaves it out cannot see them disagree.
+      window.__mount = async () => {
+        await mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+        for (const t of view.querySelectorAll("table:not(.no-enhance)")) enhanceTable(t);
+      };
       window.__ready = true;
     </script>
   </body>
