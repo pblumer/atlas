@@ -1,0 +1,45 @@
+{
+  "type": "default",
+  "id": "bw-interview-feedback",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🗣️ Interview-Feedback\n\nHalte direkt nach dem Gespräch fest, ob du diese Person für die Stelle empfiehlst. Runde, Name und Stelle kommen aus dem Aufruf des Teilprozesses — sie sind hier nur zu lesen."
+    },
+    {
+      "key": "runde",
+      "type": "textfield",
+      "label": "Runde",
+      "disabled": true
+    },
+    {
+      "key": "name",
+      "type": "textfield",
+      "label": "Bewerbung von",
+      "disabled": true
+    },
+    {
+      "key": "stelle",
+      "type": "textfield",
+      "label": "Beworben auf",
+      "disabled": true
+    },
+    {
+      "key": "empfehlung",
+      "type": "select",
+      "label": "Empfehlung",
+      "values": [
+        { "label": "Ja – weiter", "value": "ja" },
+        { "label": "Nein – nicht weiter", "value": "nein" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "notiz",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Zwei Sätze genügen. Sie stehen später im Fazit der Einstellungsentscheidung.",
+      "validate": { "required": true }
+    }
+  ]
+}

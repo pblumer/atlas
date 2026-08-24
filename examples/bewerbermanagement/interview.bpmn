@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Interview durchführen — der wiederverwendbare Teilprozess der Applikation
+  "Bewerbermanagement".
+
+  bw-bewerbung ruft ihn als Call-Activity auf, einmal je Interviewrunde. Er ist
+  ein eigenständig deployter Prozess, kein eingebetteter Subprozess: so kann ihn
+  später auch ein anderer Prozess aufrufen (etwa eine interne Bewerbung), und er
+  lässt sich einzeln testen und versionieren.
+
+    Start "Interview angesetzt"        (Eingabe: name, stelle, runde)
+     → Mockup-Service-Task "Termin vereinbaren"
+     → User-Task "Feedback erfassen"    (Formular bw-interview-feedback)
+        └─ Boundary-Timer P14D (unterbrechend)
+             → Script "Ohne Feedback bewerten" → Ende "Frist abgelaufen"
+     → Script "Bewertung erstellen"
+     → Ende "Interview abgeschlossen"   (Ausgabe: bewertung)
+
+  Der Datenvertrag ist die eigentliche Lektion: hinein gehen genau name, stelle
+  und runde, heraus kommt genau `bewertung`. BEIDE Enden erfüllen ihn — auch der
+  Fristablauf schreibt eine bewertung, sonst fehlte dem Aufrufer beim Einsammeln
+  der Multi-Instance-Ergebnisse ein Eintrag und die Instanz bliebe mit einem
+  Incident stehen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas.dev/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_bw_interview" targetNamespace="http://atlas/examples">
+
+  <process id="bw-interview" name="Interview durchführen" isExecutable="true">
+    <documentation>Führt eine einzelne Interviewrunde durch und liefert genau eine Bewertung zurück.
+
+Eingabe (vom Aufrufer gemappt): name, stelle, runde.
+Ausgabe: bewertung {runde, empfehlung ("ja" | "nein"), notiz}.
+
+Teil der Applikation "Bewerbermanagement". Aufgerufen von bw-bewerbung als Call-Activity, einmal je Eintrag in pruefung.runden.</documentation>
+
+    <startEvent id="start" name="Interview angesetzt">
+      <documentation>Kein Start-Formular: dieser Prozess wird nicht von Hand gestartet, sondern vom Aufrufer — der die Eingabevariablen mitgibt.</documentation>
+      <outgoing>f_start_termin</outgoing>
+    </startEvent>
+
+    <serviceTask id="termin" name="Termin vereinbaren">
+      <documentation>Schlägt der bewerbenden Person Termine vor und hält den bestätigten fest. Mockup-Modus — im Produktivbetrieb hängt hier die Kalender-Anbindung.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT3S"
+          resultExpression="={ vereinbart: true, kanal: &quot;Video&quot; }"
+          resultVariable="termin"/>
+      </extensionElements>
+      <incoming>f_start_termin</incoming>
+      <outgoing>f_termin_feedback</outgoing>
+    </serviceTask>
+
+    <userTask id="feedback" name="Feedback erfassen">
+      <documentation>Halte direkt nach dem Gespräch fest, ob du diese Person für die Stelle empfiehlst, und begründe es in zwei Sätzen. Beides geht in die Einstellungsentscheidung ein.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="hr"/>
+        <zeebe:formDefinition formId="bw-interview-feedback"/>
+      </extensionElements>
+      <incoming>f_termin_feedback</incoming>
+      <outgoing>f_feedback_bewerten</outgoing>
+    </userTask>
+
+    <boundaryEvent id="frist" name="14 Tage ohne Feedback" attachedToRef="feedback">
+      <documentation>Unterbrechend, im Gegensatz zur Erinnerung im Hauptprozess: eine Runde ohne Feedback muss irgendwann enden, sonst wartet die ganze Bewerbung auf sie.</documentation>
+      <outgoing>f_frist_kein</outgoing>
+      <timerEventDefinition>
+        <timeDuration>P14D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <scriptTask id="bewerten" name="Bewertung erstellen">
+      <documentation>Baut aus den Formularfeldern die eine Variable, die der Aufrufer erwartet. Der Teilprozess entscheidet damit selbst, wie sein Ergebnis aussieht — der Aufrufer kennt nur `bewertung`, nicht die Feldnamen des Formulars.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= { runde: runde, empfehlung: empfehlung, notiz: notiz }"
+          resultVariable="bewertung"/>
+      </extensionElements>
+      <incoming>f_feedback_bewerten</incoming>
+      <outgoing>f_bewerten_end</outgoing>
+    </scriptTask>
+
+    <endEvent id="end_ok" name="Interview abgeschlossen">
+      <incoming>f_bewerten_end</incoming>
+    </endEvent>
+
+    <scriptTask id="kein_feedback" name="Ohne Feedback bewerten">
+      <documentation>Erfüllt den Datenvertrag auch dann, wenn niemand geantwortet hat: eine Bewertung mit der Empfehlung "nein" und einer Notiz, die den Grund nennt. Ohne diesen Schritt fehlte dem Aufrufer ein Listeneintrag.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= { runde: runde, empfehlung: &quot;nein&quot;, notiz: &quot;Kein Feedback innerhalb der Frist&quot; }"
+          resultVariable="bewertung"/>
+      </extensionElements>
+      <incoming>f_frist_kein</incoming>
+      <outgoing>f_kein_end</outgoing>
+    </scriptTask>
+
+    <endEvent id="end_frist" name="Frist abgelaufen">
+      <incoming>f_kein_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_termin" sourceRef="start" targetRef="termin"/>
+    <sequenceFlow id="f_termin_feedback" sourceRef="termin" targetRef="feedback"/>
+    <sequenceFlow id="f_feedback_bewerten" sourceRef="feedback" targetRef="bewerten"/>
+    <sequenceFlow id="f_bewerten_end" sourceRef="bewerten" targetRef="end_ok"/>
+    <sequenceFlow id="f_frist_kein" sourceRef="frist" targetRef="kein_feedback"/>
+    <sequenceFlow id="f_kein_end" sourceRef="kein_feedback" targetRef="end_frist"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="bw-interview">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="138" y="262" width="80" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_termin" bpmnElement="termin">
+        <dc:Bounds x="250" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_feedback" bpmnElement="feedback">
+        <dc:Bounds x="400" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_frist" bpmnElement="frist">
+        <dc:Bounds x="432" y="262" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="290" y="300" width="140" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_bewerten" bpmnElement="bewerten">
+        <dc:Bounds x="550" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_ok" bpmnElement="end_ok">
+        <dc:Bounds x="700" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="676" y="262" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_kein_feedback" bpmnElement="kein_feedback">
+        <dc:Bounds x="550" y="360" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_frist" bpmnElement="end_frist">
+        <dc:Bounds x="700" y="382" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="682" y="422" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_termin" bpmnElement="f_start_termin">
+        <di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_termin_feedback" bpmnElement="f_termin_feedback">
+        <di:waypoint x="350" y="240"/><di:waypoint x="400" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_feedback_bewerten" bpmnElement="f_feedback_bewerten">
+        <di:waypoint x="500" y="240"/><di:waypoint x="550" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_bewerten_end" bpmnElement="f_bewerten_end">
+        <di:waypoint x="650" y="240"/><di:waypoint x="700" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frist_kein" bpmnElement="f_frist_kein">
+        <di:waypoint x="450" y="298"/><di:waypoint x="450" y="400"/><di:waypoint x="550" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_kein_end" bpmnElement="f_kein_end">
+        <di:waypoint x="650" y="400"/><di:waypoint x="700" y="400"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

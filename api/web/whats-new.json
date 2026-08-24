@@ -2,6 +2,39 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "the-handbook-takes-on-the-process-developer-s-role-and-build",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now builds a whole application with you",
+        "de": "Das Handbuch baut jetzt eine ganze Applikation mit Ihnen"
+      },
+      "summary": {
+        "en": "Two new chapters take the process developer's side of the work. The first says what the role owns and where a rule belongs — in the form, in a decision table, in its own process. The second builds an applicant-management application in front of you: two processes, three forms, one decision table that decides how many interview rounds run, a system that fails on purpose so you meet the error path. One button installs the whole thing into your instance and starts a case.",
+        "de": "Zwei neue Kapitel nehmen die Sicht des Prozess-Developers ein. Das erste sagt, was zur Rolle gehört und wo eine Regel hingehört — ins Formular, in eine Entscheidungstabelle, in einen eigenen Prozess. Das zweite baut vor Ihren Augen eine Bewerbermanagement-Applikation: zwei Prozesse, drei Formulare, eine Entscheidungstabelle, die über die Zahl der Interviewrunden bestimmt, und ein Umsystem, das absichtlich ausfällt, damit Sie den Fehlerweg erleben. Ein Knopf installiert das Ganze in Ihrer Instanz und startet einen Fall."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Handbook from the grid menu (top left) — or the Handbook link on the Console.",
+          "In the table of contents, pick “Process developer” → “Workshop: an application”.",
+          "Press “Install & start the application”, then follow the two interview tasks in the inbox."
+        ],
+        "de": [
+          "Handbuch über das Raster-Menü oben links öffnen — oder über den Handbuch-Link auf der Konsole.",
+          "Im Inhaltsverzeichnis „Prozess-Developer“ → „Werkstatt: eine Applikation“ wählen.",
+          "Auf „Applikation installieren & starten“ drücken und dann den beiden Interview-Aufgaben im Posteingang folgen."
+        ]
+      }
+    },
+    {
       "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
       "version": "Unreleased",
       "date": null,
@@ -113,6 +146,34 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-a-gateway-routes-into-keeps-its-result",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A repeated step reached through a gateway keeps its collected results",
+        "de": "Ein wiederholter Schritt hinter einem Gateway behält seine gesammelten Ergebnisse"
+      },
+      "summary": {
+        "en": "An activity that repeats once per list entry collects what each round produced into a list for the steps that follow. When the only way into that activity was an exclusive gateway, every round still ran and still produced its result — but the collected list was thrown away as the activity finished, so the next step read nothing at all. It is kept now.",
+        "de": "Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe für die folgenden Schritte in einer Liste. Führte der einzige Weg in diese Aktivität über ein exklusives Gateway, liefen zwar alle Durchläufe und lieferten ihr Ergebnis — die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen, und der nächste Schritt las nichts. Sie bleibt jetzt erhalten."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -275,56 +336,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-body-no-longer-writes-a-null-over-the-process",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A loop no longer empties a variable it never touched",
-        "de": "Eine Schleife leert keine Variable mehr, die sie nie angefasst hat"
-      },
-      "summary": {
-        "en": "A looping activity that reshapes its result on the way out applied that rule twice: once per round, correctly, and once more for the loop as a whole — where there was nothing to reshape, so it wrote an empty value into the process, over whatever the variable of that name already held. The rule now runs where the work is, in each round.",
-        "de": "Eine Schleifen-Aktivität, die ihr Ergebnis beim Verlassen umformt, wendete diese Regel zweimal an: einmal je Durchlauf, richtig, und noch einmal für die Schleife als Ganzes — dort gab es nichts umzuformen, also schrieb sie einen leeren Wert in den Prozess, über das, was die gleichnamige Variable schon enthielt. Die Regel läuft jetzt dort, wo die Arbeit passiert: in jedem Durchlauf."
-      },
-      "link": {
-        "label": "ADR-0068",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "a-finished-loop-round-no-longer-leaves-a-token-behind-on-the",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The replay of a loop shows one round, not a pile",
-        "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
-      },
-      "summary": {
-        "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
-        "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

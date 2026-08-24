@@ -2989,16 +2989,13 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 		// (Milestone 2); for now the branch simply ends here.
 		return
 	}
-	target := cp.Node(cp.Flow(flowID).Target)
-	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
-		ProcessInstanceKey: ei.ProcessInstanceKey,
-		ProcessDefKey:      ei.ProcessDefKey,
-		ElementId:          target.ElementId,
-		FlowScopeKey:       ei.FlowScopeKey,
-		BpmnElementType:    uint8(target.Type),
-		TokenID:            ei.TokenID,
-		SourceFlowId:       flowID,
-	})
+	// Taking the flow goes through activateElement rather than building the element
+	// instance here: it is the one place that knows a flow into a multi-instance
+	// activity activates its *body* (ADR-0077). Hand-rolled, the gateway activated the
+	// loop as an ordinary element — it still seeded and ran every iteration, but on
+	// completion nothing promoted the assembled output collection to the enclosing
+	// scope, so a loop a gateway routed into silently lost its whole result.
+	activateElement(c, ei, flowID, false)
 }
 
 // parallelGatewayBehavior: an AND gateway. As a fork (one incoming) it fires at

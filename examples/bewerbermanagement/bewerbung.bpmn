@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bewerbung bearbeiten — der Hauptprozess der Applikation "Bewerbermanagement".
+
+  Das durchgängige Beispiel des Handbuch-Kapitels „Werkstatt: eine kleine
+  Applikation bauen" (/handbuch.html#werkstatt). Es zeigt, wie ein
+  Prozess-Developer eine Applikation aus mehreren Artefakten zusammensetzt:
+  zwei Prozesse, drei Formulare, eine DMN-Entscheidung — publiziert als EINE
+  Applikation, damit alles gemeinsam versioniert und deployt wird.
+
+    Start "Bewerbung eingegangen"      (Formular bw-bewerbung-eingang)
+     → Mockup-Service-Task "Eingangsbestätigung senden"
+     → Business-Rule-Task "Vorprüfung"  (DMN bw-vorpruefung →
+                                          pruefung {empfehlung, runden})
+     → (X) "Einladen?"
+          empfehlung = "interview" → Interviews
+          sonst (Default)          → Absage
+     → Call-Activity "Interview durchführen"   (Multi-Instance, seriell,
+          einmal je Eintrag in pruefung.runden; ruft bw-interview auf und
+          sammelt je Runde eine bewertung in bewertungen)
+     → Script "Interviews auswerten"    (every … satisfies + string join
+                                          → interviewFazit)
+     → User-Task "Einstellung entscheiden"   (Formular bw-entscheidung)
+        └─ Boundary-Timer P3D, nicht unterbrechend → Erinnerung
+     → (X) "Zusage?"
+          zusage = true → Mockup "Vertrag im HR-System anlegen"
+                            └─ Error-Boundary HR_UNERREICHBAR
+                                 → User-Task "Vertrag manuell anlegen"
+          sonst (Default) → Absage
+     ⟳ Event-Subprozess "Rückzug" (Nachricht bw-rueckzug, unterbrechend):
+          kann JEDERZEIT eintreffen und beendet den Fall.
+
+  Warum die Elemente so gewählt sind, steht in der <documentation> am jeweiligen
+  Element — der Modeler zeigt sie im Feld „Dokumentation", die Tasks-App zeigt
+  sie der bearbeitenden Person über dem Formular, und das Replay zeigt sie neben
+  dem Diagramm.
+
+  Beide Service-Tasks laufen im Mockup-Modus (ADR-0120): die Engine simuliert
+  das Umsystem selbst, mit Antwortzeit und Ausfallquote. Die Applikation läuft
+  damit end-to-end, bevor eine einzige echte Anbindung existiert — und "Vertrag
+  im HR-System anlegen" fällt in etwa jedem fünften Lauf aus, damit der
+  Fehlerpfad nicht nur gemodellt, sondern auch erlebt wird.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas.dev/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_bw_bewerbung" targetNamespace="http://atlas/examples">
+
+  <message id="msg_rueckzug" name="bw-rueckzug">
+    <extensionElements>
+      <zeebe:subscription correlationKey="=email"/>
+    </extensionElements>
+  </message>
+
+  <error id="err_hr" name="HR-System nicht erreichbar" errorCode="HR_UNERREICHBAR"/>
+
+  <process id="bw-bewerbung" name="Bewerbung bearbeiten" isExecutable="true">
+    <documentation>Führt eine Bewerbung von der Eingangsbestätigung bis zur Zusage oder Absage.
+
+Startvariablen (Formular bw-bewerbung-eingang): name, email, stelle, abschluss ("keiner" | "lehre" | "bachelor" | "master"), erfahrungJahre (Zahl).
+Ergebnisvariablen: pruefung {empfehlung, runden}, bewertungen (Liste je Interviewrunde), interviewFazit, zusage, begruendung.
+
+Teil der Applikation "Bewerbermanagement": ruft bw-interview auf und nutzt die DMN-Entscheidung bw-vorpruefung. Alle Artefakte tragen das Präfix bw- und werden gemeinsam publiziert.</documentation>
+
+    <startEvent id="start" name="Bewerbung eingegangen">
+      <documentation>Startet, sobald jemand das Bewerbungsformular abschickt. Das Start-Formular ist zugleich der Datenvertrag des Prozesses: alles, was später gerechnet oder entschieden wird, kommt von hier oder wird daraus abgeleitet.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="bw-bewerbung-eingang"/>
+      </extensionElements>
+      <outgoing>f_start_eingang</outgoing>
+    </startEvent>
+
+    <serviceTask id="eingang" name="Eingangsbestätigung senden">
+      <documentation>Bestätigt der bewerbenden Person den Eingang — die erste Zusage, die eine Bewerbung verdient, und der Grund, warum dieser Schritt vor der Prüfung steht.
+
+Läuft im Mockup-Modus: die Engine simuliert das Mailsystem mit ein bis drei Sekunden Antwortzeit. Für den Produktivbetrieb wird hier ein Mail-Connector gebunden — das Modell ändert sich dabei nur an diesem einen Element.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT3S"
+          resultExpression="={ kanal: &quot;E-Mail&quot;, an: email }"
+          resultVariable="bestaetigung"/>
+      </extensionElements>
+      <incoming>f_start_eingang</incoming>
+      <outgoing>f_eingang_pruefung</outgoing>
+    </serviceTask>
+
+    <businessRuleTask id="pruefung" name="Vorprüfung">
+      <documentation>Entscheidet aus Abschluss und Berufserfahrung, ob eingeladen wird und wie viele Interviewrunden es gibt.
+
+Bewusst eine DMN-Tabelle und kein Gateway-Gestrüpp: die Regel ändert sich häufiger als der Ablauf, und HR kann sie in der Tabelle lesen und pflegen, ohne das Prozessmodell anzufassen. Das Ergebnis ist ein Kontext {empfehlung, runden} in der Variablen pruefung.</documentation>
+      <extensionElements>
+        <zeebe:calledDecision decisionId="bw-vorpruefung" resultVariable="pruefung"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=abschluss" target="abschluss"/>
+          <zeebe:input source="=erfahrungJahre" target="erfahrungJahre"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_eingang_pruefung</incoming>
+      <outgoing>f_pruefung_gw</outgoing>
+    </businessRuleTask>
+
+    <exclusiveGateway id="gw_pruefung" name="Einladen?" default="f_gw_pruefung_absage">
+      <documentation>Verzweigt auf das Ergebnis der Vorprüfung. Das Gateway entscheidet nichts selbst — es liest nur, was die DMN-Tabelle entschieden hat. Der Default-Zweig führt zur Absage: was nicht ausdrücklich eingeladen wird, wird abgesagt, und kein Fall bleibt unbeantwortet.</documentation>
+      <incoming>f_pruefung_gw</incoming>
+      <outgoing>f_gw_interviews</outgoing>
+      <outgoing>f_gw_pruefung_absage</outgoing>
+    </exclusiveGateway>
+
+    <callActivity id="interviews" name="Interview durchführen">
+      <documentation>Ruft den eigenständigen Prozess bw-interview auf — einmal je Runde aus pruefung.runden, seriell, weil die zweite Runde erst nach dem Feedback der ersten Sinn ergibt.
+
+Der Aufruf ist ein Vertrag, kein Datentopf: propagateAllParentVariables="false" schickt nur name, stelle und runde hinein, propagateAllChildVariables="false" holt nur bewertung heraus. So kann der Teilprozess weiterentwickelt werden, ohne dass hier etwas kaputtgeht.</documentation>
+      <extensionElements>
+        <zeebe:calledElement processId="bw-interview"
+          propagateAllParentVariables="false" propagateAllChildVariables="false"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=name" target="name"/>
+          <zeebe:input source="=stelle" target="stelle"/>
+          <zeebe:input source="=runde" target="runde"/>
+          <zeebe:output source="=bewertung" target="bewertung"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_gw_interviews</incoming>
+      <outgoing>f_interviews_auswertung</outgoing>
+      <multiInstanceLoopCharacteristics isSequential="true">
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=pruefung.runden" inputElement="runde"
+            outputCollection="bewertungen" outputElement="=bewertung"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+    </callActivity>
+
+    <scriptTask id="auswertung" name="Interviews auswerten">
+      <documentation>Verdichtet die gesammelten Bewertungen zu einem Satz, den ein Mensch in der Aufgabe lesen kann: erst das Urteil über alle Runden (every … satisfies), dann jede Runde einzeln (for … return + string join).
+
+Ein Inline-FEEL-Script, kein Worker: die Berechnung braucht nichts ausser den Variablen, die die Instanz schon trägt — und sie gehört genau hierhin, nicht ins Formular, damit sie im Replay nachvollziehbar bleibt.</documentation>
+      <extensionElements>
+        <zeebe:script expression="= (if every b in bewertungen satisfies b.empfehlung = &quot;ja&quot; then &quot;Alle Runden empfehlen: ja&quot; else &quot;Nicht alle Runden empfehlen&quot;) + &quot; — &quot; + string join(for b in bewertungen return b.runde + &quot;: &quot; + b.empfehlung + &quot; (&quot; + b.notiz + &quot;)&quot;, &quot; | &quot;)"
+          resultVariable="interviewFazit"/>
+      </extensionElements>
+      <incoming>f_interviews_auswertung</incoming>
+      <outgoing>f_auswertung_entscheidung</outgoing>
+    </scriptTask>
+
+    <userTask id="entscheidung" name="Einstellung entscheiden">
+      <documentation>Lies das Fazit aus allen Interviewrunden und entscheide über die Einstellung. Ob die Runden einstimmig waren, steht im ersten Satz — die Entscheidung bleibt deine.
+
+Bitte begründe kurz: die Begründung geht in die Absage bzw. in die Personalakte.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="hr"/>
+        <zeebe:formDefinition formId="bw-entscheidung"/>
+      </extensionElements>
+      <incoming>f_auswertung_entscheidung</incoming>
+      <outgoing>f_entscheidung_gw</outgoing>
+    </userTask>
+
+    <boundaryEvent id="erinnerung_timer" name="nach 3 Tagen" attachedToRef="entscheidung" cancelActivity="false">
+      <documentation>Nicht unterbrechend: die Erinnerung läuft neben der offenen Aufgabe her, statt sie abzubrechen. Eine unterbrechende Frist wäre hier falsch — eine unbeantwortete Bewerbung darf nicht verfallen, sie soll nur nicht liegen bleiben.</documentation>
+      <outgoing>f_erinnerung</outgoing>
+      <timerEventDefinition>
+        <timeDuration>P3D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <serviceTask id="erinnerung" name="Erinnerung senden">
+      <documentation>Stupst HR an, dass eine Entscheidung offen ist. Ebenfalls Mockup — im Produktivbetrieb ein Mail-Connector an die Gruppe hr.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ erinnert: true }"
+          resultVariable="erinnerung"/>
+      </extensionElements>
+      <incoming>f_erinnerung</incoming>
+      <outgoing>f_erinnerung_end</outgoing>
+    </serviceTask>
+
+    <endEvent id="end_erinnert" name="Erinnert">
+      <documentation>Beendet nur den Erinnerungszweig. Der Hauptzweig — die offene Aufgabe — läuft weiter.</documentation>
+      <incoming>f_erinnerung_end</incoming>
+    </endEvent>
+
+    <exclusiveGateway id="gw_zusage" name="Zusage?" default="f_gw_zusage_absage">
+      <documentation>Liest die Entscheidung aus dem Formular. Auch hier führt der Default zur Absage — der Weg, den ein Fall nimmt, wenn niemand ausdrücklich zusagt.</documentation>
+      <incoming>f_entscheidung_gw</incoming>
+      <outgoing>f_gw_vertrag</outgoing>
+      <outgoing>f_gw_zusage_absage</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="vertrag" name="Vertrag im HR-System anlegen">
+      <documentation>Legt den Vertragsdatensatz im HR-System an — der eine Schritt, bei dem der Prozess ein fremdes System verändert.
+
+Mockup mit Ausfallquote: in etwa jedem fünften Lauf wirft der Task den Fehler HR_UNERREICHBAR. Das ist Absicht — ein Umsystem fällt aus, und ein Prozess, der das nicht modelliert, bleibt im Produktivbetrieb stecken.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT4S"
+          resultExpression="={ vertragsnummer: &quot;V-2026-0815&quot; }"
+          resultVariable="vertrag"
+          failRate="0.2" errorCode="HR_UNERREICHBAR"/>
+      </extensionElements>
+      <incoming>f_gw_vertrag</incoming>
+      <outgoing>f_vertrag_end</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="vertrag_fehler" name="HR-System nicht erreichbar" attachedToRef="vertrag">
+      <documentation>Fängt den fachlichen Fehler des Umsystems ab und leitet ihn in einen Weg, den ein Mensch gehen kann. Unterbrechend, weil der automatische Versuch gescheitert ist und nicht weiterlaufen darf.</documentation>
+      <outgoing>f_fehler_manuell</outgoing>
+      <errorEventDefinition errorRef="err_hr"/>
+    </boundaryEvent>
+
+    <userTask id="vertrag_manuell" name="Vertrag manuell anlegen">
+      <documentation>Das HR-System war nicht erreichbar. Lege den Vertrag dort von Hand an und schliesse die Aufgabe ab, sobald das erledigt ist.
+
+Der Fall ist damit nicht verloren, sondern zugewiesen — genau das unterscheidet einen modellierten Fehlerpfad von einem Incident.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="hr"/>
+      </extensionElements>
+      <incoming>f_fehler_manuell</incoming>
+      <outgoing>f_manuell_end</outgoing>
+    </userTask>
+
+    <endEvent id="end_manuell" name="Manuell eingestellt">
+      <incoming>f_manuell_end</incoming>
+    </endEvent>
+
+    <endEvent id="end_eingestellt" name="Eingestellt">
+      <documentation>Hier hört diese Applikation auf — und das Onboarding fängt an (siehe examples/onboarding).</documentation>
+      <incoming>f_vertrag_end</incoming>
+    </endEvent>
+
+    <exclusiveGateway id="gw_absage">
+      <documentation>Führt die beiden Absage-Wege zusammen — die frühe aus der Vorprüfung und die späte aus der Entscheidung —, damit "Absage senden" nur einmal im Modell steht.</documentation>
+      <incoming>f_gw_pruefung_absage</incoming>
+      <incoming>f_gw_zusage_absage</incoming>
+      <outgoing>f_gwabsage_absage</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="absage" name="Absage senden">
+      <documentation>Sagt ab — mit der Begründung aus der Entscheidung, sofern es eine gab. Mockup wie die Eingangsbestätigung.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ kanal: &quot;E-Mail&quot;, an: email }"
+          resultVariable="absage"/>
+      </extensionElements>
+      <incoming>f_gwabsage_absage</incoming>
+      <outgoing>f_absage_end</outgoing>
+    </serviceTask>
+
+    <endEvent id="end_abgelehnt" name="Abgelehnt">
+      <incoming>f_absage_end</incoming>
+    </endEvent>
+
+    <subProcess id="rueckzug" name="Rückzug" triggeredByEvent="true">
+      <documentation>Ein Bewerber kann jederzeit zurückziehen — vor der Vorprüfung, zwischen zwei Interviews, nach der Zusage. Genau dafür ist ein Event-Subprozess da: er hängt an keinem Punkt des Ablaufs, sondern am ganzen Prozess.
+
+Ausgelöst durch die Nachricht bw-rueckzug, korreliert über die E-Mail-Adresse:
+POST /api/v1/messages {"name":"bw-rueckzug","correlationKey":"ada@example.org"}
+
+Die Output-Zuordnung ist kein Beiwerk: was ein Subprozess in seinem Scope schreibt, verschwindet mit ihm (ADR-0074). Ohne sie wäre `status` genau so lange gesetzt, wie niemand hinschaut.</documentation>
+      <extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=status" target="status"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <startEvent id="start_rueckzug" name="Rückzug gemeldet" isInterrupting="true">
+        <documentation>Unterbrechend: der Rückzug beendet den laufenden Fall, statt neben ihm herzulaufen. Eine offene Interview-Aufgabe verschwindet damit aus dem Posteingang.</documentation>
+        <outgoing>f_rueckzug_erfassen</outgoing>
+        <messageEventDefinition messageRef="msg_rueckzug"/>
+      </startEvent>
+      <scriptTask id="rueckzug_erfassen" name="Rückzug vermerken">
+        <documentation>Hält fest, wie der Fall geendet hat. Ohne diesen Vermerk sähe eine zurückgezogene Bewerbung in der Auswertung aus wie eine abgelehnte.</documentation>
+        <extensionElements>
+          <zeebe:script expression="= &quot;zurückgezogen&quot;" resultVariable="status"/>
+        </extensionElements>
+        <incoming>f_rueckzug_erfassen</incoming>
+        <outgoing>f_erfassen_end</outgoing>
+      </scriptTask>
+      <endEvent id="end_rueckzug" name="Zurückgezogen">
+        <incoming>f_erfassen_end</incoming>
+      </endEvent>
+      <sequenceFlow id="f_rueckzug_erfassen" sourceRef="start_rueckzug" targetRef="rueckzug_erfassen"/>
+      <sequenceFlow id="f_erfassen_end" sourceRef="rueckzug_erfassen" targetRef="end_rueckzug"/>
+    </subProcess>
+
+    <sequenceFlow id="f_start_eingang" sourceRef="start" targetRef="eingang"/>
+    <sequenceFlow id="f_eingang_pruefung" sourceRef="eingang" targetRef="pruefung"/>
+    <sequenceFlow id="f_pruefung_gw" sourceRef="pruefung" targetRef="gw_pruefung"/>
+    <sequenceFlow id="f_gw_interviews" name="einladen" sourceRef="gw_pruefung" targetRef="interviews">
+      <conditionExpression>= pruefung.empfehlung = "interview"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_pruefung_absage" name="absagen" sourceRef="gw_pruefung" targetRef="gw_absage"/>
+    <sequenceFlow id="f_interviews_auswertung" sourceRef="interviews" targetRef="auswertung"/>
+    <sequenceFlow id="f_auswertung_entscheidung" sourceRef="auswertung" targetRef="entscheidung"/>
+    <sequenceFlow id="f_entscheidung_gw" sourceRef="entscheidung" targetRef="gw_zusage"/>
+    <sequenceFlow id="f_gw_vertrag" name="ja" sourceRef="gw_zusage" targetRef="vertrag">
+      <conditionExpression>= zusage</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_zusage_absage" name="nein" sourceRef="gw_zusage" targetRef="gw_absage"/>
+    <sequenceFlow id="f_vertrag_end" sourceRef="vertrag" targetRef="end_eingestellt"/>
+    <sequenceFlow id="f_erinnerung" sourceRef="erinnerung_timer" targetRef="erinnerung"/>
+    <sequenceFlow id="f_erinnerung_end" sourceRef="erinnerung" targetRef="end_erinnert"/>
+    <sequenceFlow id="f_fehler_manuell" sourceRef="vertrag_fehler" targetRef="vertrag_manuell"/>
+    <sequenceFlow id="f_manuell_end" sourceRef="vertrag_manuell" targetRef="end_manuell"/>
+    <sequenceFlow id="f_gwabsage_absage" sourceRef="gw_absage" targetRef="absage"/>
+    <sequenceFlow id="f_absage_end" sourceRef="absage" targetRef="end_abgelehnt"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="bw-bewerbung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="136" y="262" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eingang" bpmnElement="eingang">
+        <dc:Bounds x="250" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruefung" bpmnElement="pruefung">
+        <dc:Bounds x="400" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_pruefung" bpmnElement="gw_pruefung" isMarkerVisible="true">
+        <dc:Bounds x="550" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="545" y="185" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_interviews" bpmnElement="interviews">
+        <dc:Bounds x="650" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_auswertung" bpmnElement="auswertung">
+        <dc:Bounds x="800" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_entscheidung" bpmnElement="entscheidung">
+        <dc:Bounds x="950" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erinnerung_timer" bpmnElement="erinnerung_timer">
+        <dc:Bounds x="982" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1022" y="186" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erinnerung" bpmnElement="erinnerung">
+        <dc:Bounds x="950" y="60" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_erinnert" bpmnElement="end_erinnert">
+        <dc:Bounds x="1100" y="82" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1094" y="122" width="48" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_zusage" bpmnElement="gw_zusage" isMarkerVisible="true">
+        <dc:Bounds x="1100" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1097" y="185" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vertrag" bpmnElement="vertrag">
+        <dc:Bounds x="1200" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vertrag_fehler" bpmnElement="vertrag_fehler">
+        <dc:Bounds x="1232" y="262" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1276" y="292" width="104" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vertrag_manuell" bpmnElement="vertrag_manuell">
+        <dc:Bounds x="1200" y="360" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_manuell" bpmnElement="end_manuell">
+        <dc:Bounds x="1350" y="382" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1326" y="422" width="84" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_eingestellt" bpmnElement="end_eingestellt">
+        <dc:Bounds x="1350" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1338" y="190" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_absage" bpmnElement="gw_absage" isMarkerVisible="true">
+        <dc:Bounds x="1100" y="495" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_absage" bpmnElement="absage">
+        <dc:Bounds x="1200" y="480" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
+        <dc:Bounds x="1350" y="502" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1338" y="542" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rueckzug" bpmnElement="rueckzug" isExpanded="true">
+        <dc:Bounds x="250" y="600" width="420" height="160"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_start_rueckzug" bpmnElement="start_rueckzug">
+        <dc:Bounds x="290" y="662" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="272" y="702" width="72" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rueckzug_erfassen" bpmnElement="rueckzug_erfassen">
+        <dc:Bounds x="380" y="640" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_rueckzug" bpmnElement="end_rueckzug">
+        <dc:Bounds x="530" y="662" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="512" y="702" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_eingang" bpmnElement="f_start_eingang">
+        <di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_eingang_pruefung" bpmnElement="f_eingang_pruefung">
+        <di:waypoint x="350" y="240"/><di:waypoint x="400" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pruefung_gw" bpmnElement="f_pruefung_gw">
+        <di:waypoint x="500" y="240"/><di:waypoint x="550" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_interviews" bpmnElement="f_gw_interviews">
+        <di:waypoint x="600" y="240"/><di:waypoint x="650" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="600" y="214" width="50" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_pruefung_absage" bpmnElement="f_gw_pruefung_absage">
+        <di:waypoint x="575" y="265"/><di:waypoint x="575" y="520"/><di:waypoint x="1100" y="520"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="583" y="280" width="50" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_interviews_auswertung" bpmnElement="f_interviews_auswertung">
+        <di:waypoint x="750" y="240"/><di:waypoint x="800" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_auswertung_entscheidung" bpmnElement="f_auswertung_entscheidung">
+        <di:waypoint x="900" y="240"/><di:waypoint x="950" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_entscheidung_gw" bpmnElement="f_entscheidung_gw">
+        <di:waypoint x="1050" y="240"/><di:waypoint x="1100" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_vertrag" bpmnElement="f_gw_vertrag">
+        <di:waypoint x="1150" y="240"/><di:waypoint x="1200" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1156" y="214" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_zusage_absage" bpmnElement="f_gw_zusage_absage">
+        <di:waypoint x="1125" y="265"/><di:waypoint x="1125" y="495"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1133" y="280" width="34" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_vertrag_end" bpmnElement="f_vertrag_end">
+        <di:waypoint x="1300" y="240"/><di:waypoint x="1350" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erinnerung" bpmnElement="f_erinnerung">
+        <di:waypoint x="1000" y="182"/><di:waypoint x="1000" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erinnerung_end" bpmnElement="f_erinnerung_end">
+        <di:waypoint x="1050" y="100"/><di:waypoint x="1100" y="100"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fehler_manuell" bpmnElement="f_fehler_manuell">
+        <di:waypoint x="1250" y="298"/><di:waypoint x="1250" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_manuell_end" bpmnElement="f_manuell_end">
+        <di:waypoint x="1300" y="400"/><di:waypoint x="1350" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gwabsage_absage" bpmnElement="f_gwabsage_absage">
+        <di:waypoint x="1150" y="520"/><di:waypoint x="1200" y="520"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_absage_end" bpmnElement="f_absage_end">
+        <di:waypoint x="1300" y="520"/><di:waypoint x="1350" y="520"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_rueckzug_erfassen" bpmnElement="f_rueckzug_erfassen">
+        <di:waypoint x="326" y="680"/><di:waypoint x="380" y="680"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erfassen_end" bpmnElement="f_erfassen_end">
+        <di:waypoint x="480" y="680"/><di:waypoint x="530" y="680"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

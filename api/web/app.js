@@ -533,6 +533,9 @@ function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  // An application's detail view is where its artifacts are gathered and published —
+  // the workshop chapter is the one that builds exactly that, end to end.
+  if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
   if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");

@@ -866,5 +866,50 @@
       },
       "route": "#/operations"
     }
+  },
+  "the-handbook-takes-on-the-process-developer-s-role-and-build": {
+    "tags": [
+      "Modeler"
+    ],
+    "title": {
+      "en": "The handbook now builds a whole application with you",
+      "de": "Das Handbuch baut jetzt eine ganze Applikation mit Ihnen"
+    },
+    "summary": {
+      "en": "Two new chapters take the process developer's side of the work. The first says what the role owns and where a rule belongs — in the form, in a decision table, in its own process. The second builds an applicant-management application in front of you: two processes, three forms, one decision table that decides how many interview rounds run, a system that fails on purpose so you meet the error path. One button installs the whole thing into your instance and starts a case.",
+      "de": "Zwei neue Kapitel nehmen die Sicht des Prozess-Developers ein. Das erste sagt, was zur Rolle gehört und wo eine Regel hingehört — ins Formular, in eine Entscheidungstabelle, in einen eigenen Prozess. Das zweite baut vor Ihren Augen eine Bewerbermanagement-Applikation: zwei Prozesse, drei Formulare, eine Entscheidungstabelle, die über die Zahl der Interviewrunden bestimmt, und ein Umsystem, das absichtlich ausfällt, damit Sie den Fehlerweg erleben. Ein Knopf installiert das Ganze in Ihrer Instanz und startet einen Fall."
+    },
+    "tutorial": {
+      "en": [
+        "Open the Handbook from the grid menu (top left) — or the Handbook link on the Console.",
+        "In the table of contents, pick “Process developer” → “Workshop: an application”.",
+        "Press “Install & start the application”, then follow the two interview tasks in the inbox."
+      ],
+      "de": [
+        "Handbuch über das Raster-Menü oben links öffnen — oder über den Handbuch-Link auf der Konsole.",
+        "Im Inhaltsverzeichnis „Prozess-Developer“ → „Werkstatt: eine Applikation“ wählen.",
+        "Auf „Applikation installieren & starten“ drücken und dann den beiden Interview-Aufgaben im Posteingang folgen."
+      ]
+    }
+  },
+  "a-loop-a-gateway-routes-into-keeps-its-result": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "A repeated step reached through a gateway keeps its collected results",
+      "de": "Ein wiederholter Schritt hinter einem Gateway behält seine gesammelten Ergebnisse"
+    },
+    "summary": {
+      "en": "An activity that repeats once per list entry collects what each round produced into a list for the steps that follow. When the only way into that activity was an exclusive gateway, every round still ran and still produced its result — but the collected list was thrown away as the activity finished, so the next step read nothing at all. It is kept now.",
+      "de": "Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe für die folgenden Schritte in einer Liste. Führte der einzige Weg in diese Aktivität über ein exklusives Gateway, liefen zwar alle Durchläufe und lieferten ihr Ergebnis — die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen, und der nächste Schritt las nichts. Sie bleibt jetzt erhalten."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
   }
 }

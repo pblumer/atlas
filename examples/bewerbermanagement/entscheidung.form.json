@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "id": "bw-entscheidung",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✅ Einstellungsentscheidung\n\nDas Fazit fasst alle Interviewrunden zusammen: erst das Urteil über alle Runden, dann jede Runde einzeln. Die Entscheidung selbst trifft ein Mensch — deshalb steht hier ein User-Task und kein Gateway."
+    },
+    {
+      "key": "name",
+      "type": "textfield",
+      "label": "Bewerbung von",
+      "disabled": true
+    },
+    {
+      "key": "stelle",
+      "type": "textfield",
+      "label": "Beworben auf",
+      "disabled": true
+    },
+    {
+      "key": "interviewFazit",
+      "type": "textarea",
+      "label": "Fazit aus den Interviews",
+      "disabled": true
+    },
+    {
+      "key": "zusage",
+      "type": "checkbox",
+      "label": "Zusagen"
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Geht in die Absage bzw. in die Personalakte.",
+      "validate": { "required": true }
+    }
+  ]
+}
