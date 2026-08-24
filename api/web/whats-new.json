@@ -326,34 +326,6 @@
         },
         "route": "#/operations/workers"
       }
-    },
-    {
-      "id": "atlas-supervises-its-own-worker-processes",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Atlas starts and restarts its workers itself",
-        "de": "Atlas startet und überwacht seine Worker selbst"
-      },
-      "summary": {
-        "en": "Running work outside the engine does not mean running a second deployment. Started with --supervise, Atlas launches the worker as its own child process, restarts it if it stops, captures its output and shuts it down with the server — so the install stays one binary and one command. It is off unless you ask for it, because under systemd or Kubernetes the platform should own that.",
-        "de": "Arbeit außerhalb der Engine bedeutet nicht, ein zweites Deployment zu betreiben. Mit --supervise startet Atlas den Worker als eigenen Kindprozess, startet ihn nach einem Abbruch neu, fängt seine Ausgabe auf und beendet ihn zusammen mit dem Server — die Installation bleibt eine Datei und ein Befehl. Standardmäßig aus, denn unter systemd oder Kubernetes gehört der Prozess-Lebenszyklus der Plattform."
-      },
-      "link": {
-        "label": "ADR-0157",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
     }
   ]
 }
