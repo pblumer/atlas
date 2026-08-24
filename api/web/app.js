@@ -4171,7 +4171,7 @@ async function viewWorkers() {
             <td class="row-actions">
               ${(c.log || []).length ? `<button class="btn neutral sm" data-log="${esc(c.id)}" title="Show this worker’s recent log">Log</button>` : ""}
               <button class="btn neutral sm" data-restart="${esc(c.id)}" title="Restart this supervised worker process">&#8635; Restart</button></td>
-          </tr>${(c.log || []).length ? `<tr class="wk-log-row" data-log-for="${esc(c.id)}" hidden>
+          </tr>${(c.log || []).length ? `<tr class="wk-log-row" data-dt-detail data-log-for="${esc(c.id)}" hidden>
             <td colspan="6"><pre class="wk-log">${esc((c.log || []).join("\n"))}</pre></td></tr>` : ""}`).join("")}
           </tbody></table>`;
       for (const b of supervised.querySelectorAll("[data-restart]")) {

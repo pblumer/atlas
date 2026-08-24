@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A structure in the Variables tab no longer comes open by itself** — and the way out
+  of one appears again. Every table in a view is handed to the shared sort/filter helper,
+  which drove each row's `hidden` from what its filter matched. The rows that hold an
+  expanded value are not data rows, but the helper owned their `hidden` too, so it forced
+  every structure open — on arrival, and again on every rewrite of the rows, which is
+  every 1.5 seconds. Clicking one closed it for an instant. And because the toolbar's
+  **Collapse all** watches the openings the *reader* made, and the reader had made none,
+  it never appeared: a tab that opened itself and offered no way to close. The helper now
+  leaves a row marked `data-dt-detail` alone — it never opens one, and only hides one
+  along with the row it belongs to when a filter removes that row; sorting moves it with
+  that row rather than stranding it under someone else's. The Workers view's per-worker
+  log, the same shape, stops springing open with it.
+
 - **A BPMN file with no layout renders when you import it, not only when you deploy it**
   ([ADR-0124](docs/adr/0124-server-side-auto-layout.md)): BPMN-DI is optional in the
   standard, so a model from a generator, an export from another tool, or a hand-written

@@ -110,3 +110,40 @@ test("collapse all closes what the table has open, from the toolbar", async ({ p
   await expect(collapse).toBeHidden();
   await expect(page.locator("#tab-variables .v-open").first()).toHaveAttribute("aria-expanded", "false");
 });
+
+// The Variables table is enhanced by the shared sort/filter helper (table.js), like every
+// table in a view. The helper drove each row's `hidden` to say what its filter matched —
+// including the expansion rows, which are not data — so every structure was forced open on
+// arrival and again on every rewrite, and the collapse control, which watches the set of
+// openings the *reader* made, never appeared. It reproduced only with both modules
+// present, which is why the harness now composes them the way app.js does.
+test("the sort/filter helper does not force the expansions open", async ({ page }) => {
+  await expect(page.locator("#tab-variables .vt tbody tr.v-struct")).toHaveCount(2);
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+  await expect(page.locator("#tab-variables #v-collapse")).toBeHidden();
+
+  // An opening the reader made survives the helper re-running over the rows.
+  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
+  await page.locator("#tab-variables .vt tbody").evaluate((b) => b.appendChild(document.createComment("x")));
+  await page.waitForTimeout(50);
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
+  await expect(page.locator("#tab-variables #v-collapse")).toBeVisible();
+});
+
+// Sorting reorders the data rows; an expansion belongs to the row above it and has to go
+// where that row goes, or it ends up explaining a stranger.
+test("an expansion follows its variable when the table is sorted", async ({ page }) => {
+  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
+  const owner = await page.locator("#tab-variables .v-struct:not([hidden])").evaluate(
+    (s) => s.previousElementSibling.querySelector("td.c-name").textContent.trim());
+
+  await page.locator("#tab-variables .vt thead th.dt-sortable").first().click();
+  await page.waitForTimeout(50);
+  await page.locator("#tab-variables .vt thead th.dt-sortable").first().click(); // reverse it
+  await page.waitForTimeout(50);
+
+  const stillOwner = await page.locator("#tab-variables .v-struct:not([hidden])").evaluate(
+    (s) => s.previousElementSibling.querySelector("td.c-name").textContent.trim());
+  expect(stillOwner, "the expansion sits under the variable it belongs to").toBe(owner);
+});
