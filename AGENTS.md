@@ -190,6 +190,18 @@ it will be read by humans.
 - **Check the render, not just the deploy.** Open the model in the
   Operations/Modeler view (or a rendered preview) and confirm there are no
   overlaps before calling it done.
+- **Document the model in the model.** Every BPMN element may carry a
+  `<bpmn:documentation>`, and Atlas reads it: the Modeler shows it in the
+  Documentation field, the replay shows it beside the selected element, and it
+  travels with every deploy, export and version — unlike an explanation you put
+  in a chat message or a commit, which the next reader will never see. Write one
+  on the process (what it is for, which variables it starts from) and on every
+  element whose purpose is not obvious from its name. For an example — a model
+  whose whole job is to teach — also say *why it is that kind of element* (why
+  this loop is parallel and not sequential), which variables it reads and writes,
+  and the trap the reader is about to walk into (`sum()` over an empty list is
+  null, not 0; a parallel round must not accumulate). A model that has to be
+  explained alongside itself is not finished.
 
 ## Pointers
 
