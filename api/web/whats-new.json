@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A file without a diagram no longer imports into an empty canvas",
+        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
+      },
+      "summary": {
+        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
+        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
+      },
+      "link": {
+        "label": "ADR-0124",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
       "version": "Unreleased",
       "date": null,
@@ -290,35 +318,6 @@
       },
       "tags": [
         "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "a-connector-task-runs-on-a-worker-credential-and-all",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "A connector's credential can live where the system is",
-        "de": "Die Zugangsdaten eines Konnektors können dort liegen, wo das System steht"
-      },
-      "summary": {
-        "en": "Connector tasks can now run on a worker, and the password goes with them: the worker that sits next to your mail relay or your ERP holds the credential for it, and Atlas never stores it. A model still names a connector and never a secret, exactly as before — what changed is which process holds the value behind the name. Workers that Atlas starts itself are handed their configuration automatically, so a single-server install needs no extra setup.",
-        "de": "Konnektor-Aufgaben können jetzt auf einem Worker laufen — und das Passwort wandert mit: Der Worker, der neben Ihrem Mailrelay oder Ihrem ERP steht, hält die Zugangsdaten dafür, Atlas speichert sie nicht. Ein Modell benennt weiterhin nur einen Konnektor und nie ein Geheimnis; geändert hat sich lediglich, welcher Prozess den Wert hinter dem Namen hält. Worker, die Atlas selbst startet, bekommen ihre Konfiguration automatisch mit, eine Einzelserver-Installation braucht also keine zusätzliche Einrichtung."
-      },
-      "link": {
-        "label": "ADR-0168",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0168-connector-work-on-a-worker.md"
-      },
-      "tags": [
-        "Connectors",
-        "Secrets"
       ],
       "try": {
         "label": {

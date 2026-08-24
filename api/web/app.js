@@ -2428,9 +2428,14 @@ async function importArtifact(projectId, reload) {
       return;
     }
     // BPMN — save the diagram as a draft; the backend rejects XML with no <process id>.
+    // BPMN-DI is optional in the standard, so a file may carry no layout at all; the
+    // backend lays one out on the way in and says so, and the author is told rather than
+    // left to assume the arrangement in front of them is the one their file described.
     const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
     const d = await api("POST", path, text, true);
-    toast(`Imported diagram “${d.name || d.processId}”`, "ok");
+    toast(d.layoutGenerated
+      ? `Imported diagram “${d.name || d.processId}” — the file carried no layout, so one was generated`
+      : `Imported diagram “${d.name || d.processId}”`, "ok");
     await reload();
   } catch (e) {
     toast("Import failed: " + e.message, "err");

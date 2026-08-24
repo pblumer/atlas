@@ -38,14 +38,23 @@ const (
 // engine hot path — so models deployed as pure semantic XML (no layout) still
 // show up in the editor and the live overlay.
 func Ensure(src []byte) []byte {
+	out, _ := EnsureReport(src)
+	return out
+}
+
+// EnsureReport is Ensure, additionally reporting whether it generated the layout —
+// which a caller storing the result wants to know, so it can say where the diagram
+// came from. False means the model already had one, or none could be generated; in
+// both cases src comes back unchanged.
+func EnsureReport(src []byte) ([]byte, bool) {
 	if bytes.Contains(src, []byte("BPMNDiagram")) {
-		return src // already laid out
+		return src, false // already laid out
 	}
 	di, ok := generateDI(src)
 	if !ok {
-		return src
+		return src, false
 	}
-	return injectBeforeDefinitionsClose(src, di)
+	return injectBeforeDefinitionsClose(src, di), true
 }
 
 // Regenerate discards whatever diagram interchange the model already carries
