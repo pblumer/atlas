@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/pblumer/atlas/connector/clientreg"
@@ -29,8 +30,13 @@ const DefaultScope = "https://graph.microsoft.com/.default"
 // The shape is a single Call rather than a method per operation because this
 // connector is a typed façade over Graph REST: the value it adds is at the *model*
 // level — naming the lifecycle operations and building their URLs and bodies — not
-// in wrapping eight HTTP calls in eight Go signatures.
+// in wrapping nine HTTP calls in nine Go signatures.
 type Client interface {
+	// Call performs one request. path is normally a path under [Client.BaseURL], but
+	// a paged listing passes back the absolute @odata.nextLink Graph handed it —
+	// verbatim, because a continuation token is not something to take apart and
+	// reassemble. An implementation must confine such a URL to its own endpoint
+	// (see [GraphClient.Call]).
 	Call(ctx context.Context, method, path string, body any) (any, error)
 	// BaseURL is the tenant's Graph root. Adding a group member is the one operation
 	// whose *body* carries a URL — the @odata.id of the member being added — so the
@@ -86,6 +92,10 @@ type graphError struct {
 // with — returns a nil result rather than an error: the operation succeeded, and
 // there is simply nothing to write into a result variable.
 func (c *GraphClient) Call(ctx context.Context, method, path string, body any) (any, error) {
+	target, err := c.resolve(path)
+	if err != nil {
+		return nil, err
+	}
 	var rdr io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -94,7 +104,7 @@ func (c *GraphClient) Call(ctx context.Context, method, path string, body any) (
 		}
 		rdr = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, rdr)
+	req, err := http.NewRequestWithContext(ctx, method, target, rdr)
 	if err != nil {
 		return nil, fmt.Errorf("entra: build %s %s: %w", method, path, err)
 	}
@@ -127,6 +137,34 @@ func (c *GraphClient) Call(ctx context.Context, method, path string, body any) (
 		return nil, fmt.Errorf("entra: %s %s returned a body that is not JSON: %w", method, path, err)
 	}
 	return out, nil
+}
+
+// resolve turns what a caller asked for into the URL to request: a path is taken
+// under this connector's own base, and an absolute URL — which is what a paged
+// listing passes back from @odata.nextLink — only if it stays on that same endpoint.
+//
+// The confinement is the point. This client carries a bearer that can read, create
+// and disable accounts across an entire directory, and a continuation is the one
+// place where a *response* decides the next URL. Following one to another host would
+// hand that token to whoever wrote the response, so a foreign continuation is
+// refused rather than followed and reported.
+func (c *GraphClient) resolve(path string) (string, error) {
+	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
+		return c.baseURL + path, nil
+	}
+	u, err := url.Parse(path)
+	if err != nil {
+		return "", fmt.Errorf("entra: cannot follow the paged result: %q is not a URL", path)
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil {
+		return "", fmt.Errorf("entra: cannot follow the paged result: this connector's own base URL %q is not a URL", c.baseURL)
+	}
+	if u.Scheme != base.Scheme || u.Host != base.Host {
+		return "", fmt.Errorf("entra: refusing to follow a paged result to %s://%s: a continuation may only stay on this connector's own endpoint (%s://%s)",
+			u.Scheme, u.Host, base.Scheme, base.Host)
+	}
+	return path, nil
 }
 
 // graphFailure turns a non-2xx response into the most specific error the body allows.

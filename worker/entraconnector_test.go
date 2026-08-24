@@ -77,3 +77,55 @@ func TestRunEntraJobReadsTheResolvedDetail(t *testing.T) {
 		t.Errorf("err = %v, want an unresolved-connector error naming contoso", err)
 	}
 }
+
+// The listing's bounds must survive the engine→worker hop. They are the only fields
+// whose loss is silent and unsafe: a dropped maxUsers turns a capped listing into an
+// unbounded one, and a job that decoded "successfully" would then read a whole
+// directory into a process variable.
+//
+// So each is asserted through what it does rather than through the decoded struct —
+// the query the connector built, and the cap actually refusing an oversized listing.
+func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
+	spy := &listingSpy{users: 51}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", spy)
+
+	_, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "list-users",
+			"filter": "department eq 'IT'", "select": "id,displayName",
+			"pageSize": int32(200), "maxUsers": int32(50),
+			"resultVariable": "leute",
+		},
+	}}, reg)
+
+	// maxUsers arrived: 51 users against a cap of 50 is refused, by that number.
+	if err == nil || !strings.Contains(err.Error(), "50-user") {
+		t.Fatalf("err = %v, want the 50-user cap to have refused the listing", err)
+	}
+	// filter, select and pageSize arrived: each is in the query the connector built.
+	for _, want := range []string{"$filter=department", "$select=id", "$top=200"} {
+		if !strings.Contains(spy.path, want) {
+			t.Errorf("path = %q, want it to carry %q", spy.path, want)
+		}
+	}
+}
+
+// listingSpy answers one page of a given size and records the path it was asked for,
+// which is where the decoded query becomes observable.
+type listingSpy struct {
+	users int
+	path  string
+}
+
+func (listingSpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
+
+func (s *listingSpy) Call(_ context.Context, _, path string, _ any) (any, error) {
+	s.path = path
+	vals := make([]any, 0, s.users)
+	for i := 0; i < s.users; i++ {
+		vals = append(vals, map[string]any{"id": "u"})
+	}
+	return map[string]any{"value": vals}, nil
+}

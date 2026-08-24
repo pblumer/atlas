@@ -12,6 +12,22 @@
 // modeler should pick "Disable account", not hand-author a URL and a JSON fragment
 // per lifecycle step — and should not be able to get the fragment subtly wrong.
 //
+// # Listing, and who follows the pages
+//
+// [Ops] covers a joiner/mover/leaver lifecycle, and one operation in it is not a
+// single call: list-users is a Graph *collection*, which is paged. Following
+// @odata.nextLink is this package's work rather than a model's — a process looping
+// over a continuation token would be carrying Graph's paging protocol in its
+// diagram, which is the encoding this connector exists to keep out of one. So a
+// result variable receives the whole listing as one array, and never a page of it.
+//
+// Two bounds keep that honest. maxUsers caps what may reach a process variable and
+// *fails* when exceeded rather than truncating (a short result set is a wrong
+// answer, not a partial one), and [maxListPages] ends a chain of pages that never
+// does. A third bound is [GraphClient]'s: a continuation may only stay on the
+// connector's own endpoint, so a redirected page cannot carry the directory-wide
+// bearer to another host.
+//
 // # Worker-only
 //
 // Like the SQL connectors (ADR-0173) and unlike everything built before them, this

@@ -1357,6 +1357,11 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 // addressing the user (a UPN or object id) and the group; AttributesVar names the
 // process variable holding the directory properties for create-user and update-user;
 // ResultVar receives what Graph returned (empty = discard).
+//
+// Filter, Select, PageSize and MaxUsers configure list-users: the OData $filter
+// (literal-or-FEEL), the $select projection, the $top per request, and the cap on
+// what may reach the result variable. The compiler has already applied their
+// defaults and refused them on the operations that return one object or none.
 type EntraConfig struct {
 	Connector     string
 	Op            string
@@ -1364,6 +1369,10 @@ type EntraConfig struct {
 	GroupID       RestExpr
 	AttributesVar string
 	ResultVar     string
+	Filter        RestExpr
+	Select        string
+	PageSize      int32
+	MaxUsers      int32
 	Retries       int32
 }
 
@@ -1389,6 +1398,10 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraUserID:        cfg.UserID,
 		EntraGroupID:       cfg.GroupID,
 		EntraAttributesVar: b.intern(cfg.AttributesVar),
+		EntraFilter:        cfg.Filter,
+		EntraSelect:        b.intern(cfg.Select),
+		EntraPageSize:      cfg.PageSize,
+		EntraMaxUsers:      cfg.MaxUsers,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
