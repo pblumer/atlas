@@ -91,8 +91,13 @@ Key qualifications that make this safe to adopt:
 - **Follow-ups / risks to watch:**
   - Drift is the main risk. Keep the view high-level; when a change invalidates it,
     update the view in the same PR.
-  - If a tool round-trip is ever needed, a formal `.archimate` / Open Exchange export
-    (Option 4) can be added later as a generated artifact without changing this decision.
+  - A formal `.archimate` / Open Exchange export (Option 4) has since been added as a
+    generated artifact at
+    [`docs/architecture/model/atlas.xml`](../architecture/model/atlas.xml) — the
+    ArchiMate 3.0 Model Exchange File Format, importable into Archi and other
+    conformant tools. This did **not** change the decision: the Markdown view remains
+    the primary, in-repo artifact and the export is generated from and subordinate to
+    it, so there is still a single source of truth.
 
 ## Pros and cons of the options
 

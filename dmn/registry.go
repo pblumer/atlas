@@ -76,11 +76,50 @@ func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 	if diags.HasErrors() {
 		return fmt.Errorf("dmn: model for def %d has errors: %v", defKey, diags)
 	}
+	r.register(defKey, defs)
+	return nil
+}
+
+// Reload is Deploy for a model that is *already* deployed — one snapshotted into a
+// deployment record, coming back at startup — and so it does not re-apply the
+// deploy-time gate above (ADR-0177). Refusing the
+// model here would not undeploy anything; it would only keep the server from
+// starting, with every other definition and every running instance behind it,
+// because a diagnostic that did not exist when the model was deployed exists now.
+//
+// The model is registered and the error diagnostics are returned rendered for
+// display ("" when there are none), for the caller to report. Rendered, not
+// structured, because temis documents diagnostic messages as human-readable and
+// explicitly not a stable API: they are for an operator to read, not for code to
+// act on.
+//
+// This is safe because of what temis guarantees about a diagnostic: malformed XML
+// is a hard error, but per-decision problems leave the rest of the model compiled,
+// and a decision whose logic failed to compile is "present but not executable" —
+// so evaluating *that* decision fails the way a failing decision has always failed,
+// as a job error on a worker, while every other decision in the model still
+// answers. A hard compile error still returns an error here: there is no model to
+// bring back.
+func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
+	defs, diags, err := r.engine.Compile(context.Background(), dmnXML)
+	if err != nil {
+		return "", fmt.Errorf("dmn: compile model for def %d: %w", defKey, err)
+	}
+	r.register(defKey, defs)
+	if !diags.HasErrors() {
+		return "", nil
+	}
+	return formatDiagnostics(diags), nil
+}
+
+// register indexes a compiled model under the deployment key it was bundled with,
+// and as the latest provider of every decision it declares (ADR-0063). Shared by
+// Deploy and Reload so both index a model identically once it is accepted.
+func (r *Registry) register(defKey uint64, defs *tdmn.Definitions) {
 	r.definitions[defKey] = append(r.definitions[defKey], defs)
 	for _, id := range defs.Index().Decisions {
 		r.latest[id] = defs
 	}
-	return nil
 }
 
 // modelProviding returns the model in the list that provides the decision id, or

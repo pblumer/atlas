@@ -148,6 +148,34 @@
       }
     },
     {
+      "id": "a-new-validation-rule-can-no-longer-take-down-a-running-serv",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An upgrade no longer stops on a model you already deployed",
+        "de": "Ein Upgrade bleibt nicht mehr an einem bereits deployten Modell hängen"
+      },
+      "summary": {
+        "en": "Atlas recompiles every deployed definition when it starts, and it used to apply the deploy checks again while doing so. A check added to a later version therefore met models that were deployed before it existed, refused them, and the server stopped starting at all — over a model nobody had touched, with every other definition and every running instance out of reach behind it. Those checks decide whether a model may be deployed, not whether it may run, so they no longer run at startup. A definition that was accepted comes back and keeps running, and Atlas writes one warning per model naming what it would fail today, so you can fix it in the Modeler in your own time. The decision models deployed with a process are treated the same way: a decision that no longer compiles no longer stops the server — it fails only if something evaluates it, and the other decisions keep answering. Deploying such a model still refuses it, with the rule named.",
+        "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
+      },
+      "link": {
+        "label": "ADR-0177",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0177-reload-skips-the-deploy-gate.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
       "version": "Unreleased",
       "date": null,
@@ -302,34 +330,6 @@
         "Operations",
         "Modeler"
       ]
-    },
-    {
-      "id": "a-finished-loop-round-no-longer-leaves-a-token-behind-on-the",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The replay of a loop shows one round, not a pile",
-        "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
-      },
-      "summary": {
-        "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
-        "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }
