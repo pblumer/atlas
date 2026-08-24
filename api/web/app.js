@@ -205,9 +205,37 @@ function viewLogin() {
 // One delegated document click drives every dropdown: clicking a .dropdown-toggle
 // opens its menu (closing others); clicking anywhere else closes them all.
 function closeAllMenus() {
-  for (const m of document.querySelectorAll(".dropdown-menu:not([hidden])")) m.hidden = true;
+  for (const m of document.querySelectorAll(".dropdown-menu:not([hidden]):not(.submenu-menu)")) m.hidden = true;
 }
+// placeSubmenu puts an open flyout beside its row. It is position:fixed so the card's
+// overflow cannot clip it, which means CSS cannot place it — these are viewport
+// coordinates. It goes to the left of the parent menu, where the room is (a row's action
+// menu sits at the right edge of a table), falling back to the right when it would not
+// fit, and is held inside the viewport vertically so a row near the bottom of a long
+// list still shows a full list rather than a sliver.
+function placeSubmenu(sm) {
+  const menu = sm.querySelector(".submenu-menu"), parent = sm.closest(".dropdown-menu");
+  if (!menu || !parent) return;
+  const row = sm.getBoundingClientRect(), box = parent.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  if (!w || !h) return; // not displayed yet — the hover rule has not applied
+  const left = box.left - w - 5 >= 8 ? box.left - w - 5 : Math.min(box.right + 5, window.innerWidth - w - 8);
+  const top = Math.max(8, Math.min(row.top - 7, window.innerHeight - h - 8));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+}
+for (const ev of ["mouseover", "focusin"]) {
+  document.addEventListener(ev, (e) => {
+    const sm = e.target instanceof Element && e.target.closest(".submenu");
+    if (sm) placeSubmenu(sm);
+  });
+}
+
 document.addEventListener("click", (e) => {
+  // A flyout's own row is not an action and must not count as "clicked outside": it
+  // opens on hover and on keyboard focus, and a click on it should leave the menu
+  // standing rather than dismiss the lot.
+  if (e.target.closest(".submenu-toggle")) { e.preventDefault(); e.stopPropagation(); return; }
   const toggle = e.target.closest(".dropdown-toggle");
   if (toggle) {
     e.preventDefault(); e.stopPropagation();
@@ -221,18 +249,29 @@ document.addEventListener("click", (e) => {
 
 // dropdown renders a trigger button + its menu. items entries are:
 //   { label, icon?, href? } — a link; or { label, icon?, act, data?, danger? } — a
-//   JS action dispatched by onMenuAction; or { sep:true } | { header:"…" }.
-function dropdown(label, triggerClass, items) {
-  const body = items.map((it) => {
+//   JS action dispatched by onMenuAction; or { sep:true } | { header:"…" } |
+//   { label, icon?, items:[…] } — a nested list, which opens as a flyout.
+function menuItemsHTML(items) {
+  return items.map((it) => {
     if (it.sep) return `<div class="sep"></div>`;
     if (it.header) return `<div class="mlabel">${esc(it.header)}</div>`;
     const icon = `<span class="mi-icon">${it.icon || ""}</span>`;
+    // A nested list: one row that reveals its own menu beside it, so a long set of
+    // choices does not stretch the parent menu down the page.
+    if (it.items) {
+      return `<div class="submenu"><button type="button" class="submenu-toggle" aria-haspopup="true">` +
+        `${icon}${esc(it.label)}<span class="submenu-caret" aria-hidden="true">&#8250;</span></button>` +
+        `<div class="dropdown-menu submenu-menu">${menuItemsHTML(it.items)}</div></div>`;
+    }
     if (it.href) return `<a href="${it.href}">${icon}${esc(it.label)}</a>`;
     const data = it.data ? Object.entries(it.data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ") : "";
     return `<button type="button" data-act="${esc(it.act)}" ${data}${it.danger ? ' class="danger"' : ""}>${icon}${esc(it.label)}</button>`;
   }).join("");
+}
+
+function dropdown(label, triggerClass, items) {
   return `<div class="dropdown"><button type="button" class="${triggerClass} dropdown-toggle">${esc(label)}</button>` +
-    `<div class="dropdown-menu" hidden>${body}</div></div>`;
+    `<div class="dropdown-menu" hidden>${menuItemsHTML(items)}</div></div>`;
 }
 
 // onMenuAction dispatches menu-item clicks in container to fn(act, buttonEl).
@@ -1741,11 +1780,13 @@ async function viewProjectDetail(id) {
 
     // "Move to" items for a row's action menu: Ungrouped plus every project, with
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
-    const moveItems = (currentPid, act, key) => [
-      { header: "Move to" },
-      { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
-      ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
-    ];
+    const moveItems = (currentPid, act, key) => [{
+      label: "Move to", icon: "&#128450;",
+      items: [
+        { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+        ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
+      ],
+    }];
 
     const nameCell = (chip, title, sub, href) => {
       const link = href ? `<a href="${href}"><b>${esc(title)}</b></a>` : `<b>${esc(title)}</b>`;
