@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Entra ID can be asked a question, not only told what to do** (ADR-0172, amended).
+  The Entra connector could address a user and change one; it could not *find* one.
+  A joiner/mover/leaver process routinely starts from a question — who is in this
+  department, which accounts are still enabled, does this UPN already exist — and
+  `get-user` needs that answer as its input. **`list-users`** authors an OData
+  `$filter` (literal-or-FEEL, so a process can list the department it is actually
+  about), a `$select` projection, a page size and a cap, and writes every matched
+  user into one process variable.
+  **The connector follows Graph's paging itself.** A collection in Graph arrives one
+  page at a time behind an `@odata.nextLink`, and a model never sees it: the result
+  variable receives the whole listing as a JSON array, not a page of it — a process
+  looping over a continuation token would be carrying Graph's paging protocol in its
+  diagram, which is the encoding this connector exists to keep out of one.
+  Three bounds keep that safe. `maxUsers` defaults to 1000 and a listing that exceeds
+  it **fails rather than truncating**, for the reason the LDAP connector's entry cap
+  does — a short result set is a wrong answer, not a partial one. An unbounded
+  listing still terminates, at a ceiling of 1000 requests, so a server that offers a
+  next page forever fails visibly instead of holding a worker until its lease
+  expires. And a continuation may only stay on the connector's own endpoint: a paged
+  result is the one place a *response* names the next URL, and the token behind it
+  can read an entire directory, so a redirected page is refused rather than followed.
+  Advanced queries (`endsWith`, `$search`) need Graph's `ConsistencyLevel` header and
+  remain the REST connector's; Graph names that refusal and the connector surfaces it
+  verbatim.
+
 - **A loop says what it was told to repeat while — and what it decided**
   (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and
   what that round read and wrote, but not the one thing an author asks when a loop does
@@ -71,6 +96,35 @@ _Changed_ / _Removed_ for each version.
   `<assignment><to>` *is* a member path (ADR-0058), and a dot there means what it says.
 
 ### Fixed
+
+- **A new validation rule can no longer take down a running server**
+  ([ADR-0177](docs/adr/0177-reload-skips-the-deploy-gate.md)):
+  deployed definitions are recompiled from their records at startup, and that reload ran
+  the deploy-time validation gate again — so a rule added to the compiler *after* a model
+  was deployed refused it on the next upgrade, and refusing it failed the startup load.
+  The server exited, the supervisor restarted it, and it exited again: a crash loop over
+  a model nobody had touched, with every other definition and every running instance
+  unreachable behind it, and no way in, because the API that could fix or replace the
+  definition only exists once the server is up. The way out was to clear the data
+  directory or hand-edit XML inside a JSON record.
+  Validation is a gate on *deploying* a model, not a condition for running one — the
+  compiled process is identical either way — so the reload no longer applies it. A
+  definition that passed the gate of the day it was deployed comes back and keeps
+  running, its instances advance unchanged, and Atlas warns once per record
+  (`event=deployment.reloaded_with_problems`) naming the deployment and the rules it
+  would fail today, so the drift is visible rather than silent. Deploying that model
+  still fails, with the rule named, where the author can act on it. A record that yields
+  no compiled process at all — it does not decode, names no such process, holds an
+  expression that will not compile — is still a hard startup error, since there is
+  nothing to bring back; it now names the record's path so it can be acted on.
+  The DMN models snapshotted with a deployment reload the same way, and were the same
+  outage arriving through a dependency bump: a decision that no longer compiles under a
+  newer temis failed the startup load and took the server with it. They are now
+  registered with their diagnostics reported, which is safe because temis leaves the
+  rest of a model compiled and the affected decision present but not executable — so a
+  broken decision fails when something evaluates it, as a job error the engine already
+  has an answer for, while every other decision in the model keeps answering. A DMN
+  model temis cannot parse at all stays a hard startup error, as before.
 
 - **A structure in the Variables tab no longer comes open by itself** — and the way out
   of one appears again. Every table in a view is handed to the shared sort/filter helper,

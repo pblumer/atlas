@@ -2235,7 +2235,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2252,6 +2252,7 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "create-user", l: "Create user" },
           { v: "get-user", l: "Read user" },
+          { v: "list-users", l: "List users" },
           { v: "update-user", l: "Update user" },
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
@@ -2262,7 +2263,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
-        showIf: (v) => v.operation && v.operation !== "create-user",
+        showIf: (v) => v.operation && v.operation !== "create-user" && v.operation !== "list-users",
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
@@ -2275,10 +2276,30 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
         hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
       },
+      {
+        key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
+        showIf: (v) => v.operation === "list-users",
+        hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Advanced queries (endsWith, $search) additionally need Graph's ConsistencyLevel header, which this connector does not send — use the REST connector for those.",
+      },
+      {
+        key: "select", label: "Properties", placeholder: "id,displayName,mail",
+        showIf: (v) => v.operation === "list-users",
+        hint: "An OData $select: which properties each user comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large listing out of the state store.",
+      },
+      {
+        key: "pageSize", label: "Page size", placeholder: "100",
+        showIf: (v) => v.operation === "list-users",
+        hint: "How many users to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole listing, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
+      },
+      {
+        key: "maxUsers", label: "Maximum users", placeholder: "1000",
+        showIf: (v) => v.operation === "list-users",
+        hint: "Caps what may land in the result variable. A listing returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
+      },
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", placeholder: "konto",
-        hint: "Receives what Graph returned — the created or read user for those operations, and nothing for the ones Graph answers with no content. Leave empty to discard it.",
+        hint: "Receives what Graph returned — the created or read user for those operations, every matched user as a JSON array for List users (required there), and nothing for the ones Graph answers with no content. Leave empty to discard it.",
       },
     ],
   },
@@ -7961,12 +7982,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
-  // drawCallActivityLinks puts a transparent, clickable hotspot directly over each
-  // call activity's "+" marker (bpmn-js draws it at the shape's bottom centre) whose
-  // child instance is known, so a single click on the marker itself jumps into the
-  // child's replay (same window) — no extra badge, the marker is the target. It
-  // complements the Details panel's link and is rebuilt whenever the step set grows.
-  // One hotspot per element (the first child); a multi-instance call activity's
+  // drawCallActivityLinks marks every call activity whose child instance is known with
+  // a button that opens the child's replay (same window). It used to be an invisible
+  // hotspot laid over the shape's "+" marker, on the theory that the marker already
+  // means "there is a process inside": but an affordance that only appears once the
+  // pointer is already on it is one nobody finds, and operators reported never
+  // discovering the drill-in at all. So it is a badge that is simply always visible,
+  // in the shape's one free corner — the type icon, the execution count and the
+  // incident badge hold the other three, and the in/out card hangs below the shape.
+  //
+  // It complements the Details panel's link and is rebuilt whenever the step set grows.
+  // One badge per element (the first child); a multi-instance call activity's
   // per-iteration children are reachable by selecting each iteration in the history.
   const caLinkIds = [];
   function drawCallActivityLinks() {
@@ -7975,14 +8001,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     for (const s of steps) {
       if (!s.childInstanceKey || seen.has(s.elementId)) continue;
       seen.add(s.elementId);
-      const el = registry.get(s.elementId);
-      if (!el) continue; // element not on this diagram
-      // Centre a small hotspot (sized in CSS) horizontally on the bottom marker.
-      const left = Math.max(0, Math.round((el.width || 100) / 2) - 11);
-      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
-        position: { bottom: 1, left },
-        html: `<a class="ca-child-hotspot" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay" aria-label="Open the called process"></a>`,
-      }));
+      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      try {
+        caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+          position: { bottom: 3, right: 3 },
+          // Hold its size against the zoom: a control that shrinks with the canvas is
+          // back to being invisible on a diagram wide enough to need scrolling, which
+          // is exactly the diagram that has call activities on it.
+          scale: { min: 0.9, max: 1.25 },
+          html: `<a class="ca-child-btn" href="#/operations/i/${s.childInstanceKey}"
+            title="Open the called process's instance replay"
+            aria-label="Open the called process's instance replay">&#8627;</a>`,
+        }));
+      } catch { /* element not in this diagram */ }
     }
   }
 
