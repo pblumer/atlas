@@ -1,6 +1,6 @@
 # ADR-0170: ADR numbers are assigned at merge, not on a branch
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-24: the numbering commit also carries the regenerated What's New feed)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -144,12 +144,38 @@ The guard tests in `docs/adr/adr_test.go` hold both halves:
   record that is not in the index. The window is one CI run, and the guard tests
   tolerate it by design.
 - **Negative:** an automated commit on `main` is a new thing for this repository. It
-  touches `docs/adr/` and files citing a draft, nothing else, and it is a no-op on
-  the overwhelming majority of pushes.
+  touches `docs/adr/`, files citing a draft, and the one file *generated from* those
+  citations (see the amendment below), and it is a no-op on the overwhelming
+  majority of pushes.
 - **Follow-ups / risks to watch:** the citation rewrite works on an allowlist of
   file types (`docs/adr/number.go`). A citation in a type not on that list would be
   left behind — the draft-citation guard test is what catches it, and the fix is to
   add the extension.
+
+### Amendment (2026-08-24): the numbering commit carries the regenerated feed
+
+The rewrite reaches `CHANGELOG.md`, and the Console's What's New feed is *generated
+from* that file and committed — ADR-0012 keeps the web UI buildless, so nothing
+regenerates it at build or run time, and CI fails on a stale one.
+
+Those two facts met exactly as the record's own reasoning predicts they would not:
+the numbering job pushes with `GITHUB_TOKEN`, which deliberately triggers no
+workflow run, so its commit is never checked by CI. A numbering run that rewrote a
+changelog citation therefore left `main` one push away from red — and the push that
+went red was an unrelated PR, whose author had no way to see the cause. That is
+precisely the "an automated commit nothing checks" hazard this record already
+guards against with its own `go build`/`go vet`/`go test` step; the feed was simply
+a gate that step did not cover.
+
+So the job now regenerates the feed after numbering, and its self-check covers what
+CI covers: `gofmt` as well, and the api test that reads the feed. The regeneration
+is conditional on there having been a draft to number — with a clean tree there is
+nothing to commit, and regenerating unconditionally would sweep an unrelated
+staleness into a commit whose message says it assigns ADR numbers.
+
+The consequence for this record is narrow but real: the numbering commit is no
+longer confined to `docs/adr/` and citing files. It also carries
+`api/web/whats-new.json`, which is derived from a citing file rather than authored.
 
 ## Pros and cons of the options
 
