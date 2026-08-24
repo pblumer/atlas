@@ -87,6 +87,34 @@
       }
     },
     {
+      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A dot in a variable name is caught at deploy",
+        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
+      },
+      "summary": {
+        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
+        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-loop-s-badge-counts-its-rounds-not-its-activations",
       "version": "Unreleased",
       "date": null,
@@ -283,34 +311,6 @@
       "summary": {
         "en": "Running work outside the engine does not mean running a second deployment. Started with --supervise, Atlas launches the worker as its own child process, restarts it if it stops, captures its output and shuts it down with the server — so the install stays one binary and one command. It is off unless you ask for it, because under systemd or Kubernetes the platform should own that.",
         "de": "Arbeit außerhalb der Engine bedeutet nicht, ein zweites Deployment zu betreiben. Mit --supervise startet Atlas den Worker als eigenen Kindprozess, startet ihn nach einem Abbruch neu, fängt seine Ausgabe auf und beendet ihn zusammen mit dem Server — die Installation bleibt eine Datei und ein Befehl. Standardmäßig aus, denn unter systemd oder Kubernetes gehört der Prozess-Lebenszyklus der Plattform."
-      },
-      "link": {
-        "label": "ADR-0157",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "the-workers-view-what-is-queued-what-is-in-flight-and-who-is",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "See what is queued, and who is working on it",
-        "de": "Sehen, was wartet — und wer daran arbeitet"
-      },
-      "summary": {
-        "en": "A new Workers view in Operations shows every job type with how much is waiting, how much is being worked on right now, and which workers are doing it. The case it is built to make obvious is the one that used to be invisible: a queue that keeps growing with nothing in flight and no worker behind it. Open a worker to see the jobs it ran, and restart one Atlas supervises.",
-        "de": "Die neue Ansicht „Workers“ in Operations zeigt zu jedem Aufgabentyp, wie viel wartet, wie viel gerade bearbeitet wird und welche Worker das tun. Sichtbar werden soll vor allem der Fall, den man bisher gar nicht sehen konnte: eine wachsende Warteschlange, an der nichts in Arbeit ist und hinter der kein Worker steht. Ein Klick auf einen Worker zeigt die Jobs, die er ausgeführt hat; einen von Atlas überwachten Worker können Sie dort neu starten."
       },
       "link": {
         "label": "ADR-0157",
