@@ -262,6 +262,16 @@ func (s *Server) apiRoutes() []apiRoute {
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Migration result", tObject())}},
+		{"GET", "/api/v1/incidents/{key}/repair-form", s.handleIncidentRepairForm, apiOp{
+			summary: "The repair form to show for one parked element instance, resolved most-specific-first: the form the modeler bound to the task, then the one an operator bound to its connector kind, then one derived from the task's input mappings. 404 when none applies, which means the raw variable editor is the way (ADR-draft-repair-forms-without-authoring)", tag: "Incidents",
+			resp: jsonBody("Source, name and form-js schema", tObject())}},
+		{"GET", "/api/v1/settings/repair-forms", s.handleGetRepairForms, apiOp{
+			summary: "Which connector kinds have a repair form bound — the form an operator is shown when a task of that kind parks, authored once instead of copied into every model (ADR-draft-repair-forms-without-authoring)", tag: "Incidents",
+			resp: jsonBody("Connector kind to form id", tObject())}},
+		{"PUT", "/api/v1/settings/repair-forms", s.handlePutRepairForms, apiOp{
+			summary: "Replace the connector-kind repair form bindings (admin-only when auth is on). A kind mapped to an empty id is unset rather than stored (ADR-draft-repair-forms-without-authoring)", tag: "Incidents",
+			req:  jsonBody("Connector kind to form id", schemaObj(map[string]any{"byKind": tObject()}, "byKind")),
+			resp: jsonBody("The stored bindings", tObject())}},
 		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
 			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances",
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{

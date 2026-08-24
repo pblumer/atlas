@@ -1,5 +1,26 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "a-repair-form-on-every-incident-without-anyone-authoring-one": {
+    "tags": [
+      "Operations",
+      "Console"
+    ],
+    "title": {
+      "en": "Every stuck task now offers a repair form, not raw JSON",
+      "de": "Jede hängende Aufgabe bietet jetzt ein Reparaturformular statt rohem JSON"
+    },
+    "summary": {
+      "en": "A task could already carry a repair form saying \"if this parks, here is how to fix it\" — but only where someone had gone back and added one, which in practice means the tasks that already failed once. Two more sources now stand behind it. In the Console you can bind one form per connector kind: a mail task fails the same way in every process, so the form for it is worth writing once rather than on forty tasks, and everyone gets it at once. And where neither exists, Atlas builds the form from the task's own input mappings — the model already says which values this task works with, so the operator is offered those instead of the instance's entire variable set. The dialog says which of the three you are looking at, because a form written for this exact task knows more than one derived from its inputs. Everything else stays as it was: the change is still recorded under your name, still writes only the fields the form shows, and the raw editor is still there.",
+      "de": "Eine Aufgabe konnte schon bisher ein Reparaturformular tragen — \"wenn das hier hängen bleibt, so wird es behoben\". Nur gab es das dort, wo jemand es nachgetragen hatte, also in der Praxis bei den Aufgaben, die schon einmal gescheitert sind. Dahinter stehen jetzt zwei weitere Quellen. In der Konsole hinterlegen Sie ein Formular je Connector-Art: Eine Mail-Aufgabe scheitert in jedem Prozess auf dieselbe Weise, das Formular dafür lohnt sich also einmal statt an vierzig Aufgaben — und alle haben es sofort. Und wo es beides nicht gibt, baut Atlas das Formular aus den Eingabe-Mappings der Aufgabe selbst: Das Modell sagt bereits, mit welchen Werten diese Aufgabe arbeitet, und genau die bekommt die Betreiberin oder der Betreiber angeboten statt aller Variablen der Instanz. Der Dialog nennt, welche der drei Quellen Sie gerade sehen, denn ein eigens für diese Aufgabe geschriebenes Formular weiß mehr als ein abgeleitetes. Alles andere bleibt: Die Änderung wird weiterhin unter Ihrem Namen protokolliert, schreibt weiterhin nur die angezeigten Felder, und den rohen Editor gibt es nach wie vor."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Console",
+        "de": "Konsole öffnen"
+      },
+      "route": "#/console"
+    }
+  },
   "entra-id-can-be-asked-a-question-not-only-told-what-to-do": {
     "tags": [
       "Connectors",

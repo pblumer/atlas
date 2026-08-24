@@ -36,6 +36,25 @@ type registrationSetting struct {
 	ProcessID string `json:"processId"`
 }
 
+// repairFormsSetting binds a repair form to a *connector kind* (ADR-draft-repair-forms-without-authoring).
+// A connector task's failure is the same failure in every model that uses that
+// integration — a mail connector rejected the recipient, a REST connector got a 4xx — so
+// the form for repairing it is worth authoring once rather than copying into every
+// process. Keyed by kind ("mail", "rest", …) → form id.
+//
+// It is operator configuration rather than model: it describes the *integration's*
+// failure, not any one model's data, and an operator must be able to change it without
+// redeploying anything. So it lives here beside the theme (ADR-0113) and the
+// registration process (ADR-0126) — org-wide, design-time, captured by the design-time
+// backup, and never in the durable log.
+//
+// A kind mapped to "" is stored as absent rather than as a binding to nothing: unsetting
+// is a delete, so the resolver never has to tell "no form" from "a form called nothing".
+type repairFormsSetting struct {
+	// ByKind maps a connector kind to the form id shown when a task of that kind parks.
+	ByKind map[string]string `json:"byKind"`
+}
+
 // settingsStore persists org-wide UI settings as JSON sidecar files, using the
 // same atomic-write + directory-fsync discipline as the other sidecar stores
 // (ADR-0019/0041). Each setting is a singleton — one instance-wide record, not a
@@ -46,6 +65,7 @@ type settingsStore struct {
 	dir     string
 	file    string // theme.json
 	regFile string // registration.json
+	rfFile  string // repairforms.json (ADR-draft-repair-forms-without-authoring)
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -57,6 +77,7 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		dir:     dir,
 		file:    filepath.Join(dir, "theme.json"),
 		regFile: filepath.Join(dir, "registration.json"),
+		rfFile:  filepath.Join(dir, "repairforms.json"),
 	}, nil
 }
 
@@ -115,6 +136,42 @@ func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
 // previous value. An empty ProcessID is a valid stored value meaning "disabled".
 func (s *settingsStore) saveRegistration(r registrationSetting) error {
 	return sidecar.WriteJSON(s.dir, s.regFile, r)
+}
+
+// ---------- Repair forms per connector kind (ADR-draft-repair-forms-without-authoring) ----------
+
+// getRepairForms returns the connector-kind → form-id bindings. An absent file is not an
+// error: it means no kind has one, which is the state every installation starts in.
+// Always returns a non-nil map so a caller can read it without a guard.
+func (s *settingsStore) getRepairForms() (map[string]string, error) {
+	data, err := os.ReadFile(s.rfFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("settingsstore: read repair forms: %w", err)
+	}
+	var r repairFormsSetting
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, fmt.Errorf("settingsstore: decode repair forms: %w", err)
+	}
+	if r.ByKind == nil {
+		r.ByKind = map[string]string{}
+	}
+	return r.ByKind, nil
+}
+
+// saveRepairForms writes the whole binding set durably, overwriting the previous one. A
+// kind whose form id is empty is dropped rather than stored: unsetting a binding is a
+// delete, so a reader never has to tell "no form" from "a form called nothing".
+func (s *settingsStore) saveRepairForms(byKind map[string]string) error {
+	clean := make(map[string]string, len(byKind))
+	for kind, id := range byKind {
+		if kind != "" && id != "" {
+			clean[kind] = id
+		}
+	}
+	return sidecar.WriteJSON(s.dir, s.rfFile, repairFormsSetting{ByKind: clean})
 }
 
 // ---------- Org brand logo (ADR-0148) ----------

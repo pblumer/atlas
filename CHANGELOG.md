@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A repair form on every incident, without anyone authoring one per task**
+  ([ADR-draft-repair-forms-without-authoring](docs/adr/draft-repair-forms-without-authoring.md)):
+  binding a form to a task said "if this parks, here is how to fix it" — but only for the
+  tasks somebody went back and annotated, which in practice is the ones that already
+  failed. The incidents that matter most are the ones nobody anticipated. Two sources now
+  sit beneath that binding, so an operator meets named fields instead of a JSON document
+  whether or not the task's author thought about it first.
+
+  **One form per connector kind**, bound once in **Console → Repair forms per connector
+  kind**. A connector's failure is the same failure in every model that uses it: a mail
+  task parks on a rejected recipient the same way wherever it sits. So the form worth
+  showing is worth writing once, for the kind — one person binding `mail` gives every mail
+  task in every process that guidance at once. The kinds come from the server, so the
+  integration added last is not the one nobody can give guidance for.
+  (`GET`/`PUT /api/v1/settings/repair-forms`, admin-gated; the whole table is written at
+  once so two changes made in quick succession cannot interleave.)
+
+  **And where neither exists, the form is derived from the task's own input mappings.** A
+  task that reads `recipient` and `subject` gets a form offering `recipient` and `subject`:
+  the model already said which variables this task's retry depends on, and that answer was
+  sitting in the compiled process unused. It is derived per request and never stored, so
+  there is nothing to go stale when the model changes — the next incident derives from the
+  version that instance is actually on.
+
+  The precedence — task, then connector kind, then derived — **is resolved on the server,
+  behind one endpoint** (`GET /api/v1/incidents/{key}/repair-form`). Three surfaces show a
+  repair form; a rule with three orders of specificity implemented three times in the
+  browser is a rule that will disagree with itself. The dialog **names which source it is
+  showing**, because the three deserve different confidence: one written for *this* task
+  knows the most, one written for a connector kind knows how that integration fails, and a
+  derived one knows only which variables the task reads. Nothing else changes: submitting
+  still goes through the audited operator override (ADR-0098) and still writes only the
+  keys the form binds, and a task nobody could derive anything for still has the raw
+  variable editor, exactly as before.
+
 - **The handbook takes on the process developer's role, and builds a whole application in
   front of you.** Everything the handbook taught so far was a *piece*: a recipe per BPMN
   pattern, a tutorial per process. The question it left unanswered is the one an author

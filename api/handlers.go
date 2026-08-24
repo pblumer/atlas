@@ -212,11 +212,13 @@ type runtimeIncident struct {
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
 	ConnectorID   string `json:"connectorId,omitempty"`
-	// RepairForm is the form the modeler bound to this task for repairing a parked
-	// instance of it (ADR-0169) — the fields worth looking at when this task goes wrong,
-	// instead of the whole variable set as raw JSON. Empty when the task names none, in
-	// which case the raw editor is the only way, exactly as before. It is a better
-	// editor over the audited operator override (ADR-0098), never a second write path.
+	// RepairForm names which source would answer if the operator asked for a repair form
+	// on this incident: "task" when the modeler bound one to this element (ADR-0169),
+	// "connector" when an operator bound one to its connector kind, "derived" when one can
+	// be built from the task's input mappings, and empty when none applies — in which case
+	// the raw variable editor is the only way, exactly as before. It is the *source* rather
+	// than a form id because the row only decides whether to offer the action; the form
+	// itself comes from GET /incidents/{key}/repair-form, where the precedence lives once.
 	RepairForm string `json:"repairForm,omitempty"`
 }
 
@@ -497,11 +499,13 @@ type incidentView struct {
 	Connector     string `json:"connector,omitempty"`
 	ConnectorKind string `json:"connectorKind,omitempty"`
 	ConnectorID   string `json:"connectorId,omitempty"`
-	// RepairForm is the form the modeler bound to this task for repairing a parked
-	// instance of it (ADR-0169) — the fields worth looking at when this task goes wrong,
-	// instead of the whole variable set as raw JSON. Empty when the task names none, in
-	// which case the raw editor is the only way, exactly as before. It is a better
-	// editor over the audited operator override (ADR-0098), never a second write path.
+	// RepairForm names which source would answer if the operator asked for a repair form
+	// on this incident: "task" when the modeler bound one to this element (ADR-0169),
+	// "connector" when an operator bound one to its connector kind, "derived" when one can
+	// be built from the task's input mappings, and empty when none applies — in which case
+	// the raw variable editor is the only way, exactly as before. It is the *source* rather
+	// than a form id because the row only decides whether to offer the action; the form
+	// itself comes from GET /incidents/{key}/repair-form, where the precedence lives once.
 	RepairForm string `json:"repairForm,omitempty"`
 }
 
@@ -1179,6 +1183,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		// One resolver for the whole overlay, so the connector store is read once for
 		// the page rather than once per parked token (ADR-0160).
 		connectorFor := s.incidentConnectorLookup()
+		repairKinds := s.repairKindsLookup()
 		// addIncident records one parked element instance on the overlay: a count on
 		// the element (so the diagram can mark the shape) and the detail behind it (so
 		// the panel can say why and offer the resolve). Full is the response cap.
@@ -1197,7 +1202,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				Message:            v.Message,
 			}
 			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
-			inc.RepairForm = d.cp.RepairForm(v.ElementId)
+			inc.RepairForm = repairFormSourceOf(d.cp, v.ElementId, repairKinds())
 			resp.Incidents = append(resp.Incidents, inc)
 			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
@@ -3831,6 +3836,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		// per parked token, and not at all when nothing on the page is on a connector
 		// task (ADR-0159).
 		connectorFor := s.incidentConnectorLookup()
+		repairKinds := s.repairKindsLookup()
 		lookup := func(piKey uint64) (instanceCtx, error) {
 			if ctx, ok := resolved[piKey]; ok {
 				return ctx, nil
@@ -3878,7 +3884,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			if ctx.cp != nil {
 				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
 				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
-				view.RepairForm = ctx.cp.RepairForm(v.ElementId)
+				view.RepairForm = repairFormSourceOf(ctx.cp, v.ElementId, repairKinds())
 			}
 			list = append(list, view)
 			return nil

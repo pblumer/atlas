@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas per-connector-kind repair forms e2e harness</title>
+    <!-- Drives the real api/web/repairforms.js against a mock `api`
+         (ADR-draft-repair-forms-without-authoring): one row per connector kind the server
+         reports, each a picker over the deployed forms, saving the whole table on every
+         change. The panel is its own module precisely so it can be driven here — app.js
+         boots the whole console on import and cannot be loaded from a test. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="toast" hidden></div>
+    <div class="card" id="repair-forms-card" style="padding:18px; max-width:720px">
+      <h2>Repair forms per connector kind</h2>
+      <div id="repair-forms-body"><p class="muted">Loading&hellip;</p></div>
+    </div>
+    <script type="module">
+      import { wireRepairForms } from "/repairforms.js";
+
+      // The kinds come from the server, so a kind added later needs no change here — which
+      // is the point of reporting them rather than hardcoding a list in the browser.
+      let STORED = { mail: "mail-repair" };
+      const KINDS = ["mail", "rest", "sharepoint"];
+      const FORMS = [
+        { id: "mail-repair", name: "Fix the mail" },
+        { id: "rest-repair", name: "Fix the REST call" },
+      ];
+
+      window.__puts = [];
+      window.__toast = null;
+      window.__failNextPut = false;
+
+      const api = async (method, url, body) => {
+        if (method === "GET" && url === "/api/v1/settings/repair-forms") {
+          return { byKind: { ...STORED }, kinds: KINDS };
+        }
+        if (method === "GET" && url === "/api/v1/forms") return FORMS;
+        if (method === "PUT" && url === "/api/v1/settings/repair-forms") {
+          window.__puts.push(body);
+          if (window.__failNextPut) {
+            window.__failNextPut = false;
+            const err = new Error("admin role required");
+            err.status = 403;
+            throw err;
+          }
+          STORED = { ...body.byKind };
+          return { byKind: { ...STORED }, kinds: KINDS };
+        }
+        return {};
+      };
+      const toast = (msg, kind) => { window.__toast = { msg, kind }; };
+
+      window.__mount = () => wireRepairForms({ api, toast });
+      window.__stored = () => STORED;
+      window.__setStored = (v) => { STORED = { ...v }; };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

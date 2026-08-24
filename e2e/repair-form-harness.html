@@ -17,6 +17,8 @@
       <div id="rows"></div>
       <button class="btn" id="run">Repair (direct)</button>
       <button class="btn" id="run-missing">Repair (form deleted)</button>
+      <button class="btn" id="run-connector">Repair (connector kind)</button>
+      <button class="btn" id="run-derived">Repair (derived)</button>
     </div>
     <script type="module">
       import { repairFormFlow, incidentRowHTML, bindIncidentActions } from "/incidents.js";
@@ -37,7 +39,9 @@
         repairForm: "fix-recipient",
       };
       const NO_FORM = { ...INCIDENT, elementInstanceKey: "9002", repairForm: "" };
-      const STALE = { ...INCIDENT, elementInstanceKey: "9003", repairForm: "gone" };
+      const STALE = { ...INCIDENT, elementInstanceKey: "9003", repairForm: "connector" };
+      const KIND = { ...INCIDENT, elementInstanceKey: "9004", repairForm: "connector" };
+      const DERIVED = { ...INCIDENT, elementInstanceKey: "9005", repairForm: "derived" };
 
       const SCHEMA = {
         type: "default",
@@ -67,11 +71,18 @@
 
       const api = async (method, url, body) => {
         window.__calls.push({ method, url, body });
-        if (method === "GET" && url === "/api/v1/forms/fix-recipient") {
-          return { id: "fix-recipient", name: "Fix the recipient", schema: SCHEMA };
-        }
-        if (method === "GET" && url === "/api/v1/forms/gone") {
-          const err = new Error("no form with that id");
+        // The resolve endpoint: the server applies the precedence and hands back whichever
+        // source answered. 9001 has a form the modeler wrote, 9004 one bound to the
+        // connector kind, 9005 one derived from the task's inputs, 9003 none at all.
+        let m;
+        if ((m = url.match(/\/incidents\/(\d+)\/repair-form$/))) {
+          const answers = {
+            "9001": { source: "task", formId: "fix-recipient", name: "Fix the recipient", schema: SCHEMA },
+            "9004": { source: "connector", formId: "mail-repair", name: "Fix the mail", schema: SCHEMA },
+            "9005": { source: "derived", name: "Derived from this task's inputs", schema: SCHEMA },
+          };
+          if (answers[m[1]]) return answers[m[1]];
+          const err = new Error("no repair form applies to this incident");
           err.status = 404;
           throw err;
         }
@@ -91,6 +102,14 @@
         reset();
         window.__result = await repairFormFlow({ api, toast, incident: STALE });
       });
+      document.getElementById("run-connector").addEventListener("click", async () => {
+        reset();
+        window.__result = await repairFormFlow({ api, toast, incident: KIND });
+      });
+      document.getElementById("run-derived").addEventListener("click", async () => {
+        reset();
+        window.__result = await repairFormFlow({ api, toast, incident: DERIVED });
+      });
 
       // The rows as an operator meets them beside a diagram: one incident whose task
       // bound a repair form, one whose did not.
@@ -99,7 +118,7 @@
         + incidentRowHTML(NO_FORM, { label: "Ship", showInstance: false });
       bindIncidentActions(rowsEl, {
         api, toast,
-        incidents: () => [INCIDENT, NO_FORM, STALE],
+        incidents: () => [INCIDENT, NO_FORM, STALE, KIND, DERIVED],
         onChanged: async () => { window.__changed = true; },
       });
 

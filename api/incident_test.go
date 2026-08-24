@@ -459,8 +459,11 @@ func TestIncidentCarriesItsRepairForm(t *testing.T) {
 	if len(inc) != 1 {
 		t.Fatalf("incidents = %+v, want the parked mail task", inc)
 	}
-	if inc[0].RepairForm != "fix-recipient" {
-		t.Errorf("repairForm = %q, want the form the model bound", inc[0].RepairForm)
+	// The field names the *source* that would answer, not the form id: the row only
+	// decides whether to offer the action, and the form itself comes from the resolve
+	// endpoint where the precedence lives once.
+	if inc[0].RepairForm != "task" {
+		t.Errorf("repairForm = %q, want %q — the modeler bound one to this element", inc[0].RepairForm, "task")
 	}
 	// It sits *beside* the connector rather than replacing it: one repairs the data, the
 	// other the integration, and an incident may well need both (ADR-0160/0169).
@@ -486,8 +489,8 @@ func TestIncidentCarriesItsRepairForm(t *testing.T) {
 	if len(rt.Incidents) != 1 {
 		t.Fatalf("runtime incidents = %+v, want one", rt.Incidents)
 	}
-	if rt.Incidents[0].RepairForm != "fix-recipient" {
-		t.Errorf("runtime incident repairForm = %q, want %q", rt.Incidents[0].RepairForm, "fix-recipient")
+	if rt.Incidents[0].RepairForm != "task" {
+		t.Errorf("runtime incident repairForm = %q, want %q", rt.Incidents[0].RepairForm, "task")
 	}
 }
 

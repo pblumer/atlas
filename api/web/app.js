@@ -18,6 +18,7 @@ import {
 } from "./incidents.js";
 import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
+import { wireRepairForms } from "./repairforms.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
@@ -1258,11 +1259,21 @@ async function viewConsoleOrg() {
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>
     ${managedCard}
+    <div class="card" id="repair-forms-card" style="margin-top:18px">
+      <h2>Repair forms per connector kind</h2>
+      <p class="muted" style="margin:6px 0 12px">When a task parks behind an incident, the operator can be shown a form with the
+      fields worth correcting instead of the instance's whole variable set as JSON. A connector's failure is the same failure in
+      every model that uses it, so the form for it is worth writing <b>once</b> here rather than binding to each task.
+      A form bound to a specific task in the Modeler still wins over these; where neither exists, the fields are derived from the
+      task's own input mappings.</p>
+      <div id="repair-forms-body"><p class="muted">Loading&hellip;</p></div>
+    </div>
     ${secretsCard}`;
 
   // Connector management is wired before the (admin-gated) user handlers so it
   // works even when the user roster is denied to a non-admin.
   wireConnectorManagement(connectors);
+  wireRepairForms({ api, toast });
   wireSecretsManagement(secrets, secretsState, connectors);
   wireAppearance();
 

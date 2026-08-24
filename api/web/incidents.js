@@ -311,22 +311,34 @@ export async function repairFormFlow({ api, toast, incident }) {
   try {
     [{ Form }, def, current] = await Promise.all([
       loadFormViewer(),
-      api("GET", "/api/v1/forms/" + encodeURIComponent(incident.repairForm)),
+      // One question, one answer: the server applies the precedence — the form the
+      // modeler bound to this task, then the one an operator bound to its connector
+      // kind, then one derived from the task's input mappings — and hands back whichever
+      // applies. Resolving it here would put that order in three surfaces
+      // (ADR-draft-repair-forms-without-authoring).
+      api("GET", `/api/v1/incidents/${encodeURIComponent(incident.elementInstanceKey)}/repair-form`),
       // A blank prefill is a usable form; a failed variable read must not block the
       // repair, which is the one thing the operator came here to do.
       api("GET", `/api/v1/instances/${encodeURIComponent(instance)}/variables`).catch(() => ({})),
     ]);
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    // A form id that no longer resolves is a stale binding, not a broken incident: say
-    // which form is missing and leave the raw editor as the way through.
-    toast(/404|no form/i.test(msg)
-      ? `The repair form “${incident.repairForm}” no longer exists — use Fix variables… instead`
+    // A 404 means no source applies any more — a binding whose form was deleted, or a
+    // model that changed underneath. That is a complete answer, not a broken incident, so
+    // it points at the way that always works.
+    toast(/404|no repair form/i.test(msg)
+      ? "No repair form applies to this incident any more — use Fix variables… instead"
       : "Could not open the repair form: " + msg, "warn");
     return null;
   }
 
-  const choice = await askRepairForm({ Form, incident, schema: def && def.schema, name: (def && def.name) || incident.repairForm, current: current || {} });
+  const choice = await askRepairForm({
+    Form, incident,
+    schema: def && def.schema,
+    name: (def && def.name) || "Repair",
+    source: def && def.source,
+    current: current || {},
+  });
   if (!choice) return null;
 
   try {
@@ -347,7 +359,18 @@ export async function repairFormFlow({ api, toast, incident }) {
 // resolves to {variables, retry}, or null when the operator cancelled. The two confirm
 // buttons are the ones the JSON dialog beside it offers, in the same order and with the
 // same meaning — an operator learns repairing an incident once, not twice.
-function askRepairForm({ Form, incident, schema, name, current }) {
+// repairSourceNote says which of the three sources this form came from, because they
+// deserve different confidence: one written for *this* task knows the most, one written
+// for a connector kind knows how that integration fails, and a derived one knows only
+// which variables the task reads. An operator reading fields at an awkward hour should
+// not have to guess which they are looking at.
+const REPAIR_SOURCE_NOTE = {
+  task: "Written for this task.",
+  connector: "Written for this connector kind — it applies to every task that uses it.",
+  derived: "Derived from this task's inputs — nobody authored it, so it names the variables the task reads and nothing more.",
+};
+
+function askRepairForm({ Form, incident, schema, name, source, current }) {
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
@@ -356,13 +379,13 @@ function askRepairForm({ Form, incident, schema, name, current }) {
         <div class="modal-head"><h2 id="inc-repair-title">Repair &middot; ${esc(incident.elementId || "task")}</h2></div>
         <div class="modal-body">
           <p class="inc-modal-msg">${esc(incident.message || "(no message)")}</p>
-          <p class="muted" style="margin:0 0 10px">The fields below are the ones this task's author said matter when it goes
-          wrong. Only these are written; everything else the instance holds is left untouched.</p>
+          <p class="muted" style="margin:0 0 10px">${esc(REPAIR_SOURCE_NOTE[source] || "")}
+          Only the fields below are written; everything else the instance holds is left untouched.</p>
           <div class="repair-form" id="inc-repair-form"></div>
           <p class="repair-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
-          <span class="muted repair-which">${esc(name)}</span>
+          <span class="muted repair-which" title="${esc(REPAIR_SOURCE_NOTE[source] || "")}">${esc(name)}</span>
           <span style="flex:1"></span>
           <button class="btn neutral" data-repair-cancel title="Close without changing anything">Cancel</button>
           <button class="btn neutral" data-repair-save title="Save the corrected values without retrying">Save only</button>

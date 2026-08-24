@@ -303,6 +303,18 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
 	"DELETE /api/v1/settings/registration": "registration config is a Console/login concern, not an agent action",
 
+	// Repair forms: which connector kinds have a form an operator is shown when a task of
+	// that kind parks. Org-wide Console configuration like the theme above, and the form
+	// it names is a form-js document a browser renders — an agent repairing an instance
+	// reads and writes variables directly (atlas_instance_variables, atlas_resolve_incident)
+	// rather than through a rendered form.
+	"GET /api/v1/settings/repair-forms": "repair-form config is a Console concern, not an agent action",
+	"PUT /api/v1/settings/repair-forms": "repair-form config is a Console concern, not an agent action",
+	// The resolved form for one incident: a form-js schema for a browser to render. An
+	// agent has the variables and the resolve action already, and nothing to render a form
+	// with — the schema would be noise to it.
+	"GET /api/v1/incidents/{key}/repair-form": "a form-js schema is for a browser to render; an agent reads and writes the variables directly",
+
 	// Auth + user administration: security surface, deliberately off-limits.
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",
 	"POST /api/v1/auth/logout":         "auth flow is not an agent capability",

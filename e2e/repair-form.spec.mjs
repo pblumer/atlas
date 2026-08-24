@@ -98,17 +98,56 @@ test("cancelling writes nothing", async ({ page }) => {
   expect(page.__errors, "page errors").toEqual([]);
 });
 
-test("a stale form binding names the missing form and points at the raw editor", async ({ page }) => {
+test("no applicable form points at the raw editor rather than failing", async ({ page }) => {
   await page.locator("#run-missing").click();
-  // No dialog: there is nothing to render.
+  // No dialog: the server resolved nothing, so there is nothing to render.
   await expect(page.locator(".repair-modal")).toHaveCount(0);
 
   const t = await page.evaluate(() => window.__toast);
-  // A form id that no longer resolves is a stale binding, not a broken incident — and
-  // the operator still has a way through, which the message names.
-  expect(t.msg).toContain("gone");
+  // A 404 here means the binding went stale or the model changed underneath — a complete
+  // answer rather than a broken incident, and the operator still has a way through.
+  expect(t.msg).toContain("No repair form applies");
   expect(t.msg).toContain("Fix variables");
   expect(await page.evaluate(() => window.__result)).toBe(null);
+
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("the dialog says which of the three sources it is showing", async ({ page }) => {
+  // The three deserve different confidence: one written for *this* task knows the most,
+  // one written for a connector kind knows how that integration fails, and a derived one
+  // knows only which variables the task reads. An operator should not have to guess.
+  await page.locator("#run").click();
+  await expect(page.locator(".repair-modal")).toContainText("Written for this task");
+  await page.locator("[data-repair-cancel]").click();
+
+  await page.locator("#run-connector").click();
+  await expect(page.locator(".repair-modal")).toContainText("connector kind");
+  await expect(page.locator(".repair-which")).toContainText("Fix the mail");
+  await page.locator("[data-repair-cancel]").click();
+
+  await page.locator("#run-derived").click();
+  const modal = page.locator(".repair-modal");
+  await expect(modal).toContainText("Derived");
+  await expect(modal).toContainText("nobody authored it");
+  // It still edits, and still writes only what it binds.
+  await modal.locator(".repair-form input").first().fill("right@example.com");
+  await modal.locator("[data-repair-save]").click();
+  const post = await page.evaluate(() =>
+    window.__calls.find((c) => c.method === "POST" && c.url.endsWith("/variables")));
+  expect(Object.keys(post.body.variables).sort()).toEqual(["recipient", "subject"]);
+
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("the form comes from the resolve endpoint, not from a form id the row carried", async ({ page }) => {
+  await page.locator("#run-connector").click();
+  await expect(page.locator(".repair-modal")).toBeVisible();
+  // One question, one answer: the surface asks which form applies and renders what it is
+  // handed. Resolving the precedence here would put it in three surfaces.
+  const gets = await page.evaluate(() => window.__calls.filter((c) => c.method === "GET").map((c) => c.url));
+  expect(gets.some((u) => u === "/api/v1/incidents/9004/repair-form")).toBe(true);
+  expect(gets.some((u) => u.startsWith("/api/v1/forms/"))).toBe(false);
 
   expect(page.__errors, "page errors").toEqual([]);
 });
