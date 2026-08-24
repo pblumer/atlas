@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Find accounts in Entra ID, not just change them",
+        "de": "Konten in Entra ID finden, nicht nur ändern"
+      },
+      "summary": {
+        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them, and receives every match in a single process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert, und erhält alle Treffer in einer einzigen Prozessvariablen. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
       "version": "Unreleased",
       "date": null,
@@ -296,35 +325,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "atlas-worker-the-same-binary-working-jobs-outside-the-engine",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "A task's work can run outside the engine",
-        "de": "Die Arbeit einer Aufgabe kann außerhalb der Engine laufen"
-      },
-      "summary": {
-        "en": "The work behind a service task no longer has to run inside Atlas itself. The same binary, started as a worker, asks Atlas for the jobs it was told to handle, does them and reports back — so a slow or unreachable system occupies the worker instead of the engine. A worker that dies mid-job does not lose it: the job is offered again once its hold expires, and a worker that comes back too late can no longer complete work that has been given to someone else.",
-        "de": "Die Arbeit hinter einer Service-Aufgabe muss nicht mehr in Atlas selbst laufen. Dieselbe Binärdatei, als Worker gestartet, fragt Atlas nach den Aufgabentypen, für die sie zuständig ist, erledigt sie und meldet das Ergebnis zurück — ein langsames oder nicht erreichbares System blockiert damit den Worker statt die Engine. Stirbt ein Worker mitten in der Arbeit, geht sie nicht verloren: Der Job wird nach Ablauf seiner Reservierung erneut angeboten, und ein zu spät zurückkehrender Worker kann Arbeit, die inzwischen jemand anderem gehört, nicht mehr abschließen."
-      },
-      "link": {
-        "label": "ADR-0157",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
-      },
-      "tags": [
-        "Operations",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
       }
     }
   ]
