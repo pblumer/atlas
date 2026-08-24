@@ -2949,3 +2949,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    distinction that matters is only "this run" versus "before it". */
 .wkjob-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .wkjob-history-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+
+/* Remove-member ✕ inside a group member chip (ADR-draft-groups-as-members). */
+.chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 0 0 5px; line-height: 1; }
+.chip-x:hover { color: var(--danger); }

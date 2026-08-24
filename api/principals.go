@@ -33,9 +33,11 @@ func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
 	list := []principalDirEntry{}
 	var loadErr error
 	s.do(func() {
-		var recs []User
-		recs, loadErr = s.users.LoadAll()
-		for _, u := range recs {
+		var users []User
+		if users, loadErr = s.users.LoadAll(); loadErr != nil {
+			return
+		}
+		for _, u := range users {
 			if u.Disabled {
 				continue
 			}
@@ -44,6 +46,15 @@ func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
 				name = u.Username
 			}
 			list = append(list, principalDirEntry{Type: PrincipalTypeUser, ID: u.ID, Name: name})
+		}
+		// Groups join the same directory (ADR-draft-groups-as-members) so a picker
+		// can offer a whole team, not only individuals.
+		var groups []group
+		if groups, loadErr = s.groups.LoadAll(); loadErr != nil {
+			return
+		}
+		for _, g := range groups {
+			list = append(list, principalDirEntry{Type: PrincipalTypeGroup, ID: g.ID, Name: g.Name})
 		}
 	})
 	if loadErr != nil {

@@ -232,6 +232,7 @@ type Server struct {
 	vault            *vault.Vault        // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
 	vaultEnabled     bool                // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore          // durable sidecar for user accounts (ADR-0044)
+	groups           *groupStore         // durable sidecar for user groups (ADR-draft-groups-as-members)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -819,6 +820,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
+	if err != nil {
+		return nil, err
+	}
 	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
 	if err != nil {
 		return nil, err
@@ -897,6 +902,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
+		groups:            groups,
 		sessions:          newSessionStore(defaultSessionTTL),
 		collab:            collab.NewRegistry(),
 		collabKeepalive:   collab.KeepaliveInterval,

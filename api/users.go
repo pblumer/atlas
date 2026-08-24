@@ -103,7 +103,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	token, err := s.sessions.create(u)
+	// Snapshot the user's group ids into the session (ADR-draft-groups-as-members),
+	// alongside roles, so scope group grants resolve without a store read.
+	var (
+		groupIDs []string
+		grpErr   error
+	)
+	s.do(func() { groupIDs, grpErr = s.groups.idsForUser(u.ID) })
+	if grpErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "login: "+grpErr.Error())
+		return
+	}
+	token, err := s.sessions.create(u, groupIDs)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "login: "+err.Error())
 		return

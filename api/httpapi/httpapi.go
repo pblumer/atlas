@@ -58,6 +58,21 @@ type Principal struct {
 	UserID   string
 	Username string
 	Roles    []string
+	// GroupIDs are the ids of the groups the user belongs to, snapshotted at login
+	// like Roles, so a scope's group grant resolves as a pure check against this
+	// slice without a store read (ADR-draft-groups-as-members). A membership change
+	// takes effect on the user's next login.
+	GroupIDs []string
+}
+
+// InGroup reports whether the principal belongs to the group with the given id.
+func (p *Principal) InGroup(groupID string) bool {
+	for _, g := range p.GroupIDs {
+		if g == groupID {
+			return true
+		}
+	}
+	return false
 }
 
 // HasRole reports whether the principal carries a role. A principal with no
