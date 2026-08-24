@@ -291,6 +291,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
 			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents",
 			resp: jsonBody("Workers and job-type queues", tObject())}},
+		{"GET", "/api/v1/workers/{id}/history", s.handleWorkerHistory, apiOp{
+			summary: "One worker's job history from the configured clio connector, newest first (admin-only; empty when no history connector is configured)", tag: "Incidents",
+			resp: jsonBody("Worker job history", tObject())}},
 		{"GET", "/api/v1/workers/{id}/jobs", s.handleWorkerJobs, apiOp{
 			summary: "One worker's recent jobs: what it was handed, what it returned, and what failed (admin-only; a bounded in-memory tail, emptied by a restart)", tag: "Incidents",
 			resp: jsonBody("Worker jobs", tObject())}},

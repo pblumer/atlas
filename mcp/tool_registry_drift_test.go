@@ -111,7 +111,8 @@ var mcpOmittedRoutes = map[string]string{
 	// a memory tail rather than a record. An agent debugging a run asks from the
 	// instance side, where atlas_instance_jobs and the timeline answer the same
 	// question durably and without an admin gate.
-	"GET /api/v1/workers/{id}/jobs": "operator diagnostics about a worker process, not an agent action",
+	"GET /api/v1/workers/{id}/jobs":    "operator diagnostics about a worker process, not an agent action",
+	"GET /api/v1/workers/{id}/history": "the same diagnostics, read from the operator's own clio; an agent with access to that clio queries it there",
 
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
