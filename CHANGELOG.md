@@ -12,6 +12,20 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A BPMN file with no layout renders when you import it, not only when you deploy it**
+  ([ADR-0124](docs/adr/0124-server-side-auto-layout.md)): BPMN-DI is optional in the
+  standard, so a model from a generator, an export from another tool, or a hand-written
+  file routinely carries none. Deployed, Atlas already lays such a model out as the
+  editor fetches it — imported as a draft it did not, so the *same file* opened onto an
+  empty canvas depending on which way it came in. A draft that arrives without diagram
+  interchange is now laid out on the way in, and the import says so, because the
+  arrangement the author is about to edit is Atlas's rather than the one their file
+  described. Reading a draft lays out too, for the ones stored before this. A model that
+  brings its own layout is stored byte for byte — generating over an author's
+  arrangement would throw it away.
+
 ### Added
 
 - **A loop says what it was told to repeat while — and what it decided**

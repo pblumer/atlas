@@ -4069,14 +4069,29 @@ type draftResp struct {
 	Name      string `json:"name"`
 	ProjectID string `json:"projectId,omitempty"`
 	SavedAt   int64  `json:"savedAt"`
+	// LayoutGenerated marks a draft that arrived without any diagram interchange and
+	// was laid out on the way in (ADR-0124). Only a save that generated one sets it,
+	// so the importer can say where the diagram came from — the file the author picked
+	// did not have one, and what they are about to edit is Atlas's arrangement, not
+	// theirs.
+	LayoutGenerated bool `json:"layoutGenerated,omitempty"`
 }
 
-// handleSaveDraft persists a diagram as a draft: the raw BPMN XML is stored as-is,
-// keyed by its process id, WITHOUT compiling it — so an incomplete or not-yet
-// executable model can still be saved and reopened. Re-saving the same process id
-// overwrites the previous draft rather than creating a version. An optional
-// ?projectId= query files the draft into that project (ADR-0034); it must name an
-// existing project, else the save is rejected.
+// handleSaveDraft persists a diagram as a draft: the BPMN XML is stored without being
+// compiled — so an incomplete or not-yet executable model can still be saved and
+// reopened — keyed by its process id. Re-saving the same process id overwrites the
+// previous draft rather than creating a version. An optional ?projectId= query files
+// the draft into that project (ADR-0034); it must name an existing project, else the
+// save is rejected.
+//
+// A model that carries no diagram interchange is laid out on the way in (ADR-0124).
+// BPMN-DI is optional in the standard, and a semantic-only file is exactly what a
+// generator or another tool hands over — deployed, such a model already renders,
+// because the deployed-XML read generates a layout for it. A draft did not, so the
+// same file imported instead of deployed opened onto an empty canvas. The response
+// says a layout was generated, so the importer can pass that on rather than leaving
+// the author to wonder whose arrangement they are looking at. A save from the Modeler
+// always carries DI, so this never touches one.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -4094,7 +4109,8 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
-	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(body)}
+	stored, laidOut := layout.EnsureReport(body)
+	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(stored)}
 	var (
 		saveErr, projErr error
 		unknownProject   bool
@@ -4135,7 +4151,10 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
+		httpapi.JSON(w, http.StatusOK, draftResp{
+			ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt,
+			LayoutGenerated: laidOut,
+		})
 	}
 }
 
@@ -4236,7 +4255,11 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleDraftXML returns a draft's raw BPMN XML so the editor can reopen it.
+// handleDraftXML returns a draft's BPMN XML so the editor can reopen it, laying the
+// model out if it carries no diagram interchange — the same read-time guarantee a
+// deployed definition has (ADR-0124). Saving a draft generates the layout up front,
+// so this is the safety net for the drafts stored before it did, and for any written
+// around that path.
 func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
@@ -4252,7 +4275,7 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
 	default:
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-		_, _ = w.Write([]byte(rec.XML))
+		_, _ = w.Write(layout.Ensure([]byte(rec.XML)))
 	}
 }
 
