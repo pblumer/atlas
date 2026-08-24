@@ -295,7 +295,11 @@ async function startInstance(defKey){
 async function refresh(){
   const [vars, tasks, instances] = await Promise.all([
     api("GET",`/instances/${instanceKey}/variables`),
-    api("GET","/tasks"),
+    // Scope the task query to THIS instance. The global /tasks list is capped
+    // (default 500 newest), so under a backlog this instance's freshly-parked task
+    // could fall off the page and the app would show "no open task". ?processInstance=
+    // resolves the instance's own tasks directly, so it always finds them.
+    api("GET",`/tasks?processInstance=${instanceKey}`),
     api("GET","/instances"),
   ]);
   const inst = instances.find(i=>i.key===instanceKey);

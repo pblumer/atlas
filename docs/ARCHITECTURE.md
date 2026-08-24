@@ -258,12 +258,14 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 - **Core:** start/end events, sequence flows, exclusive/parallel/inclusive gateways, service tasks
 - **Events:** timer, message, signal, error; boundary events (interrupting and non-interrupting)
 - **Structure:** embedded subprocesses, event subprocesses, call activities
-- **Advanced:** multi-instance (sequential and parallel), compensation, transactions
+- **Advanced:** multi-instance (sequential and parallel), standard loops (repeat while a condition holds), compensation, transactions
 - **Data:** input/output mappings, variable scoping with copy-on-write propagation
 
 ## Failure handling and incidents
 
 When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
+
+An incident is surfaced where the operator already is: the live diagram marks the stuck element, badges it with the failure message and resolves it in place ([ADR-0150](adr/0150-preview-mail-provider-and-visible-incidents.md)), and the step-by-step replay, the Instances list and the variable search say so too ([ADR-0151](adr/0151-incidents-beyond-the-live-diagram.md)). The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the runtime overlay or the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
 
 ## Observability
 
@@ -275,16 +277,53 @@ Because every state transition is an event in an ordered log, the log itself is 
 atlas/
 ├── compiler/      BPMN XML → CompiledProcess (parse, resolve, intern, expr, validate, linearize)
 ├── model/         Record, header, ValueType/Intent, payload encode/decode
-├── engine/        Partition, processor loop, batching, ProcessingContext
-├── behavior/      Per-BPMN-element behaviors (service task, gateways, events, subprocess)
+├── engine/        Partition, processor loop, batching, ProcessingContext, element behaviors
 ├── state/         State store wrapper, transactions, indexes (column families)
 ├── wal/           Write-ahead log: segmented append, group commit, replay
+├── checkpoint/    Recovery checkpoints and WAL compaction (ADR-0131)
 ├── expr/          FEEL expression compilation and evaluation
 ├── job/           Job store, worker subscription, gRPC streaming protocol
-├── timer/         Due-date index scanning and timer triggering
-└── api/           Client-facing command submission and queries
+├── dmn/           DMN registry, resolver, validation, business-rule-task worker
+├── connector/     In-process service-task workers, one package per connector kind
+│   ├── rest/          HTTP REST outbound (ADR-0067)
+│   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
+│   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
+│   ├── remedy/        BMC Remedy AR System (ADR-0106)
+│   ├── webscrape/     Web scraping (ADR-0118)
+│   ├── clio/          clio event store: read, write, query (ADR-0036)
+│   ├── temis/         temis decision service (ADR-0050)
+│   ├── script/        Polyglot script tasks: PowerShell, Python, JavaScript (ADR-0047)
+│   └── csvimport/     CSV-to-JSON, and the parser the upload check shares (ADR-0139/0084)
+├── api/           HTTP API, web UI, command submission and queries
+│   ├── runloop/       The single-writer boundary every service reaches state through
+│   ├── httpapi/       Response envelope, client IP, request principal
+│   ├── token/         Opaque share tokens: minting and shape guard
+│   ├── layout/        BPMN diagram auto-layout (ADR-0124/0127)
+│   ├── collab/        Live collaborative modeling sessions (ADR-0140)
+│   ├── vault/         Encrypted secret store (ADR-0069/0070)
+│   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
+│   └── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
+├── mcp/           MCP server over the HTTP API (ADR-0016)
+├── metrics/       Prometheus metrics (ADR-0142)
+├── opensearch/    OpenSearch event exporter (ADR-0114)
+└── cmd/atlas/     The single binary (ADR-0011)
 ```
+
+Every package under `connector/` implements the same seam: the compiler turns an
+authored service task into a job carrying a reserved `compiler.*JobTypeIndex`, and
+that kind's in-process worker handles it off the processor goroutine, after fsync —
+so a connector call can never violate the hot-path or durability invariants
+(ADR-0007, ADR-0067). Grouping them keeps that shared contract visible and makes
+adding a kind a new sub-package rather than another entry in a flat root.
+
+The sub-packages under `api/` are the parts of the server that depend on nothing
+else in it: a layout generator that only reads and writes BPMN XML, a session
+registry that only coordinates editors in memory, a vault that only seals bytes,
+and the durable-write discipline the rest of the design-time stores share. What
+remains in `api` itself is the HTTP surface and the stores it is inseparable
+from — those hang off the server's own state and are not a package boundary
+waiting to be drawn.
 
 ---
 
-*See also: [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*
+*See also: [Enterprise architecture (ArchiMate 3.2)](architecture/enterprise-architecture.md) · [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*

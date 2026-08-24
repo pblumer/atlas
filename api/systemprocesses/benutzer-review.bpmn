@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Benutzerverwaltung: Zugriffs-Review
+
+  Periodische Kontrolle: Ein Pruefer bestaetigt, dass die aktiven Konten noch
+  gebraucht werden. Gleiches Muster wie die Aufnahme (Prozess koordiniert,
+  Admin/Pruefer handelt, Mail automatisch). Bei Handlungsbedarf wird die
+  Security/Admin-Gruppe automatisch informiert.
+
+  Start (Formular rev-start: quartal, umfang, hinweis)
+   -> User-Task "Konten pruefen"        (Formular rev-pruefen; ergebnis, bemerkung, betroffene_konten)
+   -> (X) Gateway "Handlungsbedarf?"  (default -> ok; ergebnis="handlungsbedarf" -> Meldung)
+        [handlungsbedarf] -> Service-Task "Handlungsbedarf melden" (Mail, unten)
+        [ok]              -> Join
+   -> (X) Join
+   -> Script-Task "Review protokollieren"  (FEEL setzt review_status)
+   -> Ende "Review abgeschlossen"
+
+  Hinweis: In Produktion waere der Start ein Timer-Start-Event mit Zyklus
+  (z. B. quartalsweise); hier bewusst ein Start-Formular, damit der Prozess
+  explizit startbar und testbar ist.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120, Meldungs-Zweig bei y=260.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_benutzer_review" targetNamespace="http://atlas/examples">
+  <process id="proc_benutzer_review" name="Benutzerverwaltung: Zugriffs-Review" isExecutable="true">
+
+    <startEvent id="start" name="Review faellig">
+      <extensionElements>
+        <zeebe:formDefinition formId="rev-start"/>
+      </extensionElements>
+      <outgoing>f_start_pruefen</outgoing>
+    </startEvent>
+
+    <userTask id="pruefen" name="Konten pruefen">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="benutzerverwaltung"/>
+        <zeebe:formDefinition formId="rev-pruefen"/>
+      </extensionElements>
+      <incoming>f_start_pruefen</incoming>
+      <outgoing>f_pruefen_gw</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="entscheidung" name="Handlungsbedarf?" default="f_ok">
+      <incoming>f_pruefen_gw</incoming>
+      <outgoing>f_ok</outgoing>
+      <outgoing>f_handlung</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="melden" name="Handlungsbedarf melden">
+      <extensionElements>
+        <atlas:mailConnector connector="Patrick Blumer"
+          to="patrick@blumer.net"
+          subject="Zugriffs-Review: Handlungsbedarf"
+          body="=&quot;Der Zugriffs-Review (&quot; + quartal + &quot;) meldet Handlungsbedarf.\n\nBetroffene Konten: &quot; + betroffene_konten + &quot;\n\nBemerkung: &quot; + bemerkung + &quot;&quot;"/>
+      </extensionElements>
+      <incoming>f_handlung</incoming>
+      <outgoing>f_melden_join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="join">
+      <incoming>f_ok</incoming>
+      <incoming>f_melden_join</incoming>
+      <outgoing>f_join_protokoll</outgoing>
+    </exclusiveGateway>
+
+    <scriptTask id="protokoll" name="Review protokollieren">
+      <extensionElements>
+        <zeebe:script resultVariable="review_status"
+          expression="= &quot;abgeschlossen: &quot; + ergebnis"/>
+      </extensionElements>
+      <incoming>f_join_protokoll</incoming>
+      <outgoing>f_protokoll_ende</outgoing>
+    </scriptTask>
+
+    <endEvent id="ende" name="Review abgeschlossen">
+      <incoming>f_protokoll_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_pruefen" sourceRef="start" targetRef="pruefen"/>
+    <sequenceFlow id="f_pruefen_gw" sourceRef="pruefen" targetRef="entscheidung"/>
+    <sequenceFlow id="f_ok" name="ok" sourceRef="entscheidung" targetRef="join"/>
+    <sequenceFlow id="f_handlung" name="Handlungsbedarf" sourceRef="entscheidung" targetRef="melden">
+      <conditionExpression>= ergebnis = "handlungsbedarf"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_melden_join" sourceRef="melden" targetRef="join"/>
+    <sequenceFlow id="f_join_protokoll" sourceRef="join" targetRef="protokoll"/>
+    <sequenceFlow id="f_protokoll_ende" sourceRef="protokoll" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_benutzer_review">
+    <bpmndi:BPMNPlane id="BPMNPlane_benutzer_review" bpmnElement="proc_benutzer_review">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="134" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <omgdc:Bounds x="240" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="entscheidung_di" bpmnElement="entscheidung" isMarkerVisible="true">
+        <omgdc:Bounds x="400" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="380" y="62" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="melden_di" bpmnElement="melden">
+        <omgdc:Bounds x="520" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="680" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="protokoll_di" bpmnElement="protokoll">
+        <omgdc:Bounds x="780" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="940" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="916" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_pruefen_di" bpmnElement="f_start_pruefen">
+        <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefen_gw_di" bpmnElement="f_pruefen_gw">
+        <omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="400" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ok_di" bpmnElement="f_ok">
+        <omgdi:waypoint x="450" y="120"/><omgdi:waypoint x="680" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="553" y="96" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_handlung_di" bpmnElement="f_handlung">
+        <omgdi:waypoint x="425" y="145"/>
+        <omgdi:waypoint x="425" y="260"/>
+        <omgdi:waypoint x="520" y="260"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="432" y="200" width="88" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_melden_join_di" bpmnElement="f_melden_join">
+        <omgdi:waypoint x="620" y="260"/>
+        <omgdi:waypoint x="705" y="260"/>
+        <omgdi:waypoint x="705" y="145"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_protokoll_di" bpmnElement="f_join_protokoll">
+        <omgdi:waypoint x="730" y="120"/><omgdi:waypoint x="780" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_protokoll_ende_di" bpmnElement="f_protokoll_ende">
+        <omgdi:waypoint x="880" y="120"/><omgdi:waypoint x="940" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

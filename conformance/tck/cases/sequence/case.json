@@ -1,0 +1,16 @@
+{
+  "name": "sequence",
+  "model": "sequence.bpmn",
+  "features": [
+    "start-end-event",
+    "sequence-flow",
+    "script-task"
+  ],
+  "patterns": [
+    "WCP-1"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

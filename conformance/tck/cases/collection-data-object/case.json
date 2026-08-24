@@ -1,0 +1,11 @@
+{
+  "name": "collection-data-object",
+  "model": "collection-data-object.bpmn",
+  "features": [
+    "collection-data-object"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

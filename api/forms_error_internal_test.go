@@ -30,7 +30,7 @@ func TestFormHandlerStoreErrors(t *testing.T) {
 	}
 
 	// A corrupt hex-named record makes loadAll (list) and get (fetch) fail.
-	if err := os.WriteFile(srv.forms.fileFor("bad"), []byte("{not json"), 0o644); err != nil {
+	if err := os.WriteFile(srv.forms.FileFor("bad"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("plant corrupt record: %v", err)
 	}
 	if code := do(http.MethodGet, "/api/v1/forms", ""); code != http.StatusInternalServerError {
@@ -39,12 +39,12 @@ func TestFormHandlerStoreErrors(t *testing.T) {
 	if code := do(http.MethodGet, "/api/v1/forms/bad", ""); code != http.StatusInternalServerError {
 		t.Errorf("get corrupt record: %d, want 500", code)
 	}
-	if err := os.Remove(srv.forms.fileFor("bad")); err != nil {
+	if err := os.Remove(srv.forms.FileFor("bad")); err != nil {
 		t.Fatalf("cleanup corrupt record: %v", err)
 	}
 
 	// A directory at a record path makes get's read and delete's remove fail.
-	dirPath := srv.forms.fileFor("dir")
+	dirPath := srv.forms.FileFor("dir")
 	if err := os.Mkdir(dirPath, 0o755); err != nil {
 		t.Fatalf("mkdir record path: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestFormHandlerStoreErrors(t *testing.T) {
 	}
 
 	// A directory at the atomic-write temp path makes save fail.
-	tmp := srv.forms.fileFor("saveme") + ".tmp"
+	tmp := srv.forms.FileFor("saveme") + ".tmp"
 	if err := os.Mkdir(tmp, 0o755); err != nil {
 		t.Fatalf("mkdir temp path: %v", err)
 	}

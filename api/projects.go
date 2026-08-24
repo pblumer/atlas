@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // projectView is the JSON shape of a project for the Modeler. Artifacts is the
@@ -17,12 +19,15 @@ import (
 // controls (hide "Share" from a viewer, "Delete" from a non-owner, …) without
 // re-deriving the rule client-side.
 type projectView struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Key is the portable application key (ADR-0134), empty until one is derived.
+	Key        string          `json:"key,omitempty"`
 	OwnerID    string          `json:"ownerId,omitempty"`
 	Visibility string          `json:"visibility"`
 	Members    []projectMember `json:"members"`
 	MyRole     string          `json:"myRole"`
+	Protected  bool            `json:"protected"`
 	CreatedAt  int64           `json:"createdAt"`
 	UpdatedAt  int64           `json:"updatedAt"`
 	Artifacts  int             `json:"artifacts"`
@@ -44,10 +49,12 @@ func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) proje
 	return projectView{
 		ID:         p.ID,
 		Name:       p.Name,
+		Key:        p.Key,
 		OwnerID:    p.OwnerID,
 		Visibility: vis,
 		Members:    members,
-		MyRole:     p.effectiveRole(principalFrom(r.Context()), s.authEnabled),
+		MyRole:     p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled),
+		Protected:  p.Protected,
 		CreatedAt:  p.CreatedAt,
 		UpdatedAt:  p.UpdatedAt,
 		Artifacts:  artifacts,
@@ -70,24 +77,24 @@ func newID() (string, error) {
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "project name is required")
+		httpapi.Error(w, http.StatusBadRequest, "project name is required")
 		return
 	}
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	now := time.Now().Unix()
@@ -95,16 +102,24 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	// the signed-in principal; with auth off there is no principal, so the project
 	// is ownerless and the open single-user server treats it as fully accessible.
 	rec := project{ID: id, Name: name, Visibility: VisibilityPrivate, CreatedAt: now, UpdatedAt: now}
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		rec.OwnerID = p.UserID
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.projects.save(rec) })
+	s.do(func() {
+		// The portable key (ADR-0134) is assigned here so a new application has one
+		// from the start; it is derived from the name once and then never changes,
+		// because it is the identity a repository is matched on across servers.
+		if rec.Key, saveErr = s.deriveApplicationKey(rec); saveErr != nil {
+			return
+		}
+		saveErr = s.projects.Save(rec)
+	})
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.projectViewFor(r, rec, 0))
+	httpapi.JSON(w, http.StatusOK, s.projectViewFor(r, rec, 0))
 }
 
 // handleListProjects lists the projects the caller may see (oldest first) with a
@@ -117,15 +132,15 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var projs []project
-		if projs, loadErr = s.projects.loadAll(); loadErr != nil {
+		if projs, loadErr = s.projects.LoadAll(); loadErr != nil {
 			return
 		}
 		var drafts []draft
-		if drafts, loadErr = s.drafts.loadAll(); loadErr != nil {
+		if drafts, loadErr = s.drafts.LoadAll(); loadErr != nil {
 			return
 		}
 		var refs []dmnRef
-		if refs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if refs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		counts := map[string]int{}
@@ -140,17 +155,17 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		for _, p := range projs {
-			if scopeRank(p.effectiveRole(principalFrom(r.Context()), s.authEnabled)) == 0 {
+			if scopeRank(p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)) == 0 {
 				continue
 			}
 			list = append(list, s.projectViewFor(r, p, counts[p.ID]))
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list projects: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list projects: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleUpdateProject updates a project's mutable fields. Body may carry any of
@@ -163,7 +178,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -172,22 +187,22 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		OwnerID    *string `json:"ownerId"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if payload.Name == nil && payload.Visibility == nil && payload.OwnerID == nil {
-		writeError(w, http.StatusBadRequest, "no fields to update")
+		httpapi.Error(w, http.StatusBadRequest, "no fields to update")
 		return
 	}
 	var name string
 	if payload.Name != nil {
 		if name = strings.TrimSpace(*payload.Name); name == "" {
-			writeError(w, http.StatusBadRequest, "project name cannot be empty")
+			httpapi.Error(w, http.StatusBadRequest, "project name cannot be empty")
 			return
 		}
 	}
 	if payload.Visibility != nil && *payload.Visibility != VisibilityPrivate && *payload.Visibility != VisibilityShared {
-		writeError(w, http.StatusBadRequest, `visibility must be "private" or "shared"`)
+		httpapi.Error(w, http.StatusBadRequest, `visibility must be "private" or "shared"`)
 		return
 	}
 	var (
@@ -200,7 +215,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		view                projectView
 	)
 	s.do(func() {
-		rec, ok, e := s.projects.get(id)
+		rec, ok, e := s.projects.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -213,8 +228,12 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
+		if code, msg := protectedGuard(rec); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
 		if payload.OwnerID != nil && s.authEnabled {
-			if _, ok, e := s.users.get(*payload.OwnerID); e != nil {
+			if _, ok, e := s.users.Get(*payload.OwnerID); e != nil {
 				lookupErr = e
 				return
 			} else if !ok {
@@ -232,7 +251,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			rec.OwnerID = *payload.OwnerID
 		}
 		rec.UpdatedAt = time.Now().Unix()
-		if saveErr = s.projects.save(rec); saveErr != nil {
+		if saveErr = s.projects.Save(rec); saveErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(id)
@@ -244,21 +263,21 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+getErr.Error())
 	case notFound:
-		writeError(w, http.StatusNotFound, "no project with that id")
+		httpapi.Error(w, http.StatusNotFound, "no project with that id")
 	case forbidden != 0:
-		writeError(w, forbidden, fmsg)
+		httpapi.Error(w, forbidden, fmsg)
 	case lookupErr != nil:
-		writeError(w, http.StatusInternalServerError, "look up new owner: "+lookupErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "look up new owner: "+lookupErr.Error())
 	case ownerMissing:
-		writeError(w, http.StatusBadRequest, "no user with that id")
+		httpapi.Error(w, http.StatusBadRequest, "no user with that id")
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "update project: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update project: "+saveErr.Error())
 	case countErr != nil:
-		writeError(w, http.StatusInternalServerError, "count artifacts: "+countErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "count artifacts: "+countErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, view)
+		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
 
@@ -277,7 +296,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		delErr    error
 	)
 	s.do(func() {
-		rec, ok, e := s.projects.get(id)
+		rec, ok, e := s.projects.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -290,15 +309,36 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
-		delErr = s.projects.delete(id)
+		if code, msg := protectedGuard(rec); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
+		// Drop the application's release history *before* the application itself
+		// (ADR-0128). Unlike the artifacts — which deliberately survive and fall back
+		// to Ungrouped — a release is metadata *about* this application, reachable
+		// only through its id, so leaving the records behind would accumulate
+		// unreachable files. The deployed definitions themselves are untouched.
+		//
+		// The order matters for the failure case: releases first means a failed
+		// cleanup leaves the application intact, so a retry deletes both and
+		// self-heals. Deleting the application first would make the very orphans
+		// this cleanup exists to prevent, permanently — the retry would take the
+		// idempotent "already gone" path and never revisit the records.
+		if delErr = s.releases.deleteForApplication(id); delErr != nil {
+			return
+		}
+		if delErr = s.projects.Delete(id); delErr != nil {
+			return
+		}
+		delete(s.appVersions, id)
 	})
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+getErr.Error())
 	case forbidden != 0:
-		writeError(w, forbidden, fmsg)
+		httpapi.Error(w, forbidden, fmsg)
 	case delErr != nil:
-		writeError(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
 	case notFound:
 		w.WriteHeader(http.StatusNoContent) // idempotent: nothing to delete
 	default:
@@ -310,7 +350,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 // tagged with a project id. It must be called on the run-loop goroutine (inside
 // do).
 func (s *Server) countArtifactsInProject(id string) (int, error) {
-	drafts, err := s.drafts.loadAll()
+	drafts, err := s.drafts.LoadAll()
 	if err != nil {
 		return 0, err
 	}
@@ -320,7 +360,7 @@ func (s *Server) countArtifactsInProject(id string) (int, error) {
 			n++
 		}
 	}
-	refs, err := s.dmnrefs.loadAll()
+	refs, err := s.dmnrefs.LoadAll()
 	if err != nil {
 		return 0, err
 	}

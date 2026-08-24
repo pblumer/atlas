@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
 
 // This file enforces ADR-0071's "membership is inherited by the project's
 // artifacts" on the design-time artifact handlers (drafts, DMN references,
@@ -20,7 +24,7 @@ import "net/http"
 // resolve many artifacts' scopes without a store read per artifact. It must be
 // called on the run-loop goroutine (inside s.do), like the store it reads.
 func (s *Server) projectsByID() (map[string]project, error) {
-	all, err := s.projects.loadAll()
+	all, err := s.projects.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +42,7 @@ func (s *Server) projectsByID() (map[string]project, error) {
 func (s *Server) artifactRole(r *http.Request, projectID string, projs map[string]project) string {
 	if projectID != "" {
 		if p, ok := projs[projectID]; ok {
-			return p.effectiveRole(principalFrom(r.Context()), s.authEnabled)
+			return p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)
 		}
 	}
 	return ScopeRoleOwner
@@ -65,7 +69,7 @@ func (s *Server) authorizeArtifact(r *http.Request, projectID, minRole string) (
 		ok     bool
 		getErr error
 	)
-	s.do(func() { proj, ok, getErr = s.projects.get(projectID) })
+	s.do(func() { proj, ok, getErr = s.projects.Get(projectID) })
 	if getErr != nil {
 		return http.StatusInternalServerError, "read project: " + getErr.Error()
 	}
@@ -86,7 +90,7 @@ func (s *Server) authorizeTargetProject(r *http.Request, projectID, minRole stri
 		ok     bool
 		getErr error
 	)
-	s.do(func() { proj, ok, getErr = s.projects.get(projectID) })
+	s.do(func() { proj, ok, getErr = s.projects.Get(projectID) })
 	if getErr != nil {
 		return http.StatusInternalServerError, "read project: " + getErr.Error()
 	}

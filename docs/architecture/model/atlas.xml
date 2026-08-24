@@ -1,0 +1,1330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengroup.org/xsd/archimate/3.0/ http://www.opengroup.org/xsd/archimate/3.0/archimate3_Model.xsd" identifier="id-atlas-model">
+  <name xml:lang="en">Atlas Enterprise Architecture</name>
+  <documentation xml:lang="en">An ArchiMate 3.2 layered view of the Atlas BPMN workflow engine: motivation, business, application, technology, and implementation &amp; deployment. Generated from gen_open_exchange.py; a communication and round-trip artifact, subordinate to the code and the deep-dives (see ADR-0099 and docs/architecture/enterprise-architecture.md).</documentation>
+  <elements>
+    <element identifier="stk-ea" xsi:type="Stakeholder">
+      <name xml:lang="en">Enterprise Architect</name>
+      <documentation xml:lang="en">Owns capability fit, governance, and the invariants.</documentation>
+    </element>
+    <element identifier="stk-modeler" xsi:type="Stakeholder">
+      <name xml:lang="en">Process Modeler</name>
+      <documentation xml:lang="en">Needs models to be authorable and readable, then executable.</documentation>
+    </element>
+    <element identifier="stk-taskuser" xsi:type="Stakeholder">
+      <name xml:lang="en">Business / Task User</name>
+      <documentation xml:lang="en">Needs human tasks to be reliable and never silently lost.</documentation>
+    </element>
+    <element identifier="stk-ops" xsi:type="Stakeholder">
+      <name xml:lang="en">Operations</name>
+      <documentation xml:lang="en">Needs to observe, audit, and recover long-running instances.</documentation>
+    </element>
+    <element identifier="stk-integrator" xsi:type="Stakeholder">
+      <name xml:lang="en">Integration Developer</name>
+      <documentation xml:lang="en">Needs a stable protocol to attach external work (job workers).</documentation>
+    </element>
+    <element identifier="stk-maintainer" xsi:type="Stakeholder">
+      <name xml:lang="en">Maintainer / AI Agent</name>
+      <documentation xml:lang="en">Needs a codebase whose correctness rules are explicit.</documentation>
+    </element>
+    <element identifier="drv-throughput" xsi:type="Driver">
+      <name xml:lang="en">Throughput pressure</name>
+      <documentation xml:lang="en">Many instances per second per partition is a first-class goal.</documentation>
+    </element>
+    <element identifier="drv-durability" xsi:type="Driver">
+      <name xml:lang="en">Durability</name>
+      <documentation xml:lang="en">A workflow engine that drops a token is worse than useless.</documentation>
+    </element>
+    <element identifier="drv-longrunning" xsi:type="Driver">
+      <name xml:lang="en">Long-running processes</name>
+      <documentation xml:lang="en">Timers, message waits, and multi-week instances must survive restarts.</documentation>
+    </element>
+    <element identifier="drv-robustness" xsi:type="Driver">
+      <name xml:lang="en">Operational robustness</name>
+      <documentation xml:lang="en">Transient failures must pause, not crash, an instance.</documentation>
+    </element>
+    <element identifier="drv-conformance" xsi:type="Driver">
+      <name xml:lang="en">Standard conformance</name>
+      <documentation xml:lang="en">Full BPMN 2.0 execution semantics, not a subset dialect.</documentation>
+    </element>
+    <element identifier="drv-productivity" xsi:type="Driver">
+      <name xml:lang="en">Contributor productivity</name>
+      <documentation xml:lang="en">Humans and AI agents must change the engine safely.</documentation>
+    </element>
+    <element identifier="asm-interpret" xsi:type="Assessment">
+      <name xml:lang="en">Runtime XML interpretation is a throughput killer</name>
+      <documentation xml:lang="en">Most BPMN engines interpret XML at runtime and write state to SQL one transaction at a time — both are throughput killers.</documentation>
+    </element>
+    <element identifier="asm-fsync" xsi:type="Assessment">
+      <name xml:lang="en">One fsync per event caps throughput</name>
+      <documentation xml:lang="en">One fsync per event caps you at a few thousand events per second.</documentation>
+    </element>
+    <element identifier="asm-dualwrite" xsi:type="Assessment">
+      <name xml:lang="en">In-place state mutation invites consistency bugs</name>
+      <documentation xml:lang="en">Did the DB write and the in-memory change both succeed? An entire class of consistency bugs that in-place mutation invites.</documentation>
+    </element>
+    <element identifier="goal-durable" xsi:type="Goal">
+      <name xml:lang="en">Durable execution of long-lived processes</name>
+      <documentation xml:lang="en">Survive crashes and run long-lived processes.</documentation>
+    </element>
+    <element identifier="goal-bpmn" xsi:type="Goal">
+      <name xml:lang="en">Full BPMN 2.0 coverage</name>
+      <documentation xml:lang="en">Subprocesses, boundary events, event subprocesses.</documentation>
+    </element>
+    <element identifier="goal-throughput" xsi:type="Goal">
+      <name xml:lang="en">High throughput per partition</name>
+      <documentation xml:lang="en">Many instances per second per partition.</documentation>
+    </element>
+    <element identifier="goal-purego" xsi:type="Goal">
+      <name xml:lang="en">Pure Go, no CGO, embedded state store</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0010</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="out-batch" xsi:type="Outcome">
+      <name xml:lang="en">Throughput scales with batch size</name>
+      <documentation xml:lang="en">Throughput scales with batch size, not with disk round-trips.</documentation>
+    </element>
+    <element identifier="out-replay" xsi:type="Outcome">
+      <name xml:lang="en">Recovery is a deterministic log replay</name>
+      <documentation xml:lang="en">Single-writer plus event sourcing makes recovery a trivial fold.</documentation>
+    </element>
+    <element identifier="prin-compile" xsi:type="Principle">
+      <name xml:lang="en">Compile, don't interpret</name>
+      <documentation xml:lang="en">Expensive work happens once at deploy, never on the hot path.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0004</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="prin-eventsourcing" xsi:type="Principle">
+      <name xml:lang="en">Event sourcing over state mutation</name>
+      <documentation xml:lang="en">The log is the single source of truth; state is a fold of it.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0001</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="prin-groupcommit" xsi:type="Principle">
+      <name xml:lang="en">Group commit for durability</name>
+      <documentation xml:lang="en">Make many events durable with a single fsync.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0005</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="prin-singlewriter" xsi:type="Principle">
+      <name xml:lang="en">Single writer per partition</name>
+      <documentation xml:lang="en">One goroutine owns a partition's state; scale by adding partitions.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0002</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="req-inv1" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 1: no allocation on the hot path</name>
+    </element>
+    <element identifier="req-inv2" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 2: durable before visible</name>
+      <documentation xml:lang="en">Append, one fsync, commit, then side effects.</documentation>
+    </element>
+    <element identifier="req-inv3" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 3: single writer per partition</name>
+      <documentation xml:lang="en">Cross-partition work is async messaging only.</documentation>
+    </element>
+    <element identifier="req-inv4" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 4: one applyToState, live and on recovery</name>
+    </element>
+    <element identifier="req-inv5" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 5: compile, don't interpret</name>
+      <documentation xml:lang="en">No parse/validate/compile on the hot path.</documentation>
+    </element>
+    <element identifier="req-inv6" xsi:type="Requirement">
+      <name xml:lang="en">Invariant 6: events are facts, commands are intentions</name>
+      <documentation xml:lang="en">Only events persist.</documentation>
+    </element>
+    <element identifier="con-purego" xsi:type="Constraint">
+      <name xml:lang="en">Pure Go, no CGO</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0010</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="con-binary" xsi:type="Constraint">
+      <name xml:lang="en">Single self-contained binary with embedded web UI</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0011</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="con-coverage" xsi:type="Constraint">
+      <name xml:lang="en">95% statement coverage; TDD by default</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0018</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="role-ea" xsi:type="BusinessRole">
+      <name xml:lang="en">Enterprise Architect</name>
+      <documentation xml:lang="en">Capability governance, invariants.</documentation>
+    </element>
+    <element identifier="role-modeler" xsi:type="BusinessRole">
+      <name xml:lang="en">Process Modeler</name>
+      <documentation xml:lang="en">Process design and deployment (Modeler, MCP authoring).</documentation>
+    </element>
+    <element identifier="role-performer" xsi:type="BusinessRole">
+      <name xml:lang="en">Task Performer</name>
+      <documentation xml:lang="en">Human-task completion via forms.</documentation>
+    </element>
+    <element identifier="role-ops" xsi:type="BusinessRole">
+      <name xml:lang="en">Operations</name>
+      <documentation xml:lang="en">Monitoring, incident resolution, timeline inspection.</documentation>
+    </element>
+    <element identifier="role-integrator" xsi:type="BusinessRole">
+      <name xml:lang="en">Integration Developer</name>
+      <documentation xml:lang="en">Authors job workers / connectors.</documentation>
+    </element>
+    <element identifier="role-admin" xsi:type="BusinessRole">
+      <name xml:lang="en">Administrator</name>
+      <documentation xml:lang="en">Deploys the binary, manages secrets and sharing scopes.</documentation>
+    </element>
+    <element identifier="bsvc-automation" xsi:type="BusinessService">
+      <name xml:lang="en">Business Process Automation</name>
+      <documentation xml:lang="en">Durable, end-to-end execution — never drops a token.</documentation>
+    </element>
+    <element identifier="bsvc-design" xsi:type="BusinessService">
+      <name xml:lang="en">Process Design &amp; Deployment</name>
+      <documentation xml:lang="en">From a BPMN draft to a runnable, versioned process.</documentation>
+    </element>
+    <element identifier="bsvc-humantask" xsi:type="BusinessService">
+      <name xml:lang="en">Human-Task Handling</name>
+      <documentation xml:lang="en">Form-based human work, including public start links.</documentation>
+    </element>
+    <element identifier="bsvc-decision" xsi:type="BusinessService">
+      <name xml:lang="en">Business Decision Making (DMN)</name>
+      <documentation xml:lang="en">Central, versioned, explainable business rules.</documentation>
+    </element>
+    <element identifier="bsvc-monitoring" xsi:type="BusinessService">
+      <name xml:lang="en">Process Monitoring &amp; Audit</name>
+      <documentation xml:lang="en">A complete, replayable history of every instance.</documentation>
+    </element>
+    <element identifier="bproc-lifecycle" xsi:type="BusinessProcess">
+      <name xml:lang="en">Process lifecycle</name>
+      <documentation xml:lang="en">Model, deploy, run, monitor, improve.</documentation>
+    </element>
+    <element identifier="bproc-domain" xsi:type="BusinessProcess">
+      <name xml:lang="en">Domain process (e.g. order-to-cash)</name>
+      <documentation xml:lang="en">A concrete deployed BPMN model, executed as instances.</documentation>
+    </element>
+    <element identifier="bevt-message" xsi:type="BusinessEvent">
+      <name xml:lang="en">Message / signal received</name>
+    </element>
+    <element identifier="bevt-timer" xsi:type="BusinessEvent">
+      <name xml:lang="en">Deadline / timer reached</name>
+    </element>
+    <element identifier="bevt-incident" xsi:type="BusinessEvent">
+      <name xml:lang="en">Incident raised</name>
+    </element>
+    <element identifier="bobj-bpmn" xsi:type="BusinessObject">
+      <name xml:lang="en">Process Model (BPMN)</name>
+    </element>
+    <element identifier="bobj-dmn" xsi:type="BusinessObject">
+      <name xml:lang="en">Decision Model (DMN)</name>
+    </element>
+    <element identifier="bobj-form" xsi:type="BusinessObject">
+      <name xml:lang="en">Form</name>
+    </element>
+    <element identifier="bobj-instance" xsi:type="BusinessObject">
+      <name xml:lang="en">Process Instance</name>
+    </element>
+    <element identifier="bobj-usertask" xsi:type="BusinessObject">
+      <name xml:lang="en">User Task</name>
+    </element>
+    <element identifier="bobj-variables" xsi:type="BusinessObject">
+      <name xml:lang="en">Process Variables</name>
+    </element>
+    <element identifier="bobj-incident" xsi:type="BusinessObject">
+      <name xml:lang="en">Incident</name>
+    </element>
+    <element identifier="contract-durable" xsi:type="Contract">
+      <name xml:lang="en">Durable Execution (durable before visible)</name>
+      <documentation xml:lang="en">The SLA the platform honours: durable before visible.</documentation>
+    </element>
+    <element identifier="app-engine" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Atlas Engine (core)</name>
+      <documentation xml:lang="en">A single embeddable library composed of the sub-components below.</documentation>
+    </element>
+    <element identifier="app-compiler" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Graph Compiler</name>
+      <documentation xml:lang="en">BPMN XML to an immutable, integer-indexed CompiledProcess.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0004</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-processor" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Processor (single-writer)</name>
+      <documentation xml:lang="en">Batch cycle: fold commands into durable events.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0005</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-datamodel" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Data model / applyToState</name>
+      <documentation xml:lang="en">(ValueType, Intent) records; identical live and on recovery.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0001</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-wal" xsi:type="ApplicationComponent">
+      <name xml:lang="en">WAL manager</name>
+      <documentation xml:lang="en">Segmented append log, one fsync per batch, forward replay.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0005</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-statestore" xsi:type="ApplicationComponent">
+      <name xml:lang="en">State-store wrapper</name>
+      <documentation xml:lang="en">Column families / indexes over Pebble; transactions.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0003</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-timer" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Timer service</name>
+      <documentation xml:lang="en">Due-date index scan, FEEL schedules, triggering.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0055</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-jobstore" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Job store</name>
+      <documentation xml:lang="en">Activatable jobs per type; worker subscription.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0007</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-feel" xsi:type="ApplicationComponent">
+      <name xml:lang="en">FEEL expression engine</name>
+      <documentation xml:lang="en">Compile-once / eval-many, behind an expr boundary.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0015</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="app-incidentmgmt" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Incident management</name>
+      <documentation xml:lang="en">Failure to paused state to operator resolution.</documentation>
+    </element>
+    <element identifier="app-vault" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Secret vault</name>
+      <documentation xml:lang="en">Engine-internal encrypted secret store.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0069</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="chan-webui" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Web UI</name>
+      <documentation xml:lang="en">Embedded bpmn-js: Modeler, DMN editor, Operations view, public forms.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0013</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="chan-rest" xsi:type="ApplicationComponent">
+      <name xml:lang="en">REST / HTTP API</name>
+      <documentation xml:lang="en">Client command submission and queries; OpenAPI + embedded explorer.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0043</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="chan-mcp" xsi:type="ApplicationComponent">
+      <name xml:lang="en">MCP Server</name>
+      <documentation xml:lang="en">Authoring &amp; operations over MCP, as a stdio adapter over the HTTP API.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0016</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="conn-rest" xsi:type="ApplicationComponent">
+      <name xml:lang="en">REST connector</name>
+      <documentation xml:lang="en">Service task calls an external HTTP API.</documentation>
+    </element>
+    <element identifier="conn-mail" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Mail connector</name>
+      <documentation xml:lang="en">Email via Gmail / Microsoft Graph (OAuth).</documentation>
+    </element>
+    <element identifier="conn-script" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Script-task worker</name>
+      <documentation xml:lang="en">Polyglot scripts (e.g. PowerShell) as workers.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0047</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="conn-dmn" xsi:type="ApplicationComponent">
+      <name xml:lang="en">DMN / temis connector</name>
+      <documentation xml:lang="en">Business-rule tasks against the temis engine.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0050</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="conn-clio" xsi:type="ApplicationComponent">
+      <name xml:lang="en">clio event bridge</name>
+      <documentation xml:lang="en">At-least-once ingestion of external events, idempotent delivery.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0075</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="conn-csv" xsi:type="ApplicationComponent">
+      <name xml:lang="en">CSV import worker</name>
+      <documentation xml:lang="en">Bulk data import as a job.</documentation>
+    </element>
+    <element identifier="asvc-deploy" xsi:type="ApplicationService">
+      <name xml:lang="en">Deploy / Compile</name>
+    </element>
+    <element identifier="asvc-execution" xsi:type="ApplicationService">
+      <name xml:lang="en">Instance Execution</name>
+    </element>
+    <element identifier="asvc-jobdist" xsi:type="ApplicationService">
+      <name xml:lang="en">Job Distribution (gRPC)</name>
+    </element>
+    <element identifier="asvc-correlation" xsi:type="ApplicationService">
+      <name xml:lang="en">Message Correlation</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0020</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="asvc-timer" xsi:type="ApplicationService">
+      <name xml:lang="en">Timer Scheduling</name>
+    </element>
+    <element identifier="asvc-decision" xsi:type="ApplicationService">
+      <name xml:lang="en">Decision Evaluation</name>
+    </element>
+    <element identifier="asvc-humantask" xsi:type="ApplicationService">
+      <name xml:lang="en">Human-Task</name>
+    </element>
+    <element identifier="asvc-timeline" xsi:type="ApplicationService">
+      <name xml:lang="en">Query / Timeline replay</name>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0065</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="dobj-eventlog" xsi:type="DataObject">
+      <name xml:lang="en">Event log (WAL)</name>
+      <documentation xml:lang="en">The single source of truth.</documentation>
+    </element>
+    <element identifier="dobj-compiled" xsi:type="DataObject">
+      <name xml:lang="en">CompiledProcess</name>
+      <documentation xml:lang="en">Immutable, lock-free readable.</documentation>
+    </element>
+    <element identifier="dobj-statestore" xsi:type="DataObject">
+      <name xml:lang="en">State store (column families)</name>
+      <documentation xml:lang="en">The materialization.</documentation>
+    </element>
+    <element identifier="dobj-varstore" xsi:type="DataObject">
+      <name xml:lang="en">Variable store</name>
+      <documentation xml:lang="en">Referenced by scope key, never copied into records.</documentation>
+    </element>
+    <element identifier="aif-rest" xsi:type="ApplicationInterface">
+      <name xml:lang="en">HTTP / REST</name>
+    </element>
+    <element identifier="aif-grpc" xsi:type="ApplicationInterface">
+      <name xml:lang="en">gRPC job stream</name>
+    </element>
+    <element identifier="aif-mcp" xsi:type="ApplicationInterface">
+      <name xml:lang="en">MCP</name>
+    </element>
+    <element identifier="aif-web" xsi:type="ApplicationInterface">
+      <name xml:lang="en">Web (browser)</name>
+    </element>
+    <element identifier="tec-binary" xsi:type="Node">
+      <name xml:lang="en">Atlas single binary</name>
+      <documentation xml:lang="en">Self-contained Go executable, no CGO.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0010</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="tec-goruntime" xsi:type="SystemSoftware">
+      <name xml:lang="en">Go runtime</name>
+      <documentation xml:lang="en">Goroutines, scheduler, GC.</documentation>
+    </element>
+    <element identifier="tec-partition" xsi:type="Node">
+      <name xml:lang="en">Partition</name>
+      <documentation xml:lang="en">Own queue, processor, WAL, state; scales via instanceKey % N.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0002</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="tec-pebble" xsi:type="SystemSoftware">
+      <name xml:lang="en">Pebble</name>
+      <documentation xml:lang="en">Embedded pure-Go LSM-tree KV store.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0003</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="tec-filesystem" xsi:type="SystemSoftware">
+      <name xml:lang="en">Filesystem</name>
+      <documentation xml:lang="en">Carries WAL segments &amp; SST files; fsync durability.</documentation>
+    </element>
+    <element identifier="tsvc-append" xsi:type="TechnologyService">
+      <name xml:lang="en">Durable append + group commit</name>
+      <documentation xml:lang="en">One fsync per batch; throughput scales with batch size.</documentation>
+    </element>
+    <element identifier="tsvc-kv" xsi:type="TechnologyService">
+      <name xml:lang="en">Key-value storage</name>
+      <documentation xml:lang="en">Indexed state materialization.</documentation>
+    </element>
+    <element identifier="tsvc-replay" xsi:type="TechnologyService">
+      <name xml:lang="en">Log replay / recovery</name>
+      <documentation xml:lang="en">State as a deterministic fold over the log.</documentation>
+    </element>
+    <element identifier="tsvc-routing" xsi:type="TechnologyService">
+      <name xml:lang="en">Partition routing</name>
+      <documentation xml:lang="en">A bit-shift, not a lookup; partition is baked into the key.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0006</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="path-grpc" xsi:type="Path">
+      <name xml:lang="en">gRPC streaming</name>
+      <documentation xml:lang="en">Job workers.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0007</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="path-https" xsi:type="Path">
+      <name xml:lang="en">HTTPS</name>
+      <documentation xml:lang="en">REST &amp; Web UI.</documentation>
+    </element>
+    <element identifier="path-mcp" xsi:type="Path">
+      <name xml:lang="en">MCP transport</name>
+    </element>
+    <element identifier="art-binary" xsi:type="Artifact">
+      <name xml:lang="en">atlas binary</name>
+      <documentation xml:lang="en">Embeds the web UI assets.</documentation>
+    </element>
+    <element identifier="art-wal" xsi:type="Artifact">
+      <name xml:lang="en">WAL segments</name>
+      <documentation xml:lang="en">Append-only; one fsync per batch.</documentation>
+    </element>
+    <element identifier="art-sst" xsi:type="Artifact">
+      <name xml:lang="en">Pebble SST files</name>
+      <documentation xml:lang="en">Materialized state.</documentation>
+    </element>
+    <element identifier="art-models" xsi:type="Artifact">
+      <name xml:lang="en">BPMN / DMN / form files</name>
+    </element>
+    <element identifier="ext-temis" xsi:type="Node">
+      <name xml:lang="en">temis</name>
+      <documentation xml:lang="en">Deterministic DMN/FEEL decision engine.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0050</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="ext-clio" xsi:type="Node">
+      <name xml:lang="en">clio</name>
+      <documentation xml:lang="en">Event store / streaming source.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-adr">
+          <value xml:lang="en">ADR-0075</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="ext-mail" xsi:type="Node">
+      <name xml:lang="en">Gmail / Microsoft Graph</name>
+      <documentation xml:lang="en">Email providers.</documentation>
+    </element>
+    <element identifier="ext-workers" xsi:type="Node">
+      <name xml:lang="en">External job workers</name>
+      <documentation xml:lang="en">Polyglot processes such as PowerShell, gRPC-connected.</documentation>
+    </element>
+    <element identifier="plat-m0" xsi:type="Plateau">
+      <name xml:lang="en">M0 Foundations</name>
+      <documentation xml:lang="en">The three pillars end to end, with crash recovery.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">done</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m1" xsi:type="Plateau">
+      <name xml:lang="en">M1 Core BPMN</name>
+      <documentation xml:lang="en">Gateways, process variables, FEEL, I/O mappings.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">in progress</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m2" xsi:type="Plateau">
+      <name xml:lang="en">M2 Events &amp; timers</name>
+      <documentation xml:lang="en">Timer / message / signal / error and boundary events.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">in progress</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m3" xsi:type="Plateau">
+      <name xml:lang="en">M3 Structure</name>
+      <documentation xml:lang="en">Subprocesses, event subprocesses, call activities.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">planned</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m4" xsi:type="Plateau">
+      <name xml:lang="en">M4 Operability</name>
+      <documentation xml:lang="en">Incidents, metrics, operational tooling.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">planned</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m5" xsi:type="Plateau">
+      <name xml:lang="en">M5 Scale-out</name>
+      <documentation xml:lang="en">Cross-partition messaging and horizontal scale.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">planned</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="plat-m6" xsi:type="Plateau">
+      <name xml:lang="en">M6 Ecosystem</name>
+      <documentation xml:lang="en">A broader connector / integration surface.</documentation>
+      <properties>
+        <property propertyDefinitionRef="propid-status">
+          <value xml:lang="en">planned</value>
+        </property>
+      </properties>
+    </element>
+    <element identifier="wp-server" xsi:type="WorkPackage">
+      <name xml:lang="en">Milestone S: single-binary server &amp; web UI</name>
+      <documentation xml:lang="en">Parallel workstream to the engine timeline.</documentation>
+    </element>
+    <element identifier="wp-authoring" xsi:type="WorkPackage">
+      <name xml:lang="en">Milestone A: Modeler &amp; authoring experience</name>
+      <documentation xml:lang="en">Parallel workstream to the engine timeline.</documentation>
+    </element>
+  </elements>
+  <relationships>
+    <relationship identifier="r-stkops-dur" source="stk-ops" target="drv-durability" xsi:type="Association"/>
+    <relationship identifier="r-stktask-dur" source="stk-taskuser" target="drv-durability" xsi:type="Association"/>
+    <relationship identifier="r-stkmod-conf" source="stk-modeler" target="drv-conformance" xsi:type="Association"/>
+    <relationship identifier="r-stkint-rob" source="stk-integrator" target="drv-robustness" xsi:type="Association"/>
+    <relationship identifier="r-stkea-conf" source="stk-ea" target="drv-conformance" xsi:type="Association"/>
+    <relationship identifier="r-stkmnt-prod" source="stk-maintainer" target="drv-productivity" xsi:type="Association"/>
+    <relationship identifier="r-asmint-thr" source="asm-interpret" target="drv-throughput" xsi:type="Influence"/>
+    <relationship identifier="r-asmfsync-thr" source="asm-fsync" target="drv-throughput" xsi:type="Influence"/>
+    <relationship identifier="r-asmdw-dur" source="asm-dualwrite" target="drv-durability" xsi:type="Influence"/>
+    <relationship identifier="r-drvdur-gdur" source="drv-durability" target="goal-durable" xsi:type="Influence"/>
+    <relationship identifier="r-drvlong-gdur" source="drv-longrunning" target="goal-durable" xsi:type="Influence"/>
+    <relationship identifier="r-drvthr-gthr" source="drv-throughput" target="goal-throughput" xsi:type="Influence"/>
+    <relationship identifier="r-drvconf-gbpmn" source="drv-conformance" target="goal-bpmn" xsi:type="Influence"/>
+    <relationship identifier="r-drvprod-gpure" source="drv-productivity" target="goal-purego" xsi:type="Influence"/>
+    <relationship identifier="r-drvdur-prines" source="drv-durability" target="prin-eventsourcing" xsi:type="Influence"/>
+    <relationship identifier="r-prines-gdur" source="prin-eventsourcing" target="goal-durable" xsi:type="Realization"/>
+    <relationship identifier="r-pringc-gthr" source="prin-groupcommit" target="goal-throughput" xsi:type="Realization"/>
+    <relationship identifier="r-princomp-gthr" source="prin-compile" target="goal-throughput" xsi:type="Realization"/>
+    <relationship identifier="r-prinsw-gthr" source="prin-singlewriter" target="goal-throughput" xsi:type="Realization"/>
+    <relationship identifier="r-outbatch-gthr" source="out-batch" target="goal-throughput" xsi:type="Realization"/>
+    <relationship identifier="r-outreplay-gdur" source="out-replay" target="goal-durable" xsi:type="Realization"/>
+    <relationship identifier="r-inv1-gc" source="req-inv1" target="prin-groupcommit" xsi:type="Realization"/>
+    <relationship identifier="r-inv2-es" source="req-inv2" target="prin-eventsourcing" xsi:type="Realization"/>
+    <relationship identifier="r-inv2-gc" source="req-inv2" target="prin-groupcommit" xsi:type="Realization"/>
+    <relationship identifier="r-inv3-sw" source="req-inv3" target="prin-singlewriter" xsi:type="Realization"/>
+    <relationship identifier="r-inv4-es" source="req-inv4" target="prin-eventsourcing" xsi:type="Realization"/>
+    <relationship identifier="r-inv5-comp" source="req-inv5" target="prin-compile" xsi:type="Realization"/>
+    <relationship identifier="r-inv6-es" source="req-inv6" target="prin-eventsourcing" xsi:type="Realization"/>
+    <relationship identifier="r-compiler-comp" source="app-compiler" target="prin-compile" xsi:type="Realization"/>
+    <relationship identifier="r-wal-es" source="app-wal" target="prin-eventsourcing" xsi:type="Realization"/>
+    <relationship identifier="r-datamodel-es" source="app-datamodel" target="prin-eventsourcing" xsi:type="Realization"/>
+    <relationship identifier="r-proc-gc" source="app-processor" target="prin-groupcommit" xsi:type="Realization"/>
+    <relationship identifier="r-part-sw" source="tec-partition" target="prin-singlewriter" xsi:type="Realization"/>
+    <relationship identifier="r-proc-inv2" source="app-processor" target="req-inv2" xsi:type="Realization"/>
+    <relationship identifier="r-proc-inv4" source="app-datamodel" target="req-inv4" xsi:type="Realization"/>
+    <relationship identifier="r-part-inv3" source="tec-partition" target="req-inv3" xsi:type="Realization"/>
+    <relationship identifier="r-compiler-inv5" source="app-compiler" target="req-inv5" xsi:type="Realization"/>
+    <relationship identifier="r-rmod-bdes" source="role-modeler" target="bsvc-design" xsi:type="Assignment"/>
+    <relationship identifier="r-rmod-life" source="role-modeler" target="bproc-lifecycle" xsi:type="Assignment"/>
+    <relationship identifier="r-rperf-bht" source="role-performer" target="bsvc-humantask" xsi:type="Assignment"/>
+    <relationship identifier="r-rops-bmon" source="role-ops" target="bsvc-monitoring" xsi:type="Assignment"/>
+    <relationship identifier="r-rint-bauto" source="role-integrator" target="bsvc-automation" xsi:type="Association"/>
+    <relationship identifier="r-radm-bauto" source="role-admin" target="bsvc-automation" xsi:type="Association"/>
+    <relationship identifier="r-evmsg-dom" source="bevt-message" target="bproc-domain" xsi:type="Triggering"/>
+    <relationship identifier="r-evtim-dom" source="bevt-timer" target="bproc-domain" xsi:type="Triggering"/>
+    <relationship identifier="r-evinc-dom" source="bevt-incident" target="bproc-domain" xsi:type="Triggering"/>
+    <relationship identifier="r-dom-vars" source="bproc-domain" target="bobj-variables" xsi:type="Access" accessType="Write"/>
+    <relationship identifier="r-dom-form" source="bproc-domain" target="bobj-form" xsi:type="Access" accessType="Read"/>
+    <relationship identifier="r-dom-inst" source="bproc-domain" target="bobj-instance" xsi:type="Access" accessType="Write"/>
+    <relationship identifier="r-life-bpmn" source="bproc-lifecycle" target="bobj-bpmn" xsi:type="Access" accessType="ReadWrite"/>
+    <relationship identifier="r-dom-contract" source="bsvc-automation" target="contract-durable" xsi:type="Association"/>
+    <relationship identifier="r-aexec-bauto" source="asvc-execution" target="bsvc-automation" xsi:type="Realization"/>
+    <relationship identifier="r-adeploy-bdes" source="asvc-deploy" target="bsvc-design" xsi:type="Realization"/>
+    <relationship identifier="r-aht-bht" source="asvc-humantask" target="bsvc-humantask" xsi:type="Realization"/>
+    <relationship identifier="r-adec-bdec" source="asvc-decision" target="bsvc-decision" xsi:type="Realization"/>
+    <relationship identifier="r-atl-bmon" source="asvc-timeline" target="bsvc-monitoring" xsi:type="Realization"/>
+    <relationship identifier="r-aexec-dom" source="asvc-execution" target="bproc-domain" xsi:type="Serving"/>
+    <relationship identifier="r-eng-comp" source="app-engine" target="app-compiler" xsi:type="Composition"/>
+    <relationship identifier="r-eng-proc" source="app-engine" target="app-processor" xsi:type="Composition"/>
+    <relationship identifier="r-eng-dm" source="app-engine" target="app-datamodel" xsi:type="Composition"/>
+    <relationship identifier="r-eng-wal" source="app-engine" target="app-wal" xsi:type="Composition"/>
+    <relationship identifier="r-eng-ss" source="app-engine" target="app-statestore" xsi:type="Composition"/>
+    <relationship identifier="r-eng-timer" source="app-engine" target="app-timer" xsi:type="Composition"/>
+    <relationship identifier="r-eng-job" source="app-engine" target="app-jobstore" xsi:type="Composition"/>
+    <relationship identifier="r-eng-feel" source="app-engine" target="app-feel" xsi:type="Composition"/>
+    <relationship identifier="r-eng-inc" source="app-engine" target="app-incidentmgmt" xsi:type="Composition"/>
+    <relationship identifier="r-eng-vault" source="app-engine" target="app-vault" xsi:type="Composition"/>
+    <relationship identifier="r-eng-web" source="app-engine" target="chan-webui" xsi:type="Serving"/>
+    <relationship identifier="r-eng-rest" source="app-engine" target="chan-rest" xsi:type="Serving"/>
+    <relationship identifier="r-eng-mcp" source="app-engine" target="chan-mcp" xsi:type="Serving"/>
+    <relationship identifier="r-comp-adeploy" source="app-compiler" target="asvc-deploy" xsi:type="Assignment"/>
+    <relationship identifier="r-proc-aexec" source="app-processor" target="asvc-execution" xsi:type="Assignment"/>
+    <relationship identifier="r-job-ajob" source="app-jobstore" target="asvc-jobdist" xsi:type="Assignment"/>
+    <relationship identifier="r-proc-acorr" source="app-processor" target="asvc-correlation" xsi:type="Assignment"/>
+    <relationship identifier="r-timer-atimer" source="app-timer" target="asvc-timer" xsi:type="Assignment"/>
+    <relationship identifier="r-feel-adec" source="app-feel" target="asvc-decision" xsi:type="Assignment"/>
+    <relationship identifier="r-proc-aht" source="app-processor" target="asvc-humantask" xsi:type="Assignment"/>
+    <relationship identifier="r-proc-atl" source="app-processor" target="asvc-timeline" xsi:type="Assignment"/>
+    <relationship identifier="r-ajob-crest" source="asvc-jobdist" target="conn-rest" xsi:type="Serving"/>
+    <relationship identifier="r-ajob-cmail" source="asvc-jobdist" target="conn-mail" xsi:type="Serving"/>
+    <relationship identifier="r-ajob-cscript" source="asvc-jobdist" target="conn-script" xsi:type="Serving"/>
+    <relationship identifier="r-ajob-cdmn" source="asvc-jobdist" target="conn-dmn" xsi:type="Serving"/>
+    <relationship identifier="r-ajob-cclio" source="asvc-jobdist" target="conn-clio" xsi:type="Serving"/>
+    <relationship identifier="r-ajob-ccsv" source="asvc-jobdist" target="conn-csv" xsi:type="Serving"/>
+    <relationship identifier="r-crest-dom" source="conn-rest" target="bproc-domain" xsi:type="Serving"/>
+    <relationship identifier="r-cmail-dom" source="conn-mail" target="bproc-domain" xsi:type="Serving"/>
+    <relationship identifier="r-cscript-dom" source="conn-script" target="bproc-domain" xsi:type="Serving"/>
+    <relationship identifier="r-cdmn-dom" source="conn-dmn" target="bproc-domain" xsi:type="Serving"/>
+    <relationship identifier="r-proc-elog" source="app-processor" target="dobj-eventlog" xsi:type="Access" accessType="Write"/>
+    <relationship identifier="r-proc-sstore" source="app-processor" target="dobj-statestore" xsi:type="Access" accessType="ReadWrite"/>
+    <relationship identifier="r-proc-vars" source="app-processor" target="dobj-varstore" xsi:type="Access" accessType="ReadWrite"/>
+    <relationship identifier="r-comp-compiled" source="app-compiler" target="dobj-compiled" xsi:type="Access" accessType="Write"/>
+    <relationship identifier="r-proc-compiled" source="app-processor" target="dobj-compiled" xsi:type="Access" accessType="Read"/>
+    <relationship identifier="r-web-ifweb" source="chan-webui" target="aif-web" xsi:type="Composition"/>
+    <relationship identifier="r-rest-ifrest" source="chan-rest" target="aif-rest" xsi:type="Composition"/>
+    <relationship identifier="r-mcp-ifmcp" source="chan-mcp" target="aif-mcp" xsi:type="Composition"/>
+    <relationship identifier="r-job-ifgrpc" source="app-jobstore" target="aif-grpc" xsi:type="Composition"/>
+    <relationship identifier="r-bin-part" source="tec-binary" target="tec-partition" xsi:type="Composition"/>
+    <relationship identifier="r-go-bin" source="tec-goruntime" target="tec-binary" xsi:type="Serving"/>
+    <relationship identifier="r-bin-artbin" source="tec-binary" target="art-binary" xsi:type="Assignment"/>
+    <relationship identifier="r-part-artwal" source="tec-partition" target="art-wal" xsi:type="Assignment"/>
+    <relationship identifier="r-part-artsst" source="tec-partition" target="art-sst" xsi:type="Assignment"/>
+    <relationship identifier="r-pebble-ss" source="tec-pebble" target="app-statestore" xsi:type="Serving"/>
+    <relationship identifier="r-fs-wal" source="tec-filesystem" target="app-wal" xsi:type="Serving"/>
+    <relationship identifier="r-fs-pebble" source="tec-filesystem" target="tec-pebble" xsi:type="Serving"/>
+    <relationship identifier="r-part-proc" source="tec-partition" target="app-processor" xsi:type="Serving"/>
+    <relationship identifier="r-part-tappend" source="tec-partition" target="tsvc-append" xsi:type="Assignment"/>
+    <relationship identifier="r-pebble-tkv" source="tec-pebble" target="tsvc-kv" xsi:type="Assignment"/>
+    <relationship identifier="r-part-treplay" source="tec-partition" target="tsvc-replay" xsi:type="Assignment"/>
+    <relationship identifier="r-bin-trouting" source="tec-binary" target="tsvc-routing" xsi:type="Assignment"/>
+    <relationship identifier="r-tappend-contract" source="tsvc-append" target="contract-durable" xsi:type="Realization"/>
+    <relationship identifier="r-tkv-sstore" source="tsvc-kv" target="app-statestore" xsi:type="Serving"/>
+    <relationship identifier="r-artbin-eng" source="art-binary" target="app-engine" xsi:type="Realization"/>
+    <relationship identifier="r-artwal-elog" source="art-wal" target="dobj-eventlog" xsi:type="Realization"/>
+    <relationship identifier="r-artsst-sstore" source="art-sst" target="dobj-statestore" xsi:type="Realization"/>
+    <relationship identifier="r-artmodels-bpmn" source="art-models" target="bobj-bpmn" xsi:type="Realization"/>
+    <relationship identifier="r-exttemis-cdmn" source="ext-temis" target="conn-dmn" xsi:type="Serving"/>
+    <relationship identifier="r-extclio-cclio" source="ext-clio" target="conn-clio" xsi:type="Serving"/>
+    <relationship identifier="r-extmail-cmail" source="ext-mail" target="conn-mail" xsi:type="Serving"/>
+    <relationship identifier="r-extwork-cscript" source="ext-workers" target="conn-script" xsi:type="Serving"/>
+    <relationship identifier="r-pgrpc-work" source="path-grpc" target="ext-workers" xsi:type="Association"/>
+    <relationship identifier="r-pgrpc-job" source="path-grpc" target="aif-grpc" xsi:type="Association"/>
+    <relationship identifier="r-phttps-mail" source="path-https" target="ext-mail" xsi:type="Association"/>
+    <relationship identifier="r-phttps-temis" source="path-https" target="ext-temis" xsi:type="Association"/>
+    <relationship identifier="r-pmcp-mcp" source="path-mcp" target="aif-mcp" xsi:type="Association"/>
+    <relationship identifier="r-m0-m1" source="plat-m0" target="plat-m1" xsi:type="Triggering"/>
+    <relationship identifier="r-m1-m2" source="plat-m1" target="plat-m2" xsi:type="Triggering"/>
+    <relationship identifier="r-m2-m3" source="plat-m2" target="plat-m3" xsi:type="Triggering"/>
+    <relationship identifier="r-m3-m4" source="plat-m3" target="plat-m4" xsi:type="Triggering"/>
+    <relationship identifier="r-m4-m5" source="plat-m4" target="plat-m5" xsi:type="Triggering"/>
+    <relationship identifier="r-m5-m6" source="plat-m5" target="plat-m6" xsi:type="Triggering"/>
+    <relationship identifier="r-wps-m1" source="wp-server" target="plat-m1" xsi:type="Association"/>
+    <relationship identifier="r-wpa-m1" source="wp-authoring" target="plat-m1" xsi:type="Association"/>
+  </relationships>
+  <organizations>
+    <item>
+      <label xml:lang="en">Motivation</label>
+      <item identifierRef="stk-ea"/>
+      <item identifierRef="stk-modeler"/>
+      <item identifierRef="stk-taskuser"/>
+      <item identifierRef="stk-ops"/>
+      <item identifierRef="stk-integrator"/>
+      <item identifierRef="stk-maintainer"/>
+      <item identifierRef="drv-throughput"/>
+      <item identifierRef="drv-durability"/>
+      <item identifierRef="drv-longrunning"/>
+      <item identifierRef="drv-robustness"/>
+      <item identifierRef="drv-conformance"/>
+      <item identifierRef="drv-productivity"/>
+      <item identifierRef="asm-interpret"/>
+      <item identifierRef="asm-fsync"/>
+      <item identifierRef="asm-dualwrite"/>
+      <item identifierRef="goal-durable"/>
+      <item identifierRef="goal-bpmn"/>
+      <item identifierRef="goal-throughput"/>
+      <item identifierRef="goal-purego"/>
+      <item identifierRef="out-batch"/>
+      <item identifierRef="out-replay"/>
+      <item identifierRef="prin-compile"/>
+      <item identifierRef="prin-eventsourcing"/>
+      <item identifierRef="prin-groupcommit"/>
+      <item identifierRef="prin-singlewriter"/>
+      <item identifierRef="req-inv1"/>
+      <item identifierRef="req-inv2"/>
+      <item identifierRef="req-inv3"/>
+      <item identifierRef="req-inv4"/>
+      <item identifierRef="req-inv5"/>
+      <item identifierRef="req-inv6"/>
+      <item identifierRef="con-purego"/>
+      <item identifierRef="con-binary"/>
+      <item identifierRef="con-coverage"/>
+    </item>
+    <item>
+      <label xml:lang="en">Business</label>
+      <item identifierRef="role-ea"/>
+      <item identifierRef="role-modeler"/>
+      <item identifierRef="role-performer"/>
+      <item identifierRef="role-ops"/>
+      <item identifierRef="role-integrator"/>
+      <item identifierRef="role-admin"/>
+      <item identifierRef="bsvc-automation"/>
+      <item identifierRef="bsvc-design"/>
+      <item identifierRef="bsvc-humantask"/>
+      <item identifierRef="bsvc-decision"/>
+      <item identifierRef="bsvc-monitoring"/>
+      <item identifierRef="bproc-lifecycle"/>
+      <item identifierRef="bproc-domain"/>
+      <item identifierRef="bevt-message"/>
+      <item identifierRef="bevt-timer"/>
+      <item identifierRef="bevt-incident"/>
+      <item identifierRef="bobj-bpmn"/>
+      <item identifierRef="bobj-dmn"/>
+      <item identifierRef="bobj-form"/>
+      <item identifierRef="bobj-instance"/>
+      <item identifierRef="bobj-usertask"/>
+      <item identifierRef="bobj-variables"/>
+      <item identifierRef="bobj-incident"/>
+      <item identifierRef="contract-durable"/>
+    </item>
+    <item>
+      <label xml:lang="en">Application</label>
+      <item identifierRef="app-engine"/>
+      <item identifierRef="app-compiler"/>
+      <item identifierRef="app-processor"/>
+      <item identifierRef="app-datamodel"/>
+      <item identifierRef="app-wal"/>
+      <item identifierRef="app-statestore"/>
+      <item identifierRef="app-timer"/>
+      <item identifierRef="app-jobstore"/>
+      <item identifierRef="app-feel"/>
+      <item identifierRef="app-incidentmgmt"/>
+      <item identifierRef="app-vault"/>
+      <item identifierRef="chan-webui"/>
+      <item identifierRef="chan-rest"/>
+      <item identifierRef="chan-mcp"/>
+      <item identifierRef="conn-rest"/>
+      <item identifierRef="conn-mail"/>
+      <item identifierRef="conn-script"/>
+      <item identifierRef="conn-dmn"/>
+      <item identifierRef="conn-clio"/>
+      <item identifierRef="conn-csv"/>
+      <item identifierRef="asvc-deploy"/>
+      <item identifierRef="asvc-execution"/>
+      <item identifierRef="asvc-jobdist"/>
+      <item identifierRef="asvc-correlation"/>
+      <item identifierRef="asvc-timer"/>
+      <item identifierRef="asvc-decision"/>
+      <item identifierRef="asvc-humantask"/>
+      <item identifierRef="asvc-timeline"/>
+      <item identifierRef="dobj-eventlog"/>
+      <item identifierRef="dobj-compiled"/>
+      <item identifierRef="dobj-statestore"/>
+      <item identifierRef="dobj-varstore"/>
+      <item identifierRef="aif-rest"/>
+      <item identifierRef="aif-grpc"/>
+      <item identifierRef="aif-mcp"/>
+      <item identifierRef="aif-web"/>
+    </item>
+    <item>
+      <label xml:lang="en">Technology</label>
+      <item identifierRef="tec-binary"/>
+      <item identifierRef="tec-goruntime"/>
+      <item identifierRef="tec-partition"/>
+      <item identifierRef="tec-pebble"/>
+      <item identifierRef="tec-filesystem"/>
+      <item identifierRef="tsvc-append"/>
+      <item identifierRef="tsvc-kv"/>
+      <item identifierRef="tsvc-replay"/>
+      <item identifierRef="tsvc-routing"/>
+      <item identifierRef="path-grpc"/>
+      <item identifierRef="path-https"/>
+      <item identifierRef="path-mcp"/>
+      <item identifierRef="art-binary"/>
+      <item identifierRef="art-wal"/>
+      <item identifierRef="art-sst"/>
+      <item identifierRef="art-models"/>
+    </item>
+    <item>
+      <label xml:lang="en">External Systems</label>
+      <item identifierRef="ext-temis"/>
+      <item identifierRef="ext-clio"/>
+      <item identifierRef="ext-mail"/>
+      <item identifierRef="ext-workers"/>
+    </item>
+    <item>
+      <label xml:lang="en">Implementation &amp; Migration</label>
+      <item identifierRef="plat-m0"/>
+      <item identifierRef="plat-m1"/>
+      <item identifierRef="plat-m2"/>
+      <item identifierRef="plat-m3"/>
+      <item identifierRef="plat-m4"/>
+      <item identifierRef="plat-m5"/>
+      <item identifierRef="plat-m6"/>
+      <item identifierRef="wp-server"/>
+      <item identifierRef="wp-authoring"/>
+    </item>
+    <item>
+      <label xml:lang="en">Views</label>
+      <item identifierRef="view-overview"/>
+      <item identifierRef="view-motivation"/>
+      <item identifierRef="view-business"/>
+      <item identifierRef="view-application"/>
+      <item identifierRef="view-technology"/>
+      <item identifierRef="view-implementation"/>
+    </item>
+  </organizations>
+  <propertyDefinitions>
+    <propertyDefinition identifier="propid-adr" type="string">
+      <name>ADR</name>
+    </propertyDefinition>
+    <propertyDefinition identifier="propid-status" type="string">
+      <name>Roadmap status</name>
+    </propertyDefinition>
+  </propertyDefinitions>
+  <views>
+    <diagrams>
+      <view identifier="view-overview" xsi:type="Diagram">
+        <name xml:lang="en">Atlas — ArchiMate 3.2 layered view</name>
+        <node identifier="node-view-overview-drv-durability" elementRef="drv-durability" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-prin-eventsourcing" elementRef="prin-eventsourcing" xsi:type="Element" x="220" y="54" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-req-inv2" elementRef="req-inv2" xsi:type="Element" x="416" y="54" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-bsvc-automation" elementRef="bsvc-automation" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-bproc-domain" elementRef="bproc-domain" xsi:type="Element" x="220" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-bobj-instance" elementRef="bobj-instance" xsi:type="Element" x="416" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-app-engine" elementRef="app-engine" xsi:type="Element" x="24" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-chan-rest" elementRef="chan-rest" xsi:type="Element" x="220" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-conn-dmn" elementRef="conn-dmn" xsi:type="Element" x="416" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-tec-binary" elementRef="tec-binary" xsi:type="Element" x="24" y="426" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-tec-partition" elementRef="tec-partition" xsi:type="Element" x="220" y="426" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-overview-tec-pebble" elementRef="tec-pebble" xsi:type="Element" x="416" y="426" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <connection identifier="conn-view-overview-r-drvdur-prines" relationshipRef="r-drvdur-prines" xsi:type="Relationship" source="node-view-overview-drv-durability" target="node-view-overview-prin-eventsourcing"/>
+        <connection identifier="conn-view-overview-r-inv2-es" relationshipRef="r-inv2-es" xsi:type="Relationship" source="node-view-overview-req-inv2" target="node-view-overview-prin-eventsourcing"/>
+        <connection identifier="conn-view-overview-r-dom-inst" relationshipRef="r-dom-inst" xsi:type="Relationship" source="node-view-overview-bproc-domain" target="node-view-overview-bobj-instance"/>
+        <connection identifier="conn-view-overview-r-eng-rest" relationshipRef="r-eng-rest" xsi:type="Relationship" source="node-view-overview-app-engine" target="node-view-overview-chan-rest"/>
+        <connection identifier="conn-view-overview-r-cdmn-dom" relationshipRef="r-cdmn-dom" xsi:type="Relationship" source="node-view-overview-conn-dmn" target="node-view-overview-bproc-domain"/>
+        <connection identifier="conn-view-overview-r-bin-part" relationshipRef="r-bin-part" xsi:type="Relationship" source="node-view-overview-tec-binary" target="node-view-overview-tec-partition"/>
+      </view>
+      <view identifier="view-motivation" xsi:type="Diagram">
+        <name xml:lang="en">Motivation trace — one concern, all the way down</name>
+        <node identifier="node-view-motivation-stk-ops" elementRef="stk-ops" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-drv-durability" elementRef="drv-durability" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-goal-durable" elementRef="goal-durable" xsi:type="Element" x="24" y="302" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-prin-eventsourcing" elementRef="prin-eventsourcing" xsi:type="Element" x="24" y="426" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-req-inv2" elementRef="req-inv2" xsi:type="Element" x="24" y="550" w="170" h="66">
+          <style>
+            <fillColor r="231" g="219" b="245" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-app-processor" elementRef="app-processor" xsi:type="Element" x="24" y="674" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-motivation-app-wal" elementRef="app-wal" xsi:type="Element" x="220" y="674" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <connection identifier="conn-view-motivation-r-stkops-dur" relationshipRef="r-stkops-dur" xsi:type="Relationship" source="node-view-motivation-stk-ops" target="node-view-motivation-drv-durability"/>
+        <connection identifier="conn-view-motivation-r-drvdur-gdur" relationshipRef="r-drvdur-gdur" xsi:type="Relationship" source="node-view-motivation-drv-durability" target="node-view-motivation-goal-durable"/>
+        <connection identifier="conn-view-motivation-r-drvdur-prines" relationshipRef="r-drvdur-prines" xsi:type="Relationship" source="node-view-motivation-drv-durability" target="node-view-motivation-prin-eventsourcing"/>
+        <connection identifier="conn-view-motivation-r-prines-gdur" relationshipRef="r-prines-gdur" xsi:type="Relationship" source="node-view-motivation-prin-eventsourcing" target="node-view-motivation-goal-durable"/>
+        <connection identifier="conn-view-motivation-r-inv2-es" relationshipRef="r-inv2-es" xsi:type="Relationship" source="node-view-motivation-req-inv2" target="node-view-motivation-prin-eventsourcing"/>
+        <connection identifier="conn-view-motivation-r-wal-es" relationshipRef="r-wal-es" xsi:type="Relationship" source="node-view-motivation-app-wal" target="node-view-motivation-prin-eventsourcing"/>
+        <connection identifier="conn-view-motivation-r-proc-inv2" relationshipRef="r-proc-inv2" xsi:type="Relationship" source="node-view-motivation-app-processor" target="node-view-motivation-req-inv2"/>
+      </view>
+      <view identifier="view-business" xsi:type="Diagram">
+        <name xml:lang="en">Business layer</name>
+        <node identifier="node-view-business-role-modeler" elementRef="role-modeler" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-role-performer" elementRef="role-performer" xsi:type="Element" x="220" y="54" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-role-ops" elementRef="role-ops" xsi:type="Element" x="416" y="54" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bsvc-automation" elementRef="bsvc-automation" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bsvc-humantask" elementRef="bsvc-humantask" xsi:type="Element" x="220" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bsvc-decision" elementRef="bsvc-decision" xsi:type="Element" x="416" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bsvc-monitoring" elementRef="bsvc-monitoring" xsi:type="Element" x="612" y="178" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bobj-bpmn" elementRef="bobj-bpmn" xsi:type="Element" x="24" y="302" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bobj-instance" elementRef="bobj-instance" xsi:type="Element" x="220" y="302" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bobj-usertask" elementRef="bobj-usertask" xsi:type="Element" x="416" y="302" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-business-bobj-incident" elementRef="bobj-incident" xsi:type="Element" x="612" y="302" w="170" h="66">
+          <style>
+            <fillColor r="251" g="239" b="168" a="100"/>
+          </style>
+        </node>
+        <connection identifier="conn-view-business-r-rperf-bht" relationshipRef="r-rperf-bht" xsi:type="Relationship" source="node-view-business-role-performer" target="node-view-business-bsvc-humantask"/>
+        <connection identifier="conn-view-business-r-rops-bmon" relationshipRef="r-rops-bmon" xsi:type="Relationship" source="node-view-business-role-ops" target="node-view-business-bsvc-monitoring"/>
+      </view>
+      <view identifier="view-application" xsi:type="Diagram">
+        <name xml:lang="en">Application layer</name>
+        <node identifier="node-view-application-chan-webui" elementRef="chan-webui" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-chan-rest" elementRef="chan-rest" xsi:type="Element" x="220" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-chan-mcp" elementRef="chan-mcp" xsi:type="Element" x="416" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-app-compiler" elementRef="app-compiler" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-app-processor" elementRef="app-processor" xsi:type="Element" x="220" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-app-datamodel" elementRef="app-datamodel" xsi:type="Element" x="416" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-app-wal" elementRef="app-wal" xsi:type="Element" x="612" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-app-statestore" elementRef="app-statestore" xsi:type="Element" x="808" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-conn-rest" elementRef="conn-rest" xsi:type="Element" x="24" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-conn-mail" elementRef="conn-mail" xsi:type="Element" x="220" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-conn-script" elementRef="conn-script" xsi:type="Element" x="416" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-conn-dmn" elementRef="conn-dmn" xsi:type="Element" x="612" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-application-conn-clio" elementRef="conn-clio" xsi:type="Element" x="808" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="228" b="250" a="100"/>
+          </style>
+        </node>
+      </view>
+      <view identifier="view-technology" xsi:type="Diagram">
+        <name xml:lang="en">Technology &amp; deployment layer</name>
+        <node identifier="node-view-technology-tec-binary" elementRef="tec-binary" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-tec-goruntime" elementRef="tec-goruntime" xsi:type="Element" x="220" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-art-binary" elementRef="art-binary" xsi:type="Element" x="416" y="54" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-tec-partition" elementRef="tec-partition" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-art-wal" elementRef="art-wal" xsi:type="Element" x="220" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-art-sst" elementRef="art-sst" xsi:type="Element" x="416" y="178" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-tec-pebble" elementRef="tec-pebble" xsi:type="Element" x="24" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-tec-filesystem" elementRef="tec-filesystem" xsi:type="Element" x="220" y="302" w="170" h="66">
+          <style>
+            <fillColor r="203" g="238" b="215" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-ext-temis" elementRef="ext-temis" xsi:type="Element" x="24" y="426" w="170" h="66">
+          <style>
+            <fillColor r="221" g="227" b="234" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-ext-clio" elementRef="ext-clio" xsi:type="Element" x="220" y="426" w="170" h="66">
+          <style>
+            <fillColor r="221" g="227" b="234" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-ext-mail" elementRef="ext-mail" xsi:type="Element" x="416" y="426" w="170" h="66">
+          <style>
+            <fillColor r="221" g="227" b="234" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-technology-ext-workers" elementRef="ext-workers" xsi:type="Element" x="612" y="426" w="170" h="66">
+          <style>
+            <fillColor r="221" g="227" b="234" a="100"/>
+          </style>
+        </node>
+        <connection identifier="conn-view-technology-r-bin-part" relationshipRef="r-bin-part" xsi:type="Relationship" source="node-view-technology-tec-binary" target="node-view-technology-tec-partition"/>
+        <connection identifier="conn-view-technology-r-go-bin" relationshipRef="r-go-bin" xsi:type="Relationship" source="node-view-technology-tec-goruntime" target="node-view-technology-tec-binary"/>
+        <connection identifier="conn-view-technology-r-bin-artbin" relationshipRef="r-bin-artbin" xsi:type="Relationship" source="node-view-technology-tec-binary" target="node-view-technology-art-binary"/>
+        <connection identifier="conn-view-technology-r-part-artwal" relationshipRef="r-part-artwal" xsi:type="Relationship" source="node-view-technology-tec-partition" target="node-view-technology-art-wal"/>
+        <connection identifier="conn-view-technology-r-part-artsst" relationshipRef="r-part-artsst" xsi:type="Relationship" source="node-view-technology-tec-partition" target="node-view-technology-art-sst"/>
+        <connection identifier="conn-view-technology-r-fs-pebble" relationshipRef="r-fs-pebble" xsi:type="Relationship" source="node-view-technology-tec-filesystem" target="node-view-technology-tec-pebble"/>
+      </view>
+      <view identifier="view-implementation" xsi:type="Diagram">
+        <name xml:lang="en">Implementation roadmap — plateaus M0 to M6</name>
+        <node identifier="node-view-implementation-plat-m0" elementRef="plat-m0" xsi:type="Element" x="24" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m1" elementRef="plat-m1" xsi:type="Element" x="220" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m2" elementRef="plat-m2" xsi:type="Element" x="416" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m3" elementRef="plat-m3" xsi:type="Element" x="612" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m4" elementRef="plat-m4" xsi:type="Element" x="808" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m5" elementRef="plat-m5" xsi:type="Element" x="1004" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-plat-m6" elementRef="plat-m6" xsi:type="Element" x="1200" y="54" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-wp-server" elementRef="wp-server" xsi:type="Element" x="24" y="178" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <node identifier="node-view-implementation-wp-authoring" elementRef="wp-authoring" xsi:type="Element" x="220" y="178" w="170" h="66">
+          <style>
+            <fillColor r="255" g="224" b="224" a="100"/>
+          </style>
+        </node>
+        <connection identifier="conn-view-implementation-r-m0-m1" relationshipRef="r-m0-m1" xsi:type="Relationship" source="node-view-implementation-plat-m0" target="node-view-implementation-plat-m1"/>
+        <connection identifier="conn-view-implementation-r-m1-m2" relationshipRef="r-m1-m2" xsi:type="Relationship" source="node-view-implementation-plat-m1" target="node-view-implementation-plat-m2"/>
+        <connection identifier="conn-view-implementation-r-m2-m3" relationshipRef="r-m2-m3" xsi:type="Relationship" source="node-view-implementation-plat-m2" target="node-view-implementation-plat-m3"/>
+        <connection identifier="conn-view-implementation-r-m3-m4" relationshipRef="r-m3-m4" xsi:type="Relationship" source="node-view-implementation-plat-m3" target="node-view-implementation-plat-m4"/>
+        <connection identifier="conn-view-implementation-r-m4-m5" relationshipRef="r-m4-m5" xsi:type="Relationship" source="node-view-implementation-plat-m4" target="node-view-implementation-plat-m5"/>
+        <connection identifier="conn-view-implementation-r-m5-m6" relationshipRef="r-m5-m6" xsi:type="Relationship" source="node-view-implementation-plat-m5" target="node-view-implementation-plat-m6"/>
+        <connection identifier="conn-view-implementation-r-wps-m1" relationshipRef="r-wps-m1" xsi:type="Relationship" source="node-view-implementation-wp-server" target="node-view-implementation-plat-m1"/>
+        <connection identifier="conn-view-implementation-r-wpa-m1" relationshipRef="r-wpa-m1" xsi:type="Relationship" source="node-view-implementation-wp-authoring" target="node-view-implementation-plat-m1"/>
+      </view>
+    </diagrams>
+  </views>
+</model>

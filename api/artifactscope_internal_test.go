@@ -40,7 +40,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 
 	// A) projectsByID error → the four scope-filtered list handlers 500.
 	realProjects := srv.projects
-	srv.projects = &projectStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.projects = brokenStore(newProjectStore(filepath.Join(t.TempDir(), "gone")))
 	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/forms", "/api/v1/decisions"} {
 		if got := do(http.MethodGet, p, ""); got != http.StatusInternalServerError {
 			t.Fatalf("GET %s with broken projects = %d, want 500", p, got)
@@ -50,7 +50,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 
 	// B) A project whose record is a directory errors on read; an artifact filed
 	// under it makes every authorize step 500.
-	if err := os.MkdirAll(srv.projects.fileFor("pdir"), 0o755); err != nil {
+	if err := os.MkdirAll(srv.projects.FileFor("pdir"), 0o755); err != nil {
 		t.Fatalf("mk pdir: %v", err)
 	}
 	must := func(e error) {
@@ -58,10 +58,10 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 			t.Fatalf("seed: %v", e)
 		}
 	}
-	must(srv.drafts.save(draft{ProcessID: "d1", ProjectID: "pdir", XML: "<x/>", SavedAt: 1}))
-	must(srv.dmnrefs.save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "pdir", CreatedAt: 1}))
-	must(srv.forms.save(form{ID: "f1", Name: "F", ProjectID: "pdir", Schema: "{}", SavedAt: 1}))
-	must(srv.drafts.save(draft{ProcessID: "d2", XML: "<x/>", SavedAt: 1})) // ungrouped, for a move target test
+	must(srv.drafts.Save(draft{ProcessID: "d1", ProjectID: "pdir", XML: "<x/>", SavedAt: 1}))
+	must(srv.dmnrefs.Save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "pdir", CreatedAt: 1}))
+	must(srv.forms.Save(form{ID: "f1", Name: "F", ProjectID: "pdir", Schema: "{}", SavedAt: 1}))
+	must(srv.drafts.Save(draft{ProcessID: "d2", XML: "<x/>", SavedAt: 1})) // ungrouped, for a move target test
 
 	cases := []struct {
 		name, method, path, body string
@@ -87,9 +87,9 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	}
 
 	// C) A broken artifact store errors on the load-before-authorize step.
-	must(os.MkdirAll(srv.drafts.fileFor("ddir"), 0o755))
-	must(os.MkdirAll(srv.dmnrefs.fileFor("rdir"), 0o755))
-	must(os.MkdirAll(srv.forms.fileFor("fdir"), 0o755))
+	must(os.MkdirAll(srv.drafts.FileFor("ddir"), 0o755))
+	must(os.MkdirAll(srv.dmnrefs.FileFor("rdir"), 0o755))
+	must(os.MkdirAll(srv.forms.FileFor("fdir"), 0o755))
 	storeErr := []struct {
 		name, method, path, body string
 	}{

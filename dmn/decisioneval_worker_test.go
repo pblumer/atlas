@@ -47,7 +47,7 @@ func TestBusinessRuleTaskRetainsDecisionEvaluation(t *testing.T) {
 	}
 	runner := job.NewRunner(store, p)
 	lookup := func(uint64) *compiler.CompiledProcess { return cp }
-	runner.HandleCompleting(jobType, dmn.Handler(store, lookup, reg, nil))
+	runner.HandleCompleting(jobType, func(rd state.Reader) job.CompletingHandler { return dmn.Handler(store, lookup, reg, nil) })
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {

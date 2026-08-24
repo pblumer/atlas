@@ -26,11 +26,11 @@ func TestDeployStoreRoundTrip(t *testing.T) {
 	}
 	// Save out of order to prove loadAll sorts.
 	for _, k := range []uint64{3, 1, 2} {
-		if err := ds.save(sampleRecord(k)); err != nil {
+		if err := ds.Save(sampleRecord(k)); err != nil {
 			t.Fatalf("save %d: %v", k, err)
 		}
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -55,15 +55,15 @@ func TestDeployStoreOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDeployStore: %v", err)
 	}
-	if err := ds.save(sampleRecord(1)); err != nil {
+	if err := ds.Save(sampleRecord(1)); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	r := sampleRecord(1)
 	r.Name = "Renamed"
-	if err := ds.save(r); err != nil {
+	if err := ds.Save(r); err != nil {
 		t.Fatalf("re-save: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -82,14 +82,14 @@ func TestDeployStoreDelete(t *testing.T) {
 		t.Fatalf("newDeployStore: %v", err)
 	}
 	for _, k := range []uint64{1, 2} {
-		if err := ds.save(sampleRecord(k)); err != nil {
+		if err := ds.Save(sampleRecord(k)); err != nil {
 			t.Fatalf("save: %v", err)
 		}
 	}
 	if err := ds.delete(1); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestDeployStoreLoadEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDeployStore: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}
@@ -140,14 +140,14 @@ func TestDeployStoreSaveFailsWithoutDir(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("remove dir: %v", err)
 	}
-	if err := ds.save(sampleRecord(1)); err == nil {
+	if err := ds.Save(sampleRecord(1)); err == nil {
 		t.Fatal("save with no dir: want error, got nil")
 	}
 	// delete and loadAll on a missing dir also surface errors, not panics.
 	if err := ds.delete(1); err == nil {
 		t.Fatal("delete with no dir: want error, got nil")
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll with no dir: want error, got nil")
 	}
 }
@@ -163,7 +163,7 @@ func TestDeployStoreLoadAllDecodeError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "1.json"), []byte("{not json"), 0o644); err != nil {
 		t.Fatalf("write bad record: %v", err)
 	}
-	if _, err := ds.loadAll(); err == nil {
+	if _, err := ds.LoadAll(); err == nil {
 		t.Fatal("loadAll of invalid JSON: want error, got nil")
 	}
 }
@@ -176,7 +176,7 @@ func TestDeployStoreIgnoresStrayFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newDeployStore: %v", err)
 	}
-	if err := ds.save(sampleRecord(1)); err != nil {
+	if err := ds.Save(sampleRecord(1)); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Stray files: a non-.json file and a .json whose stem is not a numeric key.
@@ -187,7 +187,7 @@ func TestDeployStoreIgnoresStrayFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.json"), []byte("also not a record"), 0o644); err != nil {
 		t.Fatalf("write stray json: %v", err)
 	}
-	got, err := ds.loadAll()
+	got, err := ds.LoadAll()
 	if err != nil {
 		t.Fatalf("loadAll: %v", err)
 	}

@@ -26,11 +26,13 @@ type Value = value.Value
 
 // Compiled is a FEEL expression compiled once. It is immutable and safe for
 // concurrent evaluation (like the CompiledProcess it lives in). Evaluate it with
-// Eval; Inputs reports the variables it reads.
+// Eval; Inputs reports the variables it reads, and Source the text it was written
+// as.
 type Compiled struct {
 	fn     feel.CompiledExpr
 	env    *feel.Env
 	inputs []string
+	src    string
 }
 
 // Compile parses, type-checks and lowers src into a reusable form. vars declares
@@ -43,7 +45,7 @@ func Compile(src string, vars ...string) (*Compiled, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Compiled{fn: fn, env: env, inputs: refs}, nil
+	return &Compiled{fn: fn, env: env, inputs: refs, src: src}, nil
 }
 
 // CompileAuto compiles src while discovering the variable names it references:
@@ -61,7 +63,7 @@ func CompileAuto(src string) (*Compiled, error) {
 		env := feel.NewEnv(declared...)
 		fn, refs, err := feel.CompileStringRefs(src, env)
 		if err == nil {
-			return &Compiled{fn: fn, env: env, inputs: refs}, nil
+			return &Compiled{fn: fn, env: env, inputs: refs, src: src}, nil
 		}
 		name, ok := unknownVariable(err)
 		if !ok || seen[name] {
@@ -92,6 +94,13 @@ func unknownVariable(err error) (string, bool) {
 // Inputs returns the variable names the expression actually reads (sorted,
 // unique) — a subset of the names passed to Compile.
 func (c *Compiled) Inputs() []string { return c.inputs }
+
+// Source returns the expression as it was written. A compiled expression is
+// otherwise opaque, so an explanation of what the engine decided — a loop's
+// condition on the replay, a message naming the expression that failed — would
+// have to re-read the model to quote it. Kept once at compile time (deploy), so
+// nothing on the hot path pays for it.
+func (c *Compiled) Source() string { return c.src }
 
 // Eval evaluates the expression against the given variable bindings. Names in
 // vars that the expression does not read are ignored; declared names absent from
@@ -164,6 +173,37 @@ func FromStored(kind ValueKind, b bool, text string) Value {
 	default:
 		return value.Null
 	}
+}
+
+// AsList returns the elements of a FEEL list value and true, or nil and false if v
+// is not a list. It fans a multi-instance activity's input collection into its
+// per-iteration items (ADR-0077).
+func AsList(v Value) ([]Value, bool) {
+	l, ok := v.(value.List)
+	if !ok {
+		return nil, false
+	}
+	return l.Elements, true
+}
+
+// ListOf builds a FEEL list value from the given elements — the inverse of AsList,
+// for assembling a multi-instance output collection (ADR-0077).
+func ListOf(elems ...Value) Value {
+	return value.NewList(elems...)
+}
+
+// AsInt returns a FEEL number as an int and true if v is a whole number within int
+// range, else 0 and false. Used for a multi-instance loop cardinality (ADR-0077).
+func AsInt(v Value) (int, bool) {
+	n, ok := v.(value.Number)
+	if !ok {
+		return 0, false
+	}
+	i, ok := n.Int64()
+	if !ok {
+		return 0, false
+	}
+	return int(i), true
 }
 
 // IsTrue reports whether v is FEEL boolean true. A non-boolean (including null,

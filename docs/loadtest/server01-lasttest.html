@@ -1,0 +1,376 @@
+<title>server01 Lasttest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --panel-2: #f6f8fb;
+    --ink: #141a22;
+    --muted: #5a6472;
+    --faint: #8a94a3;
+    --line: #dbe1ea;
+    --line-strong: #c3ccd8;
+    --accent: #1466d6;
+    --accent-soft: #e3edfb;
+    --velocity: #0a9bb5;
+    --good: #12855f;
+    --good-soft: #dcefe7;
+    --warn: #b3720a;
+    --warn-soft: #f6ecd8;
+    --shadow: 0 1px 2px rgba(20,26,34,.05), 0 8px 24px rgba(20,26,34,.06);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #0d1117;
+      --panel: #161c25;
+      --panel-2: #1c232e;
+      --ink: #eef2f7;
+      --muted: #9aa6b4;
+      --faint: #6d7987;
+      --line: #262f3b;
+      --line-strong: #38424f;
+      --accent: #4d9bff;
+      --accent-soft: #16283f;
+      --velocity: #2bc0d8;
+      --good: #35c891;
+      --good-soft: #123026;
+      --warn: #e6a545;
+      --warn-soft: #2e2413;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161c25;
+    --panel-2: #1c232e;
+    --ink: #eef2f7;
+    --muted: #9aa6b4;
+    --faint: #6d7987;
+    --line: #262f3b;
+    --line-strong: #38424f;
+    --accent: #4d9bff;
+    --accent-soft: #16283f;
+    --velocity: #2bc0d8;
+    --good: #35c891;
+    --good-soft: #123026;
+    --warn: #e6a545;
+    --warn-soft: #2e2413;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--velocity);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.05;
+    letter-spacing: -.02em;
+    font-weight: 800;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .lede { font-size: 18px; color: var(--muted); margin: 0; max-width: 62ch; }
+
+  .metabar {
+    display: flex; flex-wrap: wrap; gap: 8px 20px;
+    margin: 22px 0 0; padding: 14px 0 0;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+  }
+  .metabar b { color: var(--muted); font-weight: 600; }
+
+  .verdict {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 7px 14px; border-radius: 999px;
+    background: var(--good-soft); color: var(--good);
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--good) 30%, transparent);
+  }
+  .verdict .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 20%, transparent); }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    margin: 34px 0 0;
+  }
+  @media (max-width: 720px){ .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 16px; box-shadow: var(--shadow);
+  }
+  .kpi .num {
+    font-family: var(--mono); font-weight: 700; letter-spacing: -.02em;
+    font-size: clamp(24px, 3.4vw, 32px); color: var(--ink);
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .kpi .num .u { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .kpi .lbl { margin-top: 9px; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+  .kpi.acc .num { color: var(--accent); }
+
+  section { margin-top: 52px; }
+  h2 {
+    font-size: 13px; font-family: var(--mono); text-transform: uppercase;
+    letter-spacing: .12em; color: var(--velocity); font-weight: 600;
+    margin: 0 0 6px; display: flex; align-items: baseline; gap: 10px;
+  }
+  h2 .n { color: var(--faint); }
+  .h2sub { font-size: 22px; font-weight: 750; letter-spacing: -.01em; margin: 0 0 20px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 24px; box-shadow: var(--shadow);
+  }
+  .panel + .panel { margin-top: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: right; padding: 11px 14px; font-size: 14.5px; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: var(--mono); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--faint); font-weight: 600;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  tbody td { border-bottom: 1px solid var(--line); color: var(--muted); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td:first-child { color: var(--ink); font-weight: 600; }
+  td .mono, .mono { font-family: var(--mono); }
+  tr.hi td { background: var(--accent-soft); }
+  tr.hi td:first-child { color: var(--accent); }
+  td.big { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+
+  figure { margin: 0; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 12px; }
+  figcaption b { color: var(--ink); font-weight: 650; }
+  svg { display: block; width: 100%; height: auto; }
+  .barlbl { font-family: var(--mono); font-size: 13px; fill: var(--ink); font-weight: 600; }
+  .barlbl.sm { font-size: 11.5px; fill: var(--muted); font-weight: 500; }
+  .axislbl { font-family: var(--mono); font-size: 11px; fill: var(--faint); }
+
+  .callout {
+    margin-top: 16px; border: 1px solid var(--line); border-left: 3px solid var(--velocity);
+    background: var(--panel-2); border-radius: 12px; padding: 18px 20px;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  .callout p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .callout p + p { margin-top: 8px; }
+  .callout code { font-family: var(--mono); font-size: 12.5px; background: var(--panel); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px){ .grid2 { grid-template-columns: 1fr; } }
+
+  .flowrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; }
+  .node {
+    display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: 9px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+  }
+  .node .v { color: var(--velocity); font-weight: 700; }
+  .node.u { border-color: color-mix(in srgb, var(--accent) 35%, transparent); background: var(--accent-soft); }
+  .node.g { border-style: dashed; }
+  .arrow { color: var(--faint); }
+  .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing:.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; }
+  .tag.svc { background: var(--panel-2); color: var(--muted); border:1px solid var(--line); }
+  .tag.usr { background: var(--accent-soft); color: var(--accent); }
+
+  .list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .list li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; font-size: 14.5px; color: var(--muted); }
+  .list .k { font-family: var(--mono); font-size: 11px; color: var(--velocity); background: var(--panel-2); border:1px solid var(--line); padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
+  .list b { color: var(--ink); font-weight: 650; }
+
+  .pill { display:inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 6px; }
+  .pill.ok { background: var(--good-soft); color: var(--good); }
+  .pill.neu { background: var(--panel-2); color: var(--muted); border:1px solid var(--line); }
+
+  .amp { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; align-items: stretch; text-align: center; }
+  @media (max-width: 620px){ .amp { grid-template-columns: 1fr 1fr; } }
+  .amp .step { position: relative; padding: 16px 10px; }
+  .amp .step + .step::before { content: "→"; position: absolute; left: -9px; top: 50%; transform: translateY(-50%); color: var(--faint); font-family: var(--mono); }
+  .amp .big { font-family: var(--mono); font-weight: 700; font-size: clamp(22px, 3.2vw, 30px); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .amp .cap { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .amp .sub { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+  footer .mono { font-size: 12px; }
+  a { color: var(--accent); }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Atlas · BPMN-Engine · Durchsatz &amp; Konformität · rev. 2</p>
+  <h1>Lasttest server01 — 10.000 Prozess-Instanzen, sauber verarbeitet</h1>
+  <p class="lede">Roboter-Klicks auf User-Tasks, Worker auf Service-Tasks, alle Gateway-Typen — und ein einziger Aufruf, der über verschachtelte Call-Activities zehntausend echte Kind-Prozess-Instanzen erzeugt. Der kleine server01 wurde ordentlich gefordert und blieb dabei ruhig.</p>
+
+  <div class="metabar">
+    <span><b>Server</b> Atlas 0.1.0-dev · 127.0.0.1:8080</span>
+    <span><b>Prozesse</b> allround · throughput · child/mid/top</span>
+    <span><b>Report</b> 2026-08-13 · korrigiert</span>
+  </div>
+
+  <div style="margin-top:30px; display:flex; flex-wrap:wrap; gap:10px">
+    <span class="verdict"><span class="dot"></span> Bestanden · 0 Incidents durch den Test</span>
+    <span class="verdict" style="background:var(--warn-soft); color:var(--warn); border-color:color-mix(in srgb, var(--warn) 30%, transparent)">⚑ rev. 2 · Durchsatzzahlen korrigiert (siehe §4)</span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi acc">
+      <div class="num">12.070</div>
+      <div class="lbl">abgeschlossene <b>Kind-Prozess-Instanzen</b> auf <span class="mono">loadtest-child</span> (10.000 in einem Durchgang)</div>
+    </div>
+    <div class="kpi">
+      <div class="num">~500<span class="u"> /s</span></div>
+      <div class="lbl">Prozess-Instanzen pro Sekunde, serverseitig (2.000 in ~4 s, durable journalisiert)</div>
+    </div>
+    <div class="kpi">
+      <div class="num">13<span class="u"> / 13</span></div>
+      <div class="lbl">Instanzen komplett durch alle Element-Typen, 0 Fehler</div>
+    </div>
+    <div class="kpi">
+      <div class="num">0</div>
+      <div class="lbl">neue Incidents durch den gesamten Lasttest</div>
+    </div>
+  </div>
+
+  <!-- 01 VOLUMEN -->
+  <section>
+    <h2><span class="n">01</span> Volumen</h2>
+    <p class="h2sub">Ein Aufruf, zehntausend echte Prozess-Instanzen — per verschachtelter Call-Activity.</p>
+
+    <div class="panel">
+      <div class="amp">
+        <div class="step"><div class="big">1</div><div class="cap">Top-Instanz</div><div class="sub">create × 5</div></div>
+        <div class="step"><div class="big">40</div><div class="cap">Mid-Instanzen</div><div class="sub">MI-Call, seq.</div></div>
+        <div class="step"><div class="big">2.000</div><div class="cap">Kind-Instanzen</div><div class="sub">40 × 50</div></div>
+        <div class="step"><div class="big">10.000</div><div class="cap">gesamt</div><div class="sub">× 5 Läufe</div></div>
+      </div>
+      <p style="margin:18px 2px 0; font-size:14.5px; color:var(--muted)">Jede <span class="mono">loadtest-child</span>-Instanz ist ein vollwertiger, durable persistierter Prozess (Start → Script-Task → Ende). Die Staffelung (Top sequenziell → Mid parallel) hält die Nebenläufigkeit bei <b>≈ 50 gleichzeitig</b> — bewusst gedrosselt, um den geteilten Server zu schonen. Belegt über den Element-Visit-Count der Engine: <span class="mono">cstart = 12.070</span>.</p>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Messung</th><th>Wert</th><th>Anmerkung</th></tr></thead>
+          <tbody>
+            <tr class="hi"><td>Kind-Instanzen erzeugt</td><td class="big">10.000</td><td style="text-align:left; color:var(--muted)">in diesem Durchgang, 5 × 2.000</td></tr>
+            <tr><td>Serverzeit je 2.000</td><td class="mono">~4 s</td><td style="text-align:left">≈ 500 Prozess-Instanzen/s, durable</td></tr>
+            <tr><td>End-to-End je 2.000</td><td class="mono">~5,5 s</td><td style="text-align:left">inkl. ~1,5 s MCP-Transport</td></tr>
+            <tr><td>10.000 gesamt (Wanduhr)</td><td class="mono">~42 s</td><td style="text-align:left">5 blockierende Aufrufe</td></tr>
+            <tr><td>Peak Nebenläufigkeit</td><td class="mono">~50</td><td style="text-align:left">bewusst gedrosselt</td></tr>
+            <tr><td>Incidents / Fehler</td><td class="mono">0</td><td style="text-align:left">aktiv stets zurück auf Baseline</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 INTERAKTIV -->
+  <section>
+    <h2><span class="n">02</span> Interaktive Abdeckung</h2>
+    <p class="h2sub">Roboter und Worker treiben 13 Instanzen durch jeden Element-Typ.</p>
+
+    <div class="panel">
+      <div class="flowrow">
+        <span class="node g">Start <span class="v">13</span></span>
+        <span class="arrow">→</span>
+        <span class="node">validate <span class="v">13</span> <span class="tag svc">svc</span></span>
+        <span class="arrow">→</span>
+        <span class="node g">◈ fork <span class="v">13</span></span>
+        <span class="arrow">→</span>
+        <span class="node u">Bonität <span class="v">13</span> <span class="tag usr">user</span></span>
+        <span class="node">reserve <span class="v">13</span> <span class="tag svc">svc</span></span>
+        <span class="arrow">→</span>
+        <span class="node g">◈ join <span class="v">26</span></span>
+        <span class="arrow">→</span>
+        <span class="node g">◇ Betrag?</span>
+        <span class="arrow">→</span>
+        <span class="node u">genehmigen <span class="v">7</span> <span class="tag usr">≥1000</span></span>
+        <span class="node">auto-frei <span class="v">6</span> <span class="tag svc">&lt;1000</span></span>
+        <span class="arrow">→</span>
+        <span class="node">notify <span class="v">13</span> <span class="tag svc">svc</span></span>
+        <span class="arrow">→</span>
+        <span class="node g">Ende <span class="v">13</span></span>
+      </div>
+      <p style="margin:18px 2px 0; font-size:14.5px; color:var(--muted)">Reale Element-Visit-Counts der Engine. Der <b>Parallel-Join zählt 26</b> (2 Tokens pro Instanz sauber zusammengeführt); der <b>Exclusive-Split trennt 7 + 6 = 13</b> exakt nach Betrag — inklusive der Grenzfälle <span class="mono">1000 → manuell</span> und <span class="mono">999 → auto</span>. Spitze: bis zu <b>24 gleichzeitige</b> Completions in einer Welle. Zusätzlich: <b>687</b> auto-durchlaufende <span class="mono">loadtest-throughput</span>-Instanzen.</p>
+    </div>
+  </section>
+
+  <!-- 03 TRANSPORT -->
+  <section>
+    <h2><span class="n">03</span> Wo die Zeit hingeht</h2>
+    <p class="h2sub">Der Flaschenhals ist die Leitung, nicht die Engine.</p>
+    <div class="panel">
+      <figure>
+        <svg viewBox="0 0 640 118" role="img" aria-label="Transportzeit gegen Serverzeit">
+          <text x="0" y="34" class="barlbl sm">trivialer Prozess</text>
+          <rect x="150" y="20" width="440" height="22" rx="3" fill="var(--accent)" opacity="0.30"/>
+          <rect x="150" y="20" width="4" height="22" rx="2" fill="var(--velocity)"/>
+          <text x="160" y="37" class="barlbl">1,59 s <tspan class="barlbl sm">— fast alles Transport</tspan></text>
+          <text x="0" y="86" class="barlbl sm">2.000 Kinder</text>
+          <rect x="150" y="72" width="440" height="22" rx="3" fill="var(--accent)" opacity="0.30"/>
+          <rect x="150" y="72" width="320" height="22" rx="3" fill="var(--velocity)"/>
+          <text x="160" y="89" class="barlbl">~4 s Server <tspan class="barlbl sm">+ ~1,5 s Transport</tspan></text>
+        </svg>
+        <figcaption>Ein trivialer Prozess (4 Gateways) braucht über MCP <b>1,59 s</b> — praktisch reine Netzwerk-Rundreise. Erst bei echter Arbeit (2.000 Kind-Instanzen) überwiegt die Serverzeit. Für einen echten Grenztest bräuchte es einen HTTP-nahen Generator direkt auf server01.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 04 KORREKTUR -->
+  <section>
+    <h2><span class="n">04</span> Transparenz &amp; Korrektur</h2>
+    <p class="h2sub">Was in Revision 1 falsch war — und wie es verifiziert wurde.</p>
+    <div class="callout warn">
+      <h3>Zurückgezogen: „20.000 Elemente / ~704.000 pro Sekunde"</h3>
+      <p>Die erste Report-Fassung behauptete einen Element-Durchsatz auf Basis eines Multi-Instance-Prozesses, dessen Kollektion per <code>= for i in 1..count return i</code> erzeugt wurde. Dieser FEEL-Ausdruck liefert bei diesem Atlas-Build <b><code>null</code></b> statt einer Liste — die Multi-Instance lief damit <b>null-mal</b>. Die gemessenen ~28 ms waren Leerlauf. <b>Diese Zahl ist ungültig und zurückgezogen.</b></p>
+      <p><b>Verifikation diesmal:</b> Kollektion als echte Daten übergeben statt serverseitig generieren, Ergebnis über <code>outputCollection</code> und Element-Visit-Counts gegengeprüft (<code>cstart = 12.070</code>). Erst nach bestätigter Iteration wurden Zahlen berichtet.</p>
+    </div>
+    <div class="callout">
+      <h3>Unverändert gültig</h3>
+      <p>Die interaktive Abdeckung (13 Instanzen durch alle Element-Typen), die 687 auto-durchlaufenden Instanzen und der ~1,5-s-Transport-Boden waren echt ausgeführt und per Visit-Count / Timeline belegt — von dem MI-Fehler nicht betroffen.</p>
+    </div>
+  </section>
+
+  <!-- 05 SETUP -->
+  <section>
+    <h2><span class="n">05</span> Aufbau</h2>
+    <p class="h2sub">Die deployten Prozesse.</p>
+    <div class="panel">
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Prozess</th><th>Rolle im Test</th></tr></thead>
+          <tbody>
+            <tr><td>loadtest-allround</td><td style="text-align:left; color:var(--muted)">Service + User-Tasks, Parallel-Fork/Join, Exclusive-Gateway — interaktive Abdeckung</td></tr>
+            <tr><td>loadtest-throughput</td><td style="text-align:left; color:var(--muted)">läuft beim Start vollautomatisch durch — 687 Instanzen</td></tr>
+            <tr><td>loadtest-child</td><td style="text-align:left; color:var(--muted)">triviale Kind-Prozess-Instanz — die 12.070 gezählten</td></tr>
+            <tr><td>loadtest-fan-mid / -top</td><td style="text-align:left; color:var(--muted)">verschachtelte Multi-Instance-Call-Activities — erzeugen die Kinder gestaffelt</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><b style="color:var(--muted)">Offen:</b> Alle Test-Prozesse und ihre completed-History liegen als Beleg auf server01 — inert, 0 aktiv. Auf Wunsch entferne ich sie per <span class="mono">atlas_delete_process</span>.</p>
+    <p class="mono" style="margin-top:10px">Atlas 0.1.0-dev · Report rev. 2 · 2026-08-13 · Durchsatz auf Prozess-Instanz-Ebene, verifiziert</p>
+  </footer>
+
+</div>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a parallel multi-instance activity.
+
+  Start -> script "seed" (items = [10, 20, 30]) -> multi-instance script "double"
+  -> End. The multi-instance runs the body once per element of the input
+  collection, binding each element to "item"; each iteration's inline script
+  doubles it, and the outputElement aggregates into the "results" collection. The
+  body is in-engine, so all iterations self-complete and the parallel join fires
+  once they all finish.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_multi_instance" targetNamespace="http://atlas/conformance">
+  <process id="multi-instance" name="Multi-instance" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="seed" name="Seed list">
+      <extensionElements>
+        <zeebe:script expression="= [10, 20, 30]" resultVariable="items"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="double" name="Double each">
+      <extensionElements>
+        <zeebe:script expression="= item * 2" resultVariable="doubled"/>
+      </extensionElements>
+      <multiInstanceLoopCharacteristics>
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=items" inputElement="item"
+            outputCollection="results" outputElement="=doubled"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+    </scriptTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="double"/>
+    <sequenceFlow id="f3" sourceRef="double" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="multi-instance">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_seed" bpmnElement="seed"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_double" bpmnElement="double"><dc:Bounds x="430" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="600" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="430" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="530" y="200"/><di:waypoint x="600" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

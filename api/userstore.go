@@ -1,13 +1,9 @@
 package api
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/sidecar"
 )
 
 // Identity sources. A user authenticates either against a locally stored
@@ -103,139 +99,71 @@ func (u User) toPublic() publicUser {
 	}
 }
 
-// userStore is a durable store for users, one JSON file per user id under a
-// single directory. Like the form store (ADR-0028) it reuses the on-disk sidecar
-// approach of the deployment store (ADR-0019) and is owned solely by the server's
-// run-loop goroutine, so it needs no locking of its own.
+// userStore is a durable store for user accounts, one JSON file per user id
+// under a single directory (ADR-0044). It adds the lookups authentication needs
+// on top of the shared store: a login resolves a username, an invite an email.
 type userStore struct {
-	dir string
+	*sidecar.Store[User]
 }
 
-// newUserStore opens (creating if needed) the users directory.
+// newUserStore opens (creating if needed) the users directory. Users list oldest
+// first, tie-broken by id so the order is deterministic.
 func newUserStore(dir string) (*userStore, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("userstore: create dir: %w", err)
-	}
-	return &userStore{dir: dir}, nil
-}
-
-// fileFor maps a user id to its record path. The id is hex-encoded so any id
-// yields a safe, unique, deterministic filename; the real id is also stored
-// inside the record.
-func (s *userStore) fileFor(id string) string {
-	return filepath.Join(s.dir, hex.EncodeToString([]byte(id))+".json")
-}
-
-// save writes a user durably (atomic write + directory fsync), overwriting any
-// existing user with the same id.
-func (s *userStore) save(rec User) error {
-	return atomicWriteJSON(s.dir, s.fileFor(rec.ID), rec)
-}
-
-// get returns the user for an id, or ok=false if none is stored.
-func (s *userStore) get(id string) (User, bool, error) {
-	data, err := os.ReadFile(s.fileFor(id))
+	s, err := sidecar.NewStore(dir, "userstore",
+		func(rec User) string { return rec.ID },
+		sidecar.Order(func(a, b User) bool {
+			if a.CreatedAt != b.CreatedAt {
+				return a.CreatedAt < b.CreatedAt
+			}
+			return a.ID < b.ID
+		}),
+	)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return User{}, false, nil
-		}
-		return User{}, false, fmt.Errorf("userstore: read: %w", err)
+		return nil, err
 	}
-	var rec User
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return User{}, false, fmt.Errorf("userstore: decode: %w", err)
-	}
-	return rec, true, nil
+	return &userStore{s}, nil
 }
 
-// byUsername finds a user by username, case-insensitively (login handles are not
-// case-sensitive). It scans loadAll — fine for the modest user counts a single
-// Atlas instance holds; an index can replace it if that ever changes.
+// byUsername finds a user by username, case-insensitively — usernames identify a
+// human, so they must not depend on how one typed their name at the login prompt.
+// A scan is fine at the scale a single Atlas serves; there is no second index to
+// keep consistent.
 func (s *userStore) byUsername(username string) (User, bool, error) {
-	target := strings.ToLower(strings.TrimSpace(username))
-	if target == "" {
-		return User{}, false, nil
-	}
-	all, err := s.loadAll()
-	if err != nil {
-		return User{}, false, err
-	}
-	for _, u := range all {
-		if strings.ToLower(u.Username) == target {
-			return u, true, nil
-		}
-	}
-	return User{}, false, nil
+	return s.findBy(username, func(u User) string { return u.Username })
 }
 
-// byEmail finds a user by email, case-insensitively. An empty email never
-// matches, so users without an email can't be found by "".
+// byEmail finds a user by email address, case-insensitively. A user without an
+// email never matches, so an empty needle cannot resolve to one.
 func (s *userStore) byEmail(email string) (User, bool, error) {
-	target := strings.ToLower(strings.TrimSpace(email))
+	return s.findBy(email, func(u User) string { return u.Email })
+}
+
+// findBy is the shared scan behind the lookups: normalize the needle, and return
+// the first user whose field matches it case-insensitively. An empty needle — or
+// an empty field — never matches.
+func (s *userStore) findBy(needle string, field func(User) string) (User, bool, error) {
+	target := strings.ToLower(strings.TrimSpace(needle))
 	if target == "" {
 		return User{}, false, nil
 	}
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		return User{}, false, err
 	}
 	for _, u := range all {
-		if u.Email != "" && strings.ToLower(u.Email) == target {
+		if v := field(u); v != "" && strings.ToLower(v) == target {
 			return u, true, nil
 		}
 	}
 	return User{}, false, nil
 }
 
-// delete removes a user. A missing user is not an error (idempotent cleanup).
-func (s *userStore) delete(id string) error {
-	if err := os.Remove(s.fileFor(id)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("userstore: remove: %w", err)
-	}
-	return fsyncDir(s.dir)
-}
-
-// count returns the number of stored users. Bootstrap uses it to decide whether a
-// fresh instance needs a seed admin.
+// count reports how many users exist. The first-run bootstrap asks this to decide
+// whether anyone can still claim the initial admin account (ADR-0044).
 func (s *userStore) count() (int, error) {
-	all, err := s.loadAll()
+	all, err := s.LoadAll()
 	if err != nil {
 		return 0, err
 	}
 	return len(all), nil
-}
-
-// loadAll reads every user, oldest first (stable CreatedAt order), so listings
-// read like an account roster rather than filesystem order. Files that are not
-// user records are ignored.
-func (s *userStore) loadAll() ([]User, error) {
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, fmt.Errorf("userstore: read dir: %w", err)
-	}
-	var out []User
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		if _, err := hex.DecodeString(strings.TrimSuffix(e.Name(), ".json")); err != nil {
-			continue // not a hex-named record
-		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("userstore: read %s: %w", e.Name(), err)
-		}
-		var rec User
-		if err := json.Unmarshal(data, &rec); err != nil {
-			return nil, fmt.Errorf("userstore: decode %s: %w", e.Name(), err)
-		}
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != out[j].CreatedAt {
-			return out[i].CreatedAt < out[j].CreatedAt
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
 }

@@ -185,6 +185,85 @@ func TestBundleDeployUnknownProject(t *testing.T) {
 	}
 }
 
+// assertProcessProject fails unless the deployed process is listed with the given
+// project id (ADR-0034 grouping).
+func assertProcessProject(t *testing.T, x deployTestHarness, processID, want string) {
+	t.Helper()
+	code, b := x.do(http.MethodGet, "/api/v1/processes", "")
+	if code != http.StatusOK {
+		t.Fatalf("list processes: %d", code)
+	}
+	var list []processResp
+	if err := json.Unmarshal(b, &list); err != nil {
+		t.Fatalf("decode processes: %v", err)
+	}
+	for _, p := range list {
+		if p.ProcessID == processID {
+			if p.ProjectID != want {
+				t.Fatalf("process %q projectId = %q, want %q", processID, p.ProjectID, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("process %q not found in %s", processID, b)
+}
+
+// TestDeployStampsProjectID checks a deployment records the project its draft
+// belonged to and surfaces it on /api/v1/processes, across every deploy route: a
+// project bundle deploy, a direct deploy that names the project, and a direct
+// deploy that inherits the project from the matching draft. An unknown project on
+// a direct deploy is rejected, and a plain deploy stays ungrouped.
+func TestDeployStampsProjectID(t *testing.T) {
+	t.Run("project bundle deploy", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		x := deployTestHarness{t, srv.Handler()}
+		pid := x.mkProject("Grouped")
+		x.saveDraft(pid, deployableBPMN)
+		if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, b)
+		}
+		assertProcessProject(t, x, "approve", pid)
+	})
+
+	t.Run("direct deploy names the project", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		x := deployTestHarness{t, srv.Handler()}
+		pid := x.mkProject("Named")
+		if code, b := x.do(http.MethodPost, "/api/v1/deployments?projectId="+pid, deployableBPMN); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, b)
+		}
+		assertProcessProject(t, x, "approve", pid)
+	})
+
+	t.Run("direct deploy inherits from the draft", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		x := deployTestHarness{t, srv.Handler()}
+		pid := x.mkProject("Inherited")
+		x.saveDraft(pid, deployableBPMN) // draft filed under the project
+		if code, b := x.do(http.MethodPost, "/api/v1/deployments", deployableBPMN); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, b)
+		}
+		assertProcessProject(t, x, "approve", pid)
+	})
+
+	t.Run("direct deploy rejects an unknown project", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		x := deployTestHarness{t, srv.Handler()}
+		if code, _ := x.do(http.MethodPost, "/api/v1/deployments?projectId=nope", deployableBPMN); code != http.StatusBadRequest {
+			t.Fatalf("deploy unknown project: want 400")
+		}
+	})
+
+	t.Run("plain direct deploy is ungrouped", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		x := deployTestHarness{t, srv.Handler()}
+		if code, b := x.do(http.MethodPost, "/api/v1/deployments", deployableBPMN); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, b)
+		}
+		assertProcessProject(t, x, "approve", "")
+	})
+}
+
 // TestBundleDeployStoreErrors covers the 500 branches: a broken artifact load, a
 // broken project read, a resolver failure, and a persist failure during deploy.
 func TestBundleDeployStoreErrors(t *testing.T) {
@@ -199,7 +278,7 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	realDeploys := srv.deploys
 
 	// Broken drafts store → artifact load fails.
-	srv.drafts = &draftStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.drafts = brokenStore(newDraftStore(filepath.Join(t.TempDir(), "gone")))
 	if code, _ := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusInternalServerError {
 		t.Fatalf("deploy with broken drafts = %d, want 500", code)
 	}
@@ -210,7 +289,7 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProjectStore: %v", err)
 	}
-	if err := os.MkdirAll(ps.fileFor(pid), 0o755); err != nil {
+	if err := os.MkdirAll(ps.FileFor(pid), 0o755); err != nil {
 		t.Fatalf("mkdir record: %v", err)
 	}
 	srv.projects = ps
@@ -230,15 +309,15 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	// Remove the broken reference so the persist-failure case can reach phase 3.
 	// (Delete it via the store directly, then continue.)
 	var refs []dmnRef
-	srv.do(func() { refs, _ = srv.dmnrefs.loadAll() })
+	srv.do(func() { refs, _ = srv.dmnrefs.LoadAll() })
 	for _, rr := range refs {
 		if rr.ModelRef == "busy" {
-			srv.do(func() { _ = srv.dmnrefs.delete(rr.ID) })
+			srv.do(func() { _ = srv.dmnrefs.Delete(rr.ID) })
 		}
 	}
 
 	// Broken deployment store → persist fails during phase-3 deploy → 500.
-	srv.deploys = &deployStore{dir: filepath.Join(t.TempDir(), "gone")}
+	srv.deploys = brokenStore(newDeployStore(filepath.Join(t.TempDir(), "gone")))
 	if code, _ := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusInternalServerError {
 		t.Fatalf("deploy with broken deploy store = %d, want 500", code)
 	}

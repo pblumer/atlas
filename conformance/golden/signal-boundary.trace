@@ -1,0 +1,4 @@
+state: completed
+path: start -> fork -> review -> prep -> on_abort -> raise_abort -> aborted -> thrown
+vars:
+  ready=1

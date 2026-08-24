@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // dmnRefResp is the JSON shape of a DMN reference for the Modeler.
@@ -29,7 +31,7 @@ func toDmnRefResp(r dmnRef) dmnRefResp {
 func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -38,22 +40,22 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 		ProjectID string `json:"projectId"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
 	modelRef := strings.TrimSpace(payload.ModelRef)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "reference name is required")
+		httpapi.Error(w, http.StatusBadRequest, "reference name is required")
 		return
 	}
 	if modelRef == "" {
-		writeError(w, http.StatusBadRequest, "a temis model reference is required")
+		httpapi.Error(w, http.StatusBadRequest, "a temis model reference is required")
 		return
 	}
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, CreatedAt: time.Now().Unix()}
@@ -61,17 +63,17 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 	// which also enforces that it exists (400 otherwise).
 	if rec.ProjectID != "" {
 		if code, msg := s.authorizeTargetProject(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.dmnrefs.save(rec) })
+	s.do(func() { saveErr = s.dmnrefs.Save(rec) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "create dmn reference: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create dmn reference: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toDmnRefResp(rec))
+	httpapi.JSON(w, http.StatusOK, toDmnRefResp(rec))
 }
 
 // handleListDmnRefs lists DMN references, oldest first. An optional ?projectId=
@@ -82,7 +84,7 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []dmnRef
-		if recs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if recs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		var projs map[string]project
@@ -102,10 +104,10 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleUpdateDmnRef updates a DMN reference. It can move the reference to a
@@ -120,7 +122,7 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	// Pointer fields distinguish "absent" from "present but empty": an absent
@@ -131,41 +133,41 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		Name      *string `json:"name"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	var newName string
 	if payload.Name != nil {
 		newName = strings.TrimSpace(*payload.Name)
 		if newName == "" {
-			writeError(w, http.StatusBadRequest, "reference name cannot be blank")
+			httpapi.Error(w, http.StatusBadRequest, "reference name cannot be blank")
 			return
 		}
 	}
-	// Load the reference (to learn its current scope and to carry it into the save).
+	// Load the reference (to learn its current scope and carry it into the save).
 	var (
 		rec    dmnRef
 		found  bool
 		getErr error
 	)
-	s.do(func() { rec, found, getErr = s.dmnrefs.get(id) })
+	s.do(func() { rec, found, getErr = s.dmnrefs.Get(id) })
 	if getErr != nil {
-		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, "no dmn reference with that id")
+		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
 		return
 	}
 	// Editing (rename or move) needs editor on the reference's current scope; a
 	// move into a non-empty project also needs editor on that target (ADR-0071).
 	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 	if payload.ProjectID != nil && *payload.ProjectID != "" {
 		if code, msg := s.authorizeTargetProject(r, *payload.ProjectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
@@ -176,12 +178,12 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 		rec.Name = newName
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.dmnrefs.save(rec) })
+	s.do(func() { saveErr = s.dmnrefs.Save(rec) })
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "update dmn reference: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update dmn reference: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toDmnRefResp(rec))
+	httpapi.JSON(w, http.StatusOK, toDmnRefResp(rec))
 }
 
 // handleDeleteDmnRef removes a DMN reference. Deleting an absent reference
@@ -189,14 +191,14 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// Deletion inherits the reference's project scope (ADR-0071): editor required,
-	// invisible references 404, absent ones still succeed (idempotent).
+	// an invisible reference 404s, an absent one still succeeds (idempotent).
 	var (
 		projectID string
 		found     bool
 		getErr    error
 	)
 	s.do(func() {
-		rec, ok, e := s.dmnrefs.get(id)
+		rec, ok, e := s.dmnrefs.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -205,19 +207,19 @@ func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
 		projectID = rec.ProjectID
 	})
 	if getErr != nil {
-		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
 		return
 	}
 	if found {
 		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
 	var delErr error
-	s.do(func() { delErr = s.dmnrefs.delete(id) })
+	s.do(func() { delErr = s.dmnrefs.Delete(id) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete dmn reference: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete dmn reference: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "handle",
+    "on_launch"
+  ],
+  "path": [
+    "on_launch",
+    "handle",
+    "end"
+  ],
+  "variables": {
+    "handled": "1"
+  },
+  "dataObjects": []
+}

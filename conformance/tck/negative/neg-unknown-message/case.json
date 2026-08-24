@@ -1,0 +1,6 @@
+{
+  "name": "neg-unknown-message",
+  "model": "neg-unknown-message.bpmn",
+  "rejected": true,
+  "reason": "a receive task references a message that is not declared"
+}

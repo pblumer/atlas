@@ -1,0 +1,359 @@
+{
+  "generatedAt": "2026-08-21",
+  "entries": [
+    {
+      "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Find accounts in Entra ID, not just change them",
+        "de": "Konten in Entra ID finden, nicht nur ändern"
+      },
+      "summary": {
+        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them, and receives every match in a single process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert, und erhält alle Treffer in einer einzigen Prozessvariablen. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A loop's replay says why it went round again — or stopped",
+        "de": "Der Replay einer Schleife sagt, warum sie erneut lief — oder aufhörte"
+      },
+      "summary": {
+        "en": "A looping task used to be a column of identical rows: it ran nine times, and nothing said whether that was the model or a mistake. Each round now shows the condition as you wrote it, the values that condition read for that round, the maximum, and what the loop did next — ran again, or stopped, with the bound that stopped it. The task itself carries the same reading for the whole loop. A model that runs to its maximum because it states no condition now says so.",
+        "de": "Ein Schleifen-Task war bisher eine Spalte gleich aussehender Zeilen: Er lief neun Mal, und nichts sagte, ob das so gemeint war oder ein Fehler. Jeder Durchlauf zeigt jetzt die Bedingung so, wie Sie sie geschrieben haben, die Werte, die diese Bedingung in diesem Durchlauf gelesen hat, das Maximum und was die Schleife danach tat — noch einmal laufen oder aufhören, mitsamt der Grenze, die sie gestoppt hat. Der Task selbst trägt dieselbe Lesart für die ganze Schleife. Ein Modell, das bis zum Maximum läuft, weil es gar keine Bedingung nennt, sagt das jetzt auch."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-structured-variable-opens-where-it-stands-and-says-what-sh",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the shape of a variable, not just its first thirty characters",
+        "de": "Die Struktur einer Variable sehen, nicht nur ihre ersten dreissig Zeichen"
+      },
+      "summary": {
+        "en": "A list and one element out of that list looked the same in the variables table: both previews start with the same field, and the bracket that tells them apart falls off the left edge. The summary now carries the brackets — [3 items] against {3 fields} — and a click opens the value in place, formatted, so you read the structure instead of guessing at it. Values too large for a row still open in their own window.",
+        "de": "Eine Liste und ein einzelnes Element daraus sahen in der Variablentabelle gleich aus: Beide Vorschauen beginnen mit demselben Feld, und die Klammer, die sie unterscheidet, fällt links weg. Die Zusammenfassung trägt jetzt die Klammern — [3 items] gegenüber {3 fields} — und ein Klick öffnet den Wert direkt in der Zeile, formatiert. So liest man die Struktur, statt sie zu erraten. Werte, die für eine Zeile zu groß sind, öffnen weiterhin in einem eigenen Fenster."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A dot in a variable name is caught at deploy",
+        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
+      },
+      "summary": {
+        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
+        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-new-validation-rule-can-no-longer-take-down-a-running-serv",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An upgrade no longer stops on a model you already deployed",
+        "de": "Ein Upgrade bleibt nicht mehr an einem bereits deployten Modell hängen"
+      },
+      "summary": {
+        "en": "Atlas recompiles every deployed definition when it starts, and it used to apply the deploy checks again while doing so. A check added to a later version therefore met models that were deployed before it existed, refused them, and the server stopped starting at all — over a model nobody had touched, with every other definition and every running instance out of reach behind it. Those checks decide whether a model may be deployed, not whether it may run, so they no longer run at startup. A definition that was accepted comes back and keeps running, and Atlas writes one warning per model naming what it would fail today, so you can fix it in the Modeler in your own time. The decision models deployed with a process are treated the same way: a decision that no longer compiles no longer stops the server — it fails only if something evaluates it, and the other decisions keep answering. Deploying such a model still refuses it, with the rule named.",
+        "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Structures in the Variables tab stay closed until you open them",
+        "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
+      },
+      "summary": {
+        "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
+        "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A file without a diagram no longer imports into an empty canvas",
+        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
+      },
+      "summary": {
+        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
+        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
+      },
+      "link": {
+        "label": "ADR-0124",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-s-badge-counts-its-rounds-not-its-activations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop's badge says how often it ran",
+        "de": "Der Zähler an einer Schleife sagt, wie oft sie lief"
+      },
+      "summary": {
+        "en": "The number at the corner of a looping task counted one more than the rounds it ran: the engine enters the activity once as the loop itself and once per round, and the badge showed both. It now says the round count, marked with the loop symbol — and 0 for a loop that was reached but ran nothing, which is the case most worth noticing.",
+        "de": "Die Zahl an der Ecke eines Schleifen-Tasks zählte einen mehr als die tatsächlichen Durchläufe: Die Engine betritt die Aktivität einmal als Schleife selbst und einmal je Durchlauf, und der Zähler zeigte beides. Jetzt steht dort die Anzahl der Durchläufe, mit dem Schleifensymbol gekennzeichnet — und 0 bei einer Schleife, die erreicht wurde, aber nichts ausgeführt hat; genau der Fall, den man sehen will."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "token-markers-on-one-element-no-longer-overlap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Several tokens on one shape are readable again",
+        "de": "Mehrere Tokens auf einer Form sind wieder lesbar"
+      },
+      "summary": {
+        "en": "The replay draws a marker per token on an element, and they were spaced slightly closer than they are wide — so every pair sat partly on top of the one before it. A loop puts two on its task at all times, so this was the normal case rather than a rare one. They now stand clear of each other, and where a shape runs out of room the rest become a \"+n\".",
+        "de": "Der Replay zeichnet je Token einen Marker auf dem Element, und der Abstand war etwas kleiner als der Marker breit ist — jedes Paar lag also teilweise übereinander. Eine Schleife hat immer zwei davon auf ihrem Task, das war also der Normalfall, nicht die Ausnahme. Sie stehen jetzt frei nebeneinander, und wo die Form zu schmal wird, fasst ein „+n\" den Rest zusammen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "a-looping-activity-that-also-has-an-i-o-mapping-no-longer-lo",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop stops at the maximum you set",
+        "de": "Eine Schleife hält bei dem Maximum, das Sie setzen"
+      },
+      "summary": {
+        "en": "An activity with the loop marker that also mapped a value in had lost count of its own rounds: a task set to run at most nine times ran until somebody cancelled the instance, a collection was worked through one element over and over, and what the rounds produced never reached the process. The rounds are counted again — the maximum holds, the collection advances, and the result of the last run is there when the loop ends.",
+        "de": "Eine Aktivität mit Schleifen-Marker, die zusätzlich einen Wert per Mapping hereinreichte, verlor die Zählung ihrer Durchläufe: Ein Task mit höchstens neun Läufen lief, bis jemand die Instanz abbrach, eine Sammlung wurde immer wieder mit demselben Element abgearbeitet, und was die Durchläufe erzeugt hatten, kam nie im Prozess an. Die Durchläufe werden wieder gezählt — das Maximum greift, die Sammlung läuft weiter, und das Ergebnis des letzten Laufs steht am Ende der Schleife bereit."
+      },
+      "link": {
+        "label": "ADR-0068",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
+      },
+      "tags": [
+        "Modeler",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-body-no-longer-writes-a-null-over-the-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop no longer empties a variable it never touched",
+        "de": "Eine Schleife leert keine Variable mehr, die sie nie angefasst hat"
+      },
+      "summary": {
+        "en": "A looping activity that reshapes its result on the way out applied that rule twice: once per round, correctly, and once more for the loop as a whole — where there was nothing to reshape, so it wrote an empty value into the process, over whatever the variable of that name already held. The rule now runs where the work is, in each round.",
+        "de": "Eine Schleifen-Aktivität, die ihr Ergebnis beim Verlassen umformt, wendete diese Regel zweimal an: einmal je Durchlauf, richtig, und noch einmal für die Schleife als Ganzes — dort gab es nichts umzuformen, also schrieb sie einen leeren Wert in den Prozess, über das, was die gleichnamige Variable schon enthielt. Die Regel läuft jetzt dort, wo die Arbeit passiert: in jedem Durchlauf."
+      },
+      "link": {
+        "label": "ADR-0068",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ]
+    },
+    {
+      "id": "a-finished-loop-round-no-longer-leaves-a-token-behind-on-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The replay of a loop shows one round, not a pile",
+        "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
+      },
+      "summary": {
+        "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
+        "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-model-that-maps-onto-loopcounter-is-refused-at-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Writing to the loop counter is caught before it runs",
+        "de": "Ein Schreiben auf den Schleifenzähler wird vor dem Lauf abgefangen"
+      },
+      "summary": {
+        "en": "Every round of a loop is handed its number as loopCounter, and a model may read it freely. A mapping that writes to that name overwrote the engine's own count, and the loop then ran until somebody cancelled it. The deploy now refuses such a model and names the element and the mapping, instead of leaving it to be discovered on a runaway instance.",
+        "de": "Jeder Durchlauf einer Schleife bekommt seine Nummer als loopCounter, und ein Modell darf sie frei lesen. Ein Mapping, das auf diesen Namen schreibt, überschrieb die Zählung der Engine, und die Schleife lief dann, bis jemand sie abbrach. Der Deploy weist ein solches Modell jetzt ab und benennt Element und Mapping, statt es an einer davonlaufenden Instanz sichtbar werden zu lassen."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    }
+  ]
+}

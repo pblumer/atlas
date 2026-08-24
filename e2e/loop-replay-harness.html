@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas loop-replay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`,
+         for the two things a looping activity puts on the replay: the loop explanation
+         on a round (ADR-0077/0133) and the token markers of the several element
+         instances that sit on one shape while a loop runs. bpmn assets are the
+         production ones, served at root. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000; // fixed wall-clock (ms) so timestamps are deterministic
+      const ns = (ms) => ms * 1e6;
+
+      // One script task carrying the ↻ marker, bounded by a condition and a maximum —
+      // the shape of the model whose replay this covers.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_loop" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="looper" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:scriptTask id="Rechne_1" name="rechne was">
+      <bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing>
+      <bpmn:extensionElements><zeebe:script expression="=100" resultVariable="result"/></bpmn:extensionElements>
+      <bpmn:standardLoopCharacteristics loopMaximum="4"><bpmn:loopCondition>=result &gt;= 500</bpmn:loopCondition></bpmn:standardLoopCharacteristics>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Rechne_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Rechne_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="looper">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Rechne_1_di" bpmnElement="Rechne_1"><dc:Bounds x="260" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="196" y="160"/><di:waypoint x="260" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="360" y="160"/><di:waypoint x="440" y="160"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const LOOP = { kind: "loop", condition: "result >= 500", maximum: 4 };
+      const read = [{ name: "result", value: "100", kind: "number", scope: "Rechne_1" }];
+
+      // Start, the loop's body, three rounds under it, Ende. The rounds carry what the
+      // server derives: which round, what the condition read, and what the loop then did.
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1" },
+        { elementId: "Rechne_1", elementInstanceKey: "1001", type: "bpmn:scriptTask", position: 2, tokenId: "1",
+          loop: { ...LOOP, rounds: 3 } },
+        { elementId: "Rechne_1", elementInstanceKey: "1002", type: "bpmn:scriptTask", position: 3, tokenId: "2",
+          iteration: 1, loop: { ...LOOP, round: 1, outcome: "repeated", reads: read } },
+        { elementId: "Rechne_1", elementInstanceKey: "1003", type: "bpmn:scriptTask", position: 4, tokenId: "3",
+          iteration: 2, loop: { ...LOOP, round: 2, outcome: "repeated", reads: read } },
+        { elementId: "Rechne_1", elementInstanceKey: "1004", type: "bpmn:scriptTask", position: 5, tokenId: "4",
+          iteration: 3, loop: { ...LOOP, round: 3, outcome: "stopped", stopReason: "maximum", reads: read } },
+        { elementId: "End_1", elementInstanceKey: "1005", type: "bpmn:endEvent", position: 6, tokenId: "1" },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500), variables: [] }));
+
+      // Frame 2 is the everyday case a loop produces: the body and the one round running
+      // under it, both on the same shape. Frame 5 is the crowded one — more tokens than a
+      // 100px task has room for.
+      const tok = (n) => Array.from({ length: n }, (_, i) => (
+        { elementId: "Rechne_1", tokenId: String(i + 1), elementInstanceKey: String(1001 + i), state: "active" }));
+      const frames = [
+        { position: 1, at: ns(T), tokens: [{ elementId: "Start_1", tokenId: "1", elementInstanceKey: "1000", state: "active" }] },
+        { position: 2, at: ns(T + 1000), tokens: tok(1) },
+        { position: 3, at: ns(T + 2000), tokens: tok(2) },
+        { position: 4, at: ns(T + 3000), tokens: tok(3) },
+        { position: 5, at: ns(T + 4000), tokens: tok(7) },
+        { position: 6, at: ns(T + 5000), tokens: [] },
+      ];
+
+      const TIMELINE = { processDefKey: "7", processId: "looper", version: 1, state: "completed", steps, frames };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        // The engine counts a looping activity once as its body and once per round, so the
+        // raw visit count here is 4 for three rounds — the number the badge must not show.
+        if (url.includes("/runtime")) return { elements: [{ elementId: "Rechne_1", visits: 4, tokens: 0, incidents: 0 }] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

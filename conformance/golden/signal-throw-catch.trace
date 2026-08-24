@@ -1,0 +1,4 @@
+state: completed
+path: start -> fork -> await_abort -> prep -> raise_abort -> join -> join -> end
+vars:
+  ready=1

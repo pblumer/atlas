@@ -7,13 +7,19 @@ against a live Atlas server (`0.1.0-dev`).
 | File | What it is |
 |------|-----------|
 | [`pruefe-auftrag.bpmn`](pruefe-auftrag.bpmn) | The minimal runnable scenario: `Start → Script Task "prüfe den Auftrag" → Ende`. A single inline FEEL script releases an order at/below the 1000 € approval limit and flags larger ones. Self-completing, no external worker. |
+| [`pruefe-datensaetze.bpmn`](pruefe-datensaetze.bpmn) + [`pruefe-datensaetze.dmn`](pruefe-datensaetze.dmn) + [`csv-upload-form.json`](csv-upload-form.json) + [`row-correction-form.json`](row-correction-form.json) | CSV batch validation, **fully in-process** (ADR-0084 + ADR-0086 + ADR-0087): the instance starts and parks at a **"CSV hochladen" user task** — the Quality Manager uploads the file in its form (the Tasks app submits the content as `csvText`). A **script task** holds the column layout (`columnConfig`); a **CSV-import service task** (`io.atlas.csv-import`) parses it into `rows`; then a **multi-instance subprocess** runs a **business rule task** per row against the DMN decision `RowValid` (email/group/licence). A valid row collects its `verdict`; an invalid one parks on a **correction user task**, and once corrected it re-validates (loop until valid). Self-completing; no ingestion endpoint or separate screen. |
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
 | [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
 | [`order-to-cash.bpmn`](order-to-cash.bpmn) | The full order lifecycle: cart calculation → approval (≥ 100 €, user task) → **parallel** delivery & billing (service tasks). Parks on the worker-backed steps — a realistic, not-fully-automatic process. |
 | [`order-to-cash-app.html`](order-to-cash-app.html) | A self-contained single-page app that mirrors `order-to-cash.bpmn`: edit the cart, watch the sum compute live, approve, and clear the delivery/billing tasks. No server needed — open it in a browser. |
 | [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn) | The **live** sibling: same flow, but delivery/billing are `userTask`s (HTTP-completable) instead of `serviceTask`s, so a browser app can drive the real instance end to end. |
 | [`../api/web/order-to-cash-live.html`](../api/web/order-to-cash-live.html) | The **live** app — served by the Atlas server itself (`/order-to-cash-live.html`). It deploys the model, starts a real instance with your cart, and completes each task over the HTTP API. No business logic in the client; Atlas runs the process. |
+| [`../api/web/order-to-cash-jobs.html`](../api/web/order-to-cash-jobs.html) | The **live** app against the *service-task* model: it lists the parked jobs (`GET /instances/{key}/jobs`) and completes them (`POST /jobs/{key}/complete`) — the app acts as the job worker. |
+| [`galsync.bpmn`](galsync.bpmn) | Cross-forest Global Address List sync: a DirSync delta over the source forest, then a contact created, updated or removed in the target one, looping on a timer with the cookie carried in a variable. MIM ships this as a management agent; here it is a *process*, because GALSync is a policy rather than a protocol. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
+| [`bonitaet-mockup.bpmn`](bonitaet-mockup.bpmn) | **Bonitätsprüfung mit simuliertem Umsystem** (ADR-0120): ein `serviceTask` im **Mockup-Modus** (`atlas:mockupConnector`) — die Engine simuliert die Umsystem-Abfrage selbst, mit **zufälliger Antwortzeit** (`PT1S`–`PT4S`, als Timer), einer **geskripteten Antwort** (`resultExpression` → `bonitaet`) und einer **Ausfallquote** (`failRate` + `errorCode`), die einen **BPMN-Fehler** wirft, den eine **Error-Boundary** in einen manuellen Pfad leitet. Ein Exklusiv-Gateway verzweigt auf die simulierte Antwort. Zeigt, wie sich ein Prozess end-to-end durchspielen lässt, bevor das echte (per REST angebundene) Umsystem existiert — kein externer Worker nötig. Setzt man `failRate` auf 0, entfällt der Ausfall; `min == max` macht die Dauer fix. |
+| [`pruefung/`](pruefung/) | **Prüfung mit Zeitlimit und DMN-Bewertung** (ADR-0028 + ADR-0040 + DMN): ein Assessment als Prozess. Ein **User-Task** trägt das Prüfungsformular (vier Single-Choice-Fragen); ein unterbrechendes **Boundary-Timer-Event** (`PT45M`) setzt das Zeitlimit — läuft es ab, endet der Prozess in *„Zeit abgelaufen"*. Ein Skript zählt die Punkte, ein **Business-Rule-Task** bewertet sie über die DMN-Tabelle `Notenschluessel` (Bestehensgrenze + Notenstufen — fachlich pflegbar, nicht im Code), und ein **Exklusiv-Gateway** verzweigt auf `bestanden`. Zeigt, was Atlas einer reinen Prüfungssoftware voraushat: hartes Zeitlimit, auditierbarer DMN-Trace, ergebnisabhängige Folgeschritte. |
+| [`reisebuchung/`](reisebuchung/) | **Abhängige Formulare auf zwei Ebenen** (ADR-0028 + DMN): ein Reisebuchungs-Prozess, der (A) *im Formular* eine **kaskadierende** Zielauswahl und ein **bedingtes Feld** zeigt (form-js `valuesExpression` / `conditional.hide`), und (B) *im Prozess* je nach Daten unterschiedliche Formulare erzwingt — eine **DMN-Tabelle** entscheidet aus Reiseart + Alter, ob Visum- und/oder Einverständnis-Formular Pflicht sind, **Inclusive-Gateways** routen darauf. Zeigt sauber, welche „Abhängigkeit" ins Formular gehört und welche in den Prozess. Zwei Kunden-Apps unter `api/web/` (Fall B: Wizard über mehrere User-Tasks; [`fall-a/`](reisebuchung/fall-a/): **ein** User-Task, im Client geblättert). |
 
 > Looking for a model that parks on human tasks so you can watch the task
 > lifecycle? See [`../postman/order-approval.bpmn`](../postman/order-approval.bpmn)
@@ -50,9 +56,9 @@ Order received
 
 The whole model runs to completion the moment you start an instance, because:
 
-- **Every activity is an inline FEEL script task** (`<script expression="…"
+- **Every activity is an inline FEEL script task** (`<zeebe:script expression="…"
   resultVariable="…"/>`). Atlas evaluates these *inside the engine* — unlike a
-  `serviceTask`, a `<jobScript>`, or a `businessRuleTask`, an inline script needs
+  `serviceTask`, an `<atlas:jobScript>`, or a `businessRuleTask`, an inline script needs
   no external worker, so the token never parks. (A `serviceTask` with no worker
   attached would sit active forever — correct engine behavior, but not what you
   want in a smoke test.)
@@ -335,6 +341,21 @@ The entire integration is three calls — `POST /deployments`, `POST
 on the page makes them visible. Because it ships under `api/web/`, it is embedded
 in the binary: **rebuild and redeploy the Atlas server**, then open
 `/order-to-cash-live.html`.
+
+### Service-task variant — `api/web/order-to-cash-jobs.html`
+
+The live app above uses user tasks because only they are listed by `GET /tasks`.
+The **jobs** variant drives the *service-task* model instead, using the read side
+of the operator job affordance:
+
+- `GET /api/v1/instances/{key}/jobs` lists every activatable job the instance is
+  parked on — of **any** type, not just user tasks (this is the endpoint that makes
+  the operator complete usable from a client), and
+- `POST /api/v1/jobs/{key}/complete` finishes each one, the same call for a
+  service-task job and the approval user-task job alike.
+
+So the app becomes the job worker: list the parked jobs, complete them, watch the
+parallel delivery/billing branches close. Same tiny client, different mechanism.
 
 ## Clean up
 

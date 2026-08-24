@@ -4,6 +4,12 @@
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 
+> **Update (2026-08-21).** The REST request body is no longer always the whole
+> variable scope: a task's `zeebe:ioMapping` inputs, when it has any, are the body,
+> and the url/header/query FEEL fields resolve up the task's scope chain so they see
+> those mapped locals (ADR-0068). See
+> [ADR-0174](0174-connector-payloads-are-the-input-mapping.md).
+
 ## Context and problem statement
 
 Atlas already runs several "kinds" of service task through the job path: a plain

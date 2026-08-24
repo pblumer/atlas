@@ -1,0 +1,11 @@
+{
+  "name": "signal-throw-catch",
+  "model": "signal-throw-catch.bpmn",
+  "features": [
+    "signal"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

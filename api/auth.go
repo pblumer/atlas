@@ -1,12 +1,11 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +13,9 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/logging"
 )
 
 // This file is the authentication boundary (ADR-0044). It is deliberately thin
@@ -71,40 +73,6 @@ func newUserID() (string, error) {
 		return "", err
 	}
 	return "usr_" + suffix, nil
-}
-
-// Principal is the authenticated identity of a request. It carries a snapshot of
-// the user's roles taken at login, so authorization checks read the context and
-// never have to touch the user store off the run-loop goroutine. A role change
-// therefore takes effect on the user's next login — an acceptable MVP tradeoff
-// (ADR-0044).
-type Principal struct {
-	UserID   string
-	Username string
-	Roles    []string
-}
-
-// hasRole reports whether the principal carries the given role.
-func (p *Principal) hasRole(role string) bool {
-	for _, r := range p.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
-}
-
-type principalCtxKey struct{}
-
-func withPrincipal(ctx context.Context, p *Principal) context.Context {
-	return context.WithValue(ctx, principalCtxKey{}, p)
-}
-
-// principalFrom returns the request's authenticated principal, or nil when the
-// request is unauthenticated (auth disabled, or no valid session).
-func principalFrom(ctx context.Context) *Principal {
-	p, _ := ctx.Value(principalCtxKey{}).(*Principal)
-	return p
 }
 
 // sessionCookie is the name of the opaque session cookie.
@@ -239,15 +207,75 @@ func (s *Server) InternalToken() string { return s.internalToken }
 // administration, so a leaked token cannot manage accounts.
 const servicePrincipalName = "system:mcp"
 
+// RoleDeployAgent marks the principal a deploy token resolves to: a peer Atlas
+// publishing a bundle here (ADR-0129). It is deliberately not a user role — no
+// account carries it, it cannot be assigned, and it grants nothing on its own.
+// What it may reach is decided by deployAgentAllowed below.
+const RoleDeployAgent = "deploy-agent"
+
+// deployAgentPrincipalPrefix namespaces the synthetic user id a deploy token
+// resolves to, so an audit trail says which token acted.
+const deployAgentPrincipalPrefix = "system:deploy:"
+
+// deployAgentAllowed is the complete set of operations a deploy token may reach:
+// push a bundle, and read back what this server now runs for that application.
+// Both are what ADR-0129 scoped the credential to — a publisher has to see the
+// result of what it shipped, or its own per-target view is blind.
+//
+// This is a fail-closed allowlist rather than per-handler rejection, and that is
+// the point: a deploy token is a credential handed to another machine, so the
+// blast radius of it leaking must be provable by reading one short list, not by
+// auditing every handler for a role check somebody might have forgotten to add.
+//
+// Matching goes through an http.ServeMux rather than hand-rolled path comparison,
+// so wildcards are resolved by the same matcher that routes the real request —
+// hand-written path parsing is exactly where an allowlist springs a leak.
+var deployAgentAllowed = []string{
+	"POST /api/v1/applications/import",
+	"GET /api/v1/applications/{id}/deployments",
+}
+
+// deployAgentMux resolves a request against deployAgentAllowed. It carries no
+// handlers; only whether a pattern matched is consulted.
+var deployAgentMux = func() *http.ServeMux {
+	m := http.NewServeMux()
+	nop := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	for _, pattern := range deployAgentAllowed {
+		m.Handle(pattern, nop)
+	}
+	return m
+}()
+
+// deployAgentMayReach reports whether a deploy token may perform this request.
+// An unmatched request yields an empty pattern, so anything not listed is refused.
+func deployAgentMayReach(r *http.Request) bool {
+	_, pattern := deployAgentMux.Handler(r)
+	return pattern != ""
+}
+
+// isDeployAgent reports whether a principal is a peer authenticated by a deploy
+// token rather than a person or the in-process MCP adapter.
+func isDeployAgent(p *httpapi.Principal) bool { return p != nil && p.HasRole(RoleDeployAgent) }
+
 // principalFor resolves a request to a Principal, or nil. It first honors a valid
 // internal bearer token (the MCP adapter's service identity), then a session
 // cookie. It reads only the session store and the in-memory token (never the user
 // store), so it is safe to call from a handler goroutine.
-func (s *Server) principalFor(r *http.Request) *Principal {
-	if s.internalToken != "" {
-		if tok, ok := bearerToken(r); ok &&
+func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
+	if tok, ok := bearerToken(r); ok {
+		if s.internalToken != "" &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			return &Principal{Username: servicePrincipalName}
+			return &httpapi.Principal{UserID: servicePrincipalName, Username: servicePrincipalName}
+		}
+		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
+		// index is an in-memory, mutex-guarded mirror of the durable records, so this
+		// stays safe to call from a handler goroutine and costs no disk read.
+		if rec, ok := s.deployTokens.match(tok); ok {
+			return &httpapi.Principal{
+				UserID:   deployAgentPrincipalPrefix + rec.ID,
+				Username: rec.Name,
+				Roles:    []string{RoleDeployAgent},
+			}
 		}
 	}
 	c, err := r.Cookie(sessionCookie)
@@ -258,7 +286,7 @@ func (s *Server) principalFor(r *http.Request) *Principal {
 	if !ok {
 		return nil
 	}
-	return &Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles}
+	return &httpapi.Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles}
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header,
@@ -275,14 +303,20 @@ func bearerToken(r *http.Request) (string, bool) {
 // requiresAuth reports whether enforcement gates a path when auth is enabled.
 // Only /api/v1 is gated, minus the endpoints that must work before login: the
 // login call itself, product info (the UI reads it on the login screen), and the
-// OpenAPI document. The static UI and /healthz are never gated so the login
-// screen can load at all.
+// OpenAPI document. The static UI, /healthz and /readyz are never gated so the
+// login screen can load at all and a probe that carries no session still works.
 func requiresAuth(path string) bool {
 	if path != "/api/v1" && !strings.HasPrefix(path, "/api/v1/") {
 		return false
 	}
 	switch path {
 	case "/api/v1/auth/login", "/api/v1/info", "/api/v1/openapi.json":
+		return false
+	case "/api/v1/settings/theme", "/api/v1/settings/logo", "/api/v1/settings/registration":
+		// The brand accent (theme), the brand logo (ADR-0148) and the self-service
+		// registration link (ADR-0126) are all read by the login screen before
+		// authentication. Only GET is served pre-auth; PUT/DELETE re-check the admin
+		// role in the handler, so writes stay gated even though the path is public here.
 		return false
 	}
 	return true
@@ -295,10 +329,18 @@ func requiresAuth(path string) bool {
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p := s.principalFor(r); p != nil {
-			r = r.WithContext(withPrincipal(r.Context(), p))
+			r = r.WithContext(httpapi.WithPrincipal(r.Context(), p))
 		}
-		if s.authEnabled && requiresAuth(r.URL.Path) && principalFrom(r.Context()) == nil {
-			writeError(w, http.StatusUnauthorized, "authentication required")
+		if s.authEnabled && requiresAuth(r.URL.Path) && httpapi.PrincipalFrom(r.Context()) == nil {
+			httpapi.Error(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		// A deploy token authenticates a peer, not a user: it may reach exactly the
+		// operations on the allowlist and nothing else, whatever the path's own rules
+		// would otherwise permit. Enforced here, in one place, so the credential's
+		// reach is provable by reading deployAgentAllowed (ADR-0129).
+		if p := httpapi.PrincipalFrom(r.Context()); isDeployAgent(p) && !deployAgentMayReach(r) {
+			httpapi.Error(w, http.StatusForbidden, "a deploy token may only publish an application bundle and read its deployments")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -313,9 +355,9 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if !s.authEnabled {
 		return true
 	}
-	p := principalFrom(r.Context())
-	if p == nil || !p.hasRole(RoleAdmin) {
-		writeError(w, http.StatusForbidden, "admin role required")
+	p := httpapi.PrincipalFrom(r.Context())
+	if p == nil || !p.HasRole(RoleAdmin) {
+		httpapi.Error(w, http.StatusForbidden, "admin role required")
 		return false
 	}
 	return true
@@ -366,13 +408,18 @@ func (s *Server) bootstrapAdmin(now int64) error {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := s.users.save(u); err != nil {
+	if err := s.users.Save(u); err != nil {
 		return err
 	}
 	if generated {
-		// Logged once, to stderr, so the operator can capture it on first boot.
-		// A pre-set ATLAS_ADMIN_PASSWORD is never logged.
-		log.Printf("atlas: seeded admin user %q with a generated password: %s", username, password)
+		// Logged once so the operator can capture it on first boot; a pre-set
+		// ATLAS_ADMIN_PASSWORD is never logged. The password deliberately stays inside
+		// the message rather than becoming an attribute: an attribute is what a log
+		// shipper extracts, indexes and keeps (ADR-0142 — no secret becomes a field).
+		logging.Warn(logging.AuthAdminSeeded,
+			fmt.Sprintf("seeded admin user with a generated password: %s — capture it now, "+
+				"it is not shown again", password),
+			slog.String("username", username))
 	}
 	return nil
 }

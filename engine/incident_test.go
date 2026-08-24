@@ -46,7 +46,7 @@ func TestJobFailWithRetriesRetries(t *testing.T) {
 	defer h.close(t)
 	p, jobKey, jobType := startedJob(t, h)
 
-	p.FailJob(jobKey, 2, "transient")
+	p.FailJob(jobKey, 2, "transient", 0)
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestJobFailExhaustedRaisesIncident(t *testing.T) {
 	defer h.close(t)
 	p, jobKey, jobType := startedJob(t, h)
 
-	p.FailJob(jobKey, 0, "boom")
+	p.FailJob(jobKey, 0, "boom", 0)
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestResolveIncidentResumes(t *testing.T) {
 	defer h.close(t)
 	p, jobKey, jobType := startedJob(t, h)
 
-	p.FailJob(jobKey, 0, "boom")
+	p.FailJob(jobKey, 0, "boom", 0)
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (fail): %v", err)
 	}
@@ -144,7 +144,7 @@ func TestIncidentRecovers(t *testing.T) {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
 	jobKey := singleActivatableJob(t, h1.store, jobType)
-	p1.FailJob(jobKey, 0, "boom")
+	p1.FailJob(jobKey, 0, "boom", 0)
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (fail): %v", err)
 	}
@@ -182,8 +182,8 @@ func TestFailAndResolveNoOpWhenAbsent(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 
-	p.FailJob(model.NewKey(1, 999), 0, "boom") // no such job
-	p.ResolveIncident(model.NewKey(1, 888), 1) // no such incident
+	p.FailJob(model.NewKey(1, 999), 0, "boom", 0) // no such job
+	p.ResolveIncident(model.NewKey(1, 888), 1)    // no such incident
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestCancelInstanceClearsIncident(t *testing.T) {
 	defer h.close(t)
 	p, jobKey, _ := startedJob(t, h)
 
-	p.FailJob(jobKey, 0, "boom")
+	p.FailJob(jobKey, 0, "boom", 0)
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (fail): %v", err)
 	}

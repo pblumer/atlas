@@ -1,0 +1,5 @@
+state: completed
+path: start -> seed -> double -> double -> double -> double -> end
+vars:
+  items=[10,20,30]
+  results=[20,40,60]

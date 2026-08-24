@@ -1,0 +1,20 @@
+{
+  "id": "community.slack-message",
+  "version": "0.8.1",
+  "kind": "service-task",
+  "title": "Slack Message",
+  "author": "community · a.meier",
+  "description": "Post a message to a Slack channel via an incoming webhook registered on your server. Channel and text are authored in the model; the webhook URL is referenced by name and never stored in the model.",
+  "engineCompat": ">=0.9",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Slack Message",
+    "id": "community.slack-message",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Webhook reference", "type": "String", "binding": { "type": "property", "name": "atlas:credentialsRef" } },
+      { "label": "Channel", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:channel" } },
+      { "label": "Text", "type": "Text", "feel": "optional", "binding": { "type": "property", "name": "atlas:text" } }
+    ]
+  }
+}

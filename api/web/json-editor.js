@@ -145,6 +145,10 @@ export function attachJSONEditor(textarea, opts = {}) {
   wrap.appendChild(textarea);
   wrap.appendChild(toolbar);
   textarea.classList.add("json-input");
+  // A JSON value is a code field: F2 opens it in the Developer View (ADR-0145).
+  // Declared by attribute rather than by importing dev-view.js, which would close a
+  // cycle — dev-lang.js reads this module's tokenizer.
+  textarea.dataset.devlang = "json";
   textarea.setAttribute("spellcheck", "false");
   textarea.setAttribute("autocapitalize", "off");
   textarea.setAttribute("autocomplete", "off");
@@ -322,9 +326,9 @@ export function attachJSONEditor(textarea, opts = {}) {
         <div class="json-modal-head">
           <strong>Edit JSON</strong>
           <span style="flex:1"></span>
-          <button type="button" class="btn ghost small json-modal-fmt">{ } Format</button>
-          <button type="button" class="btn ghost small json-modal-cancel">Cancel</button>
-          <button type="button" class="btn small json-modal-apply">Apply</button>
+          <button type="button" class="btn ghost small json-modal-fmt" title="Reformat the JSON">{ } Format</button>
+          <button type="button" class="btn ghost small json-modal-cancel" title="Close without applying changes">Cancel</button>
+          <button type="button" class="btn small json-modal-apply" title="Apply the edited JSON">Apply</button>
         </div>
         <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea></div>
       </div>`;

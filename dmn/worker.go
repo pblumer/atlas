@@ -80,7 +80,7 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 // made live and after the fact (ADR-0066). sink, if non-nil, additionally observes
 // each result. [Handler] (local) and the temis connector worker (central, ADR-0050)
 // are both built on it.
-func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
+func DecisionHandler(store state.Reader, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
 	return func(j job.Job) (job.Completion, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -100,7 +100,7 @@ func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink f
 		if err != nil {
 			return job.Completion{}, err
 		}
-		inputs, err := buildInputs(store, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
+		inputs, err := buildInputs(store, j.ElementInstanceKey, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
 		if err != nil {
 			return job.Completion{}, fmt.Errorf("dmn: build inputs for element %d: %w", j.ElementInstanceKey, err)
 		}
@@ -159,7 +159,7 @@ func jsonObject(m map[string]any) string {
 // model deployed under the process's own key (ADR-0014). Register it with a
 // [job.Runner] via HandleCompleting for the reserved DMN job type
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
-func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
 		// The task's binding selects which deployed model version to evaluate
 		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
@@ -180,7 +180,13 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(
 // a base, overlaid with the input mappings evaluated over the instance's live
 // variables (a mapping overrides a static input of the same name). A nil result
 // evaluates every referenced decision input to FEEL null.
-func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
+//
+// The mappings resolve over the business rule task's full scope chain (elementKey
+// up to the process root), not just the process scope, so a task nested in a
+// subprocess or a multi-instance body reads its enclosing scope's variables — e.g.
+// a per-row `inputElement` bound by a multi-instance loop (ADR-0068 scope-chain
+// resolution, ADR-0077, ADR-0084). piKey binds the reserved processInstanceKey.
+func buildInputs(store state.Reader, elementKey, piKey uint64, staticJSON string, mappings []compiler.DecisionInputMapping) (map[string]any, error) {
 	base, err := decodeInputs(staticJSON)
 	if err != nil {
 		return nil, err
@@ -188,7 +194,7 @@ func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings [
 	if len(mappings) == 0 {
 		return base, nil
 	}
-	scopeVars, err := readScopeVars(store, scope)
+	scopeVars, err := readScopeChainVars(store, elementKey)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +203,7 @@ func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings [
 		out[k] = v
 	}
 	for _, m := range mappings {
-		out[m.Target] = evalMapping(scope, scopeVars, m.Source)
+		out[m.Target] = evalMapping(piKey, scopeVars, m.Source)
 	}
 	return out, nil
 }
@@ -206,39 +212,34 @@ func buildInputs(store *state.Store, scope uint64, staticJSON string, mappings [
 // and returns its Go value for the decision context. A failed evaluation yields
 // nil (FEEL null), matching the engine's null-propagating script-task behavior, so
 // one bad mapping does not abort the decision.
-func evalMapping(scope uint64, scopeVars map[string]model.VariableValue, source *expr.Compiled) any {
-	v, err := source.Eval(bindStoredVars(scope, scopeVars, source.Inputs()))
+func evalMapping(piKey uint64, scopeVars map[string]model.VariableValue, source *expr.Compiled) any {
+	v, err := source.Eval(bindStoredVars(piKey, scopeVars, source.Inputs()))
 	if err != nil {
 		return nil
 	}
 	return feelToInput(v)
 }
 
-// readScopeVars reads all of a scope's variables into a map keyed by name, so the
-// worker binds only the names each mapping reads without a per-name store lookup.
-func readScopeVars(store *state.Store, scope uint64) (map[string]model.VariableValue, error) {
-	vars := map[string]model.VariableValue{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = *v
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vars, nil
+// readScopeChainVars reads the variables a business rule task sees into a map keyed
+// by name, resolving up the element instance's scope chain — its own activity-local
+// scope first, then each enclosing scope to the process root, nearest winning
+// (ADR-0068). A top-level task's chain is just the process scope, so this degenerates
+// to the previous single-scope read.
+func readScopeChainVars(store state.Reader, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
+	return state.VisibleVariablesMap(store, elementInstanceKey)
 }
 
-// bindStoredVars turns the named variables from a scope into a FEEL binding. A
-// name absent from the scope is left unbound (FEEL null); the reserved name
-// processInstanceKey binds to the scope's own key as a string.
-func bindStoredVars(scope uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+// bindStoredVars turns the named variables the task sees into a FEEL binding. A
+// name absent from the chain is left unbound (FEEL null); the reserved name
+// processInstanceKey binds to the process instance's key as a string.
+func bindStoredVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
 	if len(names) == 0 {
 		return nil
 	}
 	m := make(map[string]expr.Value, len(names))
 	for _, n := range names {
 		if n == builtinProcessInstanceKey {
-			m[n] = expr.String(strconv.FormatUint(scope, 10))
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
 			continue
 		}
 		if v, ok := scopeVars[n]; ok {

@@ -1,0 +1,40 @@
+Atlas has been deployed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Image: {{ include "atlas.image" . }}
+
+1. Reach the API / web UI:
+{{- if .Values.ingress.enabled }}
+   Ingress:
+   {{- range .Values.ingress.hosts }}
+     {{- $scheme := "http" }}
+     {{- if $.Values.ingress.tls }}{{ $scheme = "https" }}{{ end }}
+     {{- range .paths }}
+     {{ $scheme }}://{{ .host }}{{ .path }}
+     {{- end }}
+   {{- end }}
+{{- else if eq .Values.service.type "ClusterIP" }}
+   Port-forward from your machine:
+     kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "atlas.fullname" . }} 8080:{{ .Values.service.port }}
+   Then open http://127.0.0.1:8080/  (API docs at /api/docs, MCP at /mcp).
+{{- else }}
+   Service type is {{ .Values.service.type }}; find its external address with:
+     kubectl --namespace {{ .Release.Namespace }} get svc {{ include "atlas.fullname" . }}
+{{- end }}
+
+2. Authentication:
+{{- if .Values.atlas.auth.enabled }}
+   Login is REQUIRED. An admin is seeded on first run from{{ if .Values.atlas.auth.existingSecret }} secret {{ .Values.atlas.auth.existingSecret | quote }}{{ else }} the chart-managed secret{{ end }}.
+   Recover a locked-out admin without a shell:
+     kubectl --namespace {{ .Release.Namespace }} exec statefulset/{{ include "atlas.fullname" . }} -- \
+       /atlas reset-password --data-dir {{ .Values.persistence.mountPath }} --create-admin <username>
+{{- else }}
+   WARNING: auth is DISABLED — the API, UI and /mcp endpoint are open to anyone
+   who can reach the Service. Set atlas.auth.enabled=true (and provide
+   atlas.auth.password or atlas.auth.existingSecret) before exposing Atlas.
+{{- end }}
+
+{{- if not .Values.persistence.enabled }}
+
+3. WARNING: persistence is disabled — the write-ahead log and state live in an
+   emptyDir and are LOST on every pod restart. Enable persistence for any real use.
+{{- end }}

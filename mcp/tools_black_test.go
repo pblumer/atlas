@@ -3,6 +3,9 @@ package mcp_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -115,6 +118,87 @@ func TestCancelAndDeleteViaTools(t *testing.T) {
 	}
 }
 
+// TestCreateInstanceForwardsStartVariables proves atlas_create_instance passes
+// its optional variables through to the start endpoint, exactly as a human
+// starting the instance with a JSON body would. Without the pass-through the
+// instance starts with an empty scope; here we start it with variables and read
+// them back from the API to confirm they landed in the instance's scope.
+func TestCreateInstanceForwardsStartVariables(t *testing.T) {
+	ts := newAtlas(t)
+
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+
+	// Start with a mix of scalar and structured variables; the service task parks
+	// the token, so the instance stays active and its scope is queryable.
+	vars := map[string]any{"amount": 42, "customer": "acme", "tags": []any{"x", "y"}}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": vars}))[0]))
+	if isErr {
+		t.Fatalf("create_instance with variables = (%q, isErr=%v)", text, isErr)
+	}
+
+	// Find the running instance's key, then read its variables back over the API.
+	listText, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
+	if isErr {
+		t.Fatal("list_instances failed")
+	}
+	var instances []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
+		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
+	}
+
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/instances/%d/variables", ts.URL, instances[0].Key))
+	if err != nil {
+		t.Fatalf("get variables: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode variables %q: %v", body, err)
+	}
+	if fmt.Sprint(got["amount"]) != "42" {
+		t.Errorf("amount = %v, want 42", got["amount"])
+	}
+	if got["customer"] != "acme" {
+		t.Errorf("customer = %v, want acme", got["customer"])
+	}
+	if tags, ok := got["tags"].([]any); !ok || len(tags) != 2 || tags[0] != "x" {
+		t.Errorf("tags = %v, want [x y]", got["tags"])
+	}
+}
+
+// TestCreateInstanceNoVariablesStartsEmpty confirms the pass-through is optional:
+// omitting variables still starts the instance (with an empty scope), so the
+// common no-argument start is unaffected.
+func TestCreateInstanceNoVariablesStartsEmpty(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0]))
+	if isErr || !strings.Contains(text, `"activeProcessInstances"`) {
+		t.Fatalf("create_instance without variables = (%q, isErr=%v), want live counts", text, isErr)
+	}
+}
+
+// TestCreateInstanceRejectsNonObjectVariables covers the argument-validation
+// branch: a variables argument that is not an object is a tool error, not a
+// silently ignored value.
+func TestCreateInstanceRejectsNonObjectVariables(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": "nope"}))[0]))
+	if !isErr || !strings.Contains(text, "must be an object") {
+		t.Fatalf("create_instance with non-object variables = (%q, isErr=%v), want a tool error", text, isErr)
+	}
+}
+
 // TestCancelMissingInstanceIsToolError cancels an instance key that does not
 // exist, surfacing the server's 404 as a tool error.
 func TestCancelMissingInstanceIsToolError(t *testing.T) {
@@ -123,6 +207,46 @@ func TestCancelMissingInstanceIsToolError(t *testing.T) {
 	text, isErr := toolText(t, result(t, resps[0]))
 	if !isErr || !strings.Contains(text, "no active instance") {
 		t.Fatalf("cancel missing instance = (%q, isErr=%v), want a not-found tool error", text, isErr)
+	}
+}
+
+// TestCancelInstancesBulkViaTool drains a definition's instances through the bulk
+// atlas_cancel_instances tool: several parked instances are cancelled in bounded
+// batches (the reported flood's cleanup path) until nothing remains, after which the
+// definition deletes cleanly. A bulk cancel of an unknown definition is a tool error.
+func TestCancelInstancesBulkViaTool(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	for i := 0; i < 3; i++ {
+		if _, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {
+			t.Fatalf("create_instance %d failed", i)
+		}
+	}
+	// Batch of two: the first call hits the cap (remaining true); a follow-up with
+	// the default cap clears the rest (remaining false).
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_cancel_instances", map[string]any{"key": 1, "limit": 2}))[0]))
+	if isErr || !strings.Contains(text, `"remaining":true`) {
+		t.Fatalf("bulk cancel (batch 1) = (%q, isErr=%v), want remaining:true", text, isErr)
+	}
+	text, isErr = toolText(t, result(t, run(t, ts, callTool(4, "atlas_cancel_instances", map[string]any{"key": 1}))[0]))
+	if isErr || !strings.Contains(text, `"remaining":false`) {
+		t.Fatalf("bulk cancel (batch 2) = (%q, isErr=%v), want remaining:false", text, isErr)
+	}
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(5, "atlas_delete_process", map[string]any{"key": 1}))[0])); isErr || !strings.Contains(text, `"deleted":true`) {
+		t.Fatalf("delete_process = (%q, isErr=%v), want deleted:true", text, isErr)
+	}
+	// A bulk cancel of a definition that does not exist surfaces as a tool error.
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(6, "atlas_cancel_instances", map[string]any{"key": 999999}))[0])); !isErr || !strings.Contains(text, "no deployment") {
+		t.Fatalf("bulk cancel unknown def = (%q, isErr=%v), want a not-found tool error", text, isErr)
+	}
+	// A missing key and a non-integer limit are argument errors from the tool handler.
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(7, "atlas_cancel_instances", map[string]any{}))[0])); !isErr {
+		t.Fatal("bulk cancel without key: want a tool error")
+	}
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(8, "atlas_cancel_instances", map[string]any{"key": 1, "limit": "nope"}))[0])); !isErr {
+		t.Fatal("bulk cancel with non-integer limit: want a tool error")
 	}
 }
 

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a collection data object.
+
+  Start -> script "seed" (raw = [10, 20, 30]) -> task "store_items" -> task
+  "load_items" -> End. The <dataObject> "items" is declared isCollection="true".
+  The "store_items" task's output association writes the list into it; the
+  "load_items" task's input association reads it back into "items_copy". The list
+  round-trips, and the trace marks the object as a collection —
+  items[collection]=[10,20,30] — a distinction that is compile-time metadata, not
+  visible on the runtime value alone. Self-completing (pass-through tasks).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_collection_data_object" targetNamespace="http://atlas/conformance">
+  <process id="collection-data-object" name="Collection data object" isExecutable="true">
+    <dataObject id="DO_items" name="items" isCollection="true"/>
+    <dataObjectReference id="Ref_write" name="items" dataObjectRef="DO_items"/>
+    <dataObjectReference id="Ref_read" name="items" dataObjectRef="DO_items"/>
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="seed" name="Seed items">
+      <extensionElements>
+        <zeebe:script expression="= [10, 20, 30]" resultVariable="raw"/>
+      </extensionElements>
+    </scriptTask>
+    <task id="store_items" name="Store items">
+      <dataOutputAssociation id="doa_store">
+        <targetRef>Ref_write</targetRef>
+        <assignment><from>= raw</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <task id="load_items" name="Load items">
+      <dataInputAssociation id="dia_load">
+        <sourceRef>Ref_read</sourceRef>
+        <assignment><to>items_copy</to></assignment>
+      </dataInputAssociation>
+    </task>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="store_items"/>
+    <sequenceFlow id="f3" sourceRef="store_items" targetRef="load_items"/>
+    <sequenceFlow id="f4" sourceRef="load_items" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="collection-data-object">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_seed" bpmnElement="seed"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_store_items" bpmnElement="store_items"><dc:Bounds x="410" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_load_items" bpmnElement="load_items"><dc:Bounds x="570" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="730" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ref_write" bpmnElement="Ref_write"><dc:Bounds x="442" y="70" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ref_read" bpmnElement="Ref_read"><dc:Bounds x="602" y="70" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="410" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="510" y="200"/><di:waypoint x="570" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="670" y="200"/><di:waypoint x="730" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_store" bpmnElement="doa_store"><di:waypoint x="460" y="160"/><di:waypoint x="460" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_load" bpmnElement="dia_load"><di:waypoint x="620" y="120"/><di:waypoint x="620" y="160"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

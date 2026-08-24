@@ -1,0 +1,21 @@
+{
+  "id": "atlas.send-mail-smtp",
+  "version": "1.4.2",
+  "kind": "connector",
+  "title": "Send Email (SMTP)",
+  "author": "Atlas core",
+  "description": "Send a message through a server-registered SMTP provider. Recipients, subject and body are authored in the model; the provider and its credential live on the server (ADR-0079).",
+  "engineCompat": ">=0.9",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Send Email (SMTP)",
+    "id": "atlas.send-mail-smtp",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Provider", "type": "String", "value": "smtp", "binding": { "type": "property", "name": "atlas:mailProvider" } },
+      { "label": "To", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:to" } },
+      { "label": "Subject", "type": "String", "feel": "optional", "binding": { "type": "property", "name": "atlas:subject" } },
+      { "label": "Body", "type": "Text", "feel": "optional", "binding": { "type": "property", "name": "atlas:body" } }
+    ]
+  }
+}

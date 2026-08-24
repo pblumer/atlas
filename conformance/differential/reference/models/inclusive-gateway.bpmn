@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reference translation of ../../../models/inclusive-gateway.bpmn (same element
+     ids; FEEL scripts/conditions expressed as JavaScript). order={priority,region}
+     so the priority and EU branches open and the default (standard) is suppressed,
+     and the inclusive join synchronizes both — matching Atlas. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="d_inclusive" targetNamespace="http://atlas/conformance/ref">
+  <process id="inclusive-gateway" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="seed" scriptFormat="javascript"><script>environment.variables.order = { priority: true, region: "EU" }; next();</script></scriptTask>
+    <inclusiveGateway id="split" default="f_standard"/>
+    <scriptTask id="priority" scriptFormat="javascript"><script>environment.variables.prio = "done"; next();</script></scriptTask>
+    <scriptTask id="eu_check" scriptFormat="javascript"><script>environment.variables.eu = "done"; next();</script></scriptTask>
+    <scriptTask id="standard" scriptFormat="javascript"><script>environment.variables.std = "done"; next();</script></scriptTask>
+    <inclusiveGateway id="join"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="split"/>
+    <sequenceFlow id="f_prio" sourceRef="split" targetRef="priority">
+      <conditionExpression xsi:type="tFormalExpression" language="javascript">next(null, environment.variables.order.priority);</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_eu" sourceRef="split" targetRef="eu_check">
+      <conditionExpression xsi:type="tFormalExpression" language="javascript">next(null, environment.variables.order.region === "EU");</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_standard" sourceRef="split" targetRef="standard"/>
+    <sequenceFlow id="f3" sourceRef="priority" targetRef="join"/>
+    <sequenceFlow id="f4" sourceRef="eu_check" targetRef="join"/>
+    <sequenceFlow id="f5" sourceRef="standard" targetRef="join"/>
+    <sequenceFlow id="f6" sourceRef="join" targetRef="end"/>
+  </process>
+</definitions>

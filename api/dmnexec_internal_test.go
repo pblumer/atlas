@@ -55,7 +55,7 @@ func TestDeployModelBadDMN(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	var persistErr error
 	srv.do(func() {
-		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), [][]byte{[]byte("<not-dmn")}, 123)
+		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), [][]byte{[]byte("<not-dmn")}, 123, "")
 	})
 	if persistErr == nil {
 		t.Fatal("deployModel with an uncompilable DMN snapshot: want an error")
@@ -236,7 +236,7 @@ func TestReloadFailsOnBadDMNSnapshot(t *testing.T) {
 		t.Fatalf("newDeployStore: %v", err)
 	}
 	// Valid BPMN, but an uncompilable DMN snapshot.
-	if err := ds.save(persistedDeployment{Key: 1, ProcessID: "dinner", Version: 1, XML: dinnerBPMN, DMNXML: "<not-dmn"}); err != nil {
+	if err := ds.Save(persistedDeployment{Key: 1, ProcessID: "dinner", Version: 1, XML: dinnerBPMN, DMNXML: "<not-dmn"}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})

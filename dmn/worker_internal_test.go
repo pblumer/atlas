@@ -66,14 +66,14 @@ func TestBindStoredVars(t *testing.T) {
 // TestBuildInputsStaticOnly covers buildInputs' no-mapping path (static base
 // returned as-is) and its decode-error path (malformed interned static JSON).
 func TestBuildInputsStaticOnly(t *testing.T) {
-	in, err := buildInputs(nil, 0, `{"Season":"Winter"}`, nil)
+	in, err := buildInputs(nil, 0, 0, `{"Season":"Winter"}`, nil)
 	if err != nil {
 		t.Fatalf("buildInputs static: %v", err)
 	}
 	if in["Season"] != "Winter" {
 		t.Errorf("Season = %v, want Winter", in["Season"])
 	}
-	if _, err := buildInputs(nil, 0, `{not json`, nil); err == nil {
+	if _, err := buildInputs(nil, 0, 0, `{not json`, nil); err == nil {
 		t.Fatal("buildInputs with malformed static JSON: got nil error, want an error")
 	}
 }

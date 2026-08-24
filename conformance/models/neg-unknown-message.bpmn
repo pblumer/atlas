@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE fixture: must be REJECTED at compile.
+
+  A receive task references messageRef="Nope", but no <message> named "Nope" is
+  declared. A dangling message reference is a modeling error the compiler must
+  catch at deploy.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="defs_neg_unknown_message" targetNamespace="http://atlas/conformance">
+  <process id="neg-unknown-message" name="Unknown message" isExecutable="true">
+    <startEvent id="s"/>
+    <receiveTask id="await" messageRef="Nope"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="await"/>
+    <sequenceFlow id="f2" sourceRef="await" targetRef="e"/>
+  </process>
+</definitions>

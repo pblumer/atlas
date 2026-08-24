@@ -1,0 +1,195 @@
+# Default values for the Atlas chart.
+# This is a YAML-formatted file. Every value is documented inline.
+
+# -- Container image for the single-binary Atlas server.
+image:
+  repository: ghcr.io/pblumer/atlas
+  # -- Image tag. Empty string falls back to the chart's appVersion.
+  # Pin an immutable tag (a release version or a digest) in production.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- imagePullSecrets for private registries, e.g. [{name: regcred}].
+imagePullSecrets: []
+
+# -- Override the generated name (defaults to the chart name).
+nameOverride: ""
+# -- Override the fully-qualified name (release-name + chart-name).
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a dedicated ServiceAccount for the pod.
+  create: true
+  # -- Name to use. Generated from the fullname when empty and create is true.
+  name: ""
+  # -- Annotations to add to the ServiceAccount (e.g. cloud IAM role bindings).
+  annotations: {}
+
+# -- Extra annotations for the pod.
+podAnnotations: {}
+# -- Extra labels for the pod.
+podLabels: {}
+
+# -- Pod-level security context. fsGroup makes the mounted data volume writable
+# by the nonroot (uid/gid 65532) user the image runs as.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context. The root filesystem stays read-only; the
+# server writes under the data volume and the interpreters get a writable
+# emptyDir at /tmp (mounted by the chart), so this holds even with script tasks on.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests/limits. Sized for a small instance; tune for your load.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# -- Scheduling controls.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# -- Extra volumes and volumeMounts (e.g. to mount an external config).
+extraVolumes: []
+extraVolumeMounts: []
+
+service:
+  type: ClusterIP
+  # -- Service port. Also the port the API/UI/MCP are reachable on in-cluster.
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: atlas.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: atlas-tls
+  #    hosts:
+  #      - atlas.local
+
+# -- Persistent storage for the write-ahead log and state store. Atlas is
+# durable and stateful; this MUST be a real PersistentVolume (never emptyDir).
+persistence:
+  enabled: true
+  # -- Mount path inside the container; passed to the server as --data-dir.
+  mountPath: /data
+  # -- StorageClass; empty uses the cluster default. "-" disables dynamic
+  # provisioning and requires a pre-bound PV.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 8Gi
+  annotations: {}
+  # -- Use an existing PersistentVolumeClaim instead of the volumeClaimTemplate.
+  existingClaim: ""
+
+# -- Atlas server configuration. These map to `atlas serve` flags / env vars;
+# see cmd/atlas/main.go.
+atlas:
+  # -- Require login for the API and UI (--auth). When true, an admin is seeded
+  # on first run from the credentials below.
+  auth:
+    enabled: false
+    # -- Admin bootstrap credentials (used only when auth.enabled is true and no
+    # admin exists yet). Provide them via an existing secret in production.
+    existingSecret: ""
+    usernameKey: username
+    passwordKey: password
+    username: admin
+    # -- Admin password. Leave empty to require setting via existingSecret;
+    # rendering fails loudly if auth is enabled with no password source.
+    password: ""
+
+  # -- Encrypted secret vault (--vault). On by default. Without an explicit key
+  # the server generates one at <data-dir>/vault.key on the persistent volume.
+  vault:
+    enabled: true
+    # -- Optional ATLAS_VAULT_KEY. Provide via existingSecret in production so
+    # the key isn't stored in values. Leave empty to let the server manage it.
+    existingSecret: ""
+    keyKey: vault-key
+    key: ""
+
+  # -- Serve the OpenAPI spec and the Scalar API explorer (--docs).
+  docs:
+    enabled: true
+
+  # -- Script task workers. Each shells out to an interpreter and runs arbitrary
+  # code (ADR-0047). The default image bundles python3 and node, so those are ON;
+  # PowerShell is OFF because the default image does not ship pwsh — build the
+  # image with `--build-arg INCLUDE_POWERSHELL=true` (or point image.repository at
+  # such a build) before enabling it.
+  script:
+    powershell: false
+    python: true
+    javascript: true
+    # -- Wall-clock limit for a single script task (--script-timeout).
+    timeout: 30s
+
+  # -- Grace period for in-flight requests on shutdown (--shutdown-timeout).
+  shutdownTimeout: 10s
+
+  # -- Extra raw flags appended to the server command, e.g. ["--foo=bar"].
+  extraArgs: []
+  # -- Extra environment variables, standard Kubernetes env entries.
+  extraEnv: []
+
+# -- Probes. /healthz and /readyz are both always unauthenticated, so they are safe
+# under --auth. They answer different questions and are deliberately not
+# interchangeable (ADR-0142):
+#
+#   /healthz — is the process alive. Unconditional. The only remedy a liveness probe
+#              has is a restart, so it must not fail for anything a restart would not
+#              fix; a liveness probe that waited for recovery would kill the pod
+#              mid-replay and make the next replay start over.
+#   /readyz  — should this pod be routed traffic. Fails while startup recovery is
+#              incomplete, while the state store cannot answer a read, while the
+#              partition writer is not responding, and while the server is shutting
+#              down.
+#
+# The startup probe is generous on purpose: it gates the other two, so it is the one
+# place where a slow start should be waited out rather than restarted. Recovery is
+# bounded by the checkpoint cadence (ADR-0131), but the log after the newest checkpoint
+# can still be large, and the port does not open until the replay finishes. 120 × 5s
+# gives that ten minutes before Kubernetes gives up; raise it if your restarts replay
+# more than that.
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  failureThreshold: 120
+  periodSeconds: 5
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3

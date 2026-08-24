@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- A canvas holding a modelled flow: two nodes and the sequence flow between them. -->
+  <rect x="26" y="46" width="204" height="164" rx="20" stroke="#2563EB" stroke-width="18"/>
+  <path d="M26 92H230" stroke="#2563EB" stroke-width="14"/>
+  <path d="M92 152H164" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="82" cy="152" r="16" fill="#2563EB"/>
+  <circle cx="174" cy="152" r="16" fill="#2563EB"/>
+</svg>

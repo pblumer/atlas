@@ -19,6 +19,35 @@ type ProcessingContext struct {
 
 // process returns the immutable compiled definition (invariant I5: read by
 // index, never parsed).
+// latestDefKey resolves a bpmn process id to the newest deployed definition key
+// for a call activity's `latest` binding; ok is false if no such process is
+// deployed (ADR-0076).
+func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
+	k, ok := c.p.latestProcess[processId]
+	return k, ok
+}
+
+// resolveCallTarget resolves the definition a call activity starts as a child,
+// consulting the per-server override first and falling back to the default `latest`
+// resolution (ADR-0105). Precedence for an override: disabled parks; a pinned key
+// wins if still deployed; a redirect resolves the target's latest (one hop, so no
+// cycle). ok is false when nothing resolves (park), identical to an undeployed
+// callee (ADR-0076). A pure read of run-loop-owned maps — no allocation (I1).
+func (c *ProcessingContext) resolveCallTarget(processId string) (uint64, bool) {
+	if ov, has := c.p.callOverrides[processId]; has {
+		switch {
+		case ov.Disabled:
+			return 0, false
+		case ov.PinnedDefKey != 0:
+			_, deployed := c.p.processes[ov.PinnedDefKey]
+			return ov.PinnedDefKey, deployed
+		case ov.RedirectProcessId != "":
+			return c.latestDefKey(ov.RedirectProcessId)
+		}
+	}
+	return c.latestDefKey(processId)
+}
+
 func (c *ProcessingContext) process(defKey uint64) *compiler.CompiledProcess {
 	return c.p.processes[defKey]
 }
@@ -98,12 +127,16 @@ func (c *ProcessingContext) VariablesOfScope(scope uint64, fn func(v model.Varia
 }
 
 // ForEachElementInstance calls fn with the key of every element instance
-// belonging to a process instance, via the committed elByProc index. Keys are
-// collected before fn runs so fn may mutate element-instance state (e.g. emit
-// terminations) without disturbing the scan.
+// belonging to a process instance, through the in-flight transaction — so it sees
+// element instances created earlier in the same batch, consistently with
+// GetElementInstance, GetJob, and ActiveChildren (all tx-reads). This matters for a
+// terminate end event reached in the same batch as a parallel sibling's activation
+// (ADR-0116): the sibling is not yet committed, but it is in the tx, so the scope
+// teardown finds it. Keys are collected before fn runs so fn may mutate
+// element-instance state (e.g. emit terminations) without disturbing the scan.
 func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey uint64)) {
 	var keys []uint64
-	if err := c.p.store.ElementInstancesOfProcess(procKey, func(k uint64) error {
+	if err := c.tx.ElementInstancesOfProcess(procKey, func(k uint64, _ *model.ElementInstanceValue) error {
 		keys = append(keys, k)
 		return nil
 	}); err != nil {
@@ -112,6 +145,29 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 	for _, k := range keys {
 		fn(k)
+	}
+}
+
+// ForEachActiveProcessInstance calls fn with the key and value of every live
+// process instance, via the committed process-instance column family. Entries are
+// collected before fn runs so fn may emit events/commands (e.g. terminate a child)
+// without disturbing the scan. Used to find the child a call activity started, via
+// its persisted parent link (ADR-0076).
+func (c *ProcessingContext) ForEachActiveProcessInstance(fn func(piKey uint64, pi *model.ProcessInstanceValue)) {
+	type entry struct {
+		key uint64
+		v   model.ProcessInstanceValue
+	}
+	var entries []entry
+	if err := c.p.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		entries = append(entries, entry{key: k, v: *v})
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for i := range entries {
+		fn(entries[i].key, &entries[i].v)
 	}
 }
 
@@ -198,9 +254,25 @@ func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
 	return n
 }
 
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0108).
+func (c *ProcessingContext) IsCanceling(txKey uint64) bool {
+	ok, err := c.tx.IsCanceling(txKey)
+	c.p.fail(err)
+	return ok
+}
+
 // AppendProcessInstanceEvent records a process-instance lifecycle fact.
 func (c *ProcessingContext) AppendProcessInstanceEvent(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
 	c.appendEvent(key, model.VTProcessInstance, intent, inflightValue{process: v})
+}
+
+// AppendProcessInstanceCommand schedules a process-instance command (e.g. the
+// Terminating that cancels a call activity's child) for a later batch — the same
+// command an API cancel enqueues, so the child tears down through the identical
+// path however its termination was triggered (ADR-0076).
+func (c *ProcessingContext) AppendProcessInstanceCommand(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
+	c.appendCommand(key, model.VTProcessInstance, intent, inflightValue{process: v})
 }
 
 // AppendElementEvent records an element-instance lifecycle fact.
@@ -231,6 +303,28 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 // strings — variables are runtime data, not hot-path token movement.
 func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
+	c.markConditionDirty(v.ScopeKey)
+}
+
+// markConditionDirty notes that a variable changed in the given scope, so the batch loop will
+// schedule a re-check of the instance's conditional events (ADR-0137). It resolves the scope to
+// its process instance and records it (deduplicated); an instance whose process has no
+// conditional event records nothing, so a conditional-free process pays nothing on a write.
+func (c *ProcessingContext) markConditionDirty(scopeKey uint64) {
+	piKey := scopeKey
+	if ei := c.GetElementInstance(scopeKey); ei != nil {
+		piKey = ei.ProcessInstanceKey
+	}
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil || !c.process(pi.ProcessDefKey).HasConditionalEvents() {
+		return
+	}
+	for _, k := range c.p.condDirty {
+		if k == piKey {
+			return
+		}
+	}
+	c.p.condDirty = append(c.p.condDirty, piKey)
 }
 
 // AppendDataObjectEvent records a data-object write (created or state-changed).
@@ -252,6 +346,44 @@ func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvalua
 	c.appendEvent(v.ProcessInstanceKey, model.VTDecisionEvaluation, model.IntentDecisionEvaluated, inflightValue{decisionEval: v})
 }
 
+// AppendVariableAuditEvent records who set a variable from outside the model — an
+// operator override — as append-only audit history (ADR-0098). Like a variable it
+// carries genuine runtime data (an actor, a name, and contents), so it allocates for
+// its strings; it rides only on the non-hot-path variable-modify command, never token
+// movement. It is keyed by the owning process instance, so a scope-wide scan yields
+// every override an instance received in order.
+func (c *ProcessingContext) AppendVariableAuditEvent(v model.VariableAuditValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableAudit, model.IntentVariableAudited, inflightValue{variableAudit: v})
+}
+
+// AppendOperatorActionEvent records that an operator intervened on a running instance
+// — completing a parked job by hand, say (ADR-0159). Like AppendVariableAuditEvent it
+// is pure history: emitted alongside the events the intervention produces, it freezes
+// who acted and why into the log, so a forced step is never indistinguishable from one
+// the engine drove and replay rebuilds the identical trail (invariant I6).
+func (c *ProcessingContext) AppendOperatorActionEvent(v model.OperatorActionValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTOperatorAction, model.IntentOperatorActed, inflightValue{operatorAct: v})
+}
+
+// AppendMigrationEvent rebinds a running instance to another deployed version of its
+// process (ADR-0162). Unlike every other event it describes no single entity's
+// transition: it carries the whole element mapping the fold rewrites the instance's
+// live records through, frozen at command time so replay reproduces the rebinding from
+// the log rather than by re-deriving it (invariants I4/I6).
+func (c *ProcessingContext) AppendMigrationEvent(v model.ProcessMigrationValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTProcessMigration, model.IntentMigrated, inflightValue{migration: v})
+}
+
+// AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
+// retains a completed compensable activity (keyed under its scope in completion order),
+// and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both
+// ride only on the command path (a completion or a compensation throw), never token
+// movement; applyToState folds them into the compensable index so recovery rebuilds it
+// (invariant I6). Keyed by the owning process instance, like the other history events.
+func (c *ProcessingContext) AppendCompensableEvent(intent model.Intent, v model.CompensableValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTCompensable, intent, inflightValue{compensable: v})
+}
+
 // GetDataObject reads a scope's data object by name through the in-flight
 // transaction (sees writes from earlier in this batch). A data-output association
 // uses it to keep the object's current value or state when the write changes only
@@ -270,6 +402,15 @@ func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent mo
 	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
 }
 
+// AppendSignalSubscriptionEvent records a signal-subscription fact (created or
+// correlated). The key is the waiting element instance's key, and the value
+// carries the signal name, so applyToState can locate the index entry from the
+// event alone (invariant I4). A signal reuses the message subscription intents
+// (SubscriptionCreated / SubscriptionCorrelated) over a separate family (ADR-0088).
+func (c *ProcessingContext) AppendSignalSubscriptionEvent(key uint64, intent model.Intent, v model.SignalSubscriptionValue) {
+	c.appendEvent(key, model.VTSignal, intent, inflightValue{signalSub: v})
+}
+
 // AppendMessageFlowEvent retains one delivered message flow as history for the
 // collaboration replay (ADR-0038). It is keyed by its receiving definition (the
 // state index leads with it); the event's header timestamp and position order it
@@ -277,6 +418,15 @@ func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent mo
 // message-start instantiation, so both kinds of cross-pool delivery are recorded.
 func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
 	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
+}
+
+// AppendInboundDeliveryEvent advances an external source's inbound high-water mark
+// (ADR-0075), keyed on the receiving definition space as a neutral key (the record
+// carries the source id and sequence it needs). Emitted in the same batch as the
+// message publish it guards, so the dedup mark and the effects it authorizes commit
+// atomically under one fsync (invariant I2).
+func (c *ProcessingContext) AppendInboundDeliveryEvent(v model.InboundDeliveryValue) {
+	c.appendEvent(0, model.VTInboundDelivery, model.IntentInboundDeliveryApplied, inflightValue{inbound: v})
 }
 
 // AppendElementCommand schedules an element-instance command for a later batch.
@@ -296,6 +446,19 @@ func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []mo
 		ValueType: model.VTProcessInstance,
 		Intent:    model.IntentActivating,
 		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, CorrelationKey: correlationKey}},
+		StartVars: vars,
+		SourcePos: c.lastPos,
+	})
+}
+
+// AppendCreateChildInstanceCommand is AppendCreateInstanceCommand for a call
+// activity: the created instance records the caller's call-activity element
+// instance as its parent, so on completion it resumes that element (ADR-0076).
+func (c *ProcessingContext) AppendCreateChildInstanceCommand(defKey uint64, vars []model.VariableValue, parentElementKey uint64) {
+	c.p.followups = append(c.p.followups, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, ParentElementInstanceKey: parentElementKey}},
 		StartVars: vars,
 		SourcePos: c.lastPos,
 	})

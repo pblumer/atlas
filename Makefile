@@ -1,7 +1,8 @@
 # Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
-.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server
+.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
+        whats-new adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -45,9 +46,53 @@ cover:
 # The full gate. A change is "done" when this passes.
 check: build vet fmt-check race cover
 
+# Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
+# and scripts/whats-new/overrides.json. Commit the regenerated JSON. See
+# scripts/whats-new/README.md.
+whats-new:
+	node scripts/whats-new/gen.mjs
+
+# Assign a number to every ADR still in flight (docs/adr/draft-<slug>.md): rename it
+# to NNNN-<slug>.md, fix its heading, add its index row, and rewrite every
+# ADR-draft-<slug> citation in the tree. Run this on main — that is the only place
+# "the next free number" has one answer. .github/workflows/adr-number.yml does it
+# automatically after a merge; this target is the same thing by hand. No-op when
+# there are no drafts. See docs/adr/README.md § Writing a record.
+adr-number:
+	go run ./docs/adr/cmd/adrnum
+
 tidy:
 	go mod tidy
 
 clean:
 	go clean ./...
 	rm -rf bin dist coverage
+
+# --- Container image & Helm chart (see deploy/) -----------------------------
+
+IMAGE ?= ghcr.io/pblumer/atlas:dev
+CHART := deploy/helm/atlas
+
+# Build the server image for the local architecture (python3 + node).
+docker:
+	docker build -t $(IMAGE) .
+
+# Build the image with PowerShell (pwsh) bundled as well.
+docker-powershell:
+	docker build --build-arg INCLUDE_POWERSHELL=true -t $(IMAGE) .
+
+# Build (and optionally push with PUSH=--push) a multi-arch image via buildx.
+docker-buildx:
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(IMAGE) $(PUSH) .
+
+# Lint the Helm chart.
+helm-lint:
+	helm lint $(CHART)
+
+# Render the chart to stdout (override values via ARGS, e.g. ARGS="--set atlas.auth.enabled=true").
+helm-template:
+	helm template atlas $(CHART) $(ARGS)
+
+# Package the chart into dist/ (CI pushes it to ghcr.io/pblumer/charts/atlas).
+helm-package:
+	helm package $(CHART) --destination dist

@@ -1,0 +1,318 @@
+package rest
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+)
+
+// ProcessLookup resolves a process-definition key to its compiled process. The
+// worker uses it to find the method, URL, and result variable a REST job belongs
+// to, so one handler serves every deployed process.
+type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
+
+// SecretResolver returns the secret value for a reference name, or "" if unknown.
+// The worker uses it to turn a REST task's authentication secret *reference* into
+// the actual credential at call time (ADR-0041), so a token never lives in the
+// model or the compiled process — only its reference does.
+type SecretResolver func(ref string) string
+
+// Handler builds a job handler that performs an HTTP-REST connector task. Register
+// it with a [job.Runner] under the reserved [compiler.RestJobTypeIndex] via
+// HandleWithOutput; the runner then pulls activatable REST jobs, and for each the
+// handler resolves the connector task's method/url/headers/query/result-variable
+// from the compiled process and calls the API through client — evaluating any FEEL
+// url/header/query values over the variables the task sees, up its scope chain (the
+// fx toggle, ADR-0067/0068), and sending as the JSON request body, for methods that
+// carry one, what the task's input mappings map — or, with none, every variable it
+// sees (ADR-0174) — keyed by the job key so
+// an at-least-once retry de-duplicates. Authentication
+// (basic/bearer/apiKey) is resolved through secret, which turns the model's secret
+// *reference* into the credential at call time (ADR-0041); the token never lives in
+// the model. When the task names a result variable, the JSON response is returned
+// as that variable to be written back into the instance on completion. Returning an
+// error fails the job (retry, then an incident, ADR-0061); the runner completes it
+// only on success.
+func Handler(store state.Reader, lookup ProcessLookup, client Client, secret SecretResolver, tokens TokenProvider) job.OutputHandler {
+	return func(j job.Job) ([]model.VariableValue, error) {
+		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, nil // element instance gone (e.g. already completed); nothing to do
+		}
+		cp := lookup(ei.ProcessDefKey)
+		if cp == nil {
+			return nil, fmt.Errorf("rest: no compiled process for def %d", ei.ProcessDefKey)
+		}
+		detail, err := cp.ConnectorTaskOf(ei.ElementId)
+		if err != nil {
+			return nil, fmt.Errorf("rest: %w", err)
+		}
+		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
+		// changes only whose secret store is in reach, never what a resolved REST
+		// task means.
+		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
+		if err != nil {
+			return nil, err
+		}
+		res, err := Run(context.Background(), resolved, client, secret, tokens)
+		if err != nil {
+			return nil, err
+		}
+		if res.ResultVariable == "" {
+			return nil, nil // the model discards the response
+		}
+		return []model.VariableValue{responseVariable(res.ResultVariable, res.Body)}, nil
+	}
+}
+
+// builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's
+// own key (mirrors the engine/DMN builtin), so a url/header/query expression can
+// reference processInstanceKey.
+const builtinProcessInstanceKey = "processInstanceKey"
+
+// resolveValue turns a REST field value into a string: a literal verbatim, or a
+// FEEL expression evaluated over the scope's variables and coerced to its string
+// form (a string stays itself, a number its decimal). A FEEL null — an absent
+// variable or a failed evaluation — becomes the empty string, matching the
+// engine's null-propagating contract (as the DMN worker's mappings do); a genuinely
+// broken URL then surfaces as a call error downstream.
+func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) string {
+	if rv.Expr == nil {
+		return rv.Literal
+	}
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
+	if err != nil {
+		return ""
+	}
+	_, _, text := expr.Classify(v)
+	return text
+}
+
+// resolveKVs resolves a list of named REST values (headers or query parameters)
+// into a map, evaluating any FEEL values. Returns nil for an empty list.
+func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
+	if len(kvs) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		out[kv.Name] = resolveValue(kv.Val, piKey, scopeVars)
+	}
+	return out
+}
+
+// bindVars turns the named variables the task sees into a FEEL binding. A name
+// absent from the chain is left unbound (FEEL null); the reserved name
+// processInstanceKey binds to the process instance's key as a string.
+func bindVars(piKey uint64, scopeVars map[string]model.VariableValue, names []string) map[string]expr.Value {
+	if len(names) == 0 {
+		return nil
+	}
+	m := make(map[string]expr.Value, len(names))
+	for _, n := range names {
+		if n == builtinProcessInstanceKey {
+			m[n] = expr.String(strconv.FormatUint(piKey, 10))
+			continue
+		}
+		if v, ok := scopeVars[n]; ok {
+			m[n] = expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text)
+		}
+	}
+	return m
+}
+
+// toExprKind maps a stored variable kind to the expr kind for binding it into an
+// evaluation (mirrors the DMN worker's mapping so the two enums evolve independently).
+func toExprKind(k model.VarKind) expr.ValueKind {
+	switch k {
+	case model.VarBool:
+		return expr.KindBool
+	case model.VarNumber:
+		return expr.KindNumber
+	case model.VarString:
+		return expr.KindString
+	case model.VarJSON:
+		return expr.KindJSON
+	default:
+		return expr.KindNull
+	}
+}
+
+// applyAuth resolves a REST task's authentication and adds the resulting header to
+// headers. It turns the model's secret *reference* into a credential at call time
+// (ADR-0041) and refuses to proceed when a configured scheme's credential is missing
+// — a misconfigured credential fails the job (incident) rather than silently calling
+// the API unauthenticated. For oauth2 it obtains a bearer token through the token
+// provider (a live client-credentials fetch, ADR-0152). A no-auth task is a no-op.
+func applyAuth(ctx context.Context, headers map[string]string, encoded string, secret SecretResolver, tokens TokenProvider) (map[string]string, error) {
+	if encoded == "" {
+		return headers, nil
+	}
+	var a compiler.RestAuth
+	if err := json.Unmarshal([]byte(encoded), &a); err != nil {
+		return headers, fmt.Errorf("rest: decode auth: %w", err)
+	}
+	if a.Type == "" {
+		return headers, nil
+	}
+	name, headerValue, err := authCredential(ctx, a, secret, tokens)
+	if err != nil {
+		return headers, err
+	}
+	if name == "" {
+		return headers, fmt.Errorf("rest: unsupported auth type %q", a.Type)
+	}
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if headers[name] == "" { // don't clobber an explicit model header of the same name
+		headers[name] = headerValue
+	}
+	return headers, nil
+}
+
+// authCredential turns an auth config into the header name and value to send. The
+// static schemes (basic/bearer/apiKey) resolve a secret value; oauth2 resolves the
+// client secret and then exchanges it for a bearer token through the token provider
+// (ADR-0152). A missing credential or an unavailable provider is an error so the job
+// fails rather than calling the API unauthenticated; an unknown scheme yields an
+// empty name (the caller reports it).
+func authCredential(ctx context.Context, a compiler.RestAuth, secret SecretResolver, tokens TokenProvider) (name, value string, err error) {
+	if a.Type == "oauth2" {
+		clientSecret := resolveSecret(secret, a.SecretRef)
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("rest: oauth2 client secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", a.SecretRef)
+		}
+		if tokens == nil {
+			return "", "", fmt.Errorf("rest: oauth2 auth for token endpoint %q has no token provider configured", a.TokenURL)
+		}
+		token, err := tokens.Token(ctx, OAuthConfig{TokenURL: a.TokenURL, ClientID: a.ClientID, ClientSecret: clientSecret, Scope: a.Scope})
+		if err != nil {
+			return "", "", err
+		}
+		return "Authorization", "Bearer " + token, nil
+	}
+	v := resolveSecret(secret, a.SecretRef)
+	if v == "" {
+		return "", "", fmt.Errorf("rest: auth secret %q for %s auth is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN)", a.SecretRef, a.Type)
+	}
+	name, value = authHeader(a, v)
+	return name, value, nil
+}
+
+// resolveSecret turns a secret reference into its value through the resolver,
+// trimming surrounding whitespace; a nil resolver or unknown reference yields "".
+func resolveSecret(secret SecretResolver, ref string) string {
+	if secret == nil {
+		return ""
+	}
+	return strings.TrimSpace(secret(ref))
+}
+
+// authHeader builds the header name and value for a resolved credential: HTTP Basic
+// (base64 of user:secret), a Bearer token, or a named api-key header. An unknown
+// scheme yields an empty name. (oauth2 is handled in authCredential, which produces
+// a Bearer token before this point.)
+func authHeader(a compiler.RestAuth, secret string) (name, value string) {
+	switch a.Type {
+	case "basic":
+		return "Authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte(a.Username+":"+secret))
+	case "bearer":
+		return "Authorization", "Bearer " + secret
+	case "apikey":
+		return a.ApiKeyName, secret
+	default:
+		return "", ""
+	}
+}
+
+// responseVariable turns a decoded JSON response into the process variable named
+// by the task's result variable. The value is canonicalized through the same expr
+// path as any other variable (a scalar stays a scalar, an object/array becomes a
+// structured VarJSON), so it round-trips on replay exactly like a DMN result
+// (ADR-0014/0066).
+func responseVariable(name string, body any) model.VariableValue {
+	kind, b, text := expr.Classify(expr.FromJSON(body))
+	return model.VariableValue{Name: name, Kind: toVarKind(kind), Bool: b, Text: text}
+}
+
+// toVarKind maps an expr value kind to the stored variable kind (mirrors the DMN
+// worker's mapping so the two enums evolve independently).
+func toVarKind(k expr.ValueKind) model.VarKind {
+	switch k {
+	case expr.KindBool:
+		return model.VarBool
+	case expr.KindNumber:
+		return model.VarNumber
+	case expr.KindString:
+		return model.VarString
+	case expr.KindJSON:
+		return model.VarJSON
+	default:
+		return model.VarNull
+	}
+}
+
+// methodHasBody reports whether an HTTP method conventionally carries a request
+// body. The worker sends a body only for these, so a GET/DELETE/HEAD stays
+// body-free.
+func methodHasBody(method string) bool {
+	switch method {
+	case "POST", "PUT", "PATCH":
+		return true
+	default:
+		return false
+	}
+}
+
+// bodyFromVars turns the already-read variables into a JSON-ready map — the request
+// body a connector task sends. Which variables those are is [Resolve]'s decision:
+// the task's input mappings when it has them, else everything it sees — the same
+// rule the clio connector's event body follows
+// (ADR-0174).
+func bodyFromVars(scopeVars map[string]model.VariableValue) map[string]any {
+	data := make(map[string]any, len(scopeVars))
+	for name, v := range scopeVars {
+		vv := v
+		data[name] = varToAny(&vv)
+	}
+	return data
+}
+
+// varToAny maps a stored variable to its JSON-ready Go value. A number keeps its
+// exact canonical decimal text via json.Number rather than being routed through a
+// float, so large or high-precision numbers survive intact. A structured value
+// (VarJSON) is re-parsed from its stored JSON so the request payload nests it as a
+// real object/array rather than a JSON-in-a-string blob.
+func varToAny(v *model.VariableValue) any {
+	switch v.Kind {
+	case model.VarBool:
+		return v.Bool
+	case model.VarNumber:
+		return json.Number(v.Text)
+	case model.VarString:
+		return v.Text
+	case model.VarJSON:
+		dec := json.NewDecoder(strings.NewReader(v.Text))
+		dec.UseNumber()
+		var out any
+		if err := dec.Decode(&out); err != nil {
+			return nil
+		}
+		return out
+	default:
+		return nil
+	}
+}

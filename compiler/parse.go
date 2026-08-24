@@ -1,8 +1,10 @@
 package compiler
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -14,7 +16,7 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
-// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0051): a
+// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0091): a
 // user task with no zeebe:priorityDefinition sorts as if priority 50.
 const defaultUserTaskPriority = 50
 
@@ -83,45 +85,88 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 // instance's variables at call time; otherwise it is a literal used verbatim. what
 // names the field for error messages.
 func restValue(taskID, what, raw string) (RestExpr, error) {
+	return connectorValue(taskID, "rest connector", what, raw)
+}
+
+// connectorValue is the shared literal-or-FEEL toggle for the HTTP-based connectors
+// (REST, SCIM): a value with a leading '=' is a FEEL expression compiled once at
+// deploy time (invariant I5) and evaluated over the instance's variables at call
+// time; otherwise it is a literal used verbatim. kind names the connector for
+// diagnostics ("rest connector"/"scim connector") and what names the field.
+func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
 		return RestExpr{Literal: raw}, nil
 	}
 	text := strings.TrimSpace(trimmed[1:])
 	if text == "" {
-		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q has an empty FEEL expression for %s", taskID, what)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
 	e, err := expr.CompileAuto(text)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q: %s: %w", taskID, what, err)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
 	return RestExpr{Expr: e}, nil
 }
 
 // restAuth reads a REST connector's authentication config from its extension.
-// authType selects the scheme; an unknown scheme is rejected, and a scheme that
-// needs a secret reference must name one (secrets live server-side, ADR-0041, so
-// the model always references rather than carries them).
 func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
-	t := strings.ToLower(strings.TrimSpace(c.AuthType))
+	// oauth2 is REST-only: the client-credentials grant needs a token endpoint and a
+	// client id, and only <atlas:restConnector> carries those attributes (ADR-0152).
+	// Every other scheme is shared with the SCIM connector via connectorAuth.
+	if strings.ToLower(strings.TrimSpace(c.AuthType)) == "oauth2" {
+		return restOAuth2(taskID, c)
+	}
+	return connectorAuth(taskID, "rest connector", c.AuthType, c.AuthUsername, c.AuthApiKeyName, c.AuthSecret)
+}
+
+// restOAuth2 builds a REST connector task's client-credentials config (ADR-0152):
+// the token endpoint and client id are model data; the client secret is a reference
+// (secrets live server-side, ADR-0041). Scope is optional.
+func restOAuth2(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	if strings.TrimSpace(c.AuthTokenURL) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no tokenUrl", taskID)
+	}
+	if strings.TrimSpace(c.AuthClientID) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no clientId", taskID)
+	}
+	if strings.TrimSpace(c.AuthSecret) == "" {
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses oauth2 auth but names no client secret reference", taskID)
+	}
+	return RestAuth{
+		Type:      "oauth2",
+		ClientID:  strings.TrimSpace(c.AuthClientID),
+		SecretRef: strings.TrimSpace(c.AuthSecret),
+		TokenURL:  strings.TrimSpace(c.AuthTokenURL),
+		Scope:     strings.TrimSpace(c.AuthScope),
+	}, nil
+}
+
+// connectorAuth builds an HTTP-based connector task's authentication config from its
+// authType and credential-reference fields, shared by REST and SCIM. authType selects
+// the scheme; an unknown scheme is rejected, and a scheme that needs a secret
+// reference must name one (secrets live server-side, ADR-0041, so the model always
+// references rather than carries them). kind names the connector for diagnostics.
+func connectorAuth(taskID, kind, authType, username, apiKeyName, secret string) (RestAuth, error) {
+	t := strings.ToLower(strings.TrimSpace(authType))
 	switch t {
 	case "", "none":
 		return RestAuth{}, nil
 	case "basic", "bearer", "apikey":
-		if strings.TrimSpace(c.AuthSecret) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses %s auth but names no secret reference", taskID, t)
+		if strings.TrimSpace(secret) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses %s auth but names no secret reference", kind, taskID, t)
 		}
-		if t == "apikey" && strings.TrimSpace(c.AuthApiKeyName) == "" {
-			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses apiKey auth but names no header", taskID)
+		if t == "apikey" && strings.TrimSpace(apiKeyName) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: %s task %q uses apiKey auth but names no header", kind, taskID)
 		}
 		return RestAuth{
 			Type:       t,
-			Username:   strings.TrimSpace(c.AuthUsername),
-			ApiKeyName: strings.TrimSpace(c.AuthApiKeyName),
-			SecretRef:  strings.TrimSpace(c.AuthSecret),
+			Username:   strings.TrimSpace(username),
+			ApiKeyName: strings.TrimSpace(apiKeyName),
+			SecretRef:  strings.TrimSpace(secret),
 		}, nil
 	default:
-		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q has an unsupported auth type %q", taskID, c.AuthType)
+		return RestAuth{}, fmt.Errorf("compiler: %s task %q has an unsupported auth type %q", kind, taskID, authType)
 	}
 }
 
@@ -136,14 +181,14 @@ func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 // (<zeebe:taskDefinition type="..." retries="..."/>), the de-facto standard for
 // executable BPMN.
 func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -165,11 +210,15 @@ type Deployable struct {
 // so a caller assigning keys sequentially advances its counter by len(result). It
 // errors only if the model has no executable process at all.
 func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
 	resolve := buildMessageResolver(defs)
+	resolveSig := buildSignalResolver(defs)
+	resolveErr := buildErrorResolver(defs)
+	resolveEsc := buildEscalationResolver(defs)
+	resolveOp := buildOperationResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -177,7 +226,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
 		if err != nil {
 			return nil, err
 		}
@@ -189,29 +238,150 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	return out, nil
 }
 
-// ParseNamed compiles the single process with the given BPMN process id. It is
-// the reload path: a stored deployment records which process (by id) within its
-// (possibly collaboration) XML it represents, so recovery recompiles exactly that
-// one under its original key.
+// ParseNamed compiles the single process with the given BPMN process id — a
+// stored deployment records which process (by id) within its (possibly
+// collaboration) XML it represents, so it can be recompiled under its original
+// key. It compiles gate and all: a model that fails graph-wide validation is
+// refused, as at any deploy. Bringing a definition back from a deployment store
+// is the one case that wants the same compile *without* the gate, and uses
+// [ReloadNamed] for it (ADR-0177).
 func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, error) {
-	defs, err := decodeDefinitions(r)
-	if err != nil {
-		return nil, err
-	}
-	for _, proc := range defs.Processes {
-		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs))
-		}
-	}
-	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
+	cp, _, err := parseNamed(key, version, r, processId, true)
+	return cp, err
 }
 
-func decodeDefinitions(r io.Reader) (xmlDefinitions, error) {
-	var defs xmlDefinitions
-	if err := xml.NewDecoder(r).Decode(&defs); err != nil {
-		return xmlDefinitions{}, fmt.Errorf("compiler: parse BPMN: %w", err)
+// ReloadNamed is ParseNamed for a definition that is already deployed: it compiles
+// the named process *without* the deploy-time validation gate, and returns what
+// that gate would have said about it today alongside the process
+// (ADR-0177).
+//
+// Validation is a gate on deploying a model, not a condition for running one (I5,
+// see validation.go): the compiled process is identical either way. A definition
+// in a deployment store passed the gate of the day it was deployed and has been
+// running under it since, so re-applying today's rules to it on every restart
+// means a rule added to help authors can take a server down instead — on a model
+// nobody touched, with every other definition and every running instance
+// unreachable behind it. The rule still does its job at deploy, where the author
+// is watching and can fix the model.
+//
+// The returned Problems are what the gate raised — the full list, warnings
+// included, exactly as [ValidationError] carries it — and are empty when today's
+// rules do not refuse the model at all, so a caller can report drift on len() > 0.
+// A model that cannot be compiled at all still returns an error: there is no
+// definition to bring back.
+func ReloadNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, []Problem, error) {
+	return parseNamed(key, version, r, processId, false)
+}
+
+// parseNamed is the shared body of ParseNamed and ReloadNamed. gated says whether
+// the deploy-time validation gate applies: it does on the deploy path, and it does
+// not on the reload path, where the definition was gated once already.
+func parseNamed(key uint64, version int32, r io.Reader, processId string, gated bool) (*CompiledProcess, []Problem, error) {
+	defs, docs, err := decodeDefinitions(r)
+	if err != nil {
+		return nil, nil, err
 	}
-	return defs, nil
+	for _, proc := range defs.Processes {
+		if proc.Id != processId {
+			continue
+		}
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+		if err == nil {
+			return cp, nil, nil
+		}
+		// Only the gate refused it: stage 5 runs on a process that is already built,
+		// so this is the same definition the deploy of its day produced. Everything
+		// else stopped before there was a process, and is an error on both paths.
+		var ve *ValidationError
+		if !gated && errors.As(err, &ve) && ve.Process != nil {
+			return ve.Process, ve.Problems, nil
+		}
+		return nil, nil, err
+	}
+	return nil, nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
+}
+
+// nsBPMN is the BPMN 2.0 semantic-model namespace. Only a <documentation> in it (or in
+// no namespace, as minimal hand-written models are written) is an element's own prose;
+// one in a foreign namespace belongs to whatever extension declared it.
+const nsBPMN = "http://www.omg.org/spec/BPMN/20100524/MODEL"
+
+// decodeDefinitions parses a model into the typed structs *and* indexes every element's
+// documentation by id (elementDocumentation). The model is read into memory first
+// because those are two passes over the same bytes; deploy-time only, and every caller
+// already holds the whole model in memory anyway.
+func decodeDefinitions(r io.Reader) (xmlDefinitions, map[string]string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return xmlDefinitions{}, nil, fmt.Errorf("compiler: read BPMN: %w", err)
+	}
+	var defs xmlDefinitions
+	if err := xml.Unmarshal(data, &defs); err != nil {
+		return xmlDefinitions{}, nil, fmt.Errorf("compiler: parse BPMN: %w", err)
+	}
+	return defs, elementDocumentation(data), nil
+}
+
+// elementDocumentation indexes each element's <bpmn:documentation> text by the id of the
+// element that carries it. It is a generic token walk rather than a field on each of the
+// ~25 element structs, because documentation is the one property *every* BPMN element may
+// carry (ADR-0025) — a walk covers the elements Atlas compiles today and the ones it will
+// compile tomorrow, with no per-type wiring to forget. An element with several
+// <documentation> children (BPMN allows one per text format) has them joined by a blank
+// line, in document order.
+//
+// It is best-effort: decodeDefinitions has already rejected malformed XML through the
+// strict decode, so a token error here just ends the walk with what was found so far
+// rather than failing a deploy over metadata.
+func elementDocumentation(data []byte) map[string]string {
+	docs := map[string]string{}
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	var owners []string // the id of each open element ("" when it declares none)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return docs
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "documentation" && (t.Name.Space == nsBPMN || t.Name.Space == "") {
+				var text string
+				if err := dec.DecodeElement(&text, &t); err != nil {
+					return docs
+				}
+				// DecodeElement consumed this element whole, including its end tag, so
+				// it never enters the owner stack: the owner is the element around it.
+				if len(owners) == 0 {
+					continue
+				}
+				owner := owners[len(owners)-1]
+				text = strings.TrimSpace(text)
+				if owner == "" || text == "" {
+					continue
+				}
+				if prev := docs[owner]; prev != "" {
+					text = prev + "\n\n" + text
+				}
+				docs[owner] = text
+				continue
+			}
+			owners = append(owners, attrValue(t, "id"))
+		case xml.EndElement:
+			if len(owners) > 0 {
+				owners = owners[:len(owners)-1]
+			}
+		}
+	}
+}
+
+// attrValue returns a start element's attribute by local name, or "" if it has none.
+func attrValue(t xml.StartElement, name string) string {
+	for _, a := range t.Attr {
+		if a.Name.Local == name {
+			return a.Value
+		}
+	}
+	return ""
 }
 
 // participantNames maps each referenced process id to its participant (pool) name.
@@ -259,419 +429,195 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 	}
 }
 
+// buildOperationResolver indexes a model's <interface> operations by id and returns a
+// resolver from a send task's operationRef to the id of the operation's <inMessageRef>
+// message (ADR-0112) — the message that send publishes. An unknown operation, or one with no
+// inMessageRef, is a deploy error. The operation's outMessageRef (a response) is ignored: an
+// operationRef send is a fire-and-forget throw, exactly like a messageRef send.
+func buildOperationResolver(defs xmlDefinitions) func(ownerId, operationRef string) (string, error) {
+	ops := make(map[string]string, len(defs.Interfaces))
+	for _, iface := range defs.Interfaces {
+		for _, op := range iface.Operations {
+			if op.Id != "" {
+				ops[op.Id] = strings.TrimSpace(op.InMessageRef)
+			}
+		}
+	}
+	return func(ownerId, operationRef string) (string, error) {
+		msg, ok := ops[operationRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: send task %q references unknown operation %q", ownerId, operationRef)
+		}
+		if msg == "" {
+			return "", fmt.Errorf("compiler: operation %q referenced by send task %q has no inMessageRef", operationRef, ownerId)
+		}
+		return msg, nil
+	}
+}
+
+// buildSignalResolver indexes a model's top-level <bpmn:signal> declarations by id and
+// returns a closure resolving a signalRef to the signal's name (ADR-0088). A signal is
+// broadcast by name, so — unlike a message — there is no correlation key to compile.
+func buildSignalResolver(defs xmlDefinitions) func(ownerId, signalRef string) (string, error) {
+	signals := make(map[string]xmlSignal, len(defs.Signals))
+	for _, s := range defs.Signals {
+		if s.Id != "" {
+			signals[s.Id] = s
+		}
+	}
+	return func(ownerId, signalRef string) (string, error) {
+		s, ok := signals[signalRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: signal event %q references unknown signal %q", ownerId, signalRef)
+		}
+		if s.Name == "" {
+			return "", fmt.Errorf("compiler: signal %q referenced by %q has no name", signalRef, ownerId)
+		}
+		return s.Name, nil
+	}
+}
+
+// buildErrorResolver indexes a model's top-level <bpmn:error> declarations by id and
+// returns a closure resolving an errorRef to the error's code (ADR-0089). Errors match by
+// code, not id or name, so the resolver returns the code. A code-less error — or an
+// errorEventDefinition with no errorRef at all — resolves to "": a catch-all on a
+// boundary/handler, and an uncoded throw on an error end event. Unlike a message or
+// signal, an empty code is therefore legal; only a non-empty errorRef that names no
+// declared error is a deploy error.
+func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (string, error) {
+	errs := make(map[string]xmlError, len(defs.Errors))
+	for _, e := range defs.Errors {
+		if e.Id != "" {
+			errs[e.Id] = e
+		}
+	}
+	return func(ownerId, errorRef string) (string, error) {
+		if errorRef == "" {
+			return "", nil // a code-less catch-all, or an uncoded error throw
+		}
+		e, ok := errs[errorRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: error event %q references unknown error %q", ownerId, errorRef)
+		}
+		return e.ErrorCode, nil
+	}
+}
+
+// buildEscalationResolver indexes a model's top-level <bpmn:escalation> declarations by id
+// and returns a closure resolving an escalationRef to the escalation's code (ADR-0125).
+// Escalations match by code, mirroring errors (buildErrorResolver): a code-less escalation —
+// or an escalationEventDefinition with no escalationRef at all — resolves to "": a catch-all
+// on a boundary/handler, and an uncoded throw on an escalation throw/end event. An empty
+// code is legal; only a non-empty escalationRef that names no declared escalation is a
+// deploy error.
+func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef string) (string, error) {
+	escs := make(map[string]xmlEscalation, len(defs.Escalations))
+	for _, e := range defs.Escalations {
+		if e.Id != "" {
+			escs[e.Id] = e
+		}
+	}
+	return func(ownerId, escalationRef string) (string, error) {
+		if escalationRef == "" {
+			return "", nil // a code-less catch-all, or an uncoded escalation throw
+		}
+		e, ok := escs[escalationRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: escalation event %q references unknown escalation %q", ownerId, escalationRef)
+		}
+		return e.EscalationCode, nil
+	}
+}
+
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
-// resolving message references through resolveMessage (shared across a
-// collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error)) (*CompiledProcess, error) {
+// resolving message, signal, and error references through resolveMessage/resolveSignal/
+// resolveError (shared across a collaboration's processes). docs is the model-wide
+// element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
+// keyed by BPMN element id, and this process only ever looks up its own.
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), docs map[string]string) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
+	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
 	// keeps working. Only an explicit "false" marks a process non-executable.
 	b.SetExecutable(proc.IsExecutable != "false")
+	if proc.VersionTag != "" {
+		b.SetVersionTag(proc.VersionTag)
+	}
+	// A per-definition instance TTL (ADR-0085): parse the ISO-8601 duration up front so
+	// a malformed value fails the deploy rather than silently disabling the bound.
+	if ttl := strings.TrimSpace(proc.InstanceTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid instanceTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: instanceTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetInstanceTtl(nanos)
+	}
+	// A per-definition history TTL (ADR-0144): how long a finished instance of this
+	// definition is kept before retention hard-deletes it. Validated up front for the
+	// same reason as the instance TTL — a typo must fail the deploy, not silently leave
+	// the history unbounded.
+	if ttl := strings.TrimSpace(proc.HistoryTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid historyTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: historyTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetHistoryTtl(nanos)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
-	register := func(id string, nodeID int32) error {
-		if id == "" {
-			return fmt.Errorf("compiler: element with empty id")
-		}
-		if _, dup := ids[id]; dup {
-			return fmt.Errorf("compiler: duplicate element id %q", id)
-		}
-		ids[id] = nodeID
-		b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
-		return nil
+	reg := &registrar{b: b, ids: ids, docs: docs}
+
+	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
+	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
+	// structurally is (ADR-0108).
+	foldTransactions(&proc.xmlFlowContent)
+	// Resolve each send task's operationRef to the message the operation sends, before
+	// registerScope, so an operationRef send is compiled as the message kind (ADR-0112).
+	if err := resolveSendTaskOperations(&proc.xmlFlowContent, resolveOperation); err != nil {
+		return nil, err
 	}
 
-	for _, s := range proc.StartEvents {
-		if s.Message != nil {
-			name, keyExpr, err := resolveMessage(s.Id, s.Message.MessageRef)
-			if err != nil {
-				return nil, err
-			}
-			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if s.Timer != nil {
-			schedule, err := parseTimerSchedule(s.Timer)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
-			}
-			if schedule.IsFeel() && len(schedule.Expr.Inputs()) > 0 {
-				return nil, fmt.Errorf("compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
-			}
-			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err := register(s.Id, b.AddStartEvent()); err != nil {
-			return nil, err
-		}
-		// A none start event may carry a start form; the first one that does wins
-		// as the process's start form (ADR-0028).
-		if s.Form.FormId != "" {
-			b.SetStartFormId(s.Form.FormId)
-		}
+	// Register every flow node — the process root and, recursively, each embedded
+	// subprocess scope — then require a root-scope start event before wiring flows.
+	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
+	walkErr := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent)
+	// A rejected id is reported ahead of whatever else the walk found. Every step
+	// after registration resolves elements through ids, so an error raised once an
+	// id has been rejected is more likely a consequence of that rejection than an
+	// independent problem — and the author has to fix the id either way.
+	if reg.err != nil {
+		return nil, reg.err
 	}
-	for _, st := range proc.ServiceTasks {
-		retries := int32(defaultRetries)
-		if r := st.TaskDefinition.Retries; r != "" {
-			n, err := strconv.Atoi(r)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: service task %q has invalid retries %q: %w", st.Id, r, err)
-			}
-			retries = int32(n)
-		}
-		// A service task bearing an <atlas:clioConnector> extension is a connector
-		// task: it delegates to a server-registered clio connector via the job path
-		// (ADR-0036), not to an external service-task worker.
-		if c := st.Clio; c != nil {
-			if c.Connector == "" || c.Subject == "" || c.EventType == "" {
-				return nil, fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
-			}
-			if err := register(st.Id, b.AddClioWriteTask(c.Connector, c.Subject, c.EventType, retries)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
-		// connector task: it calls the model-authored URL via the job path
-		// (ADR-0067), not an external service-task worker. The URL lives in the model
-		// (unlike clio's registry-only endpoint); credentials never do.
-		if c := st.Rest; c != nil {
-			if strings.TrimSpace(c.Url) == "" {
-				return nil, fmt.Errorf("compiler: rest connector task %q needs a url", st.Id)
-			}
-			method, err := normalizeHTTPMethod(c.Method)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
-			}
-			url, err := restValue(st.Id, "url", c.Url)
-			if err != nil {
-				return nil, err
-			}
-			headers, err := httpKVList(st.Id, "header", c.Headers)
-			if err != nil {
-				return nil, err
-			}
-			query, err := httpKVList(st.Id, "query parameter", c.QueryParams)
-			if err != nil {
-				return nil, err
-			}
-			auth, err := restAuth(st.Id, c)
-			if err != nil {
-				return nil, err
-			}
-			id := b.AddRestConnectorTask(RestConfig{
-				Method:    method,
-				Url:       url,
-				ResultVar: strings.TrimSpace(c.ResultVariable),
-				Headers:   headers,
-				Query:     query,
-				Auth:      auth,
-				Retries:   retries,
-			})
-			if err := register(st.Id, id); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if st.TaskDefinition.Type == "" {
-			return nil, fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
-		}
-		if err := register(st.Id, b.AddServiceTask(st.TaskDefinition.Type, retries)); err != nil {
-			return nil, err
-		}
-	}
-	for _, st := range proc.ScriptTasks {
-		// A script task bearing an <atlas:jobScript> extension is a polyglot script
-		// task: it runs in a general-purpose language via the job path (ADR-0047),
-		// not inline as FEEL. The language is validated and mapped to its reserved
-		// job type at deploy time (invariant I5), so the runtime worker never has to.
-		if js := st.JobScript; js != nil {
-			jobType, ok := scriptJobTypes[strings.ToLower(strings.TrimSpace(js.Language))]
-			if !ok {
-				return nil, fmt.Errorf("compiler: script task %q has unsupported script language %q", st.Id, js.Language)
-			}
-			source := strings.TrimSpace(js.Source)
-			if source == "" {
-				return nil, fmt.Errorf("compiler: script task %q has no script source", st.Id)
-			}
-			if js.ResultVariable == "" {
-				return nil, fmt.Errorf("compiler: script task %q has no result variable", st.Id)
-			}
-			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, defaultRetries)
-			if err := register(st.Id, node); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		text := strings.TrimSpace(st.Script.Expression)
-		text = strings.TrimPrefix(text, "=") // Zeebe marks expressions with a leading '='
-		text = strings.TrimSpace(text)
-		if text == "" {
-			return nil, fmt.Errorf("compiler: script task %q has no expression", st.Id)
-		}
-		if st.Script.ResultVariable == "" {
-			return nil, fmt.Errorf("compiler: script task %q has no result variable", st.Id)
-		}
-		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
-		// discovers the process variables the expression reads; a syntax or type
-		// error fails here — i.e. fails deploy.
-		e, err := expr.CompileAuto(text)
-		if err != nil {
-			return nil, fmt.Errorf("compiler: script task %q: %w", st.Id, err)
-		}
-		if err := register(st.Id, b.AddScriptTask(e, st.Script.ResultVariable)); err != nil {
-			return nil, err
-		}
-	}
-	for _, brt := range proc.BusinessRuleTasks {
-		if brt.CalledDecision.DecisionId == "" {
-			return nil, fmt.Errorf("compiler: business rule task %q has no calledDecision decisionId", brt.Id)
-		}
-		retries := int32(defaultRetries)
-		if r := brt.CalledDecision.Retries; r != "" {
-			n, err := strconv.Atoi(r)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: business rule task %q has invalid retries %q: %w", brt.Id, r, err)
-			}
-			retries = int32(n)
-		}
-		inputs, err := decisionInputs(brt.Inputs)
-		if err != nil {
-			return nil, fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
-		}
-		mappings, err := decisionInputMappings(brt.Id, brt.InputMappings)
-		if err != nil {
-			return nil, err
-		}
-		// A business rule task marked with <atlas:temisConnector> is a central
-		// decision: it delegates to the named server-registered temis connector
-		// instead of the embedded library (ADR-0050). Authoring is otherwise
-		// identical.
-		var node int32
-		if tc := brt.TemisConnector; tc != nil {
-			if tc.Connector == "" {
-				return nil, fmt.Errorf("compiler: business rule task %q has a temisConnector with no connector name", brt.Id)
-			}
-			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
-		} else {
-			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, decisionBinding(brt.CalledDecision.BindingType))
-		}
-		if err != nil {
-			return nil, err
-		}
-		if err := register(brt.Id, node); err != nil {
-			return nil, err
-		}
-	}
-	for _, ut := range proc.UserTasks {
-		retries := int32(defaultRetries)
-		priority := int32(defaultUserTaskPriority)
-		if s := strings.TrimSpace(ut.Priority.Priority); s != "" {
-			p, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: user task %q priority %q: %w", ut.Id, s, err)
-			}
-			priority = int32(p)
-		}
-		var dueDateNanos int64
-		if s := strings.TrimSpace(ut.Schedule.DueDate); s != "" {
-			s = strings.TrimSpace(strings.TrimPrefix(s, "=")) // tolerate a FEEL '=' prefix
-			nanos, err := parseISO8601Duration(s)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: user task %q dueDate: %w", ut.Id, err)
-			}
-			dueDateNanos = nanos
-		}
-		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries)); err != nil {
-			return nil, err
-		}
-	}
-	for _, g := range proc.ExclusiveGateways {
-		if err := register(g.Id, b.AddExclusiveGateway()); err != nil {
-			return nil, err
-		}
-	}
-	for _, g := range proc.ParallelGateways {
-		if err := register(g.Id, b.AddParallelGateway()); err != nil {
-			return nil, err
-		}
-	}
-	for _, g := range proc.InclusiveGateways {
-		if err := register(g.Id, b.AddInclusiveGateway()); err != nil {
-			return nil, err
-		}
-	}
-	for _, ev := range proc.IntermediateCatchEvents {
-		switch {
-		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
-			}
-			if schedule.Repeats() {
-				return nil, fmt.Errorf("compiler: intermediate catch event %q: timeCycle is not supported (a catch fires once); use timeDuration or timeDate", ev.Id)
-			}
-			if err := register(ev.Id, b.AddTimerCatchSchedule(schedule)); err != nil {
-				return nil, err
-			}
-		case ev.Message != nil:
-			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
-			if err != nil {
-				return nil, err
-			}
-			if err := register(ev.Id, b.AddMessageCatchEvent(name, keyExpr)); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, fmt.Errorf("compiler: intermediate catch event %q: only timer and message events are supported yet", ev.Id)
-		}
-	}
-	for _, ev := range proc.IntermediateThrowEvents {
-		if ev.Message == nil {
-			return nil, fmt.Errorf("compiler: intermediate throw event %q: only message events are supported yet", ev.Id)
-		}
-		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
-		if err != nil {
-			return nil, err
-		}
-		if err := register(ev.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
-			return nil, err
-		}
-	}
-	// An undefined <task> and a <manualTask> have no execution semantics, so Atlas
-	// runs them as pass-throughs (the token flows straight on). This lets a model
-	// be drafted and its routing — e.g. a gateway's branches — tested before its
-	// tasks are given real implementations.
-	for _, t := range proc.Tasks {
-		if err := register(t.Id, b.AddTask()); err != nil {
-			return nil, err
-		}
-	}
-	for _, t := range proc.ManualTasks {
-		if err := register(t.Id, b.AddTask()); err != nil {
-			return nil, err
-		}
-	}
-	for _, e := range proc.EndEvents {
-		// A message end event publishes its message then ends; a plain end event
-		// just ends (ADR-0052).
-		if e.Message != nil {
-			name, keyExpr, err := resolveMessage(e.Id, e.Message.MessageRef)
-			if err != nil {
-				return nil, err
-			}
-			if err := register(e.Id, b.AddMessageEndEvent(name, keyExpr)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err := register(e.Id, b.AddEndEvent()); err != nil {
-			return nil, err
-		}
-	}
-	// Boundary events are registered last: each attaches to a host activity by id,
-	// which must already be registered so attachedToRef resolves (ADR-0040). An
-	// absent or "true" cancelActivity is interrupting (BPMN default); "false" is
-	// non-interrupting.
-	for _, ev := range proc.BoundaryEvents {
-		host, ok := ids[ev.AttachedToRef]
-		if !ok {
-			return nil, fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
-		}
-		interrupting := ev.CancelActivity != "false"
-		switch {
-		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
-			}
-			if schedule.Repeats() && interrupting {
-				return nil, fmt.Errorf("compiler: boundary event %q: an interrupting boundary timer does not support timeCycle (it fires once); use timeDuration or timeDate, or make the boundary non-interrupting", ev.Id)
-			}
-			if err := register(ev.Id, b.AddBoundaryTimerSchedule(host, interrupting, schedule)); err != nil {
-				return nil, err
-			}
-		case ev.Message != nil:
-			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
-			if err != nil {
-				return nil, err
-			}
-			if err := register(ev.Id, b.AddBoundaryMessageEvent(host, interrupting, name, keyExpr)); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, fmt.Errorf("compiler: boundary event %q: only timer and message boundary events are supported yet", ev.Id)
-		}
+	if walkErr != nil {
+		return nil, walkErr
 	}
 
 	if !b.hasStartEvent() {
 		return nil, fmt.Errorf("compiler: process %q has no start event", proc.Id)
 	}
 
-	// Report an unsupported element with a clear message rather than letting it
-	// surface later as a confusing "unknown targetRef" when a flow points at it.
-	for _, u := range []struct {
-		label string
-		nodes []xmlNode
-	}{
-		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
-	} {
-		if len(u.nodes) > 0 {
-			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
-				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule, user), exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
-		}
+	if err := connectScope(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
 	}
 
-	// Connect flows, compiling any FEEL condition, and remember each BPMN flow id
-	// so a gateway's default flow can be marked afterwards.
-	flowIdx := make(map[string]int32, len(proc.Flows))
-	for _, f := range proc.Flows {
-		src, ok := ids[f.SourceRef]
-		if !ok {
-			return nil, fmt.Errorf("compiler: flow %q references unknown sourceRef %q", f.Id, f.SourceRef)
-		}
-		tgt, ok := ids[f.TargetRef]
-		if !ok {
-			return nil, fmt.Errorf("compiler: flow %q references unknown targetRef %q", f.Id, f.TargetRef)
-		}
-		fid := b.Connect(src, tgt)
-		flowIdx[f.Id] = fid
-		if cond := strings.TrimSpace(f.Condition); cond != "" {
-			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
-			ce, err := expr.CompileAuto(cond)
-			if err != nil {
-				return nil, fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
-			}
-			b.SetFlowCondition(fid, ce)
-		}
+	// Resolve compensation links now that every node is registered (ADR-0103): join each
+	// compensation boundary to its handler via a BPMN <association>, and narrow each
+	// compensation throw/end that names a single activity. Both endpoints resolve through
+	// the flat, process-wide id map, so this is a post-pass over the whole scope tree.
+	if err := resolveCompensation(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
 	}
-	// Mark each exclusive/inclusive gateway's default flow (taken when no
-	// condition holds).
-	markDefault := func(kind, gid, def string) error {
-		if def == "" {
-			return nil
-		}
-		fid, ok := flowIdx[def]
-		if !ok {
-			return fmt.Errorf("compiler: %s gateway %q default references unknown flow %q", kind, gid, def)
-		}
-		b.SetFlowDefault(fid)
-		return nil
-	}
-	for _, g := range proc.ExclusiveGateways {
-		if err := markDefault("exclusive", g.Id, g.Default); err != nil {
-			return nil, err
-		}
-	}
-	for _, g := range proc.InclusiveGateways {
-		if err := markDefault("inclusive", g.Id, g.Default); err != nil {
-			return nil, err
-		}
+
+	// Record each flow node's organizational lane (ADR-0121). Lanes are metadata with no
+	// execution effect, resolved through the same process-wide id map as compensation.
+	if err := resolveLanes(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
 	}
 
 	// Data objects are not flow nodes (no token flows through them), so they are
@@ -721,63 +667,77 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return "", "", fmt.Errorf("compiler: data output association on %q has unknown targetRef %q", ownerId, targetRef)
 	}
-	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) error {
+	// The four wiring passes below each repeat one shape at every activity kind they
+	// handle — around thirty call sites of "wire it, propagate the rejection". keepWire
+	// holds the first rejection instead, so each call site is one statement and the
+	// passes are checked once at the end.
+	//
+	// Like the registrar's, the passes carry on after a rejection: registration already
+	// succeeded, so every remaining association still wires against a complete id table
+	// and no later pass can report a second failure caused by the first. The kept one is
+	// the first, and nothing between here and the check can return ahead of it.
+	var wireErr error
+	keepWire := func(err error) {
+		if err != nil && wireErr == nil {
+			wireErr = err
+		}
+	}
+	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) {
 		for _, a := range assocs {
 			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
 				ce, err := expr.CompileAuto(from)
 				if err != nil {
-					return fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err)
+					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
+					return
 				}
 				valExpr = ce
 			}
 			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
-		return nil
 	}
 	for _, st := range proc.ServiceTasks {
-		if err := wireDataOut(st.Id, st.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 	for _, st := range proc.ScriptTasks {
-		if err := wireDataOut(st.Id, st.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 	for _, brt := range proc.BusinessRuleTasks {
-		if err := wireDataOut(brt.Id, brt.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(brt.Id, brt.DataOut)
 	}
 	for _, ut := range proc.UserTasks {
-		if err := wireDataOut(ut.Id, ut.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(ut.Id, ut.DataOut)
 	}
 	for _, t := range proc.Tasks {
-		if err := wireDataOut(t.Id, t.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(t.Id, t.DataOut)
 	}
 	for _, t := range proc.ManualTasks {
-		if err := wireDataOut(t.Id, t.DataOut); err != nil {
-			return nil, err
+		wireDataOut(t.Id, t.DataOut)
+	}
+	for _, rt := range proc.ReceiveTasks {
+		wireDataOut(rt.Id, rt.DataOut)
+	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
 		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
 	// variable the read value is written into (ADR-0059).
-	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) error {
+	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) {
 		for _, a := range assocs {
 			name, _, err := resolveDataTarget(ownerId, a.SourceRef)
 			if err != nil {
-				return fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err)
+				keepWire(fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err))
+				return
 			}
 			// The target variable is the assignment's <to> (a free string the Modeler
 			// writes — a drawn association's own <targetRef> is a generated data-input
@@ -788,49 +748,47 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				variable = strings.TrimSpace(a.TargetRef)
 			}
 			if variable == "" {
-				return fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId)
+				keepWire(fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId))
+				return
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
 				ce, err := expr.CompileAuto(from)
 				if err != nil {
-					return fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err)
+					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
+					return
 				}
 				valExpr = ce
 			}
 			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
-		return nil
 	}
 	for _, st := range proc.ServiceTasks {
-		if err := wireDataIn(st.Id, st.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 	for _, st := range proc.ScriptTasks {
-		if err := wireDataIn(st.Id, st.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 	for _, brt := range proc.BusinessRuleTasks {
-		if err := wireDataIn(brt.Id, brt.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(brt.Id, brt.DataIn)
 	}
 	for _, ut := range proc.UserTasks {
-		if err := wireDataIn(ut.Id, ut.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(ut.Id, ut.DataIn)
 	}
 	for _, t := range proc.Tasks {
-		if err := wireDataIn(t.Id, t.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(t.Id, t.DataIn)
 	}
 	for _, t := range proc.ManualTasks {
-		if err := wireDataIn(t.Id, t.DataIn); err != nil {
-			return nil, err
+		wireDataIn(t.Id, t.DataIn)
+	}
+	for _, rt := range proc.ReceiveTasks {
+		wireDataIn(rt.Id, rt.DataIn)
+	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
 		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 
 	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
@@ -848,45 +806,217 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return e, nil
 	}
-	wireIO := func(ownerId string, iom xmlZeebeIOMapping) error {
+	wireIO := func(ownerId string, iom xmlZeebeIOMapping) {
 		for _, in := range iom.Inputs {
 			target := strings.TrimSpace(in.Target)
 			if target == "" {
-				return fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId)
+				keepWire(fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId))
+				return
 			}
 			e, err := compileSource(ownerId, "input", target, in.Source)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			b.AddInputMapping(ids[ownerId], target, e)
 		}
 		for _, out := range iom.Outputs {
 			target := strings.TrimSpace(out.Target)
 			if target == "" {
-				return fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId)
+				keepWire(fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId))
+				return
 			}
 			e, err := compileSource(ownerId, "output", target, out.Source)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			b.AddOutputMapping(ids[ownerId], target, e)
 		}
+	}
+	// Wire I/O mappings for every scope, recursively: a subprocess's own ioMapping
+	// (input mappings write its scope on entry, output mappings promote to the
+	// parent on completion — the engine applies both generically) and the mappings
+	// on the activities inside it (ADR-0074 Phase 4).
+	var wireScopeIO func(c *xmlFlowContent)
+	wireScopeIO = func(c *xmlFlowContent) {
+		for _, st := range c.ServiceTasks {
+			wireIO(st.Id, st.IOMapping)
+		}
+		for _, st := range c.ScriptTasks {
+			wireIO(st.Id, st.IOMapping)
+		}
+		for _, ut := range c.UserTasks {
+			wireIO(ut.Id, ut.IOMapping)
+		}
+		for _, ca := range c.CallActivities {
+			wireIO(ca.Id, ca.IOMapping)
+		}
+		for _, rt := range c.ReceiveTasks {
+			wireIO(rt.Id, rt.IOMapping)
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			wireIO(st.Id, st.IOMapping)
+		}
+		for i := range c.SubProcesses {
+			sub := &c.SubProcesses[i]
+			wireIO(sub.Id, sub.IOMapping)
+			wireScopeIO(&sub.xmlFlowContent)
+		}
+		// An ad-hoc subprocess is a scope too: recurse so its contained activities'
+		// I/O mappings are wired like any other scope's (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			wireScopeIO(&c.AdHocSubProcesses[i].xmlFlowContent)
+		}
+	}
+	wireScopeIO(&proc.xmlFlowContent)
+
+	// Wire the loop characteristics of every activity in the scope tree, recursively,
+	// mirroring wireScopeIO — both BPMN markers: multi-instance (ADR-0077) and standard
+	// loop (ADR-0133). Each FEEL source compiles once at deploy (I5), and a loop with no
+	// way to decide how many iterations to run is refused (a multi-instance with neither
+	// an input collection nor a cardinality; a standard loop with neither a condition nor
+	// a maximum). The compiler records the detail; the engine runs the iterations.
+	compileMI := func(ownerId, what, source string) (*expr.Compiled, error) {
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(source), "="))
+		if text == "" {
+			return nil, nil
+		}
+		e, err := expr.CompileAuto(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
+		}
+		return e, nil
+	}
+	// A standard loop is the other BPMN loop marker (ADR-0133): it repeats the activity
+	// while its condition holds rather than once per collection element. It compiles into
+	// the same loop table (the engine runs it on the multi-instance body/iteration
+	// machinery), so an activity carries at most one of the two markers, and a loop with
+	// neither a condition nor a maximum is refused — it could never end.
+	wireStandardLoop := func(ownerId string, sl *xmlStandardLoop) error {
+		if sl == nil {
+			return nil
+		}
+		cond, err := compileMI(ownerId, "loopCondition", sl.LoopCondition)
+		if err != nil {
+			return err
+		}
+		var max int32
+		if text := strings.TrimSpace(sl.LoopMaximum); text != "" {
+			n, err := strconv.Atoi(text)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("compiler: loop activity %q has an invalid loopMaximum %q (want a positive whole number)", ownerId, sl.LoopMaximum)
+			}
+			max = int32(n)
+		}
+		if cond == nil && max == 0 {
+			return fmt.Errorf("compiler: loop activity %q needs a loopCondition or a loopMaximum", ownerId)
+		}
+		b.SetStandardLoop(ids[ownerId], strings.TrimSpace(sl.TestBefore) == "true", max, cond)
 		return nil
 	}
-	for _, st := range proc.ServiceTasks {
-		if err := wireIO(st.Id, st.IOMapping); err != nil {
-			return nil, err
+	wireMultiInstance := func(ownerId string, mi *xmlMultiInstance) error {
+		if mi == nil {
+			return nil
+		}
+		coll, err := compileMI(ownerId, "inputCollection", mi.Loop.InputCollection)
+		if err != nil {
+			return err
+		}
+		card, err := compileMI(ownerId, "loopCardinality", mi.LoopCardinality)
+		if err != nil {
+			return err
+		}
+		if coll == nil && card == nil {
+			return fmt.Errorf("compiler: multi-instance activity %q needs an inputCollection or a loopCardinality", ownerId)
+		}
+		if coll != nil && card != nil {
+			return fmt.Errorf("compiler: multi-instance activity %q has both an inputCollection and a loopCardinality (use one)", ownerId)
+		}
+		out, err := compileMI(ownerId, "outputElement", mi.Loop.OutputElement)
+		if err != nil {
+			return err
+		}
+		cond, err := compileMI(ownerId, "completionCondition", mi.CompletionCondition)
+		if err != nil {
+			return err
+		}
+		b.SetMultiInstance(ids[ownerId], mi.IsSequential == "true",
+			strings.TrimSpace(mi.Loop.InputElement), strings.TrimSpace(mi.Loop.OutputCollection),
+			coll, card, out, cond)
+		return nil
+	}
+	// An activity carries at most one loop marker: BPMN draws them as different icons
+	// (∥/≡ for a multi-instance, ↻ for a standard loop) and they mean different things,
+	// so a model with both is refused rather than silently running one of them.
+	wireLoop := func(ownerId string, mi *xmlMultiInstance, sl *xmlStandardLoop) {
+		if mi != nil && sl != nil {
+			keepWire(fmt.Errorf("compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId))
+			return
+		}
+		if err := wireMultiInstance(ownerId, mi); err != nil {
+			keepWire(err)
+			return
+		}
+		keepWire(wireStandardLoop(ownerId, sl))
+	}
+	var wireScopeMI func(c *xmlFlowContent)
+	wireScopeMI = func(c *xmlFlowContent) {
+		for _, st := range c.ServiceTasks {
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
+		}
+		for _, st := range c.ScriptTasks {
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
+		}
+		for _, ut := range c.UserTasks {
+			wireLoop(ut.Id, ut.MultiInstance, ut.StandardLoop)
+		}
+		for _, ca := range c.CallActivities {
+			wireLoop(ca.Id, ca.MultiInstance, ca.StandardLoop)
+		}
+		for _, rt := range c.ReceiveTasks {
+			wireLoop(rt.Id, rt.MultiInstance, rt.StandardLoop)
+		}
+		for _, brt := range c.BusinessRuleTasks {
+			wireLoop(brt.Id, brt.MultiInstance, brt.StandardLoop)
+		}
+		// An undefined task and a manual task have no implementation, but they are
+		// activities: a loop marker on one repeats the (pass-through) step, which is what
+		// the diagram says it does.
+		for _, t := range c.Tasks {
+			wireLoop(t.Id, t.MultiInstance, t.StandardLoop)
+		}
+		for _, t := range c.ManualTasks {
+			wireLoop(t.Id, t.MultiInstance, t.StandardLoop)
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
+		}
+		for i := range c.SubProcesses {
+			sub := &c.SubProcesses[i]
+			wireLoop(sub.Id, sub.MultiInstance, sub.StandardLoop)
+			wireScopeMI(&sub.xmlFlowContent)
+		}
+		// Recurse into ad-hoc scopes so a contained activity's loop markers are wired
+		// exactly as in any other scope (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			wireScopeMI(&c.AdHocSubProcesses[i].xmlFlowContent)
 		}
 	}
-	for _, st := range proc.ScriptTasks {
-		if err := wireIO(st.Id, st.IOMapping); err != nil {
-			return nil, err
-		}
-	}
-	for _, ut := range proc.UserTasks {
-		if err := wireIO(ut.Id, ut.IOMapping); err != nil {
-			return nil, err
-		}
+	wireScopeMI(&proc.xmlFlowContent)
+
+	// The four wiring passes are done; report the first thing any of them rejected.
+	// Nothing between the first pass and here returns an error of its own, so this is
+	// the same error, at the same point in the deploy, that returning from the failing
+	// call site used to produce.
+	if wireErr != nil {
+		return nil, wireErr
 	}
 
 	cp, err := b.Build()
@@ -900,7 +1030,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Warnings (e.g. unreachable dead code) are non-fatal and surface through the
 	// future /validate dry-run (ADR-0026), not here.
 	if problems := Validate(cp); HasErrors(problems) {
-		return nil, &ValidationError{Problems: problems}
+		return nil, &ValidationError{Problems: problems, Process: cp}
 	}
 	return cp, nil
 }
@@ -911,7 +1041,25 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 type xmlDefinitions struct {
 	Processes     []xmlProcess      `xml:"process"`
 	Messages      []xmlMessage      `xml:"message"`
+	Signals       []xmlSignal       `xml:"signal"`
+	Errors        []xmlError        `xml:"error"`
+	Escalations   []xmlEscalation   `xml:"escalation"`
+	Interfaces    []xmlInterface    `xml:"interface"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
+}
+
+// A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
+// reads them only to resolve a send task's operationRef to the operation's inMessageRef
+// (ADR-0112) — the message that send publishes.
+type xmlInterface struct {
+	Operations []xmlOperation `xml:"operation"`
+}
+
+// A BPMN <operation> inside an <interface>. Its <inMessageRef> names the message an
+// operationRef send task publishes; its outMessageRef (a response) is not supported.
+type xmlOperation struct {
+	Id           string `xml:"id,attr"`
+	InMessageRef string `xml:"inMessageRef"`
 }
 
 // A collaboration groups participant pools. Each participant references the
@@ -943,10 +1091,66 @@ type xmlMessageEventDefinition struct {
 	MessageRef string `xml:"messageRef,attr"`
 }
 
+// A top-level signal declaration (ADR-0088). A signal is broadcast by name — it carries
+// no correlation key and no code — so it needs only an id and a name.
+type xmlSignal struct {
+	Id   string `xml:"id,attr"`
+	Name string `xml:"name,attr"`
+}
+
+type xmlSignalEventDefinition struct {
+	SignalRef string `xml:"signalRef,attr"`
+}
+
+// A top-level error declaration (ADR-0089). An error is caught by its code — the
+// nearest enclosing handler whose error code matches, or a code-less catch-all — so the
+// errorCode, not the id or name, is what an error boundary/handler compares against. The
+// id is what an errorRef points at; the name is human-facing only.
+type xmlError struct {
+	Id        string `xml:"id,attr"`
+	ErrorCode string `xml:"errorCode,attr"`
+	Name      string `xml:"name,attr"`
+}
+
+type xmlErrorEventDefinition struct {
+	ErrorRef string `xml:"errorRef,attr"`
+}
+
+// A top-level escalation declaration (ADR-0125). Like an error, an escalation is caught by
+// its code — the nearest enclosing escalation handler whose escalationCode matches, or a
+// code-less catch-all — so the escalationCode, not the id or name, is what an escalation
+// boundary/handler compares against. The id is what an escalationRef points at; the name is
+// human-facing only.
+type xmlEscalation struct {
+	Id             string `xml:"id,attr"`
+	EscalationCode string `xml:"escalationCode,attr"`
+	Name           string `xml:"name,attr"`
+}
+
+type xmlEscalationEventDefinition struct {
+	EscalationRef string `xml:"escalationRef,attr"`
+}
+
 type xmlProcess struct {
-	Id                string                `xml:"id,attr"`
-	Name              string                `xml:"name,attr"`
-	IsExecutable      string                `xml:"isExecutable,attr"`
+	Id           string `xml:"id,attr"`
+	Name         string `xml:"name,attr"`
+	IsExecutable string `xml:"isExecutable,attr"`
+	VersionTag   string `xml:"versionTag,attr"`
+	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
+	HistoryTtl   string `xml:"historyTtl,attr"`  // ISO-8601 duration; finished-instance retention (ADR-0144), empty = off
+
+	xmlFlowContent // the process root's flow nodes and sequence flows
+
+	DataObjects          []xmlDataObject          `xml:"dataObject"`
+	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
+}
+
+// xmlFlowContent is the set of flow nodes and sequence flows of one scope — the
+// process root or an embedded subprocess. Both xmlProcess and xmlSubProcess embed
+// it, so a subprocess nests the very same element shapes (ADR-0074). encoding/xml
+// promotes the embedded fields, so a <subProcess>'s own <startEvent>, <task>,
+// <sequenceFlow>, … unmarshal exactly as they do at the process root.
+type xmlFlowContent struct {
 	StartEvents       []xmlStartEvent       `xml:"startEvent"`
 	EndEvents         []xmlEndEvent         `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
@@ -960,20 +1164,296 @@ type xmlProcess struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks             []xmlNode             `xml:"task"`
-	ManualTasks       []xmlNode             `xml:"manualTask"`
-	ParallelGateways  []xmlNode             `xml:"parallelGateway"`
-	InclusiveGateways []xmlInclusiveGateway `xml:"inclusiveGateway"`
+	Tasks              []xmlPlainTask        `xml:"task"`
+	ManualTasks        []xmlPlainTask        `xml:"manualTask"`
+	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
+	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
+	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 
-	// Captured only to give a clear "unsupported element" error (see Parse); none
-	// of these are executable yet.
-	SendTasks    []xmlNode `xml:"sendTask"`
-	ReceiveTasks []xmlNode `xml:"receiveTask"`
+	SubProcesses   []xmlSubProcess   `xml:"subProcess"`
+	CallActivities []xmlCallActivity `xml:"callActivity"`
 
-	DataObjects          []xmlDataObject          `xml:"dataObject"`
-	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
+	// Transactions are <transaction> subprocesses — structurally an embedded subprocess with
+	// one added outcome, cancellation (ADR-0108). They share xmlSubProcess's shape; foldTransactions
+	// merges them into SubProcesses (marked IsTransaction) right after parse, so every scope walk
+	// that already handles subprocesses handles transactions unchanged.
+	Transactions []xmlSubProcess `xml:"transaction"`
+
+	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
+
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, carrying the same taskDefinition, connector extensions, and activity
+	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
+	SendTasks []xmlSendTask `xml:"sendTask"`
+
+	// Captured only to give a clear "unsupported element" error (see registerScope) rather
+	// than a confusing "unknown targetRef" when a flow points at one; not executable.
+	ComplexGateways []xmlNode `xml:"complexGateway"`
+
+	// AdHocSubProcesses are <adHocSubProcess> containers: a scope whose contained activities
+	// run on demand, in any order, zero or more times, rather than being driven by sequence
+	// flow from a start event (ADR-0138). They share xmlSubProcess's shape (they nest the same
+	// flow content) plus the ad-hoc's own ordering / cancelRemainingInstances /
+	// <completionCondition>.
+	AdHocSubProcesses []xmlAdHocSubProcess `xml:"adHocSubProcess"`
+
+	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
+	// them only to link a compensation boundary event to its handler (ADR-0103).
+	Associations []xmlAssociation `xml:"association"`
+
+	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
+	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
+	LaneSets []xmlLaneSet `xml:"laneSet"`
+}
+
+// xmlLaneSet is a <laneSet> — a set of sibling lanes partitioning a process or subprocess scope.
+type xmlLaneSet struct {
+	Lanes []xmlLane `xml:"lane"`
+}
+
+// xmlLane is a <lane> — an organizational partition naming the flow nodes it contains via
+// <flowNodeRef> children, optionally subdivided into a nested <childLaneSet> (ADR-0121).
+type xmlLane struct {
+	Id           string      `xml:"id,attr"`
+	Name         string      `xml:"name,attr"`
+	FlowNodeRefs []string    `xml:"flowNodeRef"`
+	ChildLaneSet *xmlLaneSet `xml:"childLaneSet"`
+}
+
+// laneLabel is a lane's name, or its id when unnamed — for error messages.
+func laneLabel(l *xmlLane) string {
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Id
+}
+
+// resolveLanes records each flow node's organizational lane (ADR-0121). It walks every scope's
+// laneSets — following nested childLaneSets and building the lane table with parent pointers — and
+// resolves each <flowNodeRef> to a node through the process-wide id map, so a lane's assignment
+// works regardless of scope. A flowNodeRef naming no registered node, or a node claimed by two
+// lanes, is a deploy error. Lanes are pure metadata, so this runs after registration and changes
+// no flow; a process with no lanes leaves every node's Lane at -1.
+func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
+	assigned := map[int32]string{} // node id → the lane that already claimed it (process-wide)
+
+	var walkLaneSet func(ls *xmlLaneSet, parent int32) error
+	walkLaneSet = func(ls *xmlLaneSet, parent int32) error {
+		for i := range ls.Lanes {
+			lane := &ls.Lanes[i]
+			idx := b.AddLane(lane.Name, parent)
+			for _, ref := range lane.FlowNodeRefs {
+				ref = strings.TrimSpace(ref)
+				if ref == "" {
+					continue
+				}
+				node, ok := ids[ref]
+				if !ok {
+					return fmt.Errorf("compiler: lane %q references unknown flow node %q", laneLabel(lane), ref)
+				}
+				if prev, dup := assigned[node]; dup {
+					return fmt.Errorf("compiler: flow node %q is in two lanes (%q and %q); a node belongs to at most one lane", ref, prev, laneLabel(lane))
+				}
+				assigned[node] = laneLabel(lane)
+				b.SetLane(node, idx)
+			}
+			if lane.ChildLaneSet != nil {
+				if err := walkLaneSet(lane.ChildLaneSet, idx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	var walkScope func(c *xmlFlowContent) error
+	walkScope = func(c *xmlFlowContent) error {
+		for i := range c.LaneSets {
+			if err := walkLaneSet(&c.LaneSets[i], -1); err != nil {
+				return err
+			}
+		}
+		for i := range c.SubProcesses {
+			if err := walkScope(&c.SubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		for i := range c.AdHocSubProcesses {
+			if err := walkScope(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walkScope(fc)
+}
+
+// xmlReceiveTask is a <receiveTask messageRef="…">: an activity that waits for the
+// referenced message to correlate, then continues (ADR-0102). It carries the same activity
+// sub-elements as a service task — I/O mappings, multi-instance, and data associations — so
+// it is a first-class activity.
+type xmlReceiveTask struct {
+	Id            string                     `xml:"id,attr"`
+	MessageRef    string                     `xml:"messageRef,attr"`
+	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+}
+
+// xmlCallActivity is a <callActivity>: it starts a separate process (named by
+// <zeebe:calledElement processId=…>) as a child instance and passes variables via
+// its <zeebe:ioMapping> and the propagation flags (ADR-0076).
+type xmlCallActivity struct {
+	Id            string            `xml:"id,attr"`
+	Name          string            `xml:"name,attr"`
+	CalledElement xmlZeebeCalledEl  `xml:"extensionElements>calledElement"`
+	IOMapping     xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
+}
+
+// xmlZeebeCalledEl is the <zeebe:calledElement> of a call activity: the called
+// process id, its version binding, and the two variable-propagation flags (each
+// defaults to true when the attribute is absent, matching Zeebe).
+type xmlZeebeCalledEl struct {
+	ProcessId                   string `xml:"processId,attr"`
+	BindingType                 string `xml:"bindingType,attr"`
+	PropagateAllParentVariables string `xml:"propagateAllParentVariables,attr"`
+	PropagateAllChildVariables  string `xml:"propagateAllChildVariables,attr"`
+}
+
+// xmlMultiInstance is a <multiInstanceLoopCharacteristics> on an activity (ADR-0077):
+// the sequential/parallel flag, an optional <loopCardinality> and <completionCondition>,
+// and its <zeebe:loopCharacteristics>. Zeebe nests the loop characteristics inside the
+// marker's own <extensionElements>, so the path is
+// multiInstanceLoopCharacteristics > extensionElements > loopCharacteristics.
+type xmlMultiInstance struct {
+	IsSequential        string            `xml:"isSequential,attr"`
+	LoopCardinality     string            `xml:"loopCardinality"`
+	CompletionCondition string            `xml:"completionCondition"`
+	Loop                xmlZeebeLoopChars `xml:"extensionElements>loopCharacteristics"`
+}
+
+// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0133): the
+// other BPMN loop marker — the circular-arrow icon — which repeats the activity while
+// its <loopCondition> holds. TestBefore checks the condition before the first
+// iteration (a while loop; absent means a repeat-until that always runs once) and
+// LoopMaximum caps the iteration count. Both are plain BPMN, no Zeebe extension.
+type xmlStandardLoop struct {
+	TestBefore    string `xml:"testBefore,attr"`
+	LoopMaximum   string `xml:"loopMaximum,attr"`
+	LoopCondition string `xml:"loopCondition"`
+}
+
+// xmlZeebeLoopChars is the <zeebe:loopCharacteristics> of a multi-instance activity:
+// the FEEL input collection, the per-iteration input element, and the output
+// collection/element that assemble each iteration's result into a list (ADR-0077).
+type xmlZeebeLoopChars struct {
+	InputCollection  string `xml:"inputCollection,attr"`
+	InputElement     string `xml:"inputElement,attr"`
+	OutputCollection string `xml:"outputCollection,attr"`
+	OutputElement    string `xml:"outputElement,attr"`
+}
+
+// xmlSubProcess is an embedded <subProcess>: a container whose own flow nodes and
+// sequence flows compile into the flat node array, linked back to it only by their
+// FlowScope (ADR-0074). It recurses — a subprocess may contain subprocesses.
+type xmlSubProcess struct {
+	Id        string            `xml:"id,attr"`
+	Name      string            `xml:"name,attr"`
+	IOMapping xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
+	// TriggeredByEvent marks an event subprocess (ADR-0082): it is not entered by a
+	// sequence flow but armed by its start event's event definition while the parent
+	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
+	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
+	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop     *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
+	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
+	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
+	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).
+	IsTransaction bool `xml:"-"`
+	xmlFlowContent
+}
+
+// xmlAdHocSubProcess is an <adHocSubProcess>: a container whose contained activities are not
+// sequenced from a start event but run on demand, in any order, zero or more times (ADR-0138).
+// It nests the same flow content as an embedded subprocess — its own activities, sequence flows,
+// boundary events and nested subprocesses compile into the flat node array scoped by it — and
+// adds the ad-hoc's own configuration:
+//
+//   - Ordering "Sequential" runs one contained activity at a time; anything else (including the
+//     absent default) is parallel: every entry activity is activated at once.
+//   - CancelRemainingInstances "false" lets the still-running activities finish when the
+//     completion condition holds; absent/"true" is the BPMN default (cancel them).
+//   - CompletionCondition is an optional boolean FEEL expression re-evaluated after each
+//     contained activity completes; absent means the ad-hoc completes when its scope drains.
+type xmlAdHocSubProcess struct {
+	Id                       string `xml:"id,attr"`
+	Name                     string `xml:"name,attr"`
+	Ordering                 string `xml:"ordering,attr"`
+	CancelRemainingInstances string `xml:"cancelRemainingInstances,attr"`
+	CompletionCondition      string `xml:"completionCondition"`
+	xmlFlowContent
+}
+
+// foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
+// slice, marked IsTransaction, recursively down the scope tree. A transaction is
+// structurally an embedded subprocess with cancellation added (ADR-0108); folding it into
+// SubProcesses means every existing walk (registration, flow wiring, compensation
+// resolution, I/O and multi-instance) treats it as a subprocess with no special-casing, and
+// only the two genuinely new sites — marking the compiled node, and dispatching a cancel
+// end/boundary — need to look at IsTransaction / the cancel event definition.
+func foldTransactions(fc *xmlFlowContent) {
+	for i := range fc.Transactions {
+		fc.Transactions[i].IsTransaction = true
+	}
+	fc.SubProcesses = append(fc.SubProcesses, fc.Transactions...)
+	fc.Transactions = nil
+	for i := range fc.SubProcesses {
+		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
+	}
+	for i := range fc.AdHocSubProcesses {
+		foldTransactions(&fc.AdHocSubProcesses[i].xmlFlowContent)
+	}
+}
+
+// resolveSendTaskOperations rewrites each send task's operationRef to the message that
+// operation sends (its inMessageRef), so the rest of the compiler treats an operationRef send
+// exactly as a messageRef send — the message kind (ADR-0112). It walks every scope, like
+// foldTransactions, and runs right after it (so send tasks inside a folded transaction are
+// covered) and before registerScope. A send task carrying both a messageRef and an operationRef
+// is a conflict (a deploy error).
+func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId, operationRef string) (string, error)) error {
+	for i := range fc.SendTasks {
+		st := &fc.SendTasks[i]
+		op := strings.TrimSpace(st.OperationRef)
+		if op == "" {
+			continue
+		}
+		if strings.TrimSpace(st.MessageRef) != "" {
+			return fmt.Errorf("compiler: send task %q sets both messageRef and operationRef; use one", st.Id)
+		}
+		msg, err := resolveOperation(st.Id, op)
+		if err != nil {
+			return err
+		}
+		st.MessageRef = msg
+	}
+	for i := range fc.SubProcesses {
+		if err := resolveSendTaskOperations(&fc.SubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	for i := range fc.AdHocSubProcesses {
+		if err := resolveSendTaskOperations(&fc.AdHocSubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -1050,10 +1530,36 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	// SingletonStart ("true") marks a message start event as one-per-correlation-key
+	// (ADR-0094): while an instance started with a key is live, a further correlating
+	// message starts no duplicate. A plain attribute (like versionTag on a process);
+	// absent = the default start-per-message behavior (ADR-0035).
+	SingletonStart string `xml:"singletonStart,attr"`
 	// Timer, when present, makes this a timer start event: the process starts a
 	// fresh instance on the schedule (duration/date/cycle/cron) the definition
 	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
 	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
+	// Signal, when present, makes this a signal start event: a broadcast signal of the
+	// referenced name instantiates the process (ADR-0088). A pointer so an absent one is nil.
+	Signal *xmlSignalEventDefinition `xml:"signalEventDefinition"`
+	// Error, when present on an event-subprocess start event, makes it an error-triggered
+	// event subprocess: it catches an error propagating in its scope whose code matches
+	// (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present on an event-subprocess start event, makes it an
+	// escalation-triggered event subprocess: it catches an escalation propagating in its
+	// scope whose code matches (ADR-0125). May be interrupting or non-interrupting per
+	// IsInterrupting. A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Conditional, when present on an event-subprocess start event, makes it a
+	// conditional-triggered event subprocess: it fires while its scope runs when its boolean
+	// FEEL condition becomes true (ADR-0137). May be interrupting or non-interrupting per
+	// IsInterrupting. A pointer so an absent one is nil.
+	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
+	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
+	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
+	// the handler alongside it. Empty for an ordinary start event.
+	IsInterrupting string `xml:"isInterrupting,attr"`
 	// Form binds a start form to a none start event (ADR-0028): the form the UI
 	// shows before creating the instance, whose data becomes the start variables.
 	// The engine never sees it — it is pre-start UI metadata.
@@ -1067,27 +1573,117 @@ type xmlInclusiveGateway struct {
 	Default string `xml:"default,attr"`
 }
 
-// An intermediate catch event; the timer and message variants are executable.
+// An intermediate catch event; the timer, message, signal, and link variants are executable.
 // Each definition is a pointer so an absent one is detected as nil.
 type xmlIntermediateCatchEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Link, when present, makes this a link catch event: the landing point of a link throw
+	// with the same name in the same scope — an off-page connector / goto (ADR-0133). A
+	// pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+	// Conditional, when present, makes this a conditional catch event: it waits until its
+	// boolean FEEL condition over the process's variables becomes true, then flows on
+	// (ADR-0137). A pointer so an absent one is nil.
+	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
 }
 
-// An intermediate throw event; only the message variant is executable so far.
+// xmlConditionalEventDefinition is a <conditionalEventDefinition> on an intermediate catch,
+// boundary, or event-subprocess start event (ADR-0137). Its <condition> is a boolean FEEL
+// expression over the process's variables; the event fires when it becomes true. Only the
+// condition matters — a conditional event carries no ref, code, or name.
+type xmlConditionalEventDefinition struct {
+	Condition string `xml:"condition"`
+}
+
+// An intermediate throw event; the message, signal, compensation, and escalation variants
+// are executable.
 type xmlIntermediateThrowEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Compensation, when present, makes this a compensation throw event: it triggers
+	// compensation of completed compensable activities in its scope (or of the one named
+	// by activityRef), then flows on (ADR-0103). A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Escalation, when present, makes this an escalation throw event: it raises the
+	// referenced escalation, propagating up to the nearest matching handler, then continues
+	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Link, when present, makes this a link throw event: a goto to the link catch of the same
+	// name in the same scope — an off-page connector (ADR-0133). A pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+}
+
+// xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
+// catch event (ADR-0133). A link is matched by Name within one flow scope: a throw jumps to
+// the catch of the same name. Only the name matters — a link carries no ref, code, or payload.
+type xmlLinkEventDefinition struct {
+	Name string `xml:"name,attr"`
+}
+
+// xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or
+// boundary event. On a throw/end event, ActivityRef optionally names the single activity
+// to compensate — empty compensates every completed compensable activity in the scope
+// (ADR-0103). On a boundary event it has no attributes (the boundary just marks its host
+// compensable and links to a handler via a BPMN <association>). waitForCompletion is
+// accepted but not yet honored (compensation is synchronous).
+type xmlCompensateEventDefinition struct {
+	ActivityRef       string `xml:"activityRef,attr"`
+	WaitForCompletion string `xml:"waitForCompletion,attr"`
+}
+
+// xmlAssociation is a BPMN <association>: an undirected artifact link. Atlas parses it
+// only to join a compensation boundary event to its compensation handler activity — one
+// endpoint is the boundary, the other the handler (ADR-0103). Non-compensation
+// associations are ignored.
+type xmlAssociation struct {
+	Id        string `xml:"id,attr"`
+	SourceRef string `xml:"sourceRef,attr"`
+	TargetRef string `xml:"targetRef,attr"`
 }
 
 // An end event. A plain (none) end event just ends the instance; one bearing a
 // messageEventDefinition is a message end event, which publishes the message
-// then ends (ADR-0052). The definition is a pointer so an absent one is nil.
+// then ends (ADR-0052); a signalEventDefinition is a signal end event, which
+// broadcasts the signal then ends (ADR-0088). Each is a pointer so an absent one is nil.
 type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Error, when present, makes this an error end event: it throws the referenced error,
+	// ending its enclosing scope abnormally and propagating up to the nearest matching
+	// handler (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present, makes this an escalation end event: it raises the referenced
+	// escalation, propagating up to the nearest matching handler, then ends its path
+	// (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Terminate is present when the end event carries a <terminateEventDefinition>.
+	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
+	// than silently dropped to a plain end (which would abandon the terminate semantics).
+	Terminate *xmlTerminateEventDefinition `xml:"terminateEventDefinition"`
+	// Compensation, when present, makes this a compensation end event: it triggers
+	// compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a
+	// compensation throw. A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel end event: it cancels the enclosing
+	// transaction — compensating its completed activities, then routing out the transaction's
+	// cancel boundary (ADR-0108). Valid only inside a transaction. A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 }
+
+// xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
+// presence matters (a non-nil pointer once parsed).
+type xmlTerminateEventDefinition struct{}
+
+// xmlCancelEventDefinition is the empty <cancelEventDefinition> element; only its presence
+// matters. On an end event it makes a cancel end event (cancels the enclosing transaction);
+// on a boundary event it makes a cancel boundary (catches a transaction's cancellation),
+// which may attach only to a transaction and is always interrupting (ADR-0108).
+type xmlCancelEventDefinition struct{}
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
@@ -1100,6 +1696,28 @@ type xmlBoundaryEvent struct {
 	CancelActivity string                     `xml:"cancelActivity,attr"`
 	Timer          *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message        *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal         *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Error, when present, makes this an error boundary event: it catches an error thrown
+	// by the host activity (or propagated up to it) whose code matches, and is always
+	// interrupting (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present, makes this an escalation boundary event: it catches an
+	// escalation raised by the host activity (or propagated up to it) whose code matches.
+	// Unlike an error boundary it honors CancelActivity — it may be interrupting or
+	// non-interrupting (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Compensation, when present, makes this a compensation boundary event: it is inert
+	// (never armed), marking its host activity compensable and linking — via a BPMN
+	// <association> — to the compensation handler (ADR-0103). A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel boundary event: it catches its host
+	// transaction's cancellation and routes the recovery flow. Valid only on a transaction,
+	// and always interrupting (ADR-0108). A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
+	// Conditional, when present, makes this a conditional boundary event: it fires while its
+	// host activity runs when its boolean FEEL condition becomes true. Honors CancelActivity —
+	// interrupting or non-interrupting (ADR-0137). A pointer so an absent one is nil.
+	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {
@@ -1114,22 +1732,37 @@ type xmlNode struct {
 	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
+// xmlPlainTask is an undefined <task> or a <manualTask>: an activity with no
+// execution semantics of its own (the engine runs it as a pass-through), but an
+// activity all the same — so it carries the loop markers (ADR-0077, ADR-0133) as well
+// as data associations. It is a separate shape from xmlNode precisely so those markers
+// stay off the gateways that share xmlNode: a looping gateway is not a thing.
+type xmlPlainTask struct {
+	Id            string                     `xml:"id,attr"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+}
+
 // A user task parks a token for human completion (ADR-0028). It optionally
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
-	Id         string                     `xml:"id,attr"`
-	Name       string                     `xml:"name,attr"`
-	Assignment xmlAssignmentDefinition    `xml:"extensionElements>assignmentDefinition"`
-	Form       xmlFormDefinition          `xml:"extensionElements>formDefinition"`
-	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
-	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
-	IOMapping  xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
-	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn     []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	Id            string                     `xml:"id,attr"`
+	Name          string                     `xml:"name,attr"`
+	Assignment    xmlAssignmentDefinition    `xml:"extensionElements>assignmentDefinition"`
+	Form          xmlFormDefinition          `xml:"extensionElements>formDefinition"`
+	Priority      xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
+	Schedule      xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
+	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
-// (ADR-0051). An empty value means the task uses the default priority.
+// (ADR-0091). An empty value means the task uses the default priority.
 type xmlPriorityDefinition struct {
 	Priority string `xml:"priority,attr"`
 }
@@ -1155,29 +1788,146 @@ type xmlAssignmentDefinition struct {
 }
 
 type xmlServiceTask struct {
-	Id             string            `xml:"id,attr"`
+	Id string `xml:"id,attr"`
+	// MessageRef is read only for a send task (ADR-0112): a <sendTask messageRef> is the
+	// message-kind send — a correlating throw in task form. A service task never carries one
+	// (it dispatches on its taskDefinition/connector), so the field is inert there.
+	MessageRef string `xml:"messageRef,attr"`
+	// OperationRef is read only for a send task (ADR-0112): a <sendTask operationRef> names a
+	// <bpmn:operation> whose <inMessageRef> is the message to send. It is resolved to that
+	// message before compilation (resolveSendTaskOperations), so it is an alternate spelling of
+	// the message kind — a fire-and-forget throw. The operation's outMessageRef (a response) is
+	// not supported. Inert on a service task.
+	OperationRef   string            `xml:"operationRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
+	// Form binds a *repair* form to this task (ADR-0169): the form an operator is shown
+	// when a token parks here with an incident, naming the variables worth looking at.
+	// It reuses zeebe:formDefinition, the same element a user task binds its work form
+	// with — the tag says "this element has a form", and what the form is *for* follows
+	// from the element that carries it. A service task never shows a form to a human in
+	// the normal course of things, so there is no ambiguity to resolve.
+	Form xmlFormDefinition `xml:"extensionElements>formDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest      *xmlRestConnector          `xml:"extensionElements>restConnector"`
-	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
-	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
+	// Mail, when present, marks this service task an outbound mail connector task
+	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
+	// absent.
+	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// User, when present, marks this service task a user-provisioning connector task
+	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
+	User *xmlUserConnector `xml:"extensionElements>userConnector"`
+	// Csv, when present, marks this service task a CSV-to-JSON connector task
+	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
+	// SharePoint, when present, marks this service task a SharePoint connector task
+	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// absent. Read it through sharePointConn, not directly — the Modeler writes the
+	// tag with a capital P (see SharePointCamel).
+	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
+	// SharePointCamel is the same extension under the spelling the Modeler produces.
+	// bpmn-js derives an element's tag from its moddle type by lowercasing only the
+	// first letter, so the type SharePointConnector serializes as
+	// <atlas:sharePointConnector> — while hand-authored models (and every compiler
+	// test) use the all-lowercase <atlas:sharepointConnector>. Go's XML matching is
+	// case-sensitive, so a task authored in the Modeler was silently ignored: its
+	// configuration sat in the XML and the task compiled as an unconfigured service
+	// task. Accepting both spellings keeps hand-authored and Modeler-authored models
+	// working; sharePointConn normalizes them.
+	SharePointCamel *xmlSharePointConnector `xml:"extensionElements>sharePointConnector"`
+	// Remedy, when present, marks this service task a BMC Remedy connector task
+	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
+	// absent.
+	Remedy *xmlRemedyConnector `xml:"extensionElements>remedyConnector"`
+	// WebScrape, when present, marks this service task a web-scraping connector task
+	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
+	// absent.
+	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
+	// Scim, when present, marks this service task a SCIM 2.0 connector task
+	// (ADR-0153): it performs a resource operation against a model-authored SCIM
+	// service provider through the job path.
+	Scim *xmlScimConnector `xml:"extensionElements>scimConnector"`
+	// Ldap, when present, marks this service task a generic LDAP connector task
+	// (ADR-0154): it performs a directory operation against a model-authored LDAP
+	// server through the job path.
+	Ldap *xmlLdapConnector `xml:"extensionElements>ldapConnector"`
+	// Soap, when present, marks this service task a SOAP / Web Services (WSDL) connector
+	// task (ADR-0165): it invokes a SOAP operation against a model-authored web-service
+	// endpoint through the job path.
+	Soap *xmlSoapConnector `xml:"extensionElements>soapConnector"`
+	// Ad, when present, marks this service task an Active Directory connector task
+	// (ADR-0166): it performs an AD-specific provisioning operation against a
+	// model-authored server through the job path.
+	Ad *xmlAdConnector `xml:"extensionElements>adConnector"`
+	// MsSql, MariaDB and Postgres each mark this service task a SQL connector task of
+	// that product (ADR-0173): one statement against a database a *worker* is
+	// configured for. They share a shape and differ only in the driver behind them,
+	// which is what decides the placeholder syntax a statement must use. They are the
+	// first kinds with no in-process handler at all.
+	MsSql    *xmlSqlConnector `xml:"extensionElements>mssqlConnector"`
+	MariaDB  *xmlSqlConnector `xml:"extensionElements>mariadbConnector"`
+	Postgres *xmlSqlConnector `xml:"extensionElements>postgresConnector"`
+	// Entra, when present, marks this service task a Microsoft Entra ID connector
+	// task (ADR-0172): one directory lifecycle operation through Graph, against a
+	// tenant a *worker* holds the app credential for.
+	Entra *xmlEntraConnector `xml:"extensionElements>entraConnector"`
+	// Ldif, when present, marks this service task a directory-file connector task
+	// (ADR-0171): LDIF or DSML entries read from, or written to, a variable.
+	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
+	// Mockup, when present, marks this service task an engine-simulated mockup task
+	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
+	// absent.
+	Mockup        *xmlMockupConnector        `xml:"extensionElements>mockupConnector"`
+	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
+// sharePointConn returns the task's SharePoint connector extension under either
+// spelling (see SharePointCamel), or nil when the task carries none. Every reader
+// must go through it so both hand-authored and Modeler-authored models compile.
+func (st xmlServiceTask) sharePointConn() *xmlSharePointConnector {
+	if st.SharePoint != nil {
+		return st.SharePoint
+	}
+	return st.SharePointCamel
+}
+
+// xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to
+// a service task (ADR-0112) — same taskDefinition, connector extensions, I/O mappings,
+// multi-instance, and data associations. It is a type alias so both parse and every
+// per-activity wiring loop treat the two identically; only the compiled node type differs.
+type xmlSendTask = xmlServiceTask
+
 // A clio connector task's parameters, carried on a service task as an
-// <atlas:clioConnector connector="..." subject="..." eventType="..."/> extension
-// element. connector names a server-registered connector (its endpoint and
-// credentials live in the server config, never in the model); subject and
-// eventType are the clio coordinates the appended event lands under.
+// <atlas:clioConnector connector="..." operation="..." .../> extension element.
+// connector names a server-registered connector (its endpoint and credentials live
+// in the server config, never in the model). operation is "write" (default),
+// "query", or "read", selecting which of the remaining attributes apply:
+//   - write: subject and eventType — the clio coordinates the appended event
+//     (the instance's variables) lands under.
+//   - query: resultVariable receives the result; either query (a run_query string)
+//     or subject (with the optional reduceSpec projection, a get_state read).
+//   - read: subject's events (up to limit; 0 = the connector's default) are read
+//     into resultVariable as a JSON array.
 type xmlClioConnector struct {
-	Connector string `xml:"connector,attr"`
-	Subject   string `xml:"subject,attr"`
-	EventType string `xml:"eventType,attr"`
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Subject        string `xml:"subject,attr"`
+	EventType      string `xml:"eventType,attr"`
+	Query          string `xml:"query,attr"`
+	ReduceSpec     string `xml:"reduceSpec,attr"`
+	Limit          string `xml:"limit,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
@@ -1185,9 +1935,11 @@ type xmlClioConnector struct {
 // url is the full request URL, authored in the model; resultVariable, if set, is
 // the process variable the JSON response is written back into. Header and
 // QueryParam child elements add request headers and query parameters. The auth*
-// attributes describe authentication: authType is "basic"/"bearer"/"apiKey";
-// authUsername (basic) and authApiKeyName (the apiKey header name) are model data;
-// authSecret names a server-side secret (ADR-0041) — never the secret value.
+// attributes describe authentication: authType is "basic"/"bearer"/"apiKey"/
+// "oauth2"; authUsername (basic) and authApiKeyName (the apiKey header name) are
+// model data; authSecret names a server-side secret (ADR-0041) — never the secret
+// value. For oauth2 (client-credentials, ADR-0152) authTokenUrl/authClientId/
+// authScope are model data and authSecret is the client secret reference.
 type xmlRestConnector struct {
 	Method         string      `xml:"method,attr"`
 	Url            string      `xml:"url,attr"`
@@ -1196,8 +1948,196 @@ type xmlRestConnector struct {
 	AuthUsername   string      `xml:"authUsername,attr"`
 	AuthApiKeyName string      `xml:"authApiKeyName,attr"`
 	AuthSecret     string      `xml:"authSecret,attr"`
+	AuthTokenURL   string      `xml:"authTokenUrl,attr"`
+	AuthClientID   string      `xml:"authClientId,attr"`
+	AuthScope      string      `xml:"authScope,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlScimConnector is the <atlas:scimConnector> extension on a service task
+// (ADR-0153). BaseUrl and Resource address the SCIM service provider and resource
+// type ("Users"/"Groups"); Operation selects the SCIM call; ResourceId (get/replace/
+// patch/delete) and Filter (search) carry literal-or-FEEL values; BodyVariable names
+// the process variable holding the create/replace/patch payload (blank → the whole
+// variable scope); ResultVariable receives the JSON response. Auth* name the scheme
+// and a server-side secret reference (never the value, ADR-0041), mirroring
+// xmlRestConnector.
+type xmlScimConnector struct {
+	BaseUrl        string `xml:"baseUrl,attr"`
+	Resource       string `xml:"resource,attr"`
+	Operation      string `xml:"operation,attr"`
+	ResourceId     string `xml:"resourceId,attr"`
+	Filter         string `xml:"filter,attr"`
+	BodyVariable   string `xml:"bodyVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	AuthType       string `xml:"authType,attr"`
+	AuthUsername   string `xml:"authUsername,attr"`
+	AuthApiKeyName string `xml:"authApiKeyName,attr"`
+	AuthSecret     string `xml:"authSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSoapConnector is the <atlas:soapConnector> extension on a service task
+// (ADR-0165). endpoint is the web-service URL (from the WSDL's soap:address) and
+// operation the operation name; soapAction overrides the SOAPAction header (blank →
+// operation); body is the XML payload placed inside the SOAP envelope's Body;
+// soapVersion is the protocol version ("1.1"/"1.2", blank → 1.1); resultVariable
+// receives the parsed response. Auth* name the scheme and a server-side secret
+// reference (never the value, ADR-0041), mirroring xmlRestConnector. endpoint/
+// soapAction/body carry literal-or-FEEL values.
+type xmlSoapConnector struct {
+	Endpoint       string `xml:"endpoint,attr"`
+	Operation      string `xml:"operation,attr"`
+	Action         string `xml:"soapAction,attr"`
+	Body           string `xml:"body,attr"`
+	Version        string `xml:"soapVersion,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	AuthType       string `xml:"authType,attr"`
+	AuthUsername   string `xml:"authUsername,attr"`
+	AuthApiKeyName string `xml:"authApiKeyName,attr"`
+	AuthSecret     string `xml:"authSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlAdConnector is the <atlas:adConnector> extension on a service task (ADR-0166).
+// url is the server (ldaps://host:636 for a password set); bindDN/bindSecret
+// authenticate the bind (bindSecret a reference, never a value, ADR-0041); startTLS
+// upgrades a plain connection. operation selects the AD operation. dn is the target
+// user or group entry; memberDN is the member added/removed for the group operations;
+// entryVariable names the create-user attribute object; newPassword is the
+// set-password value. url/bindDN/dn/memberDN/newPassword carry literal-or-FEEL values.
+type xmlAdConnector struct {
+	URL           string `xml:"url,attr"`
+	BindDN        string `xml:"bindDN,attr"`
+	BindSecret    string `xml:"bindSecret,attr"`
+	StartTLS      string `xml:"startTLS,attr"`
+	Operation     string `xml:"operation,attr"`
+	DN            string `xml:"dn,attr"`
+	MemberDN      string `xml:"memberDN,attr"`
+	EntryVariable string `xml:"entryVariable,attr"`
+	NewPassword   string `xml:"newPassword,attr"`
+	NewDN         string `xml:"newDN,attr"`
+	// The sync (DirSync) operation reads changes since a cookie: BaseDN is the naming
+	// context root, Filter narrows what is reported, CookieVariable names the variable
+	// the cookie is read from *and written back to*, MaxEntries caps one pass, and
+	// ObjectSecurity selects the flag a non-privileged sync account needs (ADR-0166).
+	BaseDN         string `xml:"baseDN,attr"`
+	Filter         string `xml:"filter,attr"`
+	CookieVariable string `xml:"cookieVariable,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	MaxEntries     string `xml:"maxEntries,attr"`
+	ObjectSecurity string `xml:"objectSecurity,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlSqlConnector is the extension a SQL connector task carries, under whichever of
+// <atlas:mssqlConnector>, <atlas:mariadbConnector> or <atlas:postgresConnector> names
+// its product (ADR-0173). The three share this shape exactly; only the element name,
+// and so the driver, differs. connector names the database the worker holds the DSN
+// for — there is deliberately no url and no credential attribute, because the
+// connection string never enters the engine. operation is query / query-one / execute. statement is the
+// SQL text and is *literal only*: it carries no fx toggle, so no process value can
+// become part of it. parametersVariable names the variable bound to the statement's
+// placeholders; resultVariable receives the result; maxRows caps a query's rows.
+type xmlSqlConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	Statement          string `xml:"statement,attr"`
+	ParametersVariable string `xml:"parametersVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
+	MaxRows            string `xml:"maxRows,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlLdifConnector is the <atlas:ldifConnector> extension on a service task
+// (ADR-0171). format is "ldif" or "dsml" — required, because guessing a directory
+// file's format from its bytes is how a malformed file becomes a plausible-looking
+// empty result. operation is "read" (the default) or "write"; source names the
+// variable holding the file text or the entries, and resultVariable the one receiving
+// the entries or the rendered file.
+type xmlLdifConnector struct {
+	Format         string `xml:"format,attr"`
+	Operation      string `xml:"operation,attr"`
+	Source         string `xml:"source,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlEntraConnector is the <atlas:entraConnector> extension on a service task
+// (ADR-0172). connector names the tenant the worker holds the app credential for —
+// there is deliberately no tenantId, clientId or secret attribute, because none of
+// them enters the engine. operation is the lifecycle step; userId and groupId address
+// the objects (literal-or-FEEL); attributesVariable names the variable holding the
+// directory properties for create-user and update-user; resultVariable receives what
+// Graph returned.
+//
+// filter, select, pageSize and maxUsers belong to list-users (ADR-0172, amended):
+// filter is the OData $filter (literal-or-FEEL), select the $select projection,
+// pageSize the $top per request, and maxUsers the cap on what may land in the result
+// variable. They are refused on the operations that return one object or none.
+type xmlEntraConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	UserID             string `xml:"userId,attr"`
+	GroupID            string `xml:"groupId,attr"`
+	AttributesVariable string `xml:"attributesVariable,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
+	Filter             string `xml:"filter,attr"`
+	Select             string `xml:"select,attr"`
+	PageSize           string `xml:"pageSize,attr"`
+	MaxUsers           string `xml:"maxUsers,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlLdapConnector is the <atlas:ldapConnector> extension on a service task
+// (ADR-0154). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
+// a reference, never a value, ADR-0041); startTLS upgrades a plain connection.
+// operation selects the directory call. dn is the target entry; baseDN/filter/scope
+// address a search; entryVariable names the add/modify attribute object; newPassword
+// is the modify-password value. resultVariable receives a search's entries. url/
+// bindDN/dn/baseDN/filter/newPassword carry literal-or-FEEL values.
+type xmlLdapConnector struct {
+	URL            string `xml:"url,attr"`
+	BindDN         string `xml:"bindDN,attr"`
+	BindSecret     string `xml:"bindSecret,attr"`
+	StartTLS       string `xml:"startTLS,attr"`
+	Operation      string `xml:"operation,attr"`
+	DN             string `xml:"dn,attr"`
+	BaseDN         string `xml:"baseDN,attr"`
+	Filter         string `xml:"filter,attr"`
+	Scope          string `xml:"scope,attr"`
+	EntryVariable  string `xml:"entryVariable,attr"`
+	NewPassword    string `xml:"newPassword,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// PageSize and MaxEntries bound a search (ADR-0154, amended). PageSize drives the
+	// simple paged-results control so a directory's admin size limit does not truncate
+	// or refuse the search; MaxEntries caps how much may land in a process variable.
+	// Both are absent-means-default; "0" is the authored way to say unbounded.
+	PageSize   string `xml:"pageSize,attr"`
+	MaxEntries string `xml:"maxEntries,attr"`
+	// ClientCertSecret names the server-side secret holding a PEM bundle (certificate
+	// plus private key) for a TLS client-certificate bind. Like bindSecret it is a
+	// reference, never a value (ADR-0041).
+	ClientCertSecret string `xml:"clientCertSecret,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // xmlHTTPKV is one name/value pair in a REST connector's headers or query
@@ -1207,9 +2147,243 @@ type xmlHTTPKV struct {
 	Value string `xml:"value,attr"`
 }
 
+// An outbound mail connector task's parameters, carried on a service task as an
+// <atlas:mailConnector connector="..." to="..." .../> extension element (ADR-0079).
+// connector names a server-registered mail provider (its host and credentials live
+// on the server, never in the model). to (required) is a comma-separated recipient
+// list; cc, bcc and from are optional; subject and body are the message. Every field
+// value is literal or, with a leading '=', a FEEL expression evaluated over the
+// instance's variables at send time (the fx toggle, ADR-0067).
+type xmlMailConnector struct {
+	Connector string `xml:"connector,attr"`
+	To        string `xml:"to,attr"`
+	Cc        string `xml:"cc,attr"`
+	Bcc       string `xml:"bcc,attr"`
+	From      string `xml:"from,attr"`
+	Subject   string `xml:"subject,attr"`
+	Body      string `xml:"body,attr"`
+	// BodyHtml is the optional HTML body (ADR-0079, amended). Authored beside Body,
+	// which stays the plain-text alternative; blank means the message is text-only,
+	// exactly as before the field existed.
+	BodyHtml string `xml:"bodyHtml,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
+// connector task (ADR-0123). Operation selects the action; the remaining
+// attributes are literal-or-FEEL values, like the mail connector's fields.
+type xmlUserConnector struct {
+	Operation   string `xml:"operation,attr"`
+	Username    string `xml:"username,attr"`
+	Email       string `xml:"email,attr"`
+	DisplayName string `xml:"displayName,attr"`
+	Roles       string `xml:"roles,attr"`
+	Password    string `xml:"password,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A CSV-to-JSON connector task's parameters, carried on a service task as an
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
+// source names the process variable holding the raw CSV text (default "csvText");
+// delimiter is the single-character field separator (default ","); hasHeader is
+// "true"/"false" (default true) — whether the first row is a header; columns is an
+// optional comma-separated list of field names (omit to derive them from the header
+// row); resultVariable names the variable the parsed rows are written to (default
+// "rows"). The layout lives in the model, so nothing but the file arrives at runtime.
+type xmlCsvConnector struct {
+	Source         string `xml:"source,attr"`
+	Delimiter      string `xml:"delimiter,attr"`
+	HasHeader      string `xml:"hasHeader,attr"`
+	Columns        string `xml:"columns,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Format is the file format ("csv" | "fixed-width" | "avp"; blank is csv) and
+	// Operation the direction ("read" | "write"; blank is read) — ADR-0139, amended.
+	Format    string `xml:"format,attr"`
+	Operation string `xml:"operation,attr"`
+	Retries   string `xml:"retries,attr"`
+}
+
+// The file formats and directions a csvConnector can author. They are spelled here
+// as well as in connector/csvimport because the compiler cannot import the connector
+// (the dependency runs the other way); TestCsvFormatsMatchTheConnector guards the seam.
+const (
+	csvimportFormatCSV        = "csv"
+	csvimportFormatFixedWidth = "fixed-width"
+	csvimportFormatAVP        = "avp"
+	csvimportOperationRead    = "read"
+	csvimportOperationWrite   = "write"
+)
+
+// csvFormatAndOperation reads the authored format and direction, applying the
+// defaults that keep every model written before either existed meaning exactly what
+// it meant then.
+func csvFormatAndOperation(taskID, rawFormat, rawOp string) (string, string, error) {
+	format := strings.ToLower(strings.TrimSpace(rawFormat))
+	if format == "" {
+		format = csvimportFormatCSV
+	}
+	switch format {
+	case csvimportFormatCSV, csvimportFormatFixedWidth, csvimportFormatAVP:
+	default:
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown format %q (want %s, %s, or %s)",
+			taskID, rawFormat, csvimportFormatAVP, csvimportFormatCSV, csvimportFormatFixedWidth)
+	}
+	op := strings.ToLower(strings.TrimSpace(rawOp))
+	if op == "" {
+		op = csvimportOperationRead
+	}
+	if op != csvimportOperationRead && op != csvimportOperationWrite {
+		return "", "", fmt.Errorf("compiler: csv connector task %q has an unknown operation %q (want %s or %s)",
+			taskID, rawOp, csvimportOperationRead, csvimportOperationWrite)
+	}
+	return format, op, nil
+}
+
+// splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
+// trimmed list of field names and, for a fixed-width file, their character widths.
+//
+// An entry is "name" or "name:width". The width is required for fixed-width, where a
+// field is found by position and there is nothing else to find it by, and rejected
+// for the other formats — an authored width the connector would ignore is an author
+// believing something untrue. An empty result means "derive the columns" (ADR-0139).
+func splitCSVColumns(taskID, format, s string) ([]string, []int32, error) {
+	if strings.TrimSpace(s) == "" {
+		if format == csvimportFormatFixedWidth {
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so it must list its columns as name:width", taskID)
+		}
+		return nil, nil, nil
+	}
+	var (
+		names  []string
+		widths []int32
+	)
+	for _, p := range strings.Split(s, ",") {
+		entry := strings.TrimSpace(p)
+		if entry == "" {
+			continue // a trailing comma names no column
+		}
+		name, rawWidth, hasWidth := strings.Cut(entry, ":")
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		var width int32
+		switch {
+		case hasWidth && format != csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width, which only a fixed-width file uses", taskID, name)
+		case hasWidth:
+			n, err := strconv.Atoi(strings.TrimSpace(rawWidth))
+			if err != nil {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q has a non-numeric width for column %q", taskID, name)
+			}
+			if n <= 0 {
+				return nil, nil, fmt.Errorf("compiler: csv connector task %q gives column %q a width of %d; a fixed-width column occupies at least one character", taskID, name, n)
+			}
+			width = int32(n)
+		case format == csvimportFormatFixedWidth:
+			return nil, nil, fmt.Errorf("compiler: csv connector task %q reads a fixed-width file, so column %q needs a width (name:width)", taskID, name)
+		}
+		names = append(names, name)
+		widths = append(widths, width)
+	}
+	if format != csvimportFormatFixedWidth {
+		widths = nil
+	}
+	return names, widths, nil
+}
+
+// csvHasHeader interprets a csvConnector's hasHeader attribute, defaulting to true
+// (a header row is present) when the attribute is absent or blank — matching the
+// CSV parser's own default (ADR-0084/0090).
+func csvHasHeader(attr string) bool {
+	s := strings.TrimSpace(attr)
+	return s == "" || strings.EqualFold(s, "true")
+}
+
+// A SharePoint connector task's parameters, carried on a service task as an
+// <atlas:sharepointConnector connector="..." site="..." list="..."> extension
+// element (ADR-0141). connector names a server-registered SharePoint provider (its
+// Graph base and OAuth credential live on the server, never in the model). site
+// (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
+// (required) is the list name or id the item is created in; resultVariable, if set,
+// receives the created item's JSON. Each ItemField child is one column value of the
+// created item. Every value is literal or, with a leading '=', a FEEL expression
+// evaluated over the instance's variables at call time (the fx toggle, ADR-0067).
+type xmlSharePointConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Site           string      `xml:"site,attr"`
+	List           string      `xml:"list,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"itemField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A BMC Remedy connector task's parameters, carried on a service task as an
+// <atlas:remedyConnector connector="..." form="..." resultVariable="..."> extension
+// element with <atlas:remedyField name="..." value="..."/> children (ADR-0106).
+// connector names a server-registered Remedy instance (its base URL and credentials
+// live on the server, never in the model). form is the Remedy form the entry is
+// created in (e.g. "HPD:IncidentInterface_Create"); each field is one entry value;
+// resultVariable, if set, receives the created entry's id. form and every field value
+// is literal or, with a leading '=', a FEEL expression over the instance's variables
+// at call time (the fx toggle, ADR-0067).
+type xmlRemedyConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Form           string      `xml:"form,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"remedyField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// A web-scraping connector task's parameters, carried on a service task as an
+// <atlas:webscrapeConnector url="..." selector="..." attribute="..."
+// resultVariable="..."/> extension element (ADR-0118). url (required) is the page to
+// fetch and selector (required) the CSS selector whose matches are extracted; both
+// live in the model (unlike a registry endpoint), and credentials never do. attribute,
+// when set, names the HTML attribute read from each match (omit to read each match's
+// text). resultVariable (required) receives the extracted values as a JSON array. url
+// and selector are literal or, with a leading '=', a FEEL expression over the instance's
+// variables at call time (the fx toggle, ADR-0067); attribute is a structural literal.
+type xmlWebScrapeConnector struct {
+	Url            string `xml:"url,attr"`
+	Selector       string `xml:"selector,attr"`
+	Attribute      string `xml:"attribute,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
+}
+
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// A mockup service task's parameters, carried on a service task as an
+// <atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" .../> extension
+// element (ADR-0120): the engine simulates the task itself. minDuration/maxDuration
+// are ISO-8601 durations bounding the random simulated execution time (a single
+// fixed duration is minDuration == maxDuration). resultExpression, when set, is a
+// FEEL expression (a leading '=' is optional and stripped) evaluated over the
+// instance's variables and written into resultVariable — the input→output script,
+// e.g. a simulated REST response. failRate is the failure probability in [0,1].
+// When errorCode is set, a simulated failure throws a BPMN error with that code
+// (caught by a matching error boundary/event subprocess); otherwise it raises an
+// incident with failMessage.
+type xmlMockupConnector struct {
+	MinDuration      string `xml:"minDuration,attr"`
+	MaxDuration      string `xml:"maxDuration,attr"`
+	ResultVariable   string `xml:"resultVariable,attr"`
+	ResultExpression string `xml:"resultExpression,attr"`
+	FailRate         string `xml:"failRate,attr"`
+	FailMessage      string `xml:"failMessage,attr"`
+	ErrorCode        string `xml:"errorCode,attr"`
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a
@@ -1223,10 +2397,12 @@ type xmlScriptTask struct {
 	// JobScript, when present, marks this a polyglot job script (PowerShell, …),
 	// run via the job path rather than inline as FEEL. The pointer is nil when the
 	// <atlas:jobScript> extension is absent.
-	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
-	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
-	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	JobScript     *xmlAtlasScript            `xml:"extensionElements>jobScript"`
+	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 type xmlZeebeScript struct {
@@ -1238,10 +2414,12 @@ type xmlZeebeScript struct {
 // extension: a script task in a general-purpose language (ADR-0047). language
 // selects the interpreter/worker (and thus the reserved job type), resultVariable
 // is the process variable the script's result is written back into, and the
-// element text is the script source.
+// element text is the script source. retries is the script job's retry budget
+// (ADR-0135) — a script fails like any other job — blank meaning the default.
 type xmlAtlasScript struct {
 	Language       string `xml:"language,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 	Source         string `xml:",chardata"`
 }
 
@@ -1261,15 +2439,19 @@ type xmlAtlasScript struct {
 //
 // The decision's result is written back into the resultVariable process variable.
 type xmlBusinessRuleTask struct {
-	Id             string               `xml:"id,attr"`
-	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
-	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
-	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
+	Id             string            `xml:"id,attr"`
+	CalledDecision xmlCalledDecision `xml:"extensionElements>calledDecision"`
+	// Form binds a repair form to this task, as on a service task (ADR-0169).
+	Form          xmlFormDefinition    `xml:"extensionElements>formDefinition"`
+	Inputs        []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
+	InputMappings []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
 	// TemisConnector, when present, marks this a central (connector) decision
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
 	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
+	MultiInstance  *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop   *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }

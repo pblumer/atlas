@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <!-- Everything Atlas is — engine, API, web UI, MCP adapter — inside one tile. -->
+  <path d="M128 26 216 76 216 180 128 230 40 180 40 76Z" stroke="#2563EB" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M92 104H164M92 134H164M92 164H136" stroke="#2563EB" stroke-width="14" stroke-linecap="round"/>
+</svg>

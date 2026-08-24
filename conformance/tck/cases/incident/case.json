@@ -1,0 +1,25 @@
+{
+  "name": "incident",
+  "model": "incident.bpmn",
+  "features": [
+    "incident"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "fail",
+      "element": "risky",
+      "message": "boom"
+    },
+    {
+      "action": "resolve",
+      "element": "risky"
+    },
+    {
+      "action": "complete",
+      "element": "risky"
+    }
+  ]
+}

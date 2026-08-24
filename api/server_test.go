@@ -33,6 +33,13 @@ const sampleBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MO
 // returns an httptest server plus a cleanup.
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	return newTestServerWith(t)
+}
+
+// newTestServerWith is newTestServer with server Options applied, for tests that
+// need a non-default configuration (e.g. a short collab keepalive interval).
+func newTestServerWith(t *testing.T, opts ...api.Option) *httptest.Server {
+	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
@@ -46,7 +53,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir)
+	srv, err := api.New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

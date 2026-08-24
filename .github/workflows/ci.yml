@@ -22,6 +22,12 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
+      # For the What's New generator below; it is plain ESM with no dependencies.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Build
         run: go build ./...
 
@@ -37,8 +43,67 @@ jobs:
             exit 1
           fi
 
+      # The Console "What's New" feed is generated from CHANGELOG.md and committed
+      # (ADR-0012 keeps the web UI buildless, so nothing regenerates it at build or
+      # runtime). Nothing else notices when a CHANGELOG entry lands without the
+      # generator having been re-run — the feed just silently stops at the last time
+      # someone remembered. Re-run it here and fail on any diff.
+      - name: What's New feed is up to date
+        run: |
+          node scripts/whats-new/gen.mjs
+          if ! git diff --quiet -- api/web/whats-new.json; then
+            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
+            echo "(Add curated DE/EN prose in scripts/whats-new/overrides.json — see scripts/whats-new/README.md.)"
+            git --no-pager diff -- api/web/whats-new.json
+            exit 1
+          fi
+
       - name: Test (race detector)
         run: go test -race ./...
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 95
+
+      # Smoke-run the benchmark harness (programme B): one iteration each, just to
+      # prove it compiles and executes. No performance threshold is enforced on PR
+      # CI — see benchmarks/README.md for how to produce a real, machine-labelled
+      # baseline.
+      - name: Benchmark harness smoke
+        run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
+
+  e2e:
+    name: e2e · token simulation
+    runs-on: ubuntu-latest
+    # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
+    # wedged browser holds the runner for the six-hour default. Well above the ~1 minute
+    # this job takes, and far below "an afternoon of runner time".
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: e2e
+        # --with-deps shells out to apt-get, so a stalled Ubuntu mirror does not fail the
+        # step — it stops it, until something cancels the job (twice on 2026-08-19, once
+        # for 24 minutes, without a single test having run). Bound that attempt, then fall
+        # back to the browser-only install: the ubuntu-latest image already carries
+        # Chromium's shared libraries, so the tests still run, and a genuinely missing one
+        # surfaces as a launch error in seconds rather than as a hang.
+        run: |
+          timeout 5m npx playwright install --with-deps chromium \
+            || npx playwright install chromium
+
+      - name: Run browser e2e tests
+        working-directory: e2e
+        run: npm test

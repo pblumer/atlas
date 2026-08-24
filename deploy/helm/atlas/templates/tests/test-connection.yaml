@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "atlas.fullname" . }}-test-connection
+  labels:
+    {{- include "atlas.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: healthz
+      image: busybox:1.36
+      command:
+        - wget
+      args:
+        - --spider
+        - --timeout=5
+        - "http://{{ include "atlas.fullname" . }}:{{ .Values.service.port }}/healthz"
+    # /healthz only says the process is alive. /readyz is the one that says it can
+    # actually serve — recovery finished, the state store answers, the writer responds —
+    # so a release test that passes means more than "something is listening".
+    - name: readyz
+      image: busybox:1.36
+      command:
+        - wget
+      args:
+        - --spider
+        - --timeout=5
+        - "http://{{ include "atlas.fullname" . }}:{{ .Values.service.port }}/readyz"

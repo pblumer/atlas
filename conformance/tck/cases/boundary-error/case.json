@@ -1,0 +1,17 @@
+{
+  "name": "boundary-error",
+  "model": "boundary-error.bpmn",
+  "features": [
+    "boundary-error"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "throwError",
+      "code": "BOOM",
+      "element": "call"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "off-sperren",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔒 Konto sperren\n\nSperre das Konto jetzt in der Konsole (**Organization → Users → Disable**) und bestätige anschließend hier.\n\n> Die Sperrung ist bewusst eine Admin-Handlung (ADR-0044/0049). Dieser Prozess koordiniert und dokumentiert sie und versendet die Bestätigung automatisch."
+    },
+    {
+      "key": "benutzername",
+      "type": "textfield",
+      "label": "Benutzername",
+      "disabled": true
+    },
+    {
+      "key": "letzter_tag",
+      "type": "textfield",
+      "label": "Letzter Arbeitstag",
+      "disabled": true
+    },
+    {
+      "key": "grund",
+      "type": "textarea",
+      "label": "Grund",
+      "disabled": true
+    },
+    {
+      "key": "gesperrt",
+      "type": "checkbox",
+      "label": "Konto wurde in der Konsole deaktiviert",
+      "validate": { "required": true }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung"
+    }
+  ]
+}

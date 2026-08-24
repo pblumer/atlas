@@ -1,0 +1,23 @@
+{
+  "completed": true,
+  "activities": [
+    "double",
+    "end",
+    "seed",
+    "start"
+  ],
+  "path": [
+    "start",
+    "seed",
+    "double",
+    "double",
+    "double",
+    "double",
+    "end"
+  ],
+  "variables": {
+    "items": "[10,20,30]",
+    "results": "[20,40,60]"
+  },
+  "dataObjects": []
+}

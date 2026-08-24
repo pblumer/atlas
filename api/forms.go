@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // maxFormBytes caps a stored form schema. form-js schemas are small JSON
@@ -42,7 +44,7 @@ func isJSONObject(raw json.RawMessage) bool {
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxFormBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -52,16 +54,16 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		Schema    json.RawMessage `json:"schema"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	id := strings.TrimSpace(payload.ID)
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "form id is required")
+		httpapi.Error(w, http.StatusBadRequest, "form id is required")
 		return
 	}
 	if !isJSONObject(payload.Schema) {
-		writeError(w, http.StatusBadRequest, "schema must be a JSON form-js document (an object)")
+		httpapi.Error(w, http.StatusBadRequest, "schema must be a JSON form-js document (an object)")
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
@@ -85,30 +87,45 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		existed  bool
 		getErr   error
 	)
-	s.do(func() { existing, existed, getErr = s.forms.get(id) })
+	s.do(func() { existing, existed, getErr = s.forms.Get(id) })
 	if getErr != nil {
-		writeError(w, http.StatusInternalServerError, "read form: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
 		return
 	}
 	if existed {
 		if code, msg := s.authorizeArtifact(r, existing.ProjectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
 	if rec.ProjectID != "" {
 		if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
-	var saveErr error
-	s.do(func() { saveErr = s.forms.save(rec) })
-	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
+	var (
+		saveErr   error
+		protected bool
+	)
+	s.do(func() {
+		// A form filed under the protected system project is platform-managed
+		// (ADR-0122): refuse overwriting it, for every caller.
+		if existing, ok, e := s.forms.Get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+			protected = true
+			return
+		}
+		saveErr = s.forms.Save(rec)
+	})
+	switch {
+	case protected:
+		httpapi.Error(w, http.StatusForbidden, "protected system form cannot be modified")
+		return
+	case saveErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, metaOf(rec))
+	httpapi.JSON(w, http.StatusOK, metaOf(rec))
 }
 
 // handleListForms lists stored forms (metadata only), most recently saved first.
@@ -119,7 +136,7 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []form
-		if recs, loadErr = s.forms.loadAll(); loadErr != nil {
+		if recs, loadErr = s.forms.LoadAll(); loadErr != nil {
 			return
 		}
 		var projs map[string]project
@@ -140,18 +157,14 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list forms: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list forms: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleGetForm returns one form including its schema — the Tasks app fetches it
-// to render a task's bound form. 404 if no form has that id. It is deliberately
-// NOT scope-gated: rendering a form to complete a running task is execution, not
-// authoring, and ADR-0071 keeps runtime out of the sharing boundary (the design-
-// time listing is filtered instead). The public, anonymous form endpoints stay
-// open for the same reason.
+// to render a task's bound form. 404 if no form has that id.
 func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
@@ -159,16 +172,16 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { rec, ok, loadErr = s.forms.get(id) })
+	s.do(func() { rec, ok, loadErr = s.forms.Get(id) })
 	switch {
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "read form: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+loadErr.Error())
 	case !ok:
-		writeError(w, http.StatusNotFound, "no form with that id")
+		httpapi.Error(w, http.StatusNotFound, "no form with that id")
 	default:
 		// Schema is stored as a raw JSON string; emit it as JSON, not a
 		// re-escaped string, so the client gets the form-js document directly.
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpapi.JSON(w, http.StatusOK, map[string]any{
 			"id":        rec.ID,
 			"name":      rec.Name,
 			"projectId": rec.ProjectID,
@@ -191,7 +204,7 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 		getErr    error
 	)
 	s.do(func() {
-		rec, ok, e := s.forms.get(id)
+		rec, ok, e := s.forms.Get(id)
 		if e != nil {
 			getErr = e
 			return
@@ -200,20 +213,33 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 		projectID = rec.ProjectID
 	})
 	if getErr != nil {
-		writeError(w, http.StatusInternalServerError, "read form: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
 		return
 	}
 	if found {
 		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
-			writeError(w, code, msg)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
-	var delErr error
-	s.do(func() { delErr = s.forms.delete(id) })
-	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete form: "+delErr.Error())
+	var (
+		delErr    error
+		protected bool
+	)
+	s.do(func() {
+		if existing, ok, e := s.forms.Get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+			protected = true
+			return
+		}
+		delErr = s.forms.Delete(id)
+	})
+	switch {
+	case protected:
+		httpapi.Error(w, http.StatusForbidden, "protected system form cannot be deleted")
+		return
+	case delErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "delete form: "+delErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"id": id})
 }

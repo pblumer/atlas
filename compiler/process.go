@@ -9,7 +9,11 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
-import "github.com/pblumer/atlas/expr"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
@@ -36,9 +40,49 @@ const (
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
 	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
 	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
+	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0074)
+	TypeCallActivity      // a call activity: starts a separate process as a child instance, waits for it, then continues; variables pass in/out by mapping (ADR-0076)
+	// TypeEventSubProcessStart is a runtime-only element type: the armed trigger of an
+	// event subprocess (ADR-0082). No compiled node carries it (the handler compiles as
+	// TypeSubProcess); the engine arms one waiting instance per event subprocess in a
+	// scope, and its firing activates the handler. It is excluded from the scope's
+	// active-child counter so it never blocks scope completion.
+	TypeEventSubProcessStart
+
+	TypeSignalCatchEvent // an intermediate catch event that waits for a broadcast signal by name (ADR-0088)
+	TypeSignalThrowEvent // an intermediate throw event that broadcasts a signal by name to every waiting catch (ADR-0088)
+	TypeSignalEndEvent   // an end event that broadcasts a signal, then ends the instance (ADR-0088); reuses the throw detail table
+	TypeSignalStartEvent // a start event that a broadcast signal instantiates (ADR-0088); at runtime it flows straight on like a message start
+
+	TypeErrorEndEvent // an end event that throws an error, ending its scope abnormally and propagating up to the nearest matching handler (ADR-0089); the send-and-stop counterpart of a BPMN error throw
+
+	TypeReceiveTask // an activity that waits for a correlating message, then continues (ADR-0102); the message intermediate catch's semantics in task form, so it accepts boundary events, I/O mappings, and multi-instance
+
+	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
+	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
+
+	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
+
+	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0110)
+
+	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
+
+	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0116): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
+
+	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
+
+	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0125); the continue-after-throw counterpart of TypeMessageThrowEvent
+	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0125); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
+
+	TypeLinkThrowEvent // a link intermediate throw event: a goto to the link catch of the same name in the same scope (ADR-0133). Resolved at compile to a synthetic sequence flow to the catch; runs as a pass-through (no execution semantics of its own)
+	TypeLinkCatchEvent // a link intermediate catch event: the landing point of a link throw of the same name (ADR-0133). Reached only via the compile-time synthetic flow; runs as a pass-through, flowing on its real outgoing flow
+
+	TypeConditionalCatchEvent // a conditional intermediate catch event: waits until its boolean FEEL condition over the process's variables becomes true, then flows on (ADR-0137). Arms inert (no subscription) and is driven to Completing by a variable-change re-check; a conditional boundary/event-sub reuses TypeBoundaryEvent/TypeEventSubProcessStart with BoundaryConditional
+
+	TypeAdHocSubProcess // an ad-hoc subprocess: a container scope whose contained activities run on demand, in any order, zero or more times — not driven by sequence flow from a start event (ADR-0138). On entry it activates every entry activity (a contained node with no incoming flow) at once; after each contained activity completes an optional boolean FEEL completion condition is re-evaluated, and the first time it holds the remaining work is cancelled and the ad-hoc completes (else it completes on scope-drain)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 21
+	numBpmnTypes = 42
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -70,6 +114,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeInclusiveGateway:
 		return "InclusiveGateway"
+	case TypeEventBasedGateway:
+		return "EventBasedGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
 	case TypeConnectorTask:
@@ -84,6 +130,48 @@ func (t BpmnType) String() string {
 		return "TimerStartEvent"
 	case TypeMessageEndEvent:
 		return "MessageEndEvent"
+	case TypeSubProcess:
+		return "SubProcess"
+	case TypeAdHocSubProcess:
+		return "AdHocSubProcess"
+	case TypeCallActivity:
+		return "CallActivity"
+	case TypeEventSubProcessStart:
+		return "EventSubProcessStart"
+	case TypeSignalCatchEvent:
+		return "SignalCatchEvent"
+	case TypeSignalThrowEvent:
+		return "SignalThrowEvent"
+	case TypeSignalEndEvent:
+		return "SignalEndEvent"
+	case TypeSignalStartEvent:
+		return "SignalStartEvent"
+	case TypeErrorEndEvent:
+		return "ErrorEndEvent"
+	case TypeReceiveTask:
+		return "ReceiveTask"
+	case TypeSendTask:
+		return "SendTask"
+	case TypeCompensationThrowEvent:
+		return "CompensationThrowEvent"
+	case TypeCompensationEndEvent:
+		return "CompensationEndEvent"
+	case TypeCancelEndEvent:
+		return "CancelEndEvent"
+	case TypeTerminateEndEvent:
+		return "TerminateEndEvent"
+	case TypeMockupTask:
+		return "MockupTask"
+	case TypeEscalationThrowEvent:
+		return "EscalationThrowEvent"
+	case TypeEscalationEndEvent:
+		return "EscalationEndEvent"
+	case TypeLinkThrowEvent:
+		return "LinkThrowEvent"
+	case TypeLinkCatchEvent:
+		return "LinkCatchEvent"
+	case TypeConditionalCatchEvent:
+		return "ConditionalCatchEvent"
 	default:
 		return "Unspecified"
 	}
@@ -92,23 +180,40 @@ func (t BpmnType) String() string {
 // CompiledNode is one BPMN element. It stays small; type-specific data lives in
 // detail tables referenced by Detail.
 type CompiledNode struct {
-	ElementId     int32 // == index in nodes[]
-	Type          BpmnType
-	OutgoingStart int32 // offset into outgoingFlows
-	OutgoingCount int32
-	IncomingCount int32 // number of sequence flows targeting this node (a parallel join waits for all)
-	FlowScope     int32 // ElementId of enclosing scope, -1 = process root
-	Detail        int32 // index into the matching detail table, -1 if none
-	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
-	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
-	DataOutStart  int32 // offset into dataOutAssocs (the data-output associations of this activity)
-	DataOutCount  int32 // number of data-output associations (0 for a node with none)
-	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
-	DataInCount   int32 // number of data-input associations (0 for a node with none)
-	IOInStart     int32 // offset into ioInputs (the zeebe:ioMapping inputs of this activity)
-	IOInCount     int32 // number of input mappings (0 for a node with none)
-	IOOutStart    int32 // offset into ioOutputs (the zeebe:ioMapping outputs of this activity)
-	IOOutCount    int32 // number of output mappings (0 for a node with none)
+	ElementId       int32 // == index in nodes[]
+	Type            BpmnType
+	OutgoingStart   int32 // offset into outgoingFlows
+	OutgoingCount   int32
+	IncomingCount   int32 // number of sequence flows targeting this node (a parallel join waits for all)
+	FlowScope       int32 // ElementId of enclosing scope, -1 = process root
+	Detail          int32 // index into the matching detail table, -1 if none
+	BoundaryStart   int32 // offset into boundaryEvents (the node ids of events attached to this activity)
+	BoundaryCount   int32 // number of boundary events attached (0 for a non-host node)
+	DataOutStart    int32 // offset into dataOutAssocs (the data-output associations of this activity)
+	DataOutCount    int32 // number of data-output associations (0 for a node with none)
+	DataInStart     int32 // offset into dataInAssocs (the data-input associations of this activity)
+	DataInCount     int32 // number of data-input associations (0 for a node with none)
+	IOInStart       int32 // offset into ioInputs (the zeebe:ioMapping inputs of this activity)
+	IOInCount       int32 // number of input mappings (0 for a node with none)
+	IOOutStart      int32 // offset into ioOutputs (the zeebe:ioMapping outputs of this activity)
+	IOOutCount      int32 // number of output mappings (0 for a node with none)
+	ScopeStartStart int32 // offset into scopeStarts (the start events nested directly in this subprocess)
+	ScopeStartCount int32 // number of nested start events (0 for a non-subprocess node)
+	MultiInstance   int32 // index into multiInstances, -1 if this node is not a multi-instance loop (ADR-0077)
+	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
+	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
+	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
+	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
+	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+}
+
+// LaneDetail is one BPMN lane: an organizational partition of the process's flow nodes with no
+// execution semantics (ADR-0121). Name is the interned lane label; Parent is the index of the
+// enclosing lane in a nested laneSet (-1 for a top-level lane), so a node's full lane path can be
+// walked leaf-to-root for display.
+type LaneDetail struct {
+	Name   int32 // interned lane name → index, -1 if unnamed
+	Parent int32 // index into lanes of the enclosing lane, -1 for a top-level lane
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -124,8 +229,34 @@ type CompiledFlow struct {
 
 // ServiceTaskDetail is the per-service-task data a behavior needs at runtime.
 type ServiceTaskDetail struct {
-	JobType int32 // interned string → index
+	JobType int32 // interned string → index, local to this compiled process
 	Retries int32
+	// globalJobType is JobType translated into the engine-wide job-type index space
+	// by [CompiledProcess.ResolveJobTypes] at deploy time, or jobTypeUnresolved when
+	// the process was never resolved. It exists because JobType is interned *per
+	// process* while the activatable-job index is engine-wide, so the same local
+	// index means different job types in two definitions and a worker subscribing by
+	// it would be handed the wrong work (ADR-0007). Unexported: only resolution may
+	// set it, and [ServiceTaskDetail.GlobalJobType] is how a behavior reads it.
+	globalJobType int32
+}
+
+// jobTypeUnresolved marks a service task whose job type has not been translated
+// into the engine-wide index space. It is deliberately not 0 — 0 is the DMN job
+// type, so a zero value would silently hand every unresolved service task to the
+// DMN worker.
+const jobTypeUnresolved int32 = -1
+
+// GlobalJobType is the job type a job created for this task must carry: the
+// engine-wide index when the process has been resolved, and otherwise the locally
+// interned one, which is what a compiled process used before resolution existed
+// and keeps a standalone process (a test, the conformance runner) behaving as it
+// always did.
+func (d *ServiceTaskDetail) GlobalJobType() int32 {
+	if d.globalJobType == jobTypeUnresolved {
+		return d.JobType
+	}
+	return d.globalJobType
 }
 
 // ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
@@ -134,6 +265,72 @@ type ServiceTaskDetail struct {
 type ScriptTaskDetail struct {
 	Expr      *expr.Compiled
 	ResultVar string
+}
+
+// CallActivityDetail is the per-call-activity data a behavior needs at runtime: the
+// bpmn process id of the process to start as a child instance (interned), the
+// binding that picks its version (latest vs this deployment), and whether variables
+// propagate wholesale in and out (Zeebe's propagateAll flags — when off, only the
+// activity's input/output mappings pass variables, giving an isolated child)
+// (ADR-0076). The called def key is resolved at deploy/runtime, not compiled here.
+type CallActivityDetail struct {
+	CalledProcessId    int32 // interned bpmn process id of the called process
+	Binding            DecisionBinding
+	PropagateAllParent bool // pass all caller variables into the child (default true)
+	PropagateAllChild  bool // return all child variables to the caller (default true)
+}
+
+// SafeLoopCeiling is how many runs a standard loop that states no loopMaximum gets
+// before the engine stops it and raises an incident (ADR-0133, amended). It is a
+// safety net for the one construct that can spin on its own — a FEEL loop condition
+// that never turns false — not a semantic limit: a loop that states its own
+// loopMaximum is bounded by that number alone, however large, because the author said
+// it out loud and the deploy validated it. The engine enforces the ceiling; the
+// compiler names it in the loop.unbounded warning, so both read the same number.
+const SafeLoopCeiling = 1000
+
+// LoopCounterVariable is the name of the 1-based per-iteration counter a loop binds
+// into each round's own scope (ADR-0077/ADR-0133, matching Zeebe). The engine writes
+// it and reads it back to know which round just finished, so it is the engine's name
+// to own inside a loop: the deploy refuses a model that maps onto it there
+// (loop.counter-mapping), and both sides name it from here rather than repeating the
+// string.
+const LoopCounterVariable = "loopCounter"
+
+// MultiInstanceDetail is the per-multi-instance-activity data a behavior needs at
+// runtime (ADR-0077). A multi-instance activity runs its node N times — once per
+// element of InputCollection (a FEEL list), or Cardinality times — as inner element
+// instances scoped under a body. InputElement (interned, -1 if none) is the local
+// variable each iteration binds to its item; the standard loopCounter (1-based) is
+// bound alongside it. Each iteration's OutputElement (a FEEL over its variables, nil
+// if none) is appended to the OutputCollection (interned, -1 if none) list promoted
+// to the parent when the loop completes. CompletionCondition (nil if none) is a FEEL
+// early-exit evaluated after each iteration. Sequential runs one iteration at a time;
+// parallel (the default) seeds them all at once. Exactly one of InputCollection or
+// Cardinality is set — the deploy is refused otherwise.
+//
+// Standard marks the other BPMN loop marker, <standardLoopCharacteristics> — the
+// loop (circular arrow) icon (ADR-0133). It shares this struct because it shares the
+// runtime: a standard loop is a sequential loop whose iteration set is not a
+// collection but a condition, so it has no InputCollection, Cardinality,
+// InputElement, or OutputCollection, and is driven instead by LoopCondition (nil
+// means "repeat until LoopMaximum"), TestBefore (check the condition before the first
+// iteration — a while loop; else a repeat-until that always runs at least once), and
+// LoopMaximum (a hard iteration cap; 0 means uncapped). At least one of LoopCondition
+// and LoopMaximum is set — the deploy is refused otherwise, since a loop with neither
+// has no way to end.
+type MultiInstanceDetail struct {
+	InputCollection     *expr.Compiled // FEEL list to iterate; nil when Cardinality is used
+	Cardinality         *expr.Compiled // FEEL count; nil when InputCollection is used
+	InputElement        int32          // interned per-iteration variable name, -1 if none
+	OutputCollection    int32          // interned result-list variable name, -1 if none
+	OutputElement       *expr.Compiled // FEEL per-iteration contribution, nil if none
+	CompletionCondition *expr.Compiled // FEEL early-exit, nil if none
+	Sequential          bool           // one iteration at a time (else parallel)
+	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0133)
+	TestBefore          bool           // standard loop: check the condition before iteration 1
+	LoopCondition       *expr.Compiled // standard loop: FEEL repeat-while, nil if none
+	LoopMaximum         int32          // standard loop: iteration cap, 0 = uncapped
 }
 
 // DecisionInputMapping is one explicit input to a DMN decision: the decision's
@@ -192,6 +389,20 @@ const (
 	BindingDeployment
 )
 
+// String renders a binding as the lower-case token used on the wire and in the
+// Modeler (`bindingType`): "latest" or "deployment". Any unknown value is
+// reported verbatim so a drift is visible rather than silently mapped to latest.
+func (b DecisionBinding) String() string {
+	switch b {
+	case BindingLatest:
+		return "latest"
+	case BindingDeployment:
+		return "deployment"
+	default:
+		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
+	}
+}
+
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
@@ -223,22 +434,51 @@ type UserTaskDetail struct {
 //
 //   - clio "write-events" (JobType == ClioWriteJobType): Connector names the
 //     server-registered clio instance; Subject and EventType are the interned clio
-//     coordinates the appended event lands under.
+//     coordinates the appended event lands under. The event body is what the task's
+//     zeebe:ioMapping inputs map, or — for a task with none — every variable it sees
+//     (ADR-0174).
+//   - clio "query" (JobType == ClioQueryJobType): Connector names the clio
+//     instance; the task reads projected state or runs a stored query and writes
+//     the result into ResultVar. Either ClioQuery (a run_query query string) is set
+//     — then the worker runs that query — or Subject (with the optional ReduceSpec
+//     projection) is set — then the worker reads get_state for that subject.
+//   - clio "read" (JobType == ClioReadJobType): Connector names the clio instance;
+//     Subject is the subject whose events are read (up to Limit, 0 = the connector's
+//     default) into ResultVar as a JSON array.
 //   - HTTP REST (JobType == RestJobType): Method and Url are the interned request
 //     method (e.g. "POST") and the full endpoint URL authored in the model
-//     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
-//     variable the JSON response is written back into on completion.
+//     (ADR-0067, revising ADR-0036 for REST); a method that carries one gets the body
+//     described below; ResultVar, if set, is the process variable the JSON response is
+//     written back into on completion.
+//   - SharePoint (JobType == SharePointJobType): Connector names the
+//     server-registered SharePoint provider; Site and List address the target list
+//     and Fields are the created item's column values (all literal-or-FEEL); the
+//     created item's JSON is written into ResultVar when set (ADR-0141).
+//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
+//     values (literal-or-FEEL) an incident/entry is created with through the AR System
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
+//   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
+//     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
+//     matches are extracted; ScrapeAttribute names the HTML attribute to read from
+//     each match (-1 → each match's text content); ResultVar receives the extracted
+//     values as a JSON array (ADR-0118).
 //
-// Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
-// send the instance's variables as the request/event body — a stand-in for full
-// payload mappings until the variable subsystem matures.
+// Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
+// when unset. No kind carries its body in the detail: where a payload is a variable
+// scope — the clio event body, the REST request body, the SCIM body with no body
+// variable named — it is the task's zeebe:ioMapping inputs, or everything the task
+// sees when it maps none (ADR-0174).
 type ConnectorTaskDetail struct {
-	JobType   int32 // interned reserved connector job type → index
-	Connector int32 // interned connector name → index, -1 if not a clio task
-	Subject   int32 // interned clio target subject → index, -1 if not a clio task
-	EventType int32 // interned clio event type → index, -1 if not a clio task
-	Method    int32 // interned HTTP method → index, -1 if not a REST task
-	ResultVar int32 // interned REST result variable name → index, -1 if none
+	JobType    int32 // interned reserved connector job type → index
+	Connector  int32 // interned connector name → index, -1 if not a clio task
+	Subject    int32 // interned clio target subject → index, -1 if unused
+	EventType  int32 // interned clio event type → index, -1 if not a clio write task
+	ClioQuery  int32 // interned clio run_query query string → index, -1 if unused
+	ReduceSpec int32 // interned clio get_state reduce-spec name → index, -1 if unused
+	Limit      int32 // clio read_events limit, 0 = the connector's default
+	Method     int32 // interned HTTP method → index, -1 if not a REST task
+	ResultVar  int32 // interned REST/clio result variable name → index, -1 if none
 	// Url is the request endpoint, Headers and Query the request headers and query
 	// parameters a REST task adds (ADR-0067). Each value is literal or a FEEL
 	// expression evaluated over the instance's variables at call time (the
@@ -252,6 +492,276 @@ type ConnectorTaskDetail struct {
 	Query   []RestKV
 	Auth    int32
 	Retries int32
+	// Mail connector fields (JobType == MailJobType, ADR-0079). Connector (above)
+	// names the server-registered mail provider; the message is authored in the
+	// model as literal-or-FEEL values evaluated over the instance's variables at
+	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
+	// the provider's default sender; MailSubject and Body are the message, and
+	// BodyHTML is its optional HTML half (sent as multipart/alternative beside Body,
+	// or alone as text/html). Each is the zero RestExpr for a non-mail task. Cc/Bcc/
+	// From/BodyHTML are also zero when a mail task omits them.
+	To          RestExpr
+	Cc          RestExpr
+	Bcc         RestExpr
+	From        RestExpr
+	MailSubject RestExpr
+	Body        RestExpr
+	BodyHTML    RestExpr
+	// CSV connector fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
+	// interned name of the process variable holding the raw CSV text (-1 → the
+	// default "csvText"); CsvResult the variable the parsed rows are written to
+	// (-1 → "rows"); CsvDelimiter the field delimiter (-1 → ","); CsvHasHeader
+	// whether the first row is a header; CsvColumns the interned field names (empty →
+	// derive them from the header row). Each is the zero value for a non-CSV task and
+	// is read only by the in-process CSV worker, which the runner dispatches by the
+	// CSV job type alone.
+	CsvSource    int32
+	CsvResult    int32
+	CsvDelimiter int32
+	CsvHasHeader bool
+	CsvColumns   []int32
+	// CsvFormat is the interned file format ("csv" | "fixed-width" | "avp"; interned
+	// "" is csv, which is what every model authored before formats existed) and
+	// CsvOperation the direction ("read" | "write"; interned "" is read). CsvWidths
+	// holds each column's character width for a fixed-width file, positionally
+	// alongside CsvColumns (ADR-0139, amended).
+	CsvFormat    int32
+	CsvOperation int32
+	CsvWidths    []int32
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0141). Connector
+	// (above) names the server-registered SharePoint provider (its Graph base and
+	// OAuth credential live server-side). Site and List address the target list (a
+	// site host/path or id, and a list name or id); Fields are the created item's
+	// column values. Each is a literal-or-FEEL value evaluated over the instance's
+	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
+	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
+	Site   RestExpr
+	List   RestExpr
+	Fields []RestKV
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
+	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
+	// receives the created entry's id. RemedyForm is the Remedy form the entry is
+	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
+	// RemedyFields are the entry's field values as name/literal-or-FEEL pairs, evaluated
+	// over the instance's variables at call time (nil for a non-remedy task).
+	RemedyForm   RestExpr
+	RemedyFields []RestKV
+	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118). Url (above)
+	// is the model-authored page to fetch; ScrapeSelector is the CSS selector whose
+	// matches are extracted (literal-or-FEEL, the zero RestExpr for a non-scrape task);
+	// ScrapeAttribute is the interned HTML attribute read from each match (-1 → each
+	// match's text content). ResultVar (above) receives the extracted values as a JSON
+	// array. Read only by the in-process web-scraping worker.
+	ScrapeSelector  RestExpr
+	ScrapeAttribute int32
+	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
+	// UserOp is the interned operation ("create" | "set-password" | "disable").
+	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword
+	// are the create/update values — each a literal-or-FEEL value evaluated over the
+	// instance's variables at call time. Each is the zero value for a non-user task and
+	// is read only by the in-process user-provisioning worker, which the runner
+	// dispatches by the user job type alone. There is no Connector and no credential:
+	// the worker mutates the internal user store directly, gated to the system project.
+	UserOp          int32
+	UserName        RestExpr
+	UserEmail       RestExpr
+	UserDisplayName RestExpr
+	UserRoles       RestExpr
+	UserPassword    RestExpr
+	// SCIM connector fields (JobType == ScimJobType, ADR-0153). ScimBaseURL is the
+	// service provider's SCIM v2 base endpoint and ScimResource the resource-type path
+	// segment ("Users"/"Groups") — each a literal-or-FEEL value evaluated over the
+	// instance's variables at call time. ScimOp is the interned operation
+	// ("create"|"get"|"replace"|"patch"|"delete"|"search"), which the worker maps to an
+	// HTTP method. ScimResourceID addresses a single resource (get/replace/patch/
+	// delete); ScimFilter is the SCIM filter for a search. ScimBody is the interned name
+	// of the process variable holding the create/replace/patch payload (interned "" →
+	// the whole variable scope, mirroring REST). Each is the zero value for a non-SCIM
+	// task; ResultVar (above) receives the JSON response and Auth (above) the
+	// bearer/basic/apiKey credential reference. Read only by the in-process SCIM worker.
+	ScimBaseURL    RestExpr
+	ScimResource   RestExpr
+	ScimOp         int32
+	ScimResourceID RestExpr
+	ScimFilter     RestExpr
+	ScimBody       int32
+	// LDAP connector fields (JobType == LdapJobType, ADR-0154). LdapURL is the server
+	// (ldap://host:389 or ldaps://host:636) and LdapBindDN the bind identity — each a
+	// literal-or-FEEL value evaluated over the instance's variables at call time.
+	// LdapBindSecret is the interned name of the server-side secret holding the bind
+	// password (interned "" → an anonymous bind); LdapStartTLS upgrades a plain
+	// connection with STARTTLS. LdapOp is the interned operation
+	// ("search"|"add"|"modify"|"add-values"|"delete-values"|"delete"|
+	// "modify-password"). LdapDN is the target entry
+	// (add/modify/delete/modify-password); LdapBaseDN/LdapFilter/LdapScope (interned
+	// "base"|"one"|"sub") address a search. LdapEntryVar is the interned name of the
+	// process variable holding the add/modify attribute object; LdapNewPassword is the
+	// modify-password value. Each is the zero value for a non-LDAP task; ResultVar
+	// (above) receives a search's entries as a JSON array. Read only by the in-process
+	// LDAP worker.
+	LdapURL         RestExpr
+	LdapBindDN      RestExpr
+	LdapBindSecret  int32
+	LdapStartTLS    bool
+	LdapOp          int32
+	LdapDN          RestExpr
+	LdapBaseDN      RestExpr
+	LdapFilter      RestExpr
+	LdapScope       int32
+	LdapEntryVar    int32
+	LdapNewPassword RestExpr
+	// LdapPageSize and LdapMaxEntries bound a search (ADR-0154, amended). The compiler
+	// writes the effective value here — the default when the model authored none — so
+	// the runtime interprets nothing (I5); 0 means unbounded, which a model asks for
+	// explicitly. LdapClientCertSecret is the interned name of the secret holding a
+	// PEM certificate+key bundle for a TLS client-certificate bind (interned "" →
+	// none); with no bind DN it authenticates by SASL EXTERNAL.
+	LdapPageSize         int32
+	LdapMaxEntries       int32
+	LdapClientCertSecret int32
+	// SOAP connector fields (JobType == SoapJobType, ADR-0165). SoapEndpoint is the
+	// web-service URL (from the WSDL's soap:address) — a literal-or-FEEL value evaluated
+	// over the instance's variables at call time. SoapOp is the interned operation name,
+	// used for diagnostics and as the default SOAPAction. SoapAction is the SOAPAction
+	// header value (literal-or-FEEL; the interned SoapOp is used when it evaluates to
+	// empty). SoapBody is the literal-or-FEEL XML payload placed inside the envelope's
+	// <soap:Body> — the operation's request element, typically FEEL-interpolated with the
+	// instance's variables. SoapVersion is the interned protocol version ("1.1"|"1.2"),
+	// which selects the envelope namespace and how the action is carried. Each is the zero
+	// value for a non-SOAP task; ResultVar (above) receives the parsed response body and
+	// Auth (above) the bearer/basic/apiKey credential reference. Read only by the
+	// in-process SOAP worker.
+	SoapEndpoint RestExpr
+	SoapOp       int32
+	SoapAction   RestExpr
+	SoapBody     RestExpr
+	SoapVersion  int32
+	// Active Directory connector fields (JobType == AdJobType, ADR-0166). AdURL is the
+	// server (ldaps://host:636) and AdBindDN the bind identity — literal-or-FEEL values.
+	// AdBindSecret is the interned name of the server-side bind-password secret (interned
+	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
+	// operation ("create-user"|"set-password"|"enable"|"disable"|"add-group-member"|
+	// "remove-group-member", "update-attributes", "move", "delete", "create-group").
+	// AdDN is the target user or group entry; AdMemberDN is the
+	// member added/removed for the group operations; AdEntryVar is the interned name of
+	// the process variable holding the create-user attribute object; AdNewPassword is the
+	// set-password value. Each is the zero value for a non-AD task. Read only by the
+	// in-process AD worker.
+	AdURL         RestExpr
+	AdBindDN      RestExpr
+	AdBindSecret  int32
+	AdStartTLS    bool
+	AdOp          int32
+	AdDN          RestExpr
+	AdMemberDN    RestExpr
+	AdEntryVar    int32
+	AdNewPassword RestExpr
+	// AdNewDN is the move operation's target distinguished name (literal-or-FEEL): the
+	// entry's new place in the tree, new relative name, or both — a mover in a
+	// directory *is* a DN change, so one value expresses all three.
+	AdNewDN RestExpr
+	// DirSync fields (AdOp == "sync", ADR-0166 amended). AdBaseDN is the naming
+	// context the delta is read from and AdFilter narrows it — literal-or-FEEL values.
+	// AdCookieVar is the interned name of the variable holding the opaque resume
+	// cookie, which the operation reads *and writes back* so a loop carries itself
+	// forward. AdMaxEntries caps one pass (0 = the connector's default), and
+	// AdObjectSecurity sets the DirSync flag that lets an account without the
+	// replication right read the changes it can see.
+	AdBaseDN         RestExpr
+	AdFilter         RestExpr
+	AdCookieVar      int32
+	AdMaxEntries     int32
+	AdObjectSecurity bool
+	// Generic SQL connector fields (JobType == SqlJobType, ADR-0173). Connector
+	// (above) names the database the *worker* is configured for — a SQL task carries
+	// no address and no credential, because the DSN never enters the engine. SqlOp is
+	// the interned operation ("query"|"query-one"|"execute").
+	//
+	// SqlStatement is the interned SQL text, and it is an interned string rather than
+	// a RestExpr on purpose: a RestExpr could hold a FEEL expression, and a statement
+	// assembled from process data is an injection with no quoting bug required. Data
+	// reaches the statement only through SqlParamsVar — the interned name of the
+	// process variable whose value is bound to the statement's placeholders (a JSON
+	// array binds positionally, an object binds by name). SqlMaxRows caps a query's
+	// result set (0 = the worker's default); exceeding it fails the job rather than
+	// truncating, since a short result set is a wrong answer. ResultVar (above)
+	// receives the rows, the single row, or the affected count.
+	//
+	// Each is the zero value for a non-SQL task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	SqlOp        int32
+	SqlStatement int32
+	SqlParamsVar int32
+	SqlMaxRows   int32
+	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0172).
+	// Connector (above) names the tenant the *worker* is configured for; a task
+	// carries no tenant id and no client secret, because they never enter the engine.
+	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
+	// "update-user"|"delete-user"|"enable"|"disable"|"add-group-member"|
+	// "remove-group-member"). EntraUserID and EntraGroupID are literal-or-FEEL values
+	// addressing the user (a UPN or object id) and the group. EntraAttributesVar is
+	// the interned name of the process variable holding the directory properties for
+	// create-user and update-user; ResultVar (above) receives what Graph returned.
+	//
+	// EntraFilter, EntraSelect, EntraPageSize and EntraMaxUsers configure list-users
+	// and are zero on every other operation, which the compiler enforces rather than
+	// ignores. EntraFilter is a literal-or-FEEL OData $filter and EntraSelect the
+	// interned $select projection. EntraPageSize is the $top asked of each request
+	// (0 leaves Graph its own page size) and EntraMaxUsers caps what may reach the
+	// result variable (0 is unbounded); the compiler has already applied the defaults,
+	// so the runtime interprets nothing (I5).
+	//
+	// Each is the zero value for a non-Entra task. No in-process worker reads these:
+	// they are resolved onto the job and read by a worker (ADR-0164/0168).
+	EntraOp            int32
+	EntraUserID        RestExpr
+	EntraGroupID       RestExpr
+	EntraAttributesVar int32
+	EntraFilter        RestExpr
+	EntraSelect        int32
+	EntraPageSize      int32
+	EntraMaxUsers      int32
+	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
+	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
+	// ("read" | "write"). LdifSource is the interned name of the variable holding the
+	// file text (read) or the entries (write); LdifResult the variable receiving the
+	// entries (read) or the rendered file (write).
+	//
+	// Unlike the text-file connector there is no default format: a file is LDIF or it
+	// is DSML, and guessing from the bytes is how a malformed file becomes a
+	// plausible-looking empty result.
+	LdifFormat    int32
+	LdifOperation int32
+	LdifSource    int32
+	LdifResult    int32
+}
+
+// MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
+// service task itself (ADR-0120), instead of dispatching a job to an external
+// worker or connector. On activation the behavior arms a one-shot timer for a
+// random duration in [MinNanos, MaxNanos] and, if Expr is set, evaluates it over
+// the instance's variables and writes the result into ResultVar (the input→output
+// "script", e.g. a simulated REST response). When the timer fires the task
+// completes — unless the fail draw selects failure, in which case a job-less
+// incident is raised with FailMessage.
+//
+// The random duration and the fail decision are derived deterministically from
+// the frozen timer key at command time (never re-drawn on replay), so no new
+// nondeterministic source enters the engine (invariant I6). FailPerMillion is the
+// failure probability scaled to parts-per-million (0 = never fail, 1_000_000 =
+// always) so the whole decision stays integer-pure across live and replay.
+type MockupTaskDetail struct {
+	MinNanos       int64          // minimum simulated duration in nanoseconds
+	MaxNanos       int64          // maximum simulated duration in nanoseconds (>= MinNanos)
+	ResultVar      string         // result-variable name, "" if none (a raw string, like ScriptTaskDetail.ResultVar)
+	Expr           *expr.Compiled // FEEL result expression compiled at deploy time (I5), nil if none
+	FailPerMillion int32          // failure probability in parts-per-million, 0..1_000_000
+	FailMessage    string         // incident message on a simulated failure, "" for a default
+	// ErrorCode, when non-empty, makes a simulated failure throw a BPMN error with this
+	// code (caught by a matching error boundary/event subprocess, ADR-0089) instead of
+	// raising an incident — so business error paths, not just technical ones, are
+	// exercisable. Empty keeps the incident behavior.
+	ErrorCode string
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -313,14 +823,55 @@ type TimerStartDetail struct {
 type MessageDetail struct {
 	MessageName    string
 	CorrelationKey *expr.Compiled
+	// SingletonStart marks a message *start* event as one-per-correlation-key: while
+	// an instance started with a given key is live, another correlating message starts
+	// no duplicate (ADR-0094). Only meaningful on a message start event; ignored on
+	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
+	SingletonStart bool
+}
+
+// SignalDetail is the per-signal-event data a behavior needs at runtime, shared by the
+// signal intermediate catch, throw, end, and start events (ADR-0088). A signal is
+// broadcast by name: it carries no correlation key and no code, so the name is all a
+// catch subscribes on and a throw broadcasts.
+type SignalDetail struct {
+	SignalName string
+}
+
+// EventSubProcessDetail is the per-event-subprocess data the runtime needs to arm its
+// trigger (ADR-0082). An event subprocess (`<subProcess triggeredByEvent="true">`) is
+// not entered by a sequence flow; instead its start event's event definition is armed
+// while the parent scope runs. Interrupting (from the start event's isInterrupting,
+// default true) decides whether firing terminates the parent scope's other work before
+// the handler runs. Kind reuses BoundaryEventKind: the timer field applies for a timer
+// trigger, the message fields for a message trigger. StartNode is the handler's inner
+// start event, seeded (like any message/timer start, flowing straight on) when the
+// handler is activated on a trigger.
+type EventSubProcessDetail struct {
+	StartNode      int32 // the handler's inner start event node id
+	Interrupting   bool  // true = terminate the parent scope's other work on trigger (isInterrupting)
+	Kind           BoundaryEventKind
+	Schedule       TimerSchedule  // BoundaryTimer: when the trigger fires
+	MessageName    string         // BoundaryMessage: the message it subscribes to
+	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
+	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
+	Condition      *expr.Compiled // BoundaryConditional: the boolean FEEL condition it fires on (ADR-0137)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
 type BoundaryEventKind uint8
 
 const (
-	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
-	BoundaryMessage                          // waits for a correlating message, then fires
+	BoundaryTimer        BoundaryEventKind = iota // waits a fixed duration, then fires
+	BoundaryMessage                               // waits for a correlating message, then fires
+	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
+	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
+	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
+	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
+	BoundaryEscalation                            // catches an escalation propagating up to it by code, then fires; honors cancelActivity — may be interrupting or non-interrupting (ADR-0125)
+	BoundaryConditional                           // fires while the host runs when its boolean FEEL condition becomes true; armed inert (no subscription), re-evaluated on variable change; honors cancelActivity — may be interrupting or non-interrupting (ADR-0137)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -335,6 +886,59 @@ type BoundaryEventDetail struct {
 	Schedule       TimerSchedule  // BoundaryTimer: when it fires; a cycle (non-interrupting only) recurs (ADR-0054)
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
+	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
+	Condition      *expr.Compiled // BoundaryConditional: the boolean FEEL condition it fires on (ADR-0137)
+	// CompensationHandler is the ElementId of the compensation handler activity this
+	// boundary links its host to (BoundaryCompensation, ADR-0103). It is resolved at
+	// compile time from the BPMN <association> joining the boundary to the handler;
+	// -1 means unresolved (a compensation boundary with no association — a deploy error).
+	CompensationHandler int32
+}
+
+// CompensationDetail is the per-compensation-throw data the runtime needs (ADR-0103),
+// shared by the compensation throw and end events like the message/signal throw table.
+// ActivityRef is the ElementId of the single activity to compensate, or -1 to compensate
+// every completed compensable activity in the throw's scope (reverse completion order).
+type CompensationDetail struct {
+	ActivityRef int32
+}
+
+// ErrorEndDetail is the per-error-end-event data the runtime needs: the code it throws
+// (ADR-0089). A code-less error end throws "", which a code-less catch-all catches. It is
+// its own small table (an error end carries no name, correlation key, or schedule).
+type ErrorEndDetail struct {
+	ErrorCode string
+}
+
+// EscalationDetail is the per-escalation-event data the runtime needs: the code it raises
+// (ADR-0125). Shared by the escalation throw and end events (like CompensationDetail is
+// shared by the compensation throw and end), since both just carry the escalation code. A
+// code-less escalation raises "", which a code-less catch-all catches.
+type EscalationDetail struct {
+	EscalationCode string
+}
+
+// ConditionalDetail is the per-conditional-catch-event data the runtime needs: the boolean
+// FEEL condition it waits on (ADR-0137). A conditional intermediate catch arms inert and is
+// driven to Completing when a variable-change re-check finds the condition true. (Conditional
+// boundaries and event subprocesses carry their condition on BoundaryEventDetail /
+// EventSubProcessDetail instead.)
+type ConditionalDetail struct {
+	Condition *expr.Compiled
+}
+
+// AdHocDetail is the per-ad-hoc-subprocess configuration the runtime needs (ADR-0138).
+// CompletionCondition is an optional boolean FEEL expression re-evaluated after each contained
+// activity completes; nil means the ad-hoc completes when its scope drains instead. When it
+// holds, CancelRemaining (the BPMN cancelRemainingInstances default, true) decides whether the
+// still-running contained activities are cancelled. Ordering is always the BPMN default,
+// parallel — every entry activity is activated at once; a model asking for sequential ordering
+// is refused at deploy until that driver lands, so no flag is carried for it.
+type AdHocDetail struct {
+	CompletionCondition *expr.Compiled
+	CancelRemaining     bool
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
@@ -404,37 +1008,72 @@ type CompiledProcess struct {
 	BpmnProcessId int32  // interned
 	Version       int32
 
+	// hasConditional is true if any node is a conditional event (ADR-0137); the runtime
+	// only re-checks conditionals for instances of a process that has one.
+	hasConditional bool
+
 	nodes []CompiledNode
 	flows []CompiledFlow
 
-	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
-	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
-	serviceTasks      []ServiceTaskDetail
-	scriptTasks       []ScriptTaskDetail
-	scriptJobTasks    []ScriptJobTaskDetail
-	businessRuleTasks []BusinessRuleTaskDetail
-	timerCatches      []TimerCatchDetail
-	connectorTasks    []ConnectorTaskDetail
-	userTasks         []UserTaskDetail
-	boundaryEventDets []BoundaryEventDetail
-	messageCatches    []MessageDetail
-	messageThrows     []MessageDetail
-	messageStarts     []MessageDetail
-	timerStarts       []TimerStartDetail
-	dataObjects       []CompiledDataObject
-	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
-	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
-	ioInputs          []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
-	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
-	startEvents       []int32
-	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
-	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
-	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
-	strings           []string // intern table (index → string), for debug/export
+	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
+	scopeStarts        []int32 // shared topology: nested start-event node ids grouped by subprocess node
+	serviceTasks       []ServiceTaskDetail
+	scriptTasks        []ScriptTaskDetail
+	callActivities     []CallActivityDetail
+	multiInstances     []MultiInstanceDetail
+	scriptJobTasks     []ScriptJobTaskDetail
+	businessRuleTasks  []BusinessRuleTaskDetail
+	timerCatches       []TimerCatchDetail
+	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
+	userTasks          []UserTaskDetail
+	boundaryEventDets  []BoundaryEventDetail
+	eventSubProcesses  []EventSubProcessDetail
+	eventSubs          []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
+	rootEventSubs      []int32 // event-subprocess handler node ids whose parent scope is the process root
+	messageCatches     []MessageDetail
+	receiveTasks       []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
+	messageThrows      []MessageDetail
+	messageStarts      []MessageDetail
+	signalCatches      []SignalDetail
+	signalThrows       []SignalDetail // shared by signal throw and signal end events
+	signalStarts       []SignalDetail
+	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
+	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
+	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts        []TimerStartDetail
+	dataObjects        []CompiledDataObject
+	dataOutAssocs      []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs       []DataInputAssociation  // shared: input associations grouped by activity node
+	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
+	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
+	startEvents        []int32
+	startFormId        int32        // interned start-form id (ADR-0028), -1 if none
+	versionTag         int32        // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64        // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
+	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
+	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms        []int32      // interned repair form id per node id (-1 if none, ADR-0169)
+	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
+	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings            []string     // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
+
+// NodeCount is how many nodes the process compiled to, so a caller outside this
+// package can walk them: node ids are the dense range [0, NodeCount).
+func (p *CompiledProcess) NodeCount() int { return len(p.nodes) }
+
+// IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
+// that may hold a cancel end event and host a cancel boundary (ADR-0108).
+func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }
 
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
@@ -454,10 +1093,43 @@ func (p *CompiledProcess) BoundaryEvents(id int32) []int32 {
 	return p.boundaryEvents[n.BoundaryStart : n.BoundaryStart+n.BoundaryCount]
 }
 
+// ScopeStartEvents returns the element ids of the start events nested directly in
+// the subprocess node id — the scope's entry points the subprocess behavior seeds
+// on activation — as a slice into the shared topology array (no allocation). Empty
+// for a non-subprocess node or a subprocess with no start event (ADR-0074).
+func (p *CompiledProcess) ScopeStartEvents(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
+}
+
 // BoundaryEvent returns the boundary-event detail at the given table index.
 func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 	return &p.boundaryEventDets[detail]
 }
+
+// IsEventSubProcess reports whether the subprocess node id is event-triggered — a
+// `<subProcess triggeredByEvent="true">` armed by its start event's event definition
+// rather than entered by a flow (ADR-0082).
+func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
+
+// EventSubProcess returns the event-subprocess detail at the given table index — the
+// trigger the runtime arms while the parent scope runs (ADR-0082).
+func (p *CompiledProcess) EventSubProcess(detail int32) *EventSubProcessDetail {
+	return &p.eventSubProcesses[detail]
+}
+
+// EventSubprocesses returns the handler node ids of the event subprocesses nested
+// directly in the subprocess scope id — the triggers the runtime arms when that
+// subprocess is entered — as a slice into the shared topology array (no allocation).
+// Empty for a scope that hosts none. Use RootEventSubprocesses for the process root.
+func (p *CompiledProcess) EventSubprocesses(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.eventSubs[n.EventSubStart : n.EventSubStart+n.EventSubCount]
+}
+
+// RootEventSubprocesses returns the handler node ids of the event subprocesses at the
+// process root — the triggers armed when an instance is created (ADR-0082).
+func (p *CompiledProcess) RootEventSubprocesses() []int32 { return p.rootEventSubs }
 
 // NodesReaching returns the set of node ids from which target is reachable by
 // following sequence flows — target's ancestors in the flow graph. An inclusive
@@ -488,13 +1160,83 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 }
 
 // ServiceTask returns the detail at the given table index.
+// ResolveJobTypes translates every model-authored job type in this process into
+// the engine-wide index space, by handing each one's *name* to intern and keeping
+// the index it returns. Service and send tasks are the only elements that need it:
+// every other job-creating element carries a reserved job type, which is already
+// the same index in every process (see reservedJobTypes).
+//
+// It is called once per process at deploy time and again for each process on
+// reload, so intern must be idempotent — the same name must come back with the
+// same index. A failure aborts the whole resolution: a half-resolved process is
+// worse than an unresolved one, because only some of its jobs would be findable.
+//
+// The interner is supplied by the caller rather than imported, so the compiler
+// stays independent of where the engine-wide table lives.
+func (p *CompiledProcess) ResolveJobTypes(intern func(name string) (int32, error)) error {
+	for i := range p.serviceTasks {
+		d := &p.serviceTasks[i]
+		name := p.Intern(d.JobType)
+		if name == "" {
+			continue // no task definition type: nothing to resolve
+		}
+		idx, err := intern(name)
+		if err != nil {
+			return fmt.Errorf("compiler: resolve job type %q: %w", name, err)
+		}
+		d.globalJobType = idx
+	}
+	return nil
+}
+
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
+	return &p.serviceTasks[detail]
+}
+
+// Lane returns the lane at the given table index (ADR-0121).
+func (p *CompiledProcess) Lane(idx int32) *LaneDetail { return &p.lanes[idx] }
+
+// NodeLane returns the leaf lane index a node belongs to, or -1 if it is in no lane (ADR-0121).
+func (p *CompiledProcess) NodeLane(nodeID int32) int32 { return p.nodes[nodeID].Lane }
+
+// LanePath returns a node's lane names from the outermost lane to the leaf, for display (e.g.
+// ["Finance", "Approver"] for a node in a nested lane). Empty when the node is in no lane (ADR-0121).
+func (p *CompiledProcess) LanePath(nodeID int32) []string {
+	idx := p.nodes[nodeID].Lane
+	var leafToRoot []string
+	for idx != -1 {
+		leafToRoot = append(leafToRoot, p.Intern(p.lanes[idx].Name))
+		idx = p.lanes[idx].Parent
+	}
+	// Reverse to outermost-first.
+	for i, j := 0, len(leafToRoot)-1; i < j; i, j = i+1, j-1 {
+		leafToRoot[i], leafToRoot[j] = leafToRoot[j], leafToRoot[i]
+	}
+	return leafToRoot
+}
+
+// SendTask returns the detail at the given table index (ADR-0112). A send task is a
+// service task under a different label — it reuses ServiceTaskDetail and the same detail
+// table, so this is ServiceTask by another name, kept for call-site clarity.
+func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// MockupTask returns the mockup-task detail at the given table index (ADR-0120).
+func (p *CompiledProcess) MockupTask(detail int32) *MockupTaskDetail {
+	return &p.mockupTasks[detail]
+}
+
+// ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A
+// receive task carries the same MessageDetail as a message catch — the message name and the
+// compiled correlation-key expression it waits on.
+func (p *CompiledProcess) ReceiveTask(detail int32) *MessageDetail {
+	return &p.receiveTasks[detail]
 }
 
 // MessageCatch returns the message-catch detail at the given table index.
@@ -528,6 +1270,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
+	SingletonStart bool // one live instance per correlation key (ADR-0094)
 }
 
 // MessageStartEvents returns each message-start event with its element index and
@@ -537,15 +1280,83 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 	var out []MessageStartEvent
 	for id := range p.nodes {
 		n := &p.nodes[id]
-		if n.Type == TypeMessageStartEvent {
+		// Only a root-scope message start instantiates the process; a message start
+		// nested in an event subprocess is that scope's trigger, not an entry point (ADR-0082).
+		if n.Type == TypeMessageStartEvent && n.FlowScope == -1 {
 			out = append(out, MessageStartEvent{
 				MessageName:    p.messageStarts[n.Detail].MessageName,
 				ElementId:      int32(id),
 				CorrelationKey: p.messageStarts[n.Detail].CorrelationKey,
+				SingletonStart: p.messageStarts[n.Detail].SingletonStart,
 			})
 		}
 	}
 	return out
+}
+
+// SignalCatch returns the signal-catch detail at the given table index (ADR-0088).
+func (p *CompiledProcess) SignalCatch(detail int32) *SignalDetail { return &p.signalCatches[detail] }
+
+// SignalThrow returns the signal-throw detail at the given table index — shared by the
+// signal throw and signal end events (ADR-0088).
+func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.signalThrows[detail] }
+
+// ErrorEnd returns the error-end detail at the given table index (ADR-0089).
+func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.errorEnds[detail] }
+
+// Escalation returns the escalation-event detail (throw or end) at the given table index (ADR-0125).
+func (p *CompiledProcess) Escalation(detail int32) *EscalationDetail { return &p.escalations[detail] }
+
+// Conditional returns the conditional-catch detail at the given table index (ADR-0137).
+func (p *CompiledProcess) Conditional(detail int32) *ConditionalDetail {
+	return &p.conditionals[detail]
+}
+
+// HasConditionalEvents reports whether the process contains any conditional event, so the
+// runtime only re-checks conditionals for instances that can have one (ADR-0137).
+func (p *CompiledProcess) HasConditionalEvents() bool { return p.hasConditional }
+
+// AdHoc returns the ad-hoc subprocess detail at the given table index (ADR-0138).
+func (p *CompiledProcess) AdHoc(detail int32) *AdHocDetail { return &p.adHocs[detail] }
+
+// AdHocEntries returns the element ids of an ad-hoc subprocess's entry activities — the
+// contained flow nodes with no incoming sequence flow, which the runtime activates when the
+// ad-hoc is entered (ADR-0138). Like ScopeStartEvents it is a slice into the shared topology
+// array (no allocation); empty for a non-ad-hoc node or an ad-hoc with no contained activity.
+func (p *CompiledProcess) AdHocEntries(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
+}
+
+// CompensationThrow returns the compensation-throw detail at the given table index —
+// shared by the compensation throw and end events (ADR-0103).
+func (p *CompiledProcess) CompensationThrow(detail int32) *CompensationDetail {
+	return &p.compensationThrows[detail]
+}
+
+// SignalStart returns the signal-start detail at the given table index (ADR-0088).
+func (p *CompiledProcess) SignalStart(detail int32) *SignalDetail { return &p.signalStarts[detail] }
+
+// SignalStartEvents returns each root-scope signal-start event's signal name and element
+// index. The engine indexes these at deploy time so a broadcast signal can instantiate the
+// process (ADR-0088), mirroring MessageStartEvents. A signal start nested in an event
+// subprocess is that scope's trigger, not a process entry point.
+func (p *CompiledProcess) SignalStartEvents() []SignalStartEvent {
+	var out []SignalStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeSignalStartEvent && n.FlowScope == -1 {
+			out = append(out, SignalStartEvent{SignalName: p.signalStarts[n.Detail].SignalName, ElementId: int32(id)})
+		}
+	}
+	return out
+}
+
+// SignalStartEvent pairs a signal-start event's signal name with its element index, so the
+// engine can index which element a starting signal flows into (ADR-0088).
+type SignalStartEvent struct {
+	SignalName string
+	ElementId  int32
 }
 
 // TimerStart returns the timer-start detail at the given table index.
@@ -565,7 +1376,9 @@ func (p *CompiledProcess) TimerStartEvents() []TimerStartEvent {
 	var out []TimerStartEvent
 	for id := range p.nodes {
 		n := &p.nodes[id]
-		if n.Type == TypeTimerStartEvent {
+		// Only a root-scope timer start arms a process-instantiating timer; a timer start
+		// nested in an event subprocess is that scope's trigger, not an entry point (ADR-0082).
+		if n.Type == TypeTimerStartEvent && n.FlowScope == -1 {
 			out = append(out, TimerStartEvent{
 				Schedule:  p.timerStarts[n.Detail].Schedule,
 				ElementId: int32(id),
@@ -583,6 +1396,129 @@ func (p *CompiledProcess) ProcessId() string { return p.Intern(p.BpmnProcessId) 
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 	return &p.scriptTasks[detail]
+}
+
+// CallActivity returns the call-activity detail at the given table index.
+func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
+	return &p.callActivities[detail]
+}
+
+// CallActivityRef is the static, read-only view of one call activity: the BPMN
+// element that hosts it, the process id it calls, the version binding, whether
+// variables propagate wholesale in/out, and whether it is a multi-instance loop
+// (spawning one child per collection element). It carries no resolved def key —
+// which deployed definition the call reaches is a per-server, deploy-time fact
+// the server layer computes on top of this (ADR-0076).
+type CallActivityRef struct {
+	ElementId          string
+	CalledProcessId    string
+	Binding            DecisionBinding
+	PropagateAllParent bool
+	PropagateAllChild  bool
+	MultiInstance      bool
+	// Loop is true when the call activity carries a standard loop marker instead —
+	// it calls the process again and again while a condition holds (ADR-0133), where
+	// MultiInstance calls it once per collection element. At most one is ever true.
+	Loop bool
+}
+
+// ConnectorRef is one model reference to a server-registered connector: the element
+// carrying it, the reserved job type that says which *kind* of connector it needs, and
+// the name it asks for. A model refers to a connector by name only and never carries
+// an endpoint or a secret (ADR-0036/0041), so nothing inside the model can tell whether
+// that name is configured anywhere — which is exactly why the references have to be
+// enumerable from outside, where the connector store is (ADR-0158).
+type ConnectorRef struct {
+	ElementId string
+	JobType   int32
+	Connector string
+}
+
+// NodeConnectorRef returns the connector reference one node makes, and false when it
+// makes none. Both shapes are covered: a connector task (mail, REST, SharePoint, …)
+// and a business rule task delegating to a remote decision service, which names its
+// connector the same way. An element that names no connector — a local decision, a
+// REST task with its URL in the model, anything that is not one of those two task
+// types — is not a reference.
+//
+// It answers the question one element at a time because that is how an *incident* asks
+// it: a token is parked on this element, which connector is it stuck on (ADR-0160)?
+// ConnectorRefs asks the same question of every node.
+func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return ConnectorRef{}, false
+	}
+	var jobType, connector int32 = -1, -1
+	switch p.nodes[id].Type {
+	case TypeConnectorTask:
+		d := p.ConnectorTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	case TypeBusinessRuleTask:
+		d := p.BusinessRuleTask(p.nodes[id].Detail)
+		jobType, connector = d.JobType, d.Connector
+	default:
+		return ConnectorRef{}, false
+	}
+	if connector < 0 {
+		return ConnectorRef{}, false
+	}
+	return ConnectorRef{
+		ElementId: p.ElementBpmnId(id),
+		JobType:   jobType,
+		Connector: p.Intern(connector),
+	}, true
+}
+
+// ConnectorRefs returns every connector reference the process makes, in node order.
+// An element that names no connector is left out; see NodeConnectorRef.
+func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
+	var out []ConnectorRef
+	for i := range p.nodes {
+		if ref, ok := p.NodeConnectorRef(int32(i)); ok {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// CallActivities returns every call activity in this process, in node order —
+// empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
+// an outbound reference (here the called process id) that the server surfaces so
+// operators can see and manage the call activities deployed on a server — which
+// process calls which, and whether the target resolves (ADR-0076).
+func (p *CompiledProcess) CallActivities() []CallActivityRef {
+	var out []CallActivityRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeCallActivity {
+			continue
+		}
+		d := p.CallActivity(p.nodes[i].Detail)
+		out = append(out, CallActivityRef{
+			ElementId:          p.ElementBpmnId(int32(i)),
+			CalledProcessId:    p.Intern(d.CalledProcessId),
+			Binding:            d.Binding,
+			PropagateAllParent: d.PropagateAllParent,
+			PropagateAllChild:  d.PropagateAllChild,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0 && !p.loops(int32(i)),
+			Loop:               p.loops(int32(i)),
+		})
+	}
+	return out
+}
+
+// loops reports whether a node's loop marker is a standard loop rather than a
+// multi-instance one (ADR-0133) — the two share the loop table, so the flag on the
+// detail is what tells them apart.
+func (p *CompiledProcess) loops(node int32) bool {
+	idx := p.nodes[node].MultiInstance
+	return idx >= 0 && p.multiInstances[idx].Standard
+}
+
+// MultiInstance returns the loop characteristics at the given table index — the
+// per-activity multi-instance detail a node's MultiInstance field points at
+// (ADR-0077).
+func (p *CompiledProcess) MultiInstance(detail int32) *MultiInstanceDetail {
+	return &p.multiInstances[detail]
 }
 
 // ScriptJobTask returns the script-job-task detail at the given table index.
@@ -630,6 +1566,26 @@ func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
 // ConnectorTask returns the connector-task detail at the given table index.
 func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]
+}
+
+// ConnectorTaskOf returns the connector-task detail for element node id, or an
+// error if id is not a connector task in this compiled process. It is the
+// bounds-checked accessor for the job-worker path: a persisted job can outlive
+// the process definition that compiled its element as a connector task (e.g. a
+// job created before a redeploy that recompiled the element into something else,
+// or dropped its connector-task table), and resolving such a stale job must fail
+// it into an incident (ADR-0061) rather than index out of range and panic the
+// job-runner goroutine — an unrecovered panic there crashes the whole server. A
+// worker that gets an error returns it, and FailJob retries then parks the token.
+func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return nil, fmt.Errorf("element %d out of range (%d nodes)", id, len(p.nodes))
+	}
+	detail := p.nodes[id].Detail
+	if detail < 0 || int(detail) >= len(p.connectorTasks) {
+		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+	}
+	return &p.connectorTasks[detail], nil
 }
 
 // StartEvents returns the process's entry-point element ids.
@@ -686,6 +1642,23 @@ func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) 
 // start surfaces. Absent in the source defaults to true (see the parser).
 func (p *CompiledProcess) IsExecutable() bool { return p.isExecutable }
 
+// VersionTag returns the process's atlas:versionTag revision label ("" if none). It
+// is design-time metadata Operations shows beside the deploy version; the engine
+// never reads it.
+func (p *CompiledProcess) VersionTag() string { return p.Intern(p.versionTag) }
+
+// InstanceTtlNanos returns the process's instance TTL in nanoseconds, or 0 when no TTL
+// is configured. A positive value is the self-cleaning expiry bound (ADR-0085): the
+// engine schedules a durable expiry timer at CreatedAt+TTL when an instance activates.
+func (p *CompiledProcess) InstanceTtlNanos() int64 { return p.instanceTtlNanos }
+
+// HistoryTtlNanos returns the process's history TTL in nanoseconds, or 0 when none is
+// configured. A positive value is this definition's own retention max age (ADR-0144):
+// the retention sweep hard-deletes a finished instance of this definition once it is
+// older than the TTL and its events are provably exported. Zero falls back to the
+// server-wide max age.
+func (p *CompiledProcess) HistoryTtlNanos() int64 { return p.historyTtlNanos }
+
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {
 	if idx < 0 || int(idx) >= len(p.strings) {
@@ -703,3 +1676,38 @@ func (p *CompiledProcess) ElementBpmnId(id int32) string {
 	}
 	return p.Intern(p.elementIds[id])
 }
+
+// ElementDocumentation returns the prose an author wrote about a node — its
+// <bpmn:documentation> (ADR-0025) — or "" when the node is undocumented or the index is
+// out of range. It is design-time metadata the engine never reads: it changes no
+// execution, and is carried so a surface that shows an element to a person can read it
+// here rather than re-parsing the model. The Tasks app uses it as a user task's work
+// instruction.
+func (p *CompiledProcess) ElementDocumentation(id int32) string {
+	if id < 0 || int(id) >= len(p.elementDocs) {
+		return ""
+	}
+	return p.Intern(p.elementDocs[id])
+}
+
+// RepairForm returns the form an operator should be offered when a token parks on this
+// node with an incident (ADR-0169), or "" when the node names none or the index is out
+// of range.
+//
+// It is a *better editor over an existing write path*, not a new one: the form names the
+// variables worth looking at, and submitting it writes them through the same audited
+// operator override the raw JSON editor uses (ADR-0098). The binding lives here, in the
+// compiled model, because whoever authored the task is who knows which values its retry
+// depends on — so it is versioned with the model, costs nothing at runtime, and rides an
+// instance's migration (ADR-0162) rather than being runtime configuration that could
+// drift from the task it describes.
+func (p *CompiledProcess) RepairForm(id int32) string {
+	if id < 0 || int(id) >= len(p.repairForms) {
+		return ""
+	}
+	return p.Intern(p.repairForms[id])
+}
+
+// Documentation returns the process's own <bpmn:documentation> — the summary that
+// describes the process as a whole — or "" if it has none.
+func (p *CompiledProcess) Documentation() string { return p.Intern(p.documentation) }

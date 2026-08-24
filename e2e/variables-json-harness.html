@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas variables-JSON e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`, for
+         the Variables tab's structured values: a list and one of its elements, which read
+         almost alike once their text is truncated. bpmn assets are the production ones. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+      import { enhanceTable } from "/table.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_vars" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="vars" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:scriptTask id="Rechne_1" name="rechne was"><bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing></bpmn:scriptTask>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Rechne_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Rechne_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="vars">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Rechne_1_di" bpmnElement="Rechne_1"><dc:Bounds x="260" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="196" y="160"/><di:waypoint x="260" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="360" y="160"/><di:waypoint x="440" y="160"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The list, and the element one round of a loop was handed out of it. Truncated in a
+      // table cell these two read the same for the first thirty characters.
+      const customers = JSON.stringify([
+        { Nachname: "Blumer", Umsatz: 5000, Vorname: "Patrick" },
+        { Nachname: "Güther", Umsatz: 10000, Vorname: "Thomas" },
+        { Nachname: "Kaiser", Umsatz: 15000, Vorname: "Stefan" },
+      ]);
+      const customer = JSON.stringify({ Nachname: "Blumer", Umsatz: 5000, Vorname: "Patrick" });
+
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1", variables: [] },
+        {
+          elementId: "Rechne_1", elementInstanceKey: "1001", type: "bpmn:scriptTask", position: 2, tokenId: "1",
+          variables: [{ name: "customers", value: customers, kind: "json" }],
+          variablesAfter: [{ name: "customers", value: customers, kind: "json" }],
+          inputs: [{ name: "customer", value: customer, kind: "json" }],
+          iteration: 1,
+        },
+        // The end event holds the same list, so a test can ask whether an expansion opened
+        // on one element follows the reader to another.
+        { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1",
+          variables: [{ name: "customers", value: customers, kind: "json" }] },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
+
+      const frames = steps.map((s, i) => ({
+        position: s.position, at: s.at,
+        tokens: i < steps.length - 1 ? [{ elementId: s.elementId, tokenId: "1", elementInstanceKey: s.elementInstanceKey, state: "active" }] : [],
+      }));
+
+      const TIMELINE = { processDefKey: "7", processId: "vars", version: 1, state: "completed", steps, frames };
+
+      const api = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      // The app enhances every table in the view once a route has mounted (app.js
+      // enhanceViewTables), and the Variables table is one of them. The harness does the
+      // same, because the enhancer and the expansion rows share the rows' `hidden` — and
+      // a harness that leaves it out cannot see them disagree.
+      window.__mount = async () => {
+        await mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+        for (const t of view.querySelectorAll("table:not(.no-enhance)")) enhanceTable(t);
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

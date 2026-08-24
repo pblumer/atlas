@@ -3,6 +3,7 @@ package job_test
 import (
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/pblumer/atlas/engine"
@@ -19,7 +20,7 @@ func (e errEngine) RunUntilIdle() error                        { return e.err }
 func (e errEngine) CompleteJob(uint64, ...model.VariableValue) {}
 func (e errEngine) CompleteJobWithDecision(uint64, *model.DecisionEvaluationValue, ...model.VariableValue) {
 }
-func (e errEngine) FailJob(uint64, int32, string) {}
+func (e errEngine) FailJob(uint64, int32, string, int64) {}
 
 // TestDriveSurfacesRunUntilIdleError covers Drive's first branch: an engine that
 // cannot make progress aborts the drive loop with its error.
@@ -65,8 +66,19 @@ func twoActivatableJobs(t *testing.T) (*engine.Processor, *state.Store, int32, [
 // TestPollOnceSkipsJobCompletedDuringScan covers the "job gone since the scan"
 // branch: a job present when the keys were collected but absent by the time its
 // turn to dispatch comes is skipped, not dispatched. The handler for the first
-// job deletes the second before the loop reaches it.
-func TestPollOnceSkipsJobCompletedDuringScan(t *testing.T) {
+// TestAJobCancelledAfterItsClaimIsStillWorked states a consequence of running
+// handlers off the run loop, rather than hiding it. Jobs are claimed while the loop
+// is held and worked after it is released, so between those two moments another
+// request can cancel one — and its handler still runs.
+//
+// That is bounded and already covered by the protocol's at-least-once contract
+// (ADR-0007): the completion of a job that is gone is a no-op in the engine, so the
+// round finishes cleanly and the token is not disturbed. What it costs is the side
+// effect of work that turned out to be unwanted, which is the same exposure a
+// worker crash-and-retry has always had. The alternative — re-reading each job
+// immediately before its handler — is a live store read off the loop, which is
+// precisely what this change removed.
+func TestAJobCancelledAfterItsClaimIsStillWorked(t *testing.T) {
 	p, store, jobType, keys := twoActivatableJobs(t)
 	other := keys[1]
 	ov, ok, err := store.GetJob(other)
@@ -74,32 +86,47 @@ func TestPollOnceSkipsJobCompletedDuringScan(t *testing.T) {
 		t.Fatalf("GetJob(other): ok=%v err=%v", ok, err)
 	}
 
+	var mu sync.Mutex
 	dispatched := map[uint64]bool{}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(j job.Job) error {
-		dispatched[j.Key] = true
-		if j.Key == keys[0] {
-			// Remove the not-yet-dispatched job so its GetJob returns not-found.
-			tx := store.NewTransaction()
-			if err := tx.DeleteJob(other, ov); err != nil {
-				return err
-			}
-			if err := tx.Commit(); err != nil {
-				return err
-			}
-			return tx.Close()
+	runner.Handle(jobType, func(state.Reader) job.Handler {
+		return func(j job.Job) error {
+			mu.Lock()
+			dispatched[j.Key] = true
+			mu.Unlock()
+			return nil
 		}
-		return nil
 	})
 
-	n, err := runner.PollOnce()
+	// The job vanishes between the claim and the work.
+	jobs, err := runner.Claim()
 	if err != nil {
-		t.Fatalf("PollOnce: %v", err)
+		t.Fatalf("Claim: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("dispatched = %d, want 1 (second job vanished before its turn)", n)
+	if len(jobs) != 2 {
+		t.Fatalf("claimed %d jobs, want 2", len(jobs))
 	}
-	if dispatched[other] {
-		t.Error("deleted job was dispatched, want it skipped")
+	tx := store.NewTransaction()
+	if err := tx.DeleteJob(other, ov); err != nil {
+		t.Fatalf("DeleteJob: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	if err := tx.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	outcomes := runner.Work(jobs, store)
+	runner.Submit(outcomes)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !dispatched[other] {
+		t.Error("the cancelled job was skipped; this test exists to record that it is not")
+	}
+	// And the round still completed cleanly: the vanished job's completion is a no-op.
+	if err := p.RunUntilIdle(); err != nil {
+		t.Errorf("RunUntilIdle after completing a job that no longer exists: %v", err)
 	}
 }

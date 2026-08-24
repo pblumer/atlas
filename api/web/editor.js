@@ -3,10 +3,22 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { copyText } from "./clipboard.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { installDevShortcut, markDevField } from "./dev-view.js";
+import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
+import { tokenSimulationModule } from "./token-simulation.js";
+import { migrateInstanceFlow } from "./migrationdialog.js";
+// Which keys a form-js schema binds — the Developer View reads it to offer a linked
+// form's fields as variables, the incident's repair form reads it to know which keys a
+// submit may write (ADR-0169). One description of it, in one place.
+import { formFieldKeys } from "./formviewer.js";
+import { attachCollab } from "./collab.js";
+import { collectDocumentation, exportDocumentation } from "./process-doc.js";
+import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -17,6 +29,10 @@ import { openDmnEditor } from "./dmn-editor.js";
 // glyph shown on the task shape in the Implement view so the executable language is
 // legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
 // it runs (see makeImplementBadges).
+// The HTML language descriptor, used for the markup fields in the connector catalog
+// (the mail body). Resolved once — the registry is static.
+const htmlLang = devLang("html");
+
 const JOB_LANGS = {
   powershell: {
     label: "PowerShell (job worker)", short: "PowerShell",
@@ -67,7 +83,7 @@ function loadBpmn() {
           fetch("vendor/bpmn/zeebe.json").then((r) => r.json()),
           fetch("atlas-moddle.json").then((r) => r.json()),
         ]);
-        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe, atlas } });
+        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe: patchZeebeModdle(zeebe), atlas } });
       } catch (e) {
         reject(new Error("failed to load the moddle extensions: " + e.message));
       }
@@ -78,10 +94,28 @@ function loadBpmn() {
   return bpmnReady;
 }
 
+// patchZeebeModdle declares the handful of attributes Atlas reads from a zeebe
+// extension element that the upstream descriptor does not know (ADR-0135): a
+// business rule task's <zeebe:calledDecision retries="…">, the retry budget the
+// compiler has always parsed there. The vendored zeebe.json stays a pristine copy of
+// zeebe-bpmn-moddle (see vendor/bpmn/README.md), so the difference lives here, in
+// code, where it is visible — rather than as an invisible edit to a vendored file.
+// Declaring it as a plain attribute (not an atlas:-prefixed one) is what keeps the
+// round-trip honest: a hand-authored retries="5" is read back into the panel.
+function patchZeebeModdle(zeebe) {
+  const cd = (zeebe.types || []).find((t) => t.name === "CalledDecision");
+  if (cd && !(cd.properties || []).some((p) => p.name === "retries")) {
+    cd.properties.push({ name: "retries", type: "String", isAttr: true });
+  }
+  return zeebe;
+}
+
 // newModeler/newViewer construct a bpmn-js instance with the moddle extensions
 // (zeebe + atlas) wired.
-function newModeler(BpmnJS, moddle, container) {
-  return new BpmnJS({ container, moddleExtensions: moddle });
+function newModeler(BpmnJS, moddle, container, extraModules) {
+  const opts = { container, moddleExtensions: moddle };
+  if (extraModules && extraModules.length) opts.additionalModules = extraModules;
+  return new BpmnJS(opts);
 }
 
 // blankXML builds an empty diagram with a UNIQUE process id. The process id is
@@ -111,13 +145,60 @@ function blankXML() {
 </bpmn:definitions>`;
 }
 
+// calleeXML builds a starter diagram for a *called* process a call activity refers
+// to (ADR-0076): a single start event, keyed by the caller-chosen process id (the
+// deploy/route identity), so the "＋ create new" affordance in the call-activity
+// panel scaffolds the callee the caller already points at. Whitespace in the id is
+// collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
+// unique one, like blankXML.
+function calleeXML(pid, name) {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const nm = (name || id).trim();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+}
+
 let current; // active modeler/viewer, destroyed on remount
+let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
+let collab; // active live collaboration session (ADR-0140), closed on remount
+// generation is bumped by cleanup() on every navigation/remount. A mount captures
+// it right after its own cleanup() and re-checks it after each await, so a slow
+// mount that a newer navigation has superseded bails out *before* it builds a
+// second viewer or writes into the live view's DOM. Without this, the router's
+// re-entrancy (hashchange fires route() again while a mount is still awaiting
+// bpmn assets or the timeline) let a stale mount create a second bpmn-js canvas
+// inside the current mount's #canvas and render another instance's data over it —
+// two overlaid diagrams, mismatched instance keys, a leaked poll timer.
+let generation = 0;
+
+// docTitle refines the browser tab title with a loaded subject (a diagram or
+// process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
+// distinguishable. The router sets a route-based title first; this sharpens it.
+function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas"; }
 
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
+  generation++; // supersede any in-flight mount (see `generation` above)
+  if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -126,6 +207,19 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
+
+// isValidTtl mirrors the engine's TTL parser (ADR-0085 instance TTL, ADR-0145 history
+// TTL; compiler/duration.go):
+// the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
+// positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
+// to warn while authoring; the deploy is the authority that rejects a bad value.
+const isValidTtl = (s) => {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(String(s).trim());
+  if (!m) return false;
+  const parts = [m[1], m[2], m[3], m[4]];
+  if (parts.every((p) => p === undefined)) return false; // no components → empty duration
+  return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
+};
 
 // --- Variable presentation (shared by the live and replay views) ---
 //
@@ -310,29 +404,6 @@ function prettyJSON(text) {
   catch { return String(text); }
 }
 
-// copyText writes text to the clipboard, falling back to a hidden textarea +
-// execCommand where the async Clipboard API isn't available (older browsers, or
-// insecure origins). Returns a promise that resolves once the copy is attempted.
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch { /* fall through to the legacy path */ }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch { return false; }
-}
-
 // bindVarCopy wires the delegated click on `.vcopy` buttons inside panel: it copies
 // the button's data-copy payload and flashes a brief "Copied" state on the button.
 // Attach once per view; survives the panel's inner re-renders.
@@ -384,6 +455,7 @@ function editorCrumbs(project, current) {
 
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
@@ -391,21 +463,59 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
         <div class="etabs">
-          <button data-tab="design" class="active">Design</button>
-          <button data-tab="implement">Implement</button>
+          <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
+          <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
-        <button class="btn neutral" id="save">Save</button>
-        <button class="btn neutral" id="export">Export XML</button>
-        <button class="btn" id="deploy">Deploy</button>
+        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
+        <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
+        <button class="btn neutral" id="export" title="Download this diagram as BPMN XML">Export XML</button>
+        <button class="btn neutral" id="docexport" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)">Documentation</button>
+        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+      </div>
+      <div class="sim-bar" id="sim-bar" hidden>
+        <button class="btn play" id="sim-play" title="Play the token simulation">&#9654; Play</button>
+        <button class="btn neutral" id="sim-step" title="Advance one token by a single step">Step</button>
+        <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
+        <label class="sim-speed">Speed
+          <select class="speed" id="sim-speed" aria-label="Simulation speed">
+            <option value="0.25">0.25&times;</option>
+            <option value="0.5">0.5&times;</option>
+            <option value="1" selected>1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="4">4&times;</option>
+          </select>
+        </label>
+        <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
+          <input type="checkbox" id="sim-auto"/> Auto-decide
+        </label>
+        <label class="sim-mi" title="How many instances a multi-instance activity runs in the simulation. A modelled fixed loop cardinality overrides this.">Instances
+          <input type="number" id="sim-mi" min="1" max="20" step="1" value="3"/>
+        </label>
+        <span class="sim-hint" id="sim-hint"></span>
+        <span style="flex:1"></span>
+        <span class="sim-stats" id="sim-stats"></span>
+      </div>
+      <div class="start-panel" id="doc-panel" hidden>
+        <label class="field"><span>Title</span>
+          <input id="doc-title" placeholder="Leave empty to use the process name"/></label>
+        <label class="field"><span>Note for this version</span>
+          <input id="doc-note" placeholder="What changed, or what this version was signed off for"/></label>
+        <div class="row">
+          <button class="btn" id="doc-publish" title="Publish a new documentation version as a PDF">Publish version</button>
+          <button class="btn neutral" id="doc-cancel" title="Close the documentation panel">Close</button>
+          <span class="err" id="doc-err"></span>
+        </div>
+        <div class="doc-history" id="doc-history"></div>
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
         <div class="row" id="deploy-actions">
-          <button class="btn" id="deploy-run">Deploy &amp; run</button>
-          <button class="btn neutral" id="deploy-only">Deploy only</button>
-          <button class="btn neutral" id="deploy-cancel">Cancel</button>
+          <button class="btn" id="deploy-run" title="Deploy this diagram and start an instance">Deploy &amp; run</button>
+          <button class="btn neutral" id="deploy-only" title="Deploy this diagram without starting an instance">Deploy only</button>
+          <button class="btn neutral" id="deploy-cancel" title="Close without deploying">Cancel</button>
           <span class="err" id="deploy-err"></span>
         </div>
       </div>
@@ -426,10 +536,20 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           </div>
         </aside>
       </div>
-      <div class="problems">
+      <div class="prob-list" id="prob-list" hidden></div>
+      <div class="problems" id="problems-bar" role="button" tabindex="0"
+           aria-expanded="false" aria-controls="prob-list"
+           title="Show validation problems">
         <span class="badge" id="prob-count">0</span> Problems
+        <span class="prob-summary" id="prob-summary"></span>
         <span style="flex:1"></span>
-        <span class="muted">Checked against the Atlas compiler</span>
+        <span class="prob-filters" id="prob-filters" hidden>
+          <button type="button" data-sev="all" class="active" title="Show all validation messages">All</button>
+          <button type="button" data-sev="error" title="Show only errors">Errors</button>
+          <button type="button" data-sev="warning" title="Show only warnings">Warnings</button>
+        </span>
+        <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
+        <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
 
@@ -441,8 +561,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
-  const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+  const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
+    tokenSimulationModule(),
+  ]);
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -459,7 +582,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
-    if (pbo) root.querySelector(".crumb-current").textContent = pbo.name || pbo.id || "Diagram";
+    if (pbo) {
+      const nm = pbo.name || pbo.id || "Diagram";
+      root.querySelector(".crumb-current").textContent = nm;
+      docTitle(`${nm} · Modeler`);
+    }
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
@@ -467,10 +594,277 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   const rerender = wireProperties(root, modeler, api, projectId, toast);
   const refreshBadges = makeImplementBadges(root, modeler);
   refreshBadges(); // reflect the initial tab for the diagram just imported
+  const refreshPoolCaptions = makePoolProcessCaptions(modeler);
+  refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
-  wireEditorVars(root, modeler);
+  wireEditorVars(root, modeler, api);
+  wireProblems(root, modeler, api);
   wireResizer(root, modeler);
+  wireTokenSim(root, modeler);
+
+  // Only a saved draft has a stable id to key a live session on; a fresh unsaved
+  // diagram or a read-only deployment does not co-edit (ADR-0140).
+  if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
+}
+
+// The BPMN elements the stock bpmn-js palette can draw but the Atlas engine can't run
+// yet, mapped to a plain-language reason. The Modeler uses these to flag such elements
+// at author time — a canvas badge and a Problems-bar warning — so the author isn't
+// surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
+// elements (compiler/scope_compile.go, compiler/parse.go).
+const UNSUPPORTED_TYPES = {
+  "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
+  "bpmn:DataStoreReference": "Data stores aren't supported yet",
+};
+const UNSUPPORTED_EVENT_DEFS = {};
+
+// unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
+// null if it can. It keys off the element type and any event definitions it carries.
+function unsupportedReason(bo) {
+  if (!bo || !bo.$type) return null;
+  if (UNSUPPORTED_TYPES[bo.$type]) return UNSUPPORTED_TYPES[bo.$type];
+  for (const d of (bo.eventDefinitions || [])) {
+    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
+  }
+  return null;
+}
+
+// wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
+// toggle that opens a filterable, element-linked list of the compiler's findings.
+// Validation is the real compiler run behind POST /api/v1/validate — never a
+// JS reimplementation of the rules (that is the interpret-don't-compile failure
+// mode the ADR rejects) — so the panel always tells the same truth as a deploy,
+// warnings included. It re-validates (debounced) as the diagram is edited, on
+// import, and on demand, so a modeling smell like a disconnected end event is
+// explained continuously rather than only at deploy time.
+function wireProblems(root, modeler, api) {
+  const bar = root.querySelector("#problems-bar");
+  const listEl = root.querySelector("#prob-list");
+  const countEl = root.querySelector("#prob-count");
+  const summaryEl = root.querySelector("#prob-summary");
+  const filtersEl = root.querySelector("#prob-filters");
+  const versionEl = root.querySelector("#prob-version");
+  const caretEl = root.querySelector("#prob-caret");
+  if (!bar || !listEl) return;
+
+  let problems = [];
+  let filter = "all"; // all | error | warning
+  let expanded = false;
+  let marked = null; // element id currently highlighted on the canvas
+  let seq = 0; // guards against a stale validate response overwriting a newer one
+  let unsupIds = []; // overlay ids for the "can't run yet" badges we drew
+
+  // findUnsupported walks the live model for elements the engine can't run yet (see
+  // unsupportedReason) and returns them as Problems-bar warnings — author-time feedback
+  // that doesn't depend on a server round-trip and catches every offender at once (the
+  // compiler stops at its first rejection).
+  const findUnsupported = () => {
+    const out = [];
+    let registry;
+    try { registry = modeler.get("elementRegistry"); } catch { return out; }
+    registry.forEach((el) => {
+      if (el.labelTarget) return; // a label shares its target's businessObject — don't double-count
+      const why = unsupportedReason(el.businessObject);
+      if (why) out.push({ severity: "warning", message: why, element: el.id, rule: "unsupported-element" });
+    });
+    return out;
+  };
+  // redrawUnsupported puts a ⚠ badge on each unrunnable element (top-right, clear of the
+  // Implement type badge at top-left) and reaps the previous set first.
+  const redrawUnsupported = (findings) => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { return; }
+    for (const id of unsupIds) { try { overlays.remove(id); } catch { /* gone */ } }
+    unsupIds = [];
+    for (const f of findings) {
+      try {
+        unsupIds.push(overlays.add(f.element, "atlas-unsupported", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)} — remove it or the diagram won't run">⚠</span>`,
+        }));
+      } catch { /* shape without graphics (mid-import) — skip */ }
+    }
+  };
+
+  const SEV_LABEL = { error: "Error", warning: "Warning" };
+  const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
+
+  const clearMark = () => {
+    if (marked == null) return;
+    try { modeler.get("canvas").removeMarker(marked, "atlas-problem"); } catch { /* gone */ }
+    marked = null;
+  };
+
+  // Jump to and highlight a problem's element — the same select + scroll pattern
+  // the variables panel uses, plus a persistent marker so the offending element
+  // stays visible after the click.
+  const focusElement = (id) => {
+    if (!id) return;
+    const el = modeler.get("elementRegistry").get(id);
+    if (!el) return;
+    clearMark();
+    try { modeler.get("selection").select(el); } catch { /* stale */ }
+    try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+    try { modeler.get("canvas").addMarker(id, "atlas-problem"); marked = id; } catch { /* no marker */ }
+  };
+
+  const render = () => {
+    const errors = problems.filter((p) => p.severity === "error").length;
+    const warnings = problems.filter((p) => p.severity === "warning").length;
+    const total = problems.length;
+
+    countEl.textContent = String(total);
+    bar.classList.toggle("has-errors", errors > 0);
+    bar.classList.toggle("has-warnings", errors === 0 && warnings > 0);
+    filtersEl.hidden = total === 0;
+    caretEl.style.visibility = total === 0 ? "hidden" : "";
+
+    if (total === 0) {
+      summaryEl.textContent = "No problems";
+    } else {
+      const parts = [];
+      if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
+      if (warnings) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+      summaryEl.textContent = parts.join(", ");
+    }
+
+    // A collapsed panel with nothing to show stays closed; nothing to list.
+    if (total === 0) { expand(false); }
+
+    const shown = problems.filter((p) => filter === "all" || p.severity === filter);
+    listEl.innerHTML = shown.length === 0
+      ? `<p class="prob-empty muted">No ${filter === "all" ? "" : filter + " "}problems.</p>`
+      : shown.map((p) => `<div class="prob-row prob-${esc(p.severity)}"${p.element ? ` data-el="${esc(p.element)}"` : ""}>
+          <span class="prob-sev" title="${esc(SEV_LABEL[p.severity] || p.severity)}">${sevIcon(p.severity)}</span>
+          <span class="prob-msg">${esc(p.message)}</span>
+          ${p.element ? `<span class="prob-el" title="Element id">${esc(p.element)}</span>` : ""}
+          <span class="prob-rule" title="Rule">${esc(p.rule)}</span>
+        </div>`).join("");
+  };
+
+  const expand = (open) => {
+    expanded = open && problems.length > 0;
+    listEl.hidden = !expanded;
+    bar.setAttribute("aria-expanded", String(expanded));
+    bar.classList.toggle("open", expanded);
+  };
+
+  // A full compile is cheap but not free; debounce so a burst of edits triggers
+  // one validate, not one per keystroke-equivalent modeling event (ADR-0026).
+  let timer = null;
+  const validate = async () => {
+    // Client-side "can't run yet" findings first: instant canvas badges, and a fallback
+    // list if the server validate can't run (not imported / offline).
+    const unsupported = findUnsupported();
+    redrawUnsupported(unsupported);
+    let xml;
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
+    const mine = ++seq;
+    let res;
+    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
+    if (mine !== seq) return; // a newer validate has superseded this one
+    const server = Array.isArray(res.problems) ? res.problems : [];
+    // Keep the compiler's authoritative findings and add a per-element warning for each
+    // unrunnable element the server didn't already flag — so a hard compile error on one
+    // element isn't doubled by a client warning, but the offenders the compiler never
+    // reached (it stops at the first) are still surfaced.
+    const flagged = new Set(server.map((p) => p.element).filter(Boolean));
+    // The compiler's hard rejections (send/receive/terminate) name the element in the
+    // message text rather than tagging it, so also drop a client warning when a server
+    // finding quotes that id — avoiding a doubled row for the same element.
+    problems = [...server, ...unsupported.filter((u) =>
+      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
+    if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
+    render();
+  };
+  const scheduleValidate = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(validate, 500);
+  };
+
+  bar.addEventListener("click", (e) => {
+    if (e.target.closest("#prob-filters")) return; // a filter click is not a toggle
+    expand(!expanded);
+  });
+  bar.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); expand(!expanded); }
+  });
+  filtersEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-sev]");
+    if (!b) return;
+    filter = b.dataset.sev;
+    for (const btn of filtersEl.querySelectorAll("button")) {
+      btn.classList.toggle("active", btn === b);
+    }
+    if (!expanded) expand(true);
+    render();
+  });
+  listEl.addEventListener("click", (e) => {
+    const row = e.target.closest(".prob-row");
+    if (row && row.dataset.el) focusElement(row.dataset.el);
+  });
+
+  modeler.on("element.changed", scheduleValidate);
+  modeler.on("elements.changed", scheduleValidate);
+  modeler.on("import.done", scheduleValidate);
+  validate(); // check the diagram just imported
+}
+
+// wireTokenSim drives the Design view's token simulation (ADR-0078): a toolbar toggle
+// enters a read-only "play" mode where tokens walk the diagram, and a control bar below
+// the toolbar plays/steps/resets the run. The simulation itself lives in the bpmn-js
+// `atlasTokenSimulation` module; this only translates button clicks into service calls
+// and reflects the service's `atlasSim.changed` events back into the controls.
+function wireTokenSim(root, modeler) {
+  let sim;
+  try { sim = modeler.get("atlasTokenSimulation"); } catch { return; } // module absent
+  const editor = root.querySelector(".editor");
+  const toggle = root.querySelector("#sim-toggle");
+  const bar = root.querySelector("#sim-bar");
+  const playBtn = root.querySelector("#sim-play");
+  const stepBtn = root.querySelector("#sim-step");
+  const resetBtn = root.querySelector("#sim-reset");
+  const speedSel = root.querySelector("#sim-speed");
+  const autoBox = root.querySelector("#sim-auto");
+  const miInput = root.querySelector("#sim-mi");
+  const hintEl = root.querySelector("#sim-hint");
+  const statsEl = root.querySelector("#sim-stats");
+  if (!toggle || !bar) return;
+
+  const setActive = (on) => {
+    sim.setActive(on);
+    toggle.classList.toggle("active", on);
+    toggle.setAttribute("aria-pressed", on ? "true" : "false");
+    editor.classList.toggle("sim-active", on);
+    bar.hidden = !on;
+  };
+
+  toggle.addEventListener("click", () => setActive(!sim.isActive()));
+  playBtn.addEventListener("click", () => (sim.stats().playing ? sim.pause() : sim.play()));
+  stepBtn.addEventListener("click", () => sim.step());
+  resetBtn.addEventListener("click", () => sim.reset());
+  speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
+  if (autoBox) autoBox.addEventListener("change", () => sim.setAuto(autoBox.checked));
+  if (miInput) miInput.addEventListener("change", () => sim.setMiCount(Number(miInput.value)));
+
+  // Reflect the simulation's state in the controls whenever it changes. `deciding` means a
+  // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
+  // event is parked, ready to be fired.
+  modeler.get("eventBus").on("atlasSim.changed", (s) => {
+    playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
+    statsEl.textContent = `${s.live} live · ${s.completed} completed`;
+    hintEl.textContent = s.deciding
+      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+      : s.waiting
+        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+        : s.live === 0
+          ? "Click a start event ▶ to drop a token, then Play."
+          : "";
+  });
+  // Seed the initial control state (counts at zero, opening hint).
+  sim.setSpeed(Number(speedSel.value));
+  if (miInput) sim.setMiCount(Number(miInput.value));
 }
 
 // wireResizer makes the properties panel width draggable, so authoring long FEEL
@@ -629,6 +1023,14 @@ function implMarker(bo) {
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
     return { label: kind.name, icon: kind.glyph };
   }
+  if (bo.$type === "bpmn:SendTask") {
+    // The send task's kind badge (ADR-0112): a message throw, a connector, or (plain job
+    // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null;
+    return { label: kind.name, icon: kind.glyph };
+  }
   return null;
 }
 
@@ -695,6 +1097,65 @@ function makeImplementBadges(root, modeler) {
   return refresh;
 }
 
+// drawPoolProcessCaptions writes, on each collaboration pool, a label naming the process
+// that pool executes. A pool is a *participant*: the canvas draws its name (e.g. "Teilnehmer
+// 1") as a vertical label in the left band, but not the process it runs — so which process a
+// pool deploys as (its name, the deploy identity instances group by) is invisible on the
+// diagram and only readable by selecting the pool. This surfaces it the same way the
+// participant is drawn: a vertical, bottom-to-top label just inside the pool body beside the
+// name band, centered on the pool's height, so it reads as the participant's counterpart.
+// The Process ID rides along in the hover title. Only pools that carry a process (a
+// processRef) get a label; a black-box pool has none to name.
+function drawPoolProcessCaptions(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    if (!bo || !/:Participant$/.test(bo.$type || "")) return;
+    const proc = bo.processRef;
+    if (!proc) return; // black-box pool — no process to name
+    const name = (proc.name || "").trim();
+    const pid = (proc.id || "").trim();
+    const main = name || pid; // name leads; a nameless process shows its id
+    if (!main) return;
+    const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
+    try {
+      ids.push(overlays.add(el.id, "atlas-pool-process", {
+        // Centered ~46px from the pool's left edge so the label's near edge clears the ~30px
+        // participant band divider by the same ~8px the participant name sits from the outer
+        // frame — matching whitespace on both. (Measured against the participant label; the
+        // offset accounts for this label rendering a touch thicker than the participant's.)
+        // The offset scales with zoom like any overlay; the label is rotated in CSS.
+        position: { top: (el.height || 0) / 2, left: 46 },
+        html: `<div class="pool-process-vlabel"><span class="ppv-text" title="${esc(title)}">${esc(main)}</span></div>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makePoolProcessCaptions keeps the pool→process captions in step with edits (process
+// renamed, a process added to a black-box pool, a pool deleted). Unlike the implementation
+// badges these are not tab-gated: which process a pool runs is structural — relevant when
+// reading the diagram at any level of detail — not an implementation nicety. Returns a
+// refresh function; the initial call reflects the just-imported diagram.
+function makePoolProcessCaptions(modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we remove only ours
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+  const refresh = () => { clear(); ids = drawPoolProcessCaptions(modeler); };
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
 // variablesForCompletion returns the variables to offer in an element's expression
 // and script fields, each tagged with where it comes from so the completion popup
 // can show its origin. Process-scope variables (start variables, script/decision
@@ -720,19 +1181,199 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// collectDiagramVariables statically analyses the diagram for the variables it
-// writes and where — the data behind the Variables panel (like Camunda's). Each
-// entry is { name, origin, originId, source }: the variable name, the element that
-// writes it (name/id and the id to select it), and how (start variable, script
-// result, decision result, output mapping). De-duplicated by name, sorted.
-function collectDiagramVariables(modeler) {
+// devVariables is variablesForCompletion's richer sibling for the Developer View
+// (ADR-0145): the same static analysis, but each variable also carries *which scope*
+// it belongs to, so the modal can group them the way a developer thinks about them —
+// what this element reads, what it writes, and what the instance carries. The
+// element-local scopes are collected first and win the de-duplication, so a name that
+// is both an input mapping here and a process variable shows where it matters.
+function devVariables(modeler, element) {
   const out = [];
   const seen = new Set();
-  const push = (name, origin, originId, source) => {
+  const push = (name, detail, scope) => {
     name = (name || "").trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    out.push({ name, origin, originId, source });
+    out.push({ name, detail, scope });
+  };
+  try {
+    const bo = element && element.businessObject;
+    const io = bo && findExt(bo, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      push(p.target, p.source ? "input mapping ← " + p.source : "input mapping", "input");
+    }
+    for (const p of (io && io.outputParameters) || []) {
+      push(p.target, p.source ? "output mapping ← " + p.source : "output mapping", "output");
+    }
+    const s = bo && findExt(bo, "zeebe:Script");
+    if (s && s.resultVariable) push(s.resultVariable, "FEEL script result", "output");
+    const js = bo && findExt(bo, "atlas:JobScript");
+    if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
+    const cd = bo && findExt(bo, "zeebe:CalledDecision");
+    if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
+  } catch { /* best-effort */ }
+  try {
+    for (const v of collectDiagramVariables(modeler)) {
+      const scope = v.category === "Form" ? "form"
+        : /^data object/.test(v.source || "") ? "data"
+        : "process";
+      const detail = v.originId && v.origin ? `${v.source} · ${v.origin}` : v.source;
+      push(v.name, detail, scope);
+    }
+  } catch { /* best-effort */ }
+  return out;
+}
+
+// sampleCache memoizes the live-values lookup per process id for this editing
+// session: opening the Developer View on ten fields of one diagram is one pair of
+// requests, not ten, and switching between the instances in the picker costs
+// nothing at all. The Reload button passes force:true to bypass it, which is how an
+// author picks up an instance they started while the Modeler was open.
+const sampleCache = new Map(); // processId -> Promise<instanceSample[]>
+
+// How many instances the picker offers. Enough to find the one that took the branch
+// being written about, few enough that the <select> stays usable.
+const MAX_SAMPLE_INSTANCES = 50;
+
+// instanceSamples reads the values the diagram's variables actually hold, from a
+// real instance of this very process. `opts.instanceKey` picks one of the offered
+// instances (default: the most relevant one — a running instance first, else the
+// newest finished one); `opts.force` re-reads from the server.
+// Returns null when the process was never deployed or has never run — the modal
+// treats that as "no samples", not as an error.
+async function instanceSamples(modeler, api, opts = {}) {
+  const bo = rootProcess(modeler);
+  const processId = bo && bo.id;
+  if (!processId || !api) return null;
+  if (opts.force) sampleCache.delete(processId);
+  if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
+
+  let rows;
+  try { rows = await sampleCache.get(processId); }
+  catch (e) { sampleCache.delete(processId); throw e; }
+  if (!rows || !rows.length) return null;
+
+  const chosen = rows.find((r) => r.key === opts.instanceKey) || rows[0];
+  return {
+    instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+    values: chosen.values,
+    // The picker only needs each instance's identity; the values ride along in the
+    // cache so switching is a re-render, not a fetch.
+    instances: rows.map((r) => ({ key: r.key, state: r.state, version: r.version, createdAt: r.createdAt })),
+  };
+}
+
+// fetchSamples resolves the diagram's process id to deployed versions and reads one
+// version's instances. GET /instances?process= already returns each instance's
+// root-scope variables, so this is two requests and no per-variable round trip.
+// The newest version is preferred, but a version deployed a minute ago has no
+// instances yet — then its predecessor's values still describe the same variables,
+// so the walk continues rather than reporting nothing.
+async function fetchSamples(api, processId) {
+  const procs = await api("GET", "/api/v1/processes");
+  const versions = (procs || [])
+    .filter((p) => p.processId === processId)
+    .sort((a, b) => b.version - a.version);
+
+  for (const v of versions) {
+    let rows;
+    try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
+    catch { return []; }
+    const found = (rows || [])
+      .filter((r) => r.processDefKey === v.key)
+      // Running instances first (their values are the live ones), then newest first.
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
+      .slice(0, MAX_SAMPLE_INSTANCES)
+      .map((r) => {
+        const values = {};
+        for (const vv of r.variables || []) {
+          if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
+        }
+        return { key: r.key, state: r.state, version: r.version, createdAt: r.createdAt, values };
+      });
+    if (found.length) return found;
+  }
+  return [];
+}
+
+// devViewContext answers "what does the Developer View need to know" at the moment
+// F2 is pressed: the variables in scope for the current selection, and the server
+// round trips the field's language offers — FEEL validates and evaluates in the
+// engine, a job script runs through the real interpreter.
+function devViewContext(modeler, api, field) {
+  const element = (() => {
+    try { return (modeler.get("selection").get() || [])[0]; } catch { return null; }
+  })();
+  const ctx = { variables: devVariables(modeler, element) };
+  const lang = field.dataset.devlang;
+  if (!api) return ctx;
+  // Live values for those variables, read lazily from a real instance of this
+  // process — what the names actually hold beats guessing from the name.
+  ctx.samples = (o) => instanceSamples(modeler, api, o);
+  if (lang === "feel") {
+    ctx.validate = (expression) => api("POST", "/api/v1/feel/validate", { expression });
+    ctx.evaluate = (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables });
+    // An fx field stores its expression '=' prefixed; the marker stays dimmed and
+    // protected in the modal exactly as it is inline (ADR-0067).
+    if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
+  } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
+    ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  }
+  return ctx;
+}
+
+// formFieldCache maps a linked form's id to its input-field keys once fetched:
+// null marks a fetch in flight (so each form is requested once), otherwise
+// { name, fields } — the form's display name and its variable-bearing field keys.
+// collectDiagramVariables reads it synchronously; ensureFormFields fills it.
+const formFieldCache = new Map();
+
+// linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
+// (start forms and user-task forms). Best-effort — a registry hiccup yields none.
+function linkedFormIds(modeler) {
+  const ids = [];
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const fd = findExt(el.businessObject, "zeebe:FormDefinition");
+      if (fd && fd.formId) ids.push(fd.formId);
+    });
+  } catch { /* best-effort */ }
+  return ids;
+}
+
+// ensureFormFields fetches the schema of each not-yet-cached form id, records its
+// field keys, then calls onLoaded so the caller can re-render with the new
+// variables. Each form is requested once (its cache slot is reserved as null while
+// in flight); a missing or failed load caches as no fields so it isn't retried in a
+// loop. No-op without an `api`.
+function ensureFormFields(api, ids, onLoaded) {
+  if (!api) return;
+  for (const id of new Set(ids)) {
+    if (!id || formFieldCache.has(id)) continue;
+    formFieldCache.set(id, null); // reserve: in flight, don't refetch
+    api("GET", "/api/v1/forms/" + encodeURIComponent(id))
+      .then((def) => {
+        formFieldCache.set(id, { name: (def && def.name) || id, fields: formFieldKeys(def && def.schema) });
+      })
+      .catch(() => { formFieldCache.set(id, { name: id, fields: [] }); })
+      .then(() => { try { if (onLoaded) onLoaded(); } catch { /* best-effort */ } });
+  }
+}
+
+// collectDiagramVariables statically analyses the diagram for the variables it
+// writes and where — the data behind the Variables panel (like Camunda's). Each
+// entry is { name, origin, originId, source, category }: the variable name, the
+// element that writes it (name/id and the id to select it), how (start variable,
+// linked-form field, script result, decision result, output mapping), and which
+// panel section it groups under. De-duplicated by name, sorted.
+function collectDiagramVariables(modeler) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, origin, originId, source, category = "Process") => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, origin, originId, source, category });
   };
   try {
     const rootBo = rootProcess(modeler);
@@ -755,6 +1396,26 @@ function collectDiagramVariables(modeler) {
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+      // A data object is first-class per-instance state (ADR-0053): its name is the
+      // engine's variable-like identity, so surface it here too. The name lives on the
+      // underlying <dataObject>; the reference's shape id drives click-to-select.
+      if (bo.$type === "bpmn:DataObjectReference") {
+        const obj = bo.dataObjectRef;
+        const st = (bo.dataState && bo.dataState.name) || "";
+        push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
+      }
+      // A linked form (start form or user-task form, ADR-0028) contributes each of
+      // its input fields as a variable: a start form's fields become the instance's
+      // start variables, a task form's become variables when the task completes. The
+      // schema is fetched lazily (ensureFormFields); until it lands the form adds
+      // nothing here. Grouped under "Form" so it reads as its own panel section.
+      const fd = findExt(bo, "zeebe:FormDefinition");
+      if (fd && fd.formId) {
+        const cached = formFieldCache.get(fd.formId);
+        if (cached && cached.fields) {
+          for (const key of cached.fields) push(key, cached.name || fd.formId, bo.id, "form field", "Form");
+        }
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -765,7 +1426,7 @@ function collectDiagramVariables(modeler) {
 // the list, and it refreshes as the diagram changes while open — a modeling aid
 // that answers "what variables exist here and who writes them" without running
 // anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
-function wireEditorVars(root, modeler) {
+function wireEditorVars(root, modeler, api) {
   const panel = root.querySelector("#vars-panel");
   const toggle = root.querySelector("#vars-toggle");
   const closeBtn = root.querySelector("#vars-close");
@@ -773,21 +1434,76 @@ function wireEditorVars(root, modeler) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
+  // Which variable groups (Form / Process) the author collapsed — persisted so the
+  // choice sticks across edits and reopening. Groups are collapsible only when there
+  // is more than one (a linked form splits Form from Process), so a header doubles as
+  // its toggle.
+  const GKEY = "atlas.vars.collapsedGroups";
+  let collapsedCats;
+  try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
+  const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
+
+  // One variable row. Draggable so its name can be dropped into any text field to
+  // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
+  // the browser's native drop-to-insert does the work with no per-field wiring.
+  const rowHTML = (v) => {
+    // A data object isn't "written by" an element — it *is* the element, so its
+    // source label itself is the click-to-select target. A form field names its form
+    // (also click-to-select). Other sources name the writing element.
+    let meta;
+    if (v.source === "form field") {
+      meta = `form field · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+    } else if (v.origin === "Data object") {
+      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`;
+    } else {
+      meta = `${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}`;
+    }
+    return `<div class="var-row" draggable="true" data-var="${esc(v.name)}" title="Drag into a field to insert">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${meta}</div></div>`;
+  };
+
   const render = () => {
+    // Warming the form-schema cache here (fired on every diagram change) also feeds
+    // the completion/picker lists, which read the same collectDiagramVariables.
+    ensureFormFields(api, linkedFormIds(modeler), render);
     if (panel.hidden) return;
     const q = (filter.value || "").trim().toLowerCase();
     const vars = collectDiagramVariables(modeler).filter((v) =>
-      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
+      (v.source || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => `<div class="var-row">
-      <div class="var-name">${esc(v.name)}</div>
-      <div class="var-meta">${esc(v.source)}${v.originId
-        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+    // Group by category so a linked form's fields read as their own section
+    // ("Form"), the process's own variables under "Process". With only one group
+    // (the common no-form case) keep the familiar flat list — no lone header.
+    const groups = new Map();
+    for (const v of vars) {
+      const g = v.category || "Process";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(v);
+    }
+    const order = ["Form", "Process"];
+    const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+    const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    list.innerHTML = cats.length === 1
+      ? groups.get(cats[0]).map(rowHTML).join("")
+      : cats.map((cat) => {
+          const col = collapsedCats.has(cat);
+          return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
+            <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
+              <span class="vg-chevron" aria-hidden="true">▸</span>
+              <span class="vg-title">${esc(cat)}</span>
+              <span class="vg-count">${groups.get(cat).length}</span>
+            </button>
+            <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
+          </div>`;
+        }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -801,6 +1517,18 @@ function wireEditorVars(root, modeler) {
   });
   filter.addEventListener("input", render);
   list.addEventListener("click", (e) => {
+    const gh = e.target.closest(".vars-group-head");
+    if (gh) {
+      const grp = gh.closest(".vars-group");
+      const cat = grp && grp.dataset.cat;
+      if (cat) {
+        const col = grp.classList.toggle("collapsed");
+        gh.setAttribute("aria-expanded", col ? "false" : "true");
+        if (col) collapsedCats.add(cat); else collapsedCats.delete(cat);
+        saveCats();
+      }
+      return;
+    }
     const o = e.target.closest(".var-origin");
     if (!o) return;
     const el = modeler.get("elementRegistry").get(o.dataset.el);
@@ -809,7 +1537,18 @@ function wireEditorVars(root, modeler) {
       try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
     }
   });
-  // Keep the open panel current as the diagram is edited.
+  list.addEventListener("dragstart", (e) => {
+    const row = e.target.closest(".var-row");
+    if (!row || !e.dataTransfer) return;
+    // Plain-text payload: dropping onto a text input/textarea natively inserts the
+    // variable name at the drop point — no drop handler needed on each field.
+    e.dataTransfer.setData("text/plain", row.dataset.var || "");
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  // Keep the open panel current as the diagram is edited; warm the cache once now
+  // (import.done has already fired by the time this wires up) so completion sees a
+  // linked form's fields even before the panel is first opened.
+  render();
   modeler.on("element.changed", render);
   modeler.on("elements.changed", render);
   modeler.on("import.done", render);
@@ -826,11 +1565,14 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   attachFeelEditor(ta, { variables: vars, validate });
   const wrap = ta.closest(".code-editor");
   if (!wrap) return;
+  // F2 lifts the expression into the Developer View — the same editor with the
+  // in-scope variables, the FEEL function reference and its help pages (ADR-0145).
+  markDevField(ta, "feel");
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
-  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
+  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
+  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test title="Test this expression against sample variables">Test</button>';
   wrap.after(hint);
   if (!evaluate) return;
 
@@ -842,7 +1584,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   panel.innerHTML = `
     <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
     <div class="feel-test-row">
-      <button type="button" class="btn neutral feel-test-run">Run</button>
+      <button type="button" class="btn neutral feel-test-run" title="Evaluate the expression">Run</button>
       <span class="feel-test-out" aria-live="polite"></span>
     </div>`;
   hint.after(panel);
@@ -923,9 +1665,11 @@ function enhanceScript(body, modeler, api, variables) {
   const language = (flang && flang.value) || "powershell";
   const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
 
+  markDevField(ta, language);
+
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -979,9 +1723,11 @@ function enhanceScript(body, modeler, api, variables) {
 // with a leading '=' (that's exactly what the compiler keys on), so the field
 // element stays the single value holder the save wiring already reads — toggling
 // only changes the editing surface and whether the value carries the '=' prefix.
-// In expression mode the field becomes a FEEL code editor; the mode is inferred
-// from the current value on load. No-op if the field isn't present. Exported so it
-// can be reused by any value-or-expression field (and driven by a UI smoke test).
+// In expression mode the field becomes a FEEL code editor with the '=' shown as a
+// dimmed, read-only prefix (deleting it is the fx button's job, not a keystroke); the
+// mode is inferred from the current value on load. No-op if the field isn't present.
+// Exported so it can be reused by any value-or-expression field (and driven by a UI
+// smoke test).
 export function attachExpressionToggle(el, opts = {}) {
   if (!el || el.dataset.fxOn === "1") return;
   el.dataset.fxOn = "1";
@@ -1004,8 +1750,20 @@ export function attachExpressionToggle(el, opts = {}) {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    // Only an expression field is a code field: a literal value has nothing for the
+    // Developer View to help with, so F2 stays inert until fx is on.
+    if (expr) markDevField(el, "feel");
+    else delete el.dataset.devlang;
     if (expr && !feelHandle) {
-      feelHandle = attachFeelEditor(el, { variables: opts.variables, validate: opts.validate });
+      // The leading '=' stays in the field value (the save wiring and compiler key on
+      // it), but is shown as a dimmed, read-only prefix — it can't be typed away, and
+      // the FEEL validator sees the bare expression, not "=expr" (which it rejects as
+      // an unexpected '='). Switching back to a literal is the fx button's job.
+      feelHandle = attachFeelEditor(el, {
+        variables: opts.variables,
+        validate: opts.validate,
+        lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length,
+      });
     } else if (!expr && feelHandle) {
       feelHandle.destroy();
       feelHandle = null;
@@ -1068,6 +1826,84 @@ function removeExt(modeler, element, type) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// Documentation is BPMN's own place for prose about an element: a <bpmn:documentation>
+// child that every process, pool, task, gateway, event, sequence flow and data object
+// may carry. Atlas treats it as pure passthrough (ADR-0025) — the compiler ignores it
+// and the codec preserves it — so documenting a model never changes what it runs. It is
+// the one property *every* element has, which is why the panel offers it beside the name
+// and id of whatever is selected rather than as a per-type section.
+
+// readDocumentation returns a business object's documentation as one string. BPMN allows
+// several <documentation> children (one per text format); an imported model may carry
+// them, so read them all — joined by a blank line — even though the panel writes one.
+function readDocumentation(bo) {
+  return ((bo && bo.documentation) || [])
+    .map((d) => (d && d.text) || "")
+    .filter((t) => t.trim() !== "")
+    .join("\n\n");
+}
+
+// writeDocumentation stores text as the business object's single <bpmn:documentation>
+// child, dropping the child entirely when the text is blank so an emptied field leaves
+// no empty element behind in the XML. It goes through the modeling API, so documenting
+// an element joins undo/redo and marks the diagram dirty like any other edit —
+// updateProperties when the documented object is the selected shape itself, and
+// updateModdleProperties when it is not (the process a pool executes).
+function writeDocumentation(modeler, element, bo, text) {
+  const modeling = modeler.get("modeling");
+  const value = (text || "").trim();
+  let docs = [];
+  if (value) {
+    const doc = modeler.get("moddle").create("bpmn:Documentation", { text: value });
+    doc.$parent = bo;
+    docs = [doc];
+  }
+  if (bo === element.businessObject) modeling.updateProperties(element, { documentation: docs });
+  else modeling.updateModdleProperties(element, bo, { documentation: docs });
+}
+
+// documentationField renders the documentation editor for one business object. `id`
+// keeps the field unique when a panel documents two things at once (a pool and the
+// process it executes); `placeholder` names what is worth writing there.
+function documentationField(bo, id = "f-doc", placeholder = "What this step is for, when it applies, who owns it…") {
+  return `<label class="field doc-field"><span>Documentation</span>
+      <textarea id="${id}" rows="3" placeholder="${esc(placeholder)}">${esc(readDocumentation(bo))}</textarea></label>`;
+}
+
+// wireDocumentation binds a documentation field rendered by documentationField. Like
+// the name field it saves on change (blur), not per keystroke, so typing a paragraph
+// isn't interrupted by a panel rebuild.
+function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
+  const f = body.querySelector("#" + id);
+  if (!f) return;
+  // Documentation is prose that ends up in the task view, the replay and the
+  // exported process document (ADR-0143) — Markdown, and worth a real editor.
+  markDevField(f, "markdown", { title: "Documentation" });
+  f.addEventListener("change", (e) => {
+    try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
+  });
+}
+
+// RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0135): how
+// many attempts the engine grants the job before a failure parks the token behind an
+// incident (ADR-0061). It is one field description appended to every catalog kind,
+// so the property reads, saves and validates identically whichever implementation a
+// task has — the plain job worker stores it on <zeebe:taskDefinition retries>, a
+// connector on its own extension's retries attribute, and the compiler reads both.
+const RETRIES_FIELD = {
+  key: "retries", label: "Retries", type: "number", min: 1, placeholder: "3",
+  hint: "How often the engine hands this task's job to a worker before giving up — the first attempt plus one per remaining count. When they are used up the failure raises an incident that parks the token until an operator resolves it. Leave empty for the default (3); 1 means a single attempt with no retry.",
+};
+
+// withRetries appends the retry-budget section to a catalog kind's fields. Every
+// kind that runs as a job takes it; the mockup kind does not (ADR-0120: the engine
+// simulates that task itself and creates no job, so there is nothing to hand out
+// again — its failure simulation raises the incident directly).
+function withRetries(kind) {
+  if (kind.id === "mockup") return kind;
+  return { ...kind, fields: [...kind.fields, { group: "Failure handling" }, RETRIES_FIELD] };
+}
+
 // SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
 // can author (ADR-0067). Each entry maps a human-facing kind to the extension
 // element the compiler reads and the typed fields that configure it. Adding a
@@ -1077,6 +1913,11 @@ function removeExt(modeler, element, type) {
 const SERVICE_TASK_KINDS = [
   {
     id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
+    // outOfProcess marks the kinds Atlas does NOT execute itself. The polarity is
+    // deliberate: every other kind today runs inside the engine, and a kind that
+    // later gains a worker sets this rather than being remembered as an exception
+    // in a list somewhere else (ADR-0164).
+    outOfProcess: true,
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
@@ -1090,7 +1931,7 @@ const SERVICE_TASK_KINDS = [
     ext: "atlas:RestConnector",
     fields: [
       { group: "HTTP endpoint" },
-      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], hint: "POST, PUT and PATCH carry a JSON body: the input mappings below are that body. With none, every variable the task sees is sent." },
       { key: "url", label: "URL", placeholder: "https://api.example.com/customers", fx: true },
       { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", fx: true, hint: "Sent with the request. A value may be a FEEL expression (fx)." },
       { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
@@ -1110,7 +1951,686 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
-];
+  {
+    id: "scim", name: "SCIM Provisioning Connector", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
+    // A person mark with an outbound arrow reads "push this identity to another
+    // system", which is what SCIM is for — distinct from the user-provisioning
+    // connector's plain person, which acts on Atlas's own login store.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fe0"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.2" cy="5.9" r="2"/><path d="M2.9 12.3c0-2 1.5-3.1 3.3-3.1s3.3 1.1 3.3 3.1"/><path d="M11.1 6.1h2.5M12.4 4.8l1.3 1.3-1.3 1.3"/></g></svg>`,
+    ext: "atlas:ScimConnector",
+    fields: [
+      { group: "Service provider" },
+      { key: "baseUrl", label: "Base URL", placeholder: "https://idp.example.com/scim/v2", fx: true, hint: "The SCIM service provider's base URL, without the resource segment. May be a FEEL expression (fx)." },
+      { key: "resource", label: "Resource", placeholder: "Users", fx: true, hint: "The resource type segment, normally Users or Groups. May be a FEEL expression (fx)." },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create", l: "Create (POST)" },
+          { v: "get", l: "Get by id (GET)" },
+          { v: "replace", l: "Replace (PUT)" },
+          { v: "patch", l: "Patch (PATCH)" },
+          { v: "delete", l: "Delete (DELETE)" },
+          { v: "search", l: "Search by filter (GET)" },
+        ],
+      },
+      {
+        key: "resourceId", label: "Resource id", placeholder: "=scimId", fx: true,
+        showIf: (v) => v.operation === "get" || v.operation === "replace" || v.operation === "patch" || v.operation === "delete",
+        hint: "The provider's id for the resource. Usually a FEEL reference to the id a previous create wrote into a variable.",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: 'userName eq "arno"', fx: true,
+        showIf: (v) => v.operation === "search",
+        hint: "An RFC 7644 filter expression. May be a FEEL expression (fx).",
+      },
+      {
+        key: "bodyVariable", label: "Payload variable", placeholder: "scimUser",
+        showIf: (v) => v.operation === "create" || v.operation === "replace" || v.operation === "patch",
+        hint: "A process variable holding the JSON object to send. Empty sends the input mappings below instead — or, with none, every variable the task sees.",
+      },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "scimResponse", hint: "The provider's JSON response is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "ldap", name: "LDAP Directory Connector", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
+    // A root node branching into three children reads "directory tree" at a glance —
+    // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
+    ext: "atlas:LdapConnector",
+    fields: [
+      { group: "Directory server" },
+      { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldap://host:389 for a plain connection, ldaps://host:636 for TLS. May be a FEEL expression (fx)." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      {
+        key: "bindSecret", label: "Bind password reference", placeholder: "LDAP_BIND",
+        hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
+      },
+      {
+        key: "clientCertSecret", label: "Client certificate reference", placeholder: "LDAP_CLIENT_CERT",
+        hint: "Optional. Names a server-side secret holding one PEM bundle — certificate and private key together — presented to the directory. With no bind DN the certificate is the identity and the connector binds SASL EXTERNAL; with one it is transport only.",
+      },
+      {
+        key: "startTLS", label: "STARTTLS", type: "select",
+        options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
+        hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "search", l: "Search" },
+          { v: "add", l: "Add entry" },
+          { v: "modify", l: "Modify entry (replace attributes)" },
+          { v: "add-values", l: "Add attribute values" },
+          { v: "delete-values", l: "Delete attribute values" },
+          { v: "delete", l: "Delete entry" },
+          { v: "modify-password", l: "Set password (RFC 3062)" },
+        ],
+      },
+      { key: "baseDN", label: "Base DN", placeholder: "ou=users,dc=example,dc=com", fx: true, showIf: (v) => v.operation === "search", hint: "The subtree the search starts from. May be a FEEL expression (fx)." },
+      { key: "filter", label: "Filter", placeholder: "(&(objectClass=person)(uid=arno))", fx: true, showIf: (v) => v.operation === "search", hint: "An RFC 4515 search filter. May be a FEEL expression (fx)." },
+      {
+        key: "scope", label: "Scope", type: "select", showIf: (v) => v.operation === "search",
+        options: [{ v: "", l: "Subtree (default)" }, { v: "base", l: "Base object only" }, { v: "one", l: "One level" }, { v: "sub", l: "Subtree" }],
+      },
+      {
+        key: "dn", label: "Entry DN", placeholder: "uid=arno,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation && v.operation !== "search",
+        hint: "The entry the operation acts on. May be a FEEL expression (fx).",
+      },
+      {
+        key: "entryVariable", label: "Attributes variable", placeholder: "ldapEntry",
+        showIf: (v) => v.operation === "add" || v.operation === "modify" || v.operation === "add-values" || v.operation === "delete-values",
+        hint: "A process variable holding a JSON object of attribute names to values. Modify replaces each named attribute wholesale; add/delete values change individual values, which is what a multi-valued attribute two processes both write needs — adding one group member is not a statement about everyone else's.",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
+        showIf: (v) => v.operation === "modify-password",
+        hint: "Usually a FEEL reference to a variable, so no password is written into the model.",
+      },
+      {
+        key: "pageSize", label: "Page size", placeholder: "500", showIf: (v) => v.operation === "search",
+        hint: "Fetches the search in pages (RFC 2696), so a directory's administrative size limit does not refuse it. Empty uses 500; 0 asks for one unpaged search.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000", showIf: (v) => v.operation === "search",
+        hint: "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "soap", name: "SOAP / Web Services Connector", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
+    // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
+    // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
+    // connectors.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f8a7e"/><g fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"><rect x="3" y="4.5" width="10" height="7" rx="0.8"/><path d="M3.2 5l4.8 3.6L12.8 5"/></g></svg>`,
+    ext: "atlas:SoapConnector",
+    fields: [
+      { group: "Web service" },
+      { key: "endpoint", label: "Endpoint URL", placeholder: "https://ws.example.com/UserService", fx: true, hint: "The web service's endpoint (the WSDL's soap:address). May be a FEEL expression (fx)." },
+      { key: "operation", label: "Operation", placeholder: "GetUser", hint: "The operation name, used in diagnostics and as the default SOAPAction." },
+      { key: "soapAction", label: "SOAPAction", placeholder: "urn:GetUser", fx: true, hint: "The SOAPAction header (SOAP 1.1) or Content-Type action (1.2). Empty uses the operation name. May be a FEEL expression (fx)." },
+      {
+        key: "soapVersion", label: "SOAP version", type: "select",
+        options: [{ v: "", l: "1.1 (default)" }, { v: "1.1", l: "1.1" }, { v: "1.2", l: "1.2" }],
+        hint: "1.1 sends text/xml with a SOAPAction header; 1.2 sends application/soap+xml.",
+      },
+      {
+        key: "body", label: "Request body (XML)", placeholder: "<tns:GetUser xmlns:tns='urn:x'><id>1</id></tns:GetUser>", fx: true,
+        hint: "The operation's request element, placed inside the SOAP envelope's Body. Use the fx toggle for a FEEL expression that interpolates the instance's variables into the XML.",
+      },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "WS_PASSWORD",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "soapResponse", hint: "The parsed SOAP response body is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "ad", name: "Active Directory Connector", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
+    // A person mark on an azure tile reads "directory account" at a glance — AD's
+    // people-and-groups focus, distinct from the generic LDAP tree.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fb0"/><circle cx="8" cy="6" r="2.1" fill="#fff"/><path d="M3.9 12.4c0-2.3 1.9-3.6 4.1-3.6s4.1 1.3 4.1 3.6z" fill="#fff"/></svg>`,
+    ext: "atlas:AdConnector",
+    fields: [
+      { group: "Directory server" },
+      { key: "url", label: "Server URL", placeholder: "ldaps://dc.example.com:636", fx: true, hint: "ldaps://host:636 — a password set requires an encrypted channel. May be a FEEL expression (fx)." },
+      { key: "bindDN", label: "Bind DN", placeholder: "cn=svc-atlas,ou=service,dc=example,dc=com", fx: true, hint: "The account the connector binds as. Empty binds anonymously." },
+      {
+        key: "bindSecret", label: "Bind password reference", placeholder: "AD_BIND",
+        hint: "The password lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the password itself.",
+      },
+      {
+        key: "startTLS", label: "STARTTLS", type: "select",
+        options: [{ v: "", l: "No" }, { v: "true", l: "Yes — upgrade the connection" }],
+        hint: "Upgrades a plain ldap:// connection after connecting. Unnecessary for ldaps://, which is already TLS.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-user", l: "Create user" },
+          { v: "create-group", l: "Create group" },
+          { v: "create-contact", l: "Create contact" },
+          { v: "update-attributes", l: "Update attributes" },
+          { v: "set-password", l: "Set password (unicodePwd)" },
+          { v: "enable", l: "Enable account" },
+          { v: "disable", l: "Disable account" },
+          { v: "move", l: "Move / rename" },
+          { v: "delete", l: "Delete entry" },
+          { v: "add-group-member", l: "Add group member" },
+          { v: "remove-group-member", l: "Remove group member" },
+          { v: "sync", l: "Read changes (DirSync)" },
+        ],
+      },
+      {
+        key: "baseDN", label: "Base DN", placeholder: "dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "(objectClass=user)", fx: true,
+        showIf: (v) => v.operation === "sync",
+        hint: "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
+      },
+      {
+        key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
+        showIf: (v) => v.operation === "sync",
+        hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
+      },
+      {
+        key: "maxEntries", label: "Maximum entries", placeholder: "1000",
+        showIf: (v) => v.operation === "sync",
+        hint: "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
+      },
+      {
+        key: "objectSecurity", label: "Object security", type: "select",
+        showIf: (v) => v.operation === "sync",
+        options: [{ v: "", l: "No — the account replicates directory changes" }, { v: "true", l: "Yes — report only what the account may read" }],
+        hint: "DirSync normally needs the 'Replicating Directory Changes' right. Turn this on for an account that does not have it: the pass then reports only the objects the account can read.",
+      },
+      {
+        key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation !== "sync",
+        hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
+      },
+      {
+        key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
+        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
+      },
+      {
+        key: "newDN", label: "New DN", placeholder: "cn=Arno Meier,ou=extern,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "move",
+        hint: "Where the entry now lives. A directory has no separate move and rename — an entry's place in the tree is its name — so one target DN expresses both. May be a FEEL expression (fx).",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=neuesPasswort", fx: true,
+        showIf: (v) => v.operation === "set-password",
+        hint: "Usually a FEEL reference to a variable, so no password is written into the model. Set over LDAPS/STARTTLS (unicodePwd).",
+      },
+      {
+        key: "memberDN", label: "Member DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
+        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
+        hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
+      },
+      { group: "Output", showIf: (v) => v.operation === "sync" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "aenderungen",
+        showIf: (v) => v.operation === "sync",
+        hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+      },
+    ],
+  },
+  {
+    id: "ldif", name: "Directory File Connector", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
+    // page — a file of entries rather than a live directory.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
+    ext: "atlas:LdifConnector",
+    fields: [
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select",
+        options: [{ v: "ldif", l: "LDIF (RFC 2849)" }, { v: "dsml", l: "DSML v1" }],
+        hint: "Required — there is deliberately no default. Guessing a directory file's format from its bytes is how a malformed file becomes a plausible-looking empty result.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to entries" }, { v: "write", l: "Write — entries to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "ldifText",
+        hint: "Reading: the variable holding the file text. Writing: the variable holding the entries, in the same {dn, attributes} shape an LDAP search or an AD sync produces — so a directory read can be written straight to a file.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "eintraege",
+        hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory connectors return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
+      },
+    ],
+  },
+  {
+    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    // A person mark inside a cloud on Microsoft blue: the directory account of the
+    // AD connector, moved to the cloud — the pair should read as siblings.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
+    ext: "atlas:EntraConnector",
+    fields: [
+      { group: "Tenant" },
+      {
+        key: "connector", label: "Connector", placeholder: "contoso",
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0172).",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-user", l: "Create user" },
+          { v: "get-user", l: "Read user" },
+          { v: "list-users", l: "List users" },
+          { v: "update-user", l: "Update user" },
+          { v: "enable", l: "Enable account" },
+          { v: "disable", l: "Disable account" },
+          { v: "delete-user", l: "Delete user" },
+          { v: "add-group-member", l: "Add group member" },
+          { v: "remove-group-member", l: "Remove group member" },
+        ],
+      },
+      {
+        key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
+        showIf: (v) => v.operation && v.operation !== "create-user" && v.operation !== "list-users",
+        hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "groupId", label: "Group", placeholder: "8f9a…-object-id", fx: true,
+        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
+        hint: "The group's object id. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+      },
+      {
+        key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
+        showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
+        hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
+        showIf: (v) => v.operation === "list-users",
+        hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Advanced queries (endsWith, $search) additionally need Graph's ConsistencyLevel header, which this connector does not send — use the REST connector for those.",
+      },
+      {
+        key: "select", label: "Properties", placeholder: "id,displayName,mail",
+        showIf: (v) => v.operation === "list-users",
+        hint: "An OData $select: which properties each user comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large listing out of the state store.",
+      },
+      {
+        key: "pageSize", label: "Page size", placeholder: "100",
+        showIf: (v) => v.operation === "list-users",
+        hint: "How many users to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole listing, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
+      },
+      {
+        key: "maxUsers", label: "Maximum users", placeholder: "1000",
+        showIf: (v) => v.operation === "list-users",
+        hint: "Caps what may land in the result variable. A listing returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "konto",
+        hint: "Receives what Graph returned — the created or read user for those operations, every matched user as a JSON array for List users (required there), and nothing for the ones Graph answers with no content. Leave empty to discard it.",
+      },
+    ],
+  },
+  {
+    id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
+    ext: "atlas:MssqlConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a SQL Server database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MSSQL_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = @p1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. SQL Server uses @p1-style placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders: a JSON array binds in order, a JSON object binds by name (SQL Server supports named binding). Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "mariadb", name: "MariaDB Connector", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
+    ext: "atlas:MariadbConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a MariaDB database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_MARIADB_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = ?",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. MariaDB uses ?-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. MariaDB has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "postgres", name: "PostgreSQL Connector", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
+    ext: "atlas:PostgresConnector",
+    fields: [
+      { group: "Database" },
+      {
+        key: "connector", label: "Connector", placeholder: "hr-db",
+        hint: "Names a PostgreSQL database a *worker* is configured for. Unlike other kinds this is not configured in the Console: the connection string lives in the worker's own environment (ATLAS_POSTGRES_<NAME>_DSN), so the engine never holds a database credential (ADR-0173).",
+      },
+      { group: "Statement" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "query", l: "Query — many rows" },
+          { v: "query-one", l: "Query one — a single row" },
+          { v: "execute", l: "Execute — insert/update/delete" },
+        ],
+      },
+      {
+        key: "statement", label: "SQL statement", rows: 6, placeholder: "SELECT id, mail FROM personen WHERE abteilung = $1",
+        hint: "Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. PostgreSQL uses $1-style positional placeholders.",
+      },
+      {
+        key: "parametersVariable", label: "Parameters variable", placeholder: "params",
+        hint: "A process variable bound to the statement's placeholders, as a JSON array in order. PostgreSQL has no named parameters, so an object is refused rather than silently reordered. Leave empty for a statement with no placeholders.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
+      },
+      {
+        key: "maxRows", label: "Maximum rows", placeholder: "1000", showIf: (v) => !v.operation || v.operation === "query",
+        hint: "Caps the result set. A query returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses the worker's default of 1000.",
+      },
+    ],
+  },
+  {
+    id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
+    // A stacked event-stream mark on a violet tile reads "append-only event log" at a
+    // glance — clio's counterpart to REST's globe. Three white rows with a leading
+    // dot suggest a growing stream of events; the drawImplBadges/stkind-icon CSS adds
+    // the round tile chrome, so the SVG only needs the fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#7c5cff"/><circle cx="4.1" cy="4.6" r="1.05" fill="#fff"/><rect x="6.4" y="3.85" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="8" r="1.05" fill="#fff"/><rect x="6.4" y="7.25" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="11.4" r="1.05" fill="#fff"/><rect x="6.4" y="10.65" width="6.2" height="1.5" rx="0.75" fill="#fff"/></svg>`,
+    ext: "atlas:ClioConnector",
+    fields: [
+      { group: "clio connector" },
+      { key: "connector", label: "Connector", datalist: "clio", placeholder: "orders-clio", hint: "Names a server-registered clio connector (its endpoint and token live on the server, never in the model)." },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [{ v: "write", l: "Send event (write-events)" }, { v: "query", l: "Query state (get_state / run_query)" }, { v: "read", l: "Read events (read-events)" }],
+      },
+      { group: "Event", showIf: (v) => !v.operation || v.operation === "write" },
+      { key: "subject", label: "Subject", placeholder: "orders/new", showIf: (v) => !v.operation || v.operation === "write" || v.operation === "read", hint: "The clio subject the event lands under (write) or is read from (read/get_state)." },
+      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The input mappings below are the event body. With none, every variable the task sees is sent." },
+      { group: "Query", showIf: (v) => v.operation === "query" },
+      { key: "query", label: "Query", placeholder: "leave empty for get_state", showIf: (v) => v.operation === "query", hint: "A run_query query string. If empty, get_state is read for the subject above." },
+      { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },
+      { group: "Read", showIf: (v) => v.operation === "read" },
+      { key: "limit", label: "Limit", placeholder: "0 = connector default", showIf: (v) => v.operation === "read" },
+      { key: "resultVariable", label: "Result variable", placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
+    ],
+  },
+  {
+    id: "mail", name: "E-Mail Outbound Connector", desc: "Send an e-mail via a mail provider", icon: "M",
+    // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
+    // connector's counterpart to REST's globe and clio's event stream. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white envelope strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:MailConnector",
+    fields: [
+      { group: "Mail provider" },
+      { key: "connector", label: "Connector", datalist: "mail", placeholder: "office365", hint: "Names a server-registered mail provider (its host, credentials, and default sender live on the server, never in the model)." },
+      { group: "Message" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
+      { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+    ],
+  },
+  {
+    id: "csv", name: "Text File Connector", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
+    // file connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white grid strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:CsvConnector",
+    fields: [
+      { group: "File" },
+      {
+        key: "format", label: "Format", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Delimited (CSV)" },
+          { v: "fixed-width", l: "Fixed-width" },
+          { v: "avp", l: "Attribute-value pairs" },
+        ],
+        hint: "All three describe a table of records in a text file and produce the same rows; they differ only in how a record is delimited and how a field is found inside it.",
+      },
+      {
+        key: "operation", label: "Direction", type: "select", reRender: true,
+        options: [{ v: "", l: "Read — file to rows" }, { v: "write", l: "Write — rows to file" }],
+      },
+      {
+        key: "source", label: "Source variable", placeholder: "csvText",
+        hint: "Reading: the variable holding the raw file text. Writing: the variable holding the rows, as a JSON array of objects.",
+      },
+      { group: "Layout" },
+      {
+        key: "delimiter", label: "Delimiter", type: "select", showIf: (v) => !v.format,
+        options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }],
+      },
+      {
+        key: "hasHeader", label: "Header row", type: "select", showIf: (v) => v.format !== "avp",
+        options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }],
+      },
+      {
+        key: "columns", label: "Columns", placeholder: "email, group, license",
+        hint: "Comma-separated field names. For a delimited file leave empty to derive them from the header row (required when there is none); an attribute-value file names its own fields, so a layout only narrows what is picked out.",
+        showIf: (v) => v.format !== "fixed-width",
+      },
+      {
+        key: "columns", label: "Columns and widths", placeholder: "personalnr:8, name:30, abteilung:10",
+        hint: "Comma-separated name:width entries. A fixed-width field is found by position, so every column needs its character count — and a value wider than its column is cut on write, because the format has no way to hold it.",
+        showIf: (v) => v.format === "fixed-width",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "rows",
+        hint: "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set.",
+      },
+    ],
+  },
+  {
+    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
+    // this connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white list rows.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:SharePointConnector",
+    fields: [
+      { group: "SharePoint provider" },
+      { key: "connector", label: "Connector", placeholder: "contoso", hint: "Names a server-registered SharePoint provider (its Graph base and OAuth credential live on the server, never in the model)." },
+      { group: "Target" },
+      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
+      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
+      { group: "Item" },
+      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
+    // Remedy connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white ticket strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:RemedyConnector",
+    fields: [
+      { group: "Remedy instance" },
+      { key: "connector", label: "Connector", placeholder: "helix-itsm", hint: "Names a server-registered Remedy instance (its base URL and credentials live on the server, never in the model)." },
+      { group: "Entry" },
+      { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
+      { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "webscrape", name: "Web Scraping Connector", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
+    // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
+    // connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white web strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
+    ext: "atlas:WebscrapeConnector",
+    fields: [
+      { group: "Page" },
+      { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The page to fetch. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Extraction" },
+      { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, hint: "The CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
+      { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", hint: "The HTML attribute read from each match (e.g. href). Leave empty to extract each match's text content." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
+    ],
+  },
+  {
+    id: "userconnector", name: "User Provisioning Connector", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    // A person mark on a teal tile reads "user account" at a glance. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white figure strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0d7a63"/><g fill="none" stroke="#fff" stroke-width="1.1"><circle cx="8" cy="6" r="2.2"/><path d="M3.8 13c0-2.3 1.9-3.6 4.2-3.6s4.2 1.3 4.2 3.6"/></g></svg>`,
+    ext: "atlas:UserConnector",
+    // This connector is gated to the protected system project and mutates the local
+    // user store, so — unlike every other connector — it names no server-registered
+    // provider and carries no credential reference at all (ADR-0122/0123).
+    fields: [
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create", l: "Create user" },
+          { v: "set-password", l: "Set password" },
+          { v: "disable", l: "Disable user" },
+        ],
+      },
+      { group: "Account" },
+      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The Atlas login to create, update, or disable. May be a FEEL expression (fx)." },
+      { key: "email", label: "E-mail", placeholder: "=email", fx: true, showIf: (v) => !v.operation || v.operation === "create" },
+      { key: "displayName", label: "Display name", placeholder: '=vorname + " " + nachname', fx: true, showIf: (v) => !v.operation || v.operation === "create" },
+      {
+        key: "roles", label: "Roles", placeholder: "user", fx: true,
+        showIf: (v) => !v.operation || v.operation === "create",
+        hint: "Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.",
+      },
+      { group: "Credential", showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password" },
+      {
+        key: "password", label: "Initial password", placeholder: "=initialpasswort", fx: true,
+        showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password",
+        hint: "At least 8 characters. Usually a FEEL reference to a variable an admin set on the approval form, so no password is written into the model.",
+      },
+    ],
+  },
+  {
+    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
+    // task's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white beaker strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#647488"/><path d="M6.3 3.2v3.4L3.9 11a1 1 0 0 0 .9 1.5h6.4a1 1 0 0 0 .9-1.5L9.7 6.6V3.2" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.6 3.2h4.8M5.4 8.4h5.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:MockupConnector",
+    fields: [
+      { group: "Duration" },
+      { key: "minDuration", label: "Min duration", placeholder: "PT1S", hint: "ISO-8601 duration (e.g. PT1S, PT5M). The engine waits a random time in [min, max] before completing. For a fixed time, set only this." },
+      { key: "maxDuration", label: "Max duration", placeholder: "leave empty for a fixed duration", hint: "ISO-8601 duration. Omit to make the duration exactly the minimum." },
+      { group: "Result (input → output)" },
+      { key: "resultExpression", label: "Result expression", placeholder: `={ status: "ok", id: orderId }`, fx: true, rows: 4, hint: "A FEEL expression evaluated over the instance's variables and written to the result variable — the input→output script, e.g. a simulated REST/Umsystem response. Press Ctrl+Space for variable completion." },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The process variable the result expression is written into. Required when a result expression is set." },
+      { group: "Failure simulation" },
+      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails instead of completing — for exercising error/retry paths." },
+      { key: "errorCode", label: "BPMN error code", placeholder: "leave empty to raise an incident", hint: "When set, a failure throws a BPMN error with this code — caught by a matching error boundary event or error event subprocess. Leave empty to raise a technical incident (resolvable, retries with a fresh draw) instead." },
+      { key: "failMessage", label: "Incident message", placeholder: "umsystem unavailable", hint: "The incident message when a failure raises an incident (i.e. when no error code is set)." },
+    ],
+  },
+].map(withRetries);
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
 // detected by which connector extension it carries; the plain job worker is the
@@ -1144,18 +2664,44 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
-function serviceTaskKindHTML(bo) {
-  const cur = serviceTaskKind(bo);
-  const ext = findExt(bo, cur.ext) || {};
-  const rows = SERVICE_TASK_KINDS.map((k) => `
+// fillConnectorDatalist populates a <datalist> with the names of the server-registered
+// connectors of one kind ("mail" | "clio" | "temis"), so a connector field offers the
+// configured names as a dropdown. It is a helper, not a constraint: env-configured
+// connectors need not be listed and the field stays free text, so a fetch failure just
+// leaves it empty.
+function fillConnectorDatalist(api, dl, kind) {
+  if (!api || !dl) return;
+  api("GET", "/api/v1/connectors").then((list) => {
+    dl.innerHTML = (list || [])
+      .filter((c) => c && c.enabled && c.kind === kind && (c.name || "").trim())
+      .map((c) => `<option value="${esc(c.name)}"></option>`).join("");
+  }).catch(() => { /* no suggestions; the field stays free text */ });
+}
+
+// stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
+// curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
+// Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
+function stKindRowsHTML(kinds, curId) {
+  return kinds.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
-         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b>${runsInEngine(k)
+        ? `<span class="stkind-inengine" title="Atlas runs this kind itself. Work that can fail slowly belongs on a worker (ADR-0164).">in&#8209;engine</span>` : ""}<br>
+        <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
+}
+
+// stKindFieldsHTML renders the typed field form for one catalog kind over its stored
+// extension, generic over text/select/map fields, section groups, and showIf visibility.
+function stKindFieldsHTML(cur, ext) {
   let fields = "";
   for (const f of cur.fields) {
-    if (f.group) { fields += `<h3>${esc(f.group)}</h3>`; continue; }
+    if (f.group) {
+      if (f.showIf && !f.showIf(ext)) continue;
+      fields += `<h3>${esc(f.group)}</h3>`;
+      continue;
+    }
     if (f.showIf && !f.showIf(ext)) continue;
     if (f.type === "map") {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
@@ -1163,8 +2709,14 @@ function serviceTaskKindHTML(bo) {
       fields += `<div class="field"><span>${esc(f.label)}</span>
         <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
           <div class="st-map-rows">${rowsHTML}</div>
-          <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
+          <button type="button" class="st-map-add" style="margin-top:2px" title="Add a mapping">+ Add</button>
         </div></div>`;
+    } else if (f.type === "number") {
+      // A count, not free text (the retry budget): a spinner with the engine's own
+      // lower bound, so the field cannot express a value the compiler refuses.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
+               value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
@@ -1172,20 +2724,124 @@ function serviceTaskKindHTML(bo) {
         return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
-    } else if (f.fx) {
-      // A 1-row textarea so the fx toggle can host the FEEL editor in place.
+    } else if (f.type === "html") {
+      // A markup field: the same textarea the save wiring reads, upgraded to an HTML
+      // code editor below (and F2-able into the Developer View, ADR-0145).
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+    } else if (f.fx) {
+      // A textarea — 1 row by default, taller for prose like an e-mail body — so the
+      // fx toggle can host the FEEL editor in place at that size.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+    } else if (f.datalist) {
+      // A combobox: a free-text field that also offers the server-registered connectors
+      // of this kind as a dropdown (populated after render, see the field wiring).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
+        <datalist id="dl-st-${f.key}"></datalist></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
+  return fields;
+}
+
+// stKindHeadingHTML renders the heading above the chosen kind's fields.
+//
+// When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
+// the kind name is only a *caption* for them, not a group of its own: rendering it as an
+// <h3> made groupifyPanel build a collapsible group whose body is empty — a chevron that
+// toggles nothing, which reads as broken. Render a plain, non-interactive caption then
+// (data-standalone-group keeps it a sibling instead of being folded into the Type group),
+// and keep a real <h3> only for a kind whose fields live directly under it (Job worker),
+// where the heading does have content to collapse.
+// runsInEngine reports whether Atlas executes a catalog kind itself. Everything
+// except the plain job worker does, today (ADR-0164): the engine's own process
+// makes the call, so its latency and its failures are the engine's.
+function runsInEngine(k) { return !k.outOfProcess; }
+
+// inEngineNoticeHTML is the deprecation notice for a kind Atlas runs itself
+// (ADR-0164). It says it where the choice is actually made — the Workers view can
+// only report the consequence afterwards — and it says what to do instead rather
+// than only that something is discouraged.
+function inEngineNoticeHTML(cur) {
+  if (!runsInEngine(cur)) return "";
+  return `<p class="stkind-notice">Atlas runs this kind <b>in its own process</b>, so this call&rsquo;s
+    latency and failures are the engine&rsquo;s. New models should prefer a <b>Job worker</b> and an
+    <code>atlas worker</code> serving that job type; these kinds keep working and are being moved out
+    of the engine.</p>`;
+}
+
+function stKindHeadingHTML(cur) {
+  const fields = cur.fields || [];
+  // Fields listed before the kind's first group have no group of their own (the Job
+  // worker's Job type, say), so the kind name must stay a real, non-empty group header
+  // for them — otherwise they would float outside every group. Note withRetries appends
+  // a Failure handling group to every job-running kind, so "has any group" is always
+  // true here; only what precedes the first one decides.
+  const firstGroup = fields.findIndex((f) => f.group);
+  const leading = firstGroup === -1 ? fields.length : firstGroup;
+  if (leading > 0) return `<h3>${esc(cur.name)}</h3>`;
+  return `<div class="pgroup-caption" data-standalone-group="1">
+    ${cur.glyph ? `<span class="pgroup-caption-icon">${cur.glyph}</span>` : ""}
+    <span>${esc(cur.name)}</span>
+  </div>`;
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
+// both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${rows}</div>
-    <h3>${esc(cur.name)}</h3>${fields}`;
+    <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
+    ${stKindHeadingHTML(cur)}${inEngineNoticeHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
+}
+
+// SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
+// form. It is not a connector (no ext / fields form) — it is configured by the shared message
+// picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
+// to the send task's picker.
+const SEND_MESSAGE_KIND = {
+  id: "message", name: "Message", icon: "✉",
+  desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+};
+
+// sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
+// what the task carries: a messageRef → Message; a connector extension → that connector; a
+// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
+// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
+// until a message is chosen, and a fresh send task starts as a plain message send. Without this
+// default, the Message kind would be undetectable while messageRef is still empty.
+function sendTaskKind(bo) {
+  if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  if (findExt(bo, "zeebe:TaskDefinition")) return SERVICE_TASK_KINDS[0]; // Job worker
+  return SEND_MESSAGE_KIND;
+}
+
+// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
+// task's connector/job-worker catalog, then either the shared message picker (Message kind)
+// or the chosen connector's field form (ADR-0112). The picker reuses the .stkind-row markup,
+// so the existing filter/click wiring drives it.
+function sendTaskKindHTML(modeler, bo) {
+  const cur = sendTaskKind(bo);
+  const picker = `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+  if (cur.id === "message") {
+    return picker + messageFieldsHTML(modeler, bo,
+      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+  }
+  const ext = findExt(bo, cur.ext) || {};
+  return picker + stKindHeadingHTML(cur) + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -1193,10 +2849,16 @@ function serviceTaskKindHTML(bo) {
 // extension, so the compiler sees exactly one connector kind (ADR-0067).
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
+  // The retry budget is a property of the task, not of the implementation it happens
+  // to have (ADR-0135), so it survives a switch of kind even though each kind stores
+  // it on its own extension — swapping a job worker for a REST connector must not
+  // silently reset the task to the default three attempts.
+  const prev = findExt(element.businessObject, serviceTaskKind(element.businessObject).ext) || {};
   for (const other of SERVICE_TASK_KINDS) {
     if (other.id !== kind.id) removeExt(modeler, element, other.ext);
   }
   const defaults = {};
+  if (prev.retries && kind.fields.some((f) => f.key === "retries")) defaults.retries = prev.retries;
   for (const f of kind.fields) {
     if (f.type === "select" && f.options && f.options.length) {
       const v = selectOption(f.options[0]).v;
@@ -1204,6 +2866,20 @@ function applyServiceTaskKind(modeler, element, kindId) {
     }
   }
   upsertExt(modeler, element, kind.ext, defaults);
+}
+
+// applySendTaskKind switches a send task between its Message kind and the connector/job-worker
+// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
+// Message drops every connector/taskDefinition extension (the message picker then sets the
+// messageRef), and switching to a connector/worker clears any messageRef first.
+function applySendTaskKind(modeler, element, kindId) {
+  if (kindId === "message") {
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    return;
+  }
+  const bo = element.businessObject;
+  if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  applyServiceTaskKind(modeler, element, kindId);
 }
 
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
@@ -1316,7 +2992,7 @@ function mappingGroupHTML(kind, params) {
     : { title: "Output mapping", wrap: "io-outputs",
         hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
   const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
-  return `<div class="io-group" data-kind="${kind}" data-standalone-group="1">
+  return `<div class="io-group" data-kind="${kind}" data-group="${meta.title}" data-standalone-group="1">
     <div class="io-group-head">
       <span class="io-group-title">${meta.title}</span>
       <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
@@ -1379,6 +3055,210 @@ function saveIOMappings(modeler, element, inRows, outRows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// loopMode reports which loop marker an activity carries — the value of the Mode
+// select and, one to one, the marker bpmn-js draws on the shape: "none" (no marker),
+// "loop" (bpmn:StandardLoopCharacteristics, the ↻ icon, ADR-0133), or "parallel" /
+// "sequential" (bpmn:MultiInstanceLoopCharacteristics, the ∥ / ≡ icons, ADR-0077).
+// Every reader of the loop section goes through this, so the panel can never disagree
+// with the icon: whatever set the characteristics — this panel, the context pad's
+// marker toggle, or an imported file — reads back as the mode that drew it.
+function loopMode(bo) {
+  const lc = bo.loopCharacteristics;
+  if (!lc) return "none";
+  if (lc.$type === "bpmn:StandardLoopCharacteristics") return "loop";
+  if (lc.$type === "bpmn:MultiInstanceLoopCharacteristics") return lc.isSequential ? "sequential" : "parallel";
+  return "none";
+}
+
+// REPAIR_FORM_TYPES are the task kinds that can park behind an incident an operator
+// repairs by correcting variables — a service task and its send-task twin (both create a
+// job and wait) and a business rule task. A user task is deliberately not one: its
+// zeebe:formDefinition is its *work* form, the thing a person fills in to do the task,
+// and offering a second form binding on the same element under the same extension would
+// be ambiguous in the model as well as on screen.
+const REPAIR_FORM_TYPES = new Set(["bpmn:ServiceTask", "bpmn:SendTask", "bpmn:BusinessRuleTask"]);
+
+// repairFormHTML is the repair-form binding on a task (ADR-0169): the form an operator
+// is shown when this task parks, instead of the instance's whole variable set as raw
+// JSON. Whoever is authoring the task is the one who knows which values its retry
+// depends on, which is why the binding is offered here rather than configured by an
+// operator later.
+//
+// It renders the same #f-form picker a user task's work form uses, and so is wired by
+// the same change handler and populated by the same forms fetch — the extension written
+// is identical (zeebe:formDefinition), only the element carrying it differs, which is
+// exactly what makes one the work form and the other the repair form. An element is one
+// type, so the two branches never both render and the id is never duplicated.
+function repairFormHTML(bo) {
+  if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
+  const fd = findExt(bo, "zeebe:FormDefinition") || {};
+  const cur = fd.formId || "";
+  return `<h3>Repair form</h3>
+    <label class="field"><span>Form</span>
+      <select id="f-form">
+        <option value="">&mdash; none &mdash;</option>
+        ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
+      </select></label>
+    <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
+      the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
+      change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
+      nothing specific to say. <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen
+      this to link it.</p>`;
+}
+
+// multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
+// standard loop (ADR-0133) or a parallel/sequential multi-instance (ADR-0077) — and
+// the fields that mode needs. For a multi-instance: whether it runs over a collection
+// or a fixed count, the per-iteration input element, an optional output
+// collection/element, and an optional completion condition, read from the activity's
+// bpmn:MultiInstanceLoopCharacteristics (bo.loopCharacteristics) and its nested
+// <zeebe:loopCharacteristics> plus <loopCardinality>/<completionCondition>. For a
+// standard loop: the repeat-while condition, when it is checked, and the iteration
+// cap, read from bpmn:StandardLoopCharacteristics. Changing the mode or the
+// collection/count choice re-renders the panel so the right fields show; FEEL values
+// are stored '=' prefixed (stripped for display), matching the io-mapping editor. The
+// whole block only shows for the activity types the compiler supports (service/script/
+// user tasks, call activities, subprocesses).
+function multiInstanceHTML(bo) {
+  const mi = bo.loopCharacteristics;
+  const mode = loopMode(bo);
+  const on = mode === "parallel" || mode === "sequential";
+  const loop = on && mi.extensionElements
+    ? (mi.extensionElements.values || []).find((v) => v.$type === "zeebe:LoopCharacteristics")
+    : null;
+  const cardBody = on && mi.loopCardinality ? (mi.loopCardinality.body || "") : "";
+  const compBody = on && mi.completionCondition ? (mi.completionCondition.body || "") : "";
+  const ic = (loop && loop.inputCollection) || "";
+  const ie = (loop && loop.inputElement) || "";
+  const oc = (loop && loop.outputCollection) || "";
+  const oe = (loop && loop.outputElement) || "";
+  // A loop with a cardinality and no input collection is the "fixed count" variant.
+  const src = cardBody && !ic ? "cardinality" : "collection";
+  const strip = (s) => (s || "").replace(/^=\s*/, "");
+
+  let html = `<h3>Loop</h3>
+    <label class="field"><span>Mode</span>
+      <select id="f-mi-mode">
+        <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
+        <option value="loop" ${mode === "loop" ? "selected" : ""}>Loop — repeat while a condition holds</option>
+        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Multi-instance parallel — all iterations at once</option>
+        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Multi-instance sequential — one after another</option>
+      </select></label>`;
+  if (mode === "none") return html;
+  if (mode === "loop") return html + standardLoopHTML(mi, strip);
+
+  html += `<label class="field"><span>Iterate over</span>
+      <select id="f-mi-src">
+        <option value="collection" ${src === "collection" ? "selected" : ""}>A collection</option>
+        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>A fixed count</option>
+      </select></label>`;
+  if (src === "collection") {
+    html += `<label class="field"><span>Input collection (FEEL)</span>
+        <input type="text" id="f-mi-inputCollection" value="${esc(strip(ic))}" placeholder="orderLines"/></label>
+      <label class="field"><span>Input element</span>
+        <input type="text" id="f-mi-inputElement" value="${esc(ie)}" placeholder="line"/></label>`;
+  } else {
+    html += `<label class="field"><span>Loop cardinality (FEEL or a number)</span>
+        <input type="text" id="f-mi-cardinality" value="${esc(strip(cardBody))}" placeholder="3"/></label>`;
+  }
+  html += `<label class="field"><span>Output collection <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-outputCollection" value="${esc(oc)}" placeholder="totals"/></label>
+    <label class="field"><span>Output element (FEEL) <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-outputElement" value="${esc(strip(oe))}" placeholder="line.qty * line.price"/></label>
+    <label class="field"><span>Completion condition (FEEL) <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-completion" value="${esc(strip(compBody))}" placeholder="count(totals) > 2"/></label>
+    <p class="muted" style="font-size:12px">${mode === "sequential"
+      ? "Runs one iteration at a time — the next starts only when the previous finishes."
+      : "Starts every iteration at once and waits until all finish."} ${src === "collection"
+      ? "One iteration per element of the <b>input collection</b>; the <b>input element</b> is the variable each iteration binds its item to (plus the built-in <code>loopCounter</code>)."
+      : "Runs <b>loop cardinality</b> times, each with a <code>loopCounter</code>."} An <b>output collection</b> gathers each iteration's <b>output element</b> into a list in order; a <b>completion condition</b> ends the loop early.</p>`;
+  return html;
+}
+
+// standardLoopHTML renders the fields of a BPMN standard loop — the ↻ marker
+// (ADR-0133): the FEEL condition the loop repeats while, when that condition is
+// checked (testBefore: before the first run makes it a while loop that may skip the
+// activity entirely; after each run is BPMN's default repeat-until, which always runs
+// once), and an optional iteration cap. sl is the bpmn:StandardLoopCharacteristics.
+function standardLoopHTML(sl, strip) {
+  const cond = sl && sl.loopCondition ? (sl.loopCondition.body || "") : "";
+  const max = sl && sl.loopMaximum != null ? String(sl.loopMaximum) : "";
+  const before = !!(sl && sl.testBefore);
+  return `<label class="field"><span>Repeat while (FEEL)</span>
+      <input type="text" id="f-mi-loopcond" value="${esc(strip(cond))}" placeholder="not(approved)"/></label>
+    <label class="field"><span>Check the condition</span>
+      <select id="f-mi-testbefore">
+        <option value="after" ${before ? "" : "selected"}>After each run — the activity always runs at least once</option>
+        <option value="before" ${before ? "selected" : ""}>Before each run — the activity may be skipped entirely</option>
+      </select></label>
+    <label class="field"><span>Max iterations <span class="muted">(optional)</span></span>
+      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="no limit"/></label>
+    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both. Without a cap the engine stops a loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more — a backstop for a condition that never turns false, not a limit on a cap you set yourself.</p>`;
+}
+
+// saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics
+// from the panel fields (ADR-0077). Mode "none" drops it entirely; otherwise it
+// rebuilds the whole element — the isSequential flag, a nested <zeebe:loopCharacteristics>
+// (only the non-empty of inputCollection/inputElement or outputCollection/outputElement),
+// a <loopCardinality> for the fixed-count variant, and a <completionCondition> — so
+// editing one field never leaves a stale sibling. FEEL values are stored '=' prefixed.
+function saveMultiInstance(modeler, element, vals) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  if (vals.mode === "none") {
+    modeling.updateProperties(element, { loopCharacteristics: undefined });
+    return;
+  }
+  const feel = (v) => { v = (v || "").trim(); return v === "" ? "" : (v.startsWith("=") ? v : "= " + v); };
+  // A standard loop is the other BPMN marker (ADR-0133) — its own element, with the
+  // condition, the testBefore flag, and the cap. Written whole like the multi-instance
+  // one, so switching modes or clearing a field never leaves a stale sibling behind.
+  if (vals.mode === "loop") {
+    const props = {};
+    if (vals.testBefore) props.testBefore = true;
+    const max = parseInt(vals.loopMaximum, 10);
+    if (max > 0) props.loopMaximum = max;
+    const sl = moddle.create("bpmn:StandardLoopCharacteristics", props);
+    sl.$parent = bo;
+    if (vals.loopCondition) {
+      const cond = moddle.create("bpmn:FormalExpression", { body: feel(vals.loopCondition) });
+      cond.$parent = sl;
+      sl.loopCondition = cond;
+    }
+    modeling.updateProperties(element, { loopCharacteristics: sl });
+    return;
+  }
+  const mi = moddle.create("bpmn:MultiInstanceLoopCharacteristics", { isSequential: vals.mode === "sequential" });
+  mi.$parent = bo;
+
+  const loopProps = {};
+  if (vals.src === "collection") {
+    if (vals.inputCollection) loopProps.inputCollection = feel(vals.inputCollection);
+    if (vals.inputElement) loopProps.inputElement = vals.inputElement;
+  }
+  if (vals.outputCollection) loopProps.outputCollection = vals.outputCollection;
+  if (vals.outputElement) loopProps.outputElement = feel(vals.outputElement);
+  if (Object.keys(loopProps).length) {
+    const loop = moddle.create("zeebe:LoopCharacteristics", loopProps);
+    const ext = moddle.create("bpmn:ExtensionElements", { values: [loop] });
+    ext.$parent = mi;
+    loop.$parent = ext;
+    mi.extensionElements = ext;
+  }
+  if (vals.src === "cardinality" && vals.cardinality) {
+    const card = moddle.create("bpmn:FormalExpression", { body: feel(vals.cardinality) });
+    card.$parent = mi;
+    mi.loopCardinality = card;
+  }
+  if (vals.completion) {
+    const cc = moddle.create("bpmn:FormalExpression", { body: feel(vals.completion) });
+    cc.$parent = mi;
+    mi.completionCondition = cc;
+  }
+  modeling.updateProperties(element, { loopCharacteristics: mi });
+}
+
 // messageFieldsHTML renders the message picker for a catch or throw event: a
 // dropdown of the model's shared messages (plus "new"), and — once one is chosen —
 // its name and correlation key, which are shared so every event using the message
@@ -1420,7 +3300,7 @@ function messagesManagerHTML(modeler) {
     : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
   return `<h3>Messages</h3>
     <div class="msg-list">${rows}</div>
-    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px">＋ Add message</button>
+    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="Add a message">＋ Add message</button>
     <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
 }
 
@@ -1490,6 +3370,29 @@ function timerFieldsHTML(timer, kinds, note) {
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
 function messageDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
+}
+
+// messageRefHolder returns the moddle object that carries an element's messageRef: the
+// bpmn:MessageEventDefinition for a message event, or the receive task's own business object
+// (a receive task holds messageRef directly, not via an event definition — ADR-0102). It is
+// what the message picker reads and its handlers write, so a receive task reuses the same
+// picker as a message catch. null when the element references no message.
+function messageRefHolder(bo) {
+  // A receive task (ADR-0102) and a message-kind send task (ADR-0112) both hold messageRef
+  // directly on their own business object, not via an event definition, so the shared
+  // message picker reads and writes them the same way it does a message event.
+  if (bo && (bo.$type === "bpmn:ReceiveTask" || bo.$type === "bpmn:SendTask")) return bo;
+  return messageDefOf(bo);
+}
+
+// isEventSubStart reports whether a start event is the trigger of an event subprocess —
+// i.e. it sits directly inside a subprocess whose triggeredByEvent is set (ADR-0082). Such
+// a start carries a message/timer trigger and an isInterrupting flag, not a process-entry
+// form. bpmn-js sets triggeredByEvent (and draws the dashed container) when the user makes
+// the subprocess an event subprocess.
+function isEventSubStart(element) {
+  const p = element && element.parent && element.parent.businessObject;
+  return !!(p && p.$type === "bpmn:SubProcess" && p.triggeredByEvent === true);
 }
 
 // definitionsOf returns the diagram's <bpmn:definitions> moddle element, where
@@ -1570,6 +3473,391 @@ function deleteMessage(modeler, msgId) {
   });
 }
 
+// --- Signals (broadcast events, ADR-0088) ---
+//
+// A signal is a top-level <bpmn:signal> declaration shared by reference, exactly like a
+// message — except a signal has NO correlation key: it is a 1:n broadcast delivered by
+// name alone to every waiting catch (an intermediate catch, a signal boundary, a signal
+// event subprocess, a signal start). These helpers mirror the message ones, dropping the
+// correlation-key concept.
+
+// signalDefOf returns an event's bpmn:SignalEventDefinition, or null.
+function signalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:SignalEventDefinition") || null;
+}
+
+// listSignals returns every <bpmn:signal> declared on the model's definitions.
+function listSignals(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Signal") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createSignal adds a fresh <bpmn:signal> to the model and returns it.
+function createSignal(modeler, name) {
+  const moddle = modeler.get("moddle");
+  const sig = moddle.create("bpmn:Signal");
+  sig.id = "Signal_" + Math.random().toString(36).slice(2, 8);
+  sig.name = name || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    sig.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), sig];
+  }
+  return sig;
+}
+
+// linkSignal points a signal event definition at a signal (undo/redo tracked).
+function linkSignal(modeler, element, sed, sig) {
+  try { modeler.get("modeling").updateModdleProperties(element, sed, { signalRef: sig || undefined }); } catch { /* stale */ }
+}
+
+// deleteSignal removes a signal and clears any event still referencing it, so a deleted
+// signal never leaves a dangling signalRef (which would fail to compile).
+function deleteSignal(modeler, sigId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== sigId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const sed = signalDefOf(el.businessObject);
+    if (sed && sed.signalRef && sed.signalRef.id === sigId) {
+      try { modeling.updateModdleProperties(el, sed, { signalRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// signalFieldsHTML renders the signal picker for a catch/throw/boundary/start/end event:
+// a dropdown of the model's shared signals (plus "new") and — once one is chosen — its
+// name, shared so every event using the signal stays in sync. Unlike a message there is
+// no correlation key: a signal broadcasts by name alone. sed is the
+// bpmn:SignalEventDefinition.
+function signalFieldsHTML(modeler, sed, hint) {
+  const current = sed.signalRef;
+  const options = listSignals(modeler).map((s) =>
+    `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Signal name</span>
+      <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  return `<h3>Signal</h3>
+    <label class="field"><span>Signal</span>
+      <select id="f-sigref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New signal…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// signalsManagerHTML lists the model's signals for central management (add, rename,
+// delete). Shown on the diagram/collaboration root alongside the messages manager.
+function signalsManagerHTML(modeler) {
+  const sigs = listSignals(modeler);
+  const rows = sigs.length
+    ? sigs.map((s) => `
+        <div class="sig-row" data-id="${esc(s.id)}">
+          <input class="sig-name" value="${esc(s.name || "")}" placeholder="signal name"/>
+          <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
+  return `<h3>Signals</h3>
+    <div class="sig-list">${rows}</div>
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="Add a signal">＋ Add signal</button>
+    <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
+}
+
+// wireSignalsManager binds the Signals management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireSignalsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#sig-add");
+  if (add) add.addEventListener("click", () => { createSignal(modeler, "signal"); rerenderRoot(); });
+  body.querySelectorAll(".sig-row").forEach((row) => {
+    const id = row.dataset.id;
+    const sig = () => listSignals(modeler).find((s) => s.id === id);
+    const nameIn = row.querySelector(".sig-name");
+    if (nameIn) nameIn.addEventListener("change", () => { const s = sig(); if (s) s.name = nameIn.value.trim(); });
+    const del = row.querySelector(".sig-del");
+    if (del) del.addEventListener("click", () => { deleteSignal(modeler, id); rerenderRoot(); });
+  });
+}
+
+// --- Errors (scoped failures, ADR-0089) ---
+//
+// An error is a top-level <bpmn:error> declaration shared by reference, like a message or
+// signal — but matched by its errorCode (not a name or correlation key) and delivered to the
+// NEAREST enclosing handler (an error boundary or error event subprocess), not broadcast. An
+// error is thrown by an error end event (or a worker failing a job to a code); an error catch
+// is always interrupting. These helpers mirror the signal ones, authoring the error code — a
+// code-less error is a catch-all when caught, an uncoded throw when thrown.
+
+// errorDefOf returns an event's bpmn:ErrorEventDefinition, or null.
+function errorDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ErrorEventDefinition") || null;
+}
+
+// cancelDefOf returns the <cancelEventDefinition> of an element, or null. On a boundary event
+// it makes a cancel boundary (a transaction's cancellation catch); on an end event a cancel
+// end event (ADR-0108).
+function cancelDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:CancelEventDefinition") || null;
+}
+
+// listErrors returns every <bpmn:error> declared on the model's definitions.
+function listErrors(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Error") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createError adds a fresh <bpmn:error> with the given code to the model and returns it.
+function createError(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const err = moddle.create("bpmn:Error");
+  err.id = "Error_" + Math.random().toString(36).slice(2, 8);
+  err.errorCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    err.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), err];
+  }
+  return err;
+}
+
+// linkError points an error event definition at an error (undo/redo tracked).
+function linkError(modeler, element, eed, err) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { errorRef: err || undefined }); } catch { /* stale */ }
+}
+
+// deleteError removes an error and clears any event still referencing it, so a deleted error
+// never leaves a dangling errorRef (which would fail to compile).
+function deleteError(modeler, errId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== errId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = errorDefOf(el.businessObject);
+    if (eed && eed.errorRef && eed.errorRef.id === errId) {
+      try { modeling.updateModdleProperties(el, eed, { errorRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// errorFieldsHTML renders the error picker for an error end event or an error boundary /
+// event subprocess: a dropdown of the model's shared errors (plus "new") and — once one is
+// chosen — its code, shared so a thrower and its catchers stay in sync. Matching is by code;
+// a code-less error is a catch-all. eed is the bpmn:ErrorEventDefinition.
+function errorFieldsHTML(modeler, eed, hint) {
+  const current = eed.errorRef;
+  const options = listErrors(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.errorCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Error code</span>
+      <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Error</h3>
+    <label class="field"><span>Error</span>
+      <select id="f-errref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New error…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// errorsManagerHTML lists the model's errors for central management (add, edit code, delete).
+function errorsManagerHTML(modeler) {
+  const errs = listErrors(modeler);
+  const rows = errs.length
+    ? errs.map((e) => `
+        <div class="err-row" data-id="${esc(e.id)}">
+          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="error code"/>
+          <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
+  return `<h3>Errors</h3>
+    <div class="err-list">${rows}</div>
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="Add an error">＋ Add error</button>
+    <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
+}
+
+// wireErrorsManager binds the Errors management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireErrorsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#err-add");
+  if (add) add.addEventListener("click", () => { createError(modeler, "ERROR_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".err-row").forEach((row) => {
+    const id = row.dataset.id;
+    const err = () => listErrors(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".err-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = err(); if (e) e.errorCode = codeIn.value.trim(); });
+    const del = row.querySelector(".err-del");
+    if (del) del.addEventListener("click", () => { deleteError(modeler, id); rerenderRoot(); });
+  });
+}
+
+// --- Escalation authoring (ADR-0125) ---
+// An escalation is raised by an escalation throw or end event and caught by the nearest
+// enclosing escalation boundary or event subprocess with a matching code. Unlike an error, an
+// escalation catch may be non-interrupting (the handler runs alongside the still-running
+// activity) and an uncaught escalation is benign. These helpers mirror the error ones, keyed on
+// the escalation code — a code-less escalation is a catch-all when caught, an uncoded raise when
+// thrown.
+
+// escalationDefOf returns an event's bpmn:EscalationEventDefinition, or null.
+function escalationDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:EscalationEventDefinition") || null;
+}
+
+// linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
+// jumps to the link intermediate catch of the same name in the same scope — an off-page
+// connector / goto (ADR-0133).
+function linkDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
+}
+
+// linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
+function linkFieldsHTML(led, hint) {
+  return `<h3>Link</h3>
+    <label class="field"><span>Link name</span>
+      <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// conditionalDefOf returns an event's bpmn:ConditionalEventDefinition, or null. A conditional
+// event fires when its boolean FEEL condition over the process's variables becomes true —
+// re-evaluated on every variable change (ADR-0137).
+function conditionalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ConditionalEventDefinition") || null;
+}
+
+// conditionalFieldsHTML renders the FEEL condition field for a conditional catch, boundary, or
+// event-subprocess start. The condition is a boolean FEEL expression over the scope's variables;
+// the event fires when it becomes true (ADR-0137). ced is the bpmn:ConditionalEventDefinition.
+function conditionalFieldsHTML(ced, hint) {
+  const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
+  return `<h3>Condition (FEEL)</h3>
+    <label class="field"><span>Expression</span>
+      <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// listEscalations returns every <bpmn:escalation> declared on the model's definitions.
+function listEscalations(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Escalation") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createEscalation adds a fresh <bpmn:escalation> with the given code and returns it.
+function createEscalation(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const esc_ = moddle.create("bpmn:Escalation");
+  esc_.id = "Escalation_" + Math.random().toString(36).slice(2, 8);
+  esc_.escalationCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    esc_.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), esc_];
+  }
+  return esc_;
+}
+
+// linkEscalation points an escalation event definition at an escalation (undo/redo tracked).
+function linkEscalation(modeler, element, eed, esc_) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { escalationRef: esc_ || undefined }); } catch { /* stale */ }
+}
+
+// deleteEscalation removes an escalation and clears any event still referencing it, so a
+// deleted escalation never leaves a dangling escalationRef (which would fail to compile).
+function deleteEscalation(modeler, escId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== escId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = escalationDefOf(el.businessObject);
+    if (eed && eed.escalationRef && eed.escalationRef.id === escId) {
+      try { modeling.updateModdleProperties(el, eed, { escalationRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// escalationFieldsHTML renders the escalation picker for an escalation throw/end event or an
+// escalation boundary / event subprocess: a dropdown of the model's shared escalations (plus
+// "new") and — once one is chosen — its code, shared so a raiser and its catchers stay in sync.
+// Matching is by code; a code-less escalation is a catch-all. eed is the
+// bpmn:EscalationEventDefinition.
+function escalationFieldsHTML(modeler, eed, hint) {
+  const current = eed.escalationRef;
+  const options = listEscalations(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.escalationCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Escalation code</span>
+      <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Escalation</h3>
+    <label class="field"><span>Escalation</span>
+      <select id="f-escref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New escalation…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// escalationsManagerHTML lists the model's escalations for central management (add, edit code,
+// delete).
+function escalationsManagerHTML(modeler) {
+  const escs = listEscalations(modeler);
+  const rows = escs.length
+    ? escs.map((e) => `
+        <div class="esc-row" data-id="${esc(e.id)}">
+          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="escalation code"/>
+          <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
+  return `<h3>Escalations</h3>
+    ${rows}
+    <button type="button" class="btn ghost" id="esc-add" title="Add an escalation">＋ Add escalation</button>
+    <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
+}
+
+// wireEscalationsManager binds the Escalations management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireEscalationsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#esc-add");
+  if (add) add.addEventListener("click", () => { createEscalation(modeler, "ESCALATION_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".esc-row").forEach((row) => {
+    const id = row.dataset.id;
+    const escl = () => listEscalations(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".esc-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = escl(); if (e) e.escalationCode = codeIn.value.trim(); });
+    const del = row.querySelector(".esc-del");
+    if (del) del.addEventListener("click", () => { deleteEscalation(modeler, id); rerenderRoot(); });
+  });
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -1577,6 +3865,27 @@ function rootProcess(modeler) {
     const bo = modeler.get("canvas").getRootElement().businessObject;
     return bo && /:Process$/.test(bo.$type || "") ? bo : null;
   } catch { return null; }
+}
+
+// processBusinessObject returns the <bpmn:process> business object a rendered diagram
+// holds for the given process id: the root itself when the diagram is a single process,
+// or the matching pool's processRef when it is a collaboration — a running instance
+// always belongs to exactly one of a collaboration's processes. Falls back to the first
+// pool that carries a process, so a diagram whose ids have drifted still shows something
+// rather than nothing.
+function processBusinessObject(viewer, processId) {
+  const bo = rootProcess(viewer);
+  if (bo) return bo;
+  let first = null, match = null;
+  try {
+    viewer.get("elementRegistry").forEach((el) => {
+      const p = el.businessObject;
+      if (!p || !/:Participant$/.test(p.$type || "") || !p.processRef) return;
+      if (!first) first = p.processRef;
+      if (processId && p.processRef.id === processId) match = p.processRef;
+    });
+  } catch { return null; }
+  return match || first;
 }
 
 // isCollaborationRoot reports whether the diagram root is a collaboration (pools),
@@ -1811,7 +4120,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
 // collapsible body. It works on the already-rendered panel, so every element type's
 // markup is grouped by one function instead of each branch knowing about grouping.
 // Nodes are moved as whole subtrees, so field listeners and rich editors survive.
-function groupifyPanel(body, collapsed) {
+function groupifyPanel(body, ctl) {
   const heads = [...body.children].filter((n) => n.tagName === "H3");
   if (!heads.length) return;
   // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
@@ -1821,7 +4130,8 @@ function groupifyPanel(body, collapsed) {
   for (const h3 of heads) {
     const title = h3.textContent.trim();
     const group = document.createElement("div");
-    group.className = "pgroup" + (collapsed.has(title) ? " collapsed" : "");
+    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
+    group.dataset.group = title;
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "pgroup-body";
     let n = h3.nextSibling;
@@ -1846,14 +4156,25 @@ function groupifyPanel(body, collapsed) {
       dot.title = "has content";
       head.appendChild(dot);
     }
-    head.addEventListener("click", () => {
-      const isCol = group.classList.toggle("collapsed");
-      if (isCol) collapsed.add(title); else collapsed.delete(title);
-    });
+    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
     body.insertBefore(group, h3);
     group.appendChild(head);
     group.appendChild(bodyWrap);
     body.removeChild(h3);
+  }
+  // A subtle expand-all / collapse-all control, added once there is more than one
+  // collapsible group (the <h3> sections plus any standalone I/O-mapping groups), so
+  // the author can open or clear the whole panel in one click.
+  const total = body.querySelectorAll(".pgroup, .io-group").length;
+  if (total >= 2 && !body.querySelector(".pgroup-tools")) {
+    const tools = document.createElement("div");
+    tools.className = "pgroup-tools";
+    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand" title="Expand all groups">Expand all</button>`
+      + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
+      + `<button type="button" class="pgroup-all" data-all="collapse" title="Collapse all groups">Collapse all</button>`;
+    tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
+    tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
+    body.insertBefore(tools, body.firstChild);
   }
 }
 
@@ -1869,12 +4190,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
   // with a chevron and a filled dot when it carries content. groupifyPanel runs
   // after each (re-)render via a MutationObserver, so no per-element branch has to
   // know about grouping; collapse state persists across renders in `collapsed`.
-  const collapsed = new Set();
+  // Property groups start collapsed on open — all but General — so a freshly selected
+  // element shows its identity, not every section at once (the author's request).
+  // `choice` remembers explicit toggles for this editing session, shared across element
+  // selections; untouched groups fall back to the default. It resets when the editor
+  // remounts, so reopening a file collapses the panel again.
+  const DEFAULT_OPEN = new Set(["General"]);
+  const choice = new Map(); // group title -> true(collapsed)/false(open), only when toggled
+  const groupCtl = {
+    isCollapsed: (title) => choice.has(title) ? choice.get(title) : !DEFAULT_OPEN.has(title),
+    onToggle: (title, col) => choice.set(title, col),
+    // Expand/collapse every group now on screen (both <h3> sections and standalone
+    // I/O-mapping groups) and record each so re-renders keep the chosen state.
+    setAll: (col) => {
+      for (const g of body.querySelectorAll(".pgroup, .io-group")) {
+        g.classList.toggle("collapsed", col);
+        const t = (g.dataset.group || "").trim();
+        if (t) choice.set(t, col);
+      }
+    },
+  };
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, collapsed); } finally { groupifying = false; }
+    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -1917,17 +4257,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
         <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
         <h3>Process</h3>
         <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
-        <button type="button" class="btn" id="f-addproc" style="margin-top:6px">+ Add a process</button>`;
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="Add a process to this collaboration">+ Add a process</button>`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
+      wirePoolId(body, element);
+      wireDocumentation(body, modeler, element, bo);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -1938,7 +4281,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       startVarsHTML = `
         <h3>Start variables</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
         <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
     }
     body.innerHTML = `${poolFields}
@@ -1947,10 +4290,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
       <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
+      <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
       ${startVarsHTML}`;
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
+    wirePoolId(body, element);
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });
@@ -1958,7 +4304,24 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const v = (e.target.value || "").trim();
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
+    wireDocumentation(body, modeler, element, bo);
+    wireDocumentation(body, modeler, element, proc, "f-procdoc");
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
+
+  // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
+  // fields are: bpmn-js validates the new id and rewrites references, throwing on an
+  // invalid or duplicate id, which we revert with a toast.
+  function wirePoolId(body, element) {
+    const f = body.querySelector("#f-poolid");
+    if (!f) return;
+    f.addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v === element.businessObject.id) return;
+      if (!v) { show(element); return; }
+      try { modeling.updateProperties(element, { id: v }); }
+      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+    });
   }
 
   function show(element) {
@@ -1977,7 +4340,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           startVarsHTML = `
             <h3>Start variables</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
             <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. The engine ignores the declaration; it's authoring metadata.</p>`;
         }
         body.innerHTML = `
@@ -1985,11 +4348,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
+          <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
+          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
+          <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
+          <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
           ${startVarsHTML}
-          ${messagesManagerHTML(modeler)}`;
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -2002,22 +4374,52 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const v = (e.target.value || "").trim();
           try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
         });
+        body.querySelector("#f-pttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // The engine parses the day/time subset of ISO-8601 and rejects a malformed or
+          // non-positive TTL at deploy (ADR-0085). Catch it here so the mistake surfaces
+          // while authoring instead of as a failed deploy — but still store what was typed
+          // so the field never silently drops the user's value.
+          if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-phttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Validated exactly like the instance TTL: warn while authoring, but store what
+          // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
+          if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
+        });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
         });
+        wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
       // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
-          ${messagesManagerHTML(modeler)}`;
+          ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
+        wireDocumentation(body, modeler, collabEl, collabEl.businessObject);
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -2054,6 +4456,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const tab = activeTab(root);
     const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
+    // A user task's documentation is read by a person at runtime (the Tasks app shows it
+    // as the work instruction, ADR-0025), so the field is framed for that audience.
+    const isUserTask = bo.$type === "bpmn:UserTask";
     const src = bo.sourceRef;
     // A conditional branch is a flow out of an exclusive/inclusive gateway. Its
     // name is the descriptive label (Design); its conditionExpression is the FEEL
@@ -2066,7 +4471,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
+      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. The engine never acts on it, but it is part of the model, so it travels with every deploy, export and version.${isUserTask ? " On a <b>user task</b> it is more than a note: the Tasks app shows it to the assignee as the <b>work instruction</b>, above the form — so write it to the person who will do the work." : ""}</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -2116,13 +4523,27 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
 
     if (tab === "implement") {
-      if (isActivity(bo)) {
+      if (bo.$type === "bpmn:ReceiveTask") {
+        // A receive task waits for a correlating message, then continues (ADR-0102). It is
+        // an activity, so it takes the shared message picker (the receive task holds its
+        // messageRef directly, which messageRefHolder resolves for the field handlers).
+        html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+        html += multiInstanceHTML(bo); // wait for the message once per iteration
+      } else if (bo.$type === "bpmn:SendTask") {
+        // The single outbound element (ADR-0112): a kind picker chooses what it sends —
+        // Message (a correlating throw), or a connector / job worker (a job it waits on).
+        html += sendTaskKindHTML(modeler, bo);
+        // A message-kind send task is a throw, not an activity the engine can loop
+        // (the compiler skips it), so the loop section is offered only for the
+        // job-backed kinds — matching what actually runs.
+        if (sendTaskKind(bo).id !== "message") html += multiInstanceHTML(bo);
+      } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
           <label class="field"><span>Task type</span>
             <select id="f-tasktype">
               <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
-              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
+              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL or a scripting language)</option>
               <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
               <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>Business rule task (DMN)</option>
               <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>User task</option>
@@ -2155,11 +4576,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
+              <h3>Failure handling</h3>
+              <label class="field"><span>Retries</span>
+                <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
+              <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
               <div class="feel-test" data-run-lang="${lang}">
                 <label class="field"><span>Test — sample variables (JSON)</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
                 <div class="feel-test-row">
-                  <button type="button" class="btn neutral ps-run">Run</button>
+                  <button type="button" class="btn neutral ps-run" title="Run this script against the sample variables">Run</button>
                   <span class="feel-test-out ps-run-out" aria-live="polite"></span>
                 </div>
                 <pre class="ps-run-detail" hidden></pre>
@@ -2189,7 +4614,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
               </select></label>`;
           if (mode === "connector") {
             html += `<label class="field"><span>Connector</span>
-              <input type="text" id="f-connector" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/></label>`;
+              <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
+              <datalist id="dl-connector"></datalist></label>`;
           }
           const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
           const bindingField = mode === "local" ? `
@@ -2201,14 +4627,18 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ Neue Decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Bearbeiten</button>
             </div>
             <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
             <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <h3>Failure handling</h3>
+            <label class="field"><span>Retries</span>
+              <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
+            <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
@@ -2247,6 +4677,73 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
         }
+        // The repair form is offered on the task kinds that can park behind an incident
+        // an operator repairs by correcting variables (ADR-0169); repairFormHTML itself
+        // decides which those are, so the panel and the compiler agree on the set.
+        html += repairFormHTML(bo);
+        // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
+        // standard loop) — including the ones with no implementation of their own: an
+        // undefined or manual task repeats its pass-through, a business rule task
+        // re-evaluates its decision. The section is offered wherever the engine honours
+        // the marker, so the panel and the icon agree on every activity.
+        html += multiInstanceHTML(bo);
+      } else if (bo.$type === "bpmn:SubProcess") {
+        // An embedded subprocess is a scope, so it takes the same generic
+        // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
+        // subprocess is not a task. Input mappings write a variable into the
+        // subprocess scope on entry (its inner elements see it, up the chain); output
+        // mappings promote selected values to the enclosing scope on completion.
+        html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
+        html += ioMappingsHTML(bo);
+        html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
+      } else if (bo.$type === "bpmn:AdHocSubProcess") {
+        // An ad-hoc subprocess is a scope whose contained activities run on demand, in any
+        // order, rather than being sequenced from a start event (ADR-0143). What it needs
+        // configuring is how it *finishes*: an optional boolean FEEL completion condition
+        // re-evaluated after each contained activity completes, and whether a holding
+        // condition cancels the still-running activities. Ordering is parallel — every entry
+        // activity starts at once; sequential is refused at deploy, so it is not offered.
+        const cancelRemaining = bo.cancelRemainingInstances !== false;
+        html += `<h3>Ad-hoc subprocess</h3>
+          <p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+        html += `<h3>Completion condition (FEEL)</h3>
+          <label class="field"><span>Expression</span>
+            <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
+          <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
+        html += `<label class="field"><span>When it completes</span>
+            <select id="f-adhoccancel">
+              <option value="true" ${cancelRemaining ? "selected" : ""}>Cancel the activities still running</option>
+              <option value="false" ${cancelRemaining ? "" : "selected"}>Let them finish first</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Applies when the completion condition becomes true while other contained activities are still running.</p>`;
+        html += ioMappingsHTML(bo);
+      } else if (bo.$type === "bpmn:CallActivity") {
+        // A call activity invokes a *separate* deployed process as a child instance
+        // (ADR-0076). It is configured by its <zeebe:calledElement>: which process to
+        // call (by its bpmn process id), the version binding, and whether variables
+        // propagate wholesale in each direction. With propagation off, only the I/O
+        // mappings below cross the boundary — true isolation.
+        const ce = findExt(bo, "zeebe:CalledElement") || {};
+        const binding = ce.bindingType === "deployment" ? "deployment" : "latest";
+        const propParent = ce.propagateAllParentVariables !== false; // default true (Zeebe)
+        const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
+        html += `<h3>Called process</h3>
+          <label class="field"><span>Process ID</span>
+            <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
+            <datalist id="f-call-proc-list"></datalist></label>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button></div>
+          <label class="field"><span>Binding</span>
+            <select id="f-call-binding">
+              <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
+              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Starts the process with this <b>id</b> as a child instance and waits for it to finish. <b>Latest</b> calls the newest deployed version; <b>Deployment</b> pins to the version deployed alongside this one.</p>
+          <h3>Variables</h3>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
+          <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
+        html += ioMappingsHTML(bo);
+        html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
@@ -2259,21 +4756,39 @@ function wireProperties(root, modeler, api, projectId, toast) {
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
+        const link = linkDefOf(bo);
+        const cond = conditionalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
             A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+        } else if (link) {
+          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
+        } else if (cond) {
+          html += conditionalFieldsHTML(cond, "The event waits until this boolean condition over the instance's variables becomes true — re-evaluated on every variable change — then continues. If it already holds when the token arrives, it passes straight through.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Conditional</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const link = linkDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+        } else if (link) {
+          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -2282,30 +4797,99 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // timer / message wiring as the intermediate catch event.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
-        const interrupting = bo.cancelActivity !== false;
-        html += `<h3>Behaviour</h3>
-          <label class="field"><span>On trigger</span>
-            <select id="f-cancelactivity">
-              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
-              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
-            </select></label>
-          <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
-        if (timer) {
-          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
-          const cycleNote = interrupting
-            ? "An interrupting boundary fires once, so it has no cycle."
-            : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
-          html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
-            <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-            ${cycleNote} A FEEL expression is allowed in any type.`);
-        } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
+        const cancel = cancelDefOf(bo);
+        if (err) {
+          // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+        } else if (cancel) {
+          // A cancel boundary may attach only to a transaction and is always interrupting — no
+          // cancelActivity toggle and no trigger fields (ADR-0108).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
+          const interrupting = bo.cancelActivity !== false;
+          html += `<h3>Behaviour</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-cancelactivity">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting boundary fires once, so it has no cycle."
+              : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
+            html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
+              <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event fires while the activity runs, when this boolean condition over the instance's variables becomes true — re-evaluated on every variable change. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler once while the activity keeps going.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> boundary event, then configure its trigger here.</p>`;
+          }
+        }
+      } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
+        // The start event of an event subprocess: it triggers the handler while the
+        // enclosing scope runs, interrupting it or not (ADR-0082). Its message/timer
+        // trigger reuses the same editors as a catch/boundary event; the isInterrupting
+        // flag is the scope-level analog of a boundary's cancelActivity.
+        const timer = timerDefOf(bo);
+        const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
+        if (err) {
+          // An error event subprocess is always interrupting — no toggle (ADR-0089).
+          html += `<h3>Event subprocess trigger</h3>
+            <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
+        } else {
+          const interrupting = bo.isInterrupting !== false;
+          html += `<h3>Event subprocess trigger</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-interrupting">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting timer fires once, so it has no cycle."
+              : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
+            html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
+              <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event subprocess fires when this boolean condition over the scope's variables becomes true — re-evaluated on every variable change. Interrupting terminates the scope's other work first; non-interrupting runs this handler once alongside the still-running scope.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> trigger, then configure it here.</p>`;
+          }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
@@ -2313,6 +4897,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
             A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -2324,14 +4910,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
+      } else if (bo.$type === "bpmn:EventBasedGateway") {
+        // A deferred choice: no configuration of its own — the branches are the
+        // catch events it points at (ADR-0110).
+        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+        } else if (err) {
+          html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this end event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, then this path ends. Unlike an error end, a matching catch may be non-interrupting, and an uncaught escalation is harmless (no incident).");
+        } else if (cancel) {
+          // A cancel end event is only meaningful inside a transaction (ADR-0108).
+          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> end event, which publishes a message as the instance ends.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> end event.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -2340,6 +4943,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
       html += `<p class="muted" style="font-size:12px">${has
         ? "A FEEL condition is set on this branch — edit it in the <b>Implement</b> tab."
         : "Set this branch's FEEL condition in the <b>Implement</b> tab."}</p>`;
+    }
+    // A loop marker on an element that has no Loop section above is one Atlas does not
+    // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
+    // the diagram claim behavior it doesn't have (ADR-0133).
+    if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
+      html += `<h3>Loop</h3>
+        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;
 
@@ -2355,6 +4965,24 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    wireDocumentation(body, modeler, element, bo);
+
+    // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
+    // new id (unique, a valid identifier) and rewrites the references that point at this
+    // element — they are moddle object references, so links such as a data object's stay
+    // intact — throwing on an invalid or duplicate id, which we revert with a toast. This
+    // is how a data object's auto-generated id is renamed to something meaningful.
+    const fid = body.querySelector("#f-id");
+    if (fid) {
+      fid.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v === bo.id) return;
+        if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
+        try { modeling.updateProperties(element, { id: v }); }
+        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
 
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
@@ -2455,6 +5083,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const fpsbody = body.querySelector("#f-psbody");
     const fpsresult = body.querySelector("#f-psresult");
+    const fpsretries = body.querySelector("#f-psretries");
     const saveJobScript = () => savePreservingPanel(() => {
       // The selected language is the source of truth; keep it on the extension so
       // the compiler maps it to the right worker's job type.
@@ -2463,10 +5092,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         language,
         source: fpsbody.value || "",
         resultVariable: (fpsresult.value || "").trim(),
+        // A script runs as a job, so it carries the same retry budget as any other
+        // job-backed task (ADR-0135); cleared means the engine's default, written as
+        // no attribute at all.
+        retries: ((fpsretries && fpsretries.value) || "").trim() || undefined,
       });
     });
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
+    if (fpsretries) fpsretries.addEventListener("change", saveJobScript);
 
     // The script field is upgraded to the shared code editor (highlighting,
     // completion, gutter, error markers) and its Run panel wired in the Implement
@@ -2491,7 +5125,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
+          else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
@@ -2516,7 +5152,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (f.type === "map") { props[f.key] = readMapField(f); continue; }
         // A showIf-hidden field isn't rendered; leave its stored value untouched.
         const el = body.querySelector("#f-st-" + f.key);
-        if (el) props[f.key] = (el.value || "").trim();
+        if (!el) continue;
+        const v = (el.value || "").trim();
+        // A cleared count means "the engine's default" — drop the attribute rather
+        // than write an empty one, so the exported XML says what the task means.
+        props[f.key] = (f.type === "number" && v === "") ? undefined : v;
       }
       upsertExt(modeler, element, stKind.ext, props);
     });
@@ -2528,6 +5168,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
       });
+      // A connector field offers the server's registered connectors of its kind.
+      if (f.datalist) fillConnectorDatalist(api, body.querySelector("#dl-st-" + f.key), f.datalist);
     }
     // Value-or-expression (fx) support: an fx field can hold a literal or a FEEL
     // expression (stored '=' prefixed, exactly what the compiler keys on). The
@@ -2536,7 +5178,25 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
     const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
-    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+    // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
+    // form, …) gets the value-or-expression toggle; map value cells are handled below.
+    for (const f of stKind.fields) {
+      if (f.group || f.type === "map" || !f.fx) continue;
+      stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
+    // Markup fields (the mail connector's HTML body) get the shared code editor with
+    // the HTML language module — tag/attribute colouring and variable completion
+    // inline, the full Developer View on F2 (ADR-0145).
+    for (const f of stKind.fields) {
+      if (f.type !== "html") continue;
+      const el = body.querySelector("#f-st-" + f.key);
+      if (!el) continue;
+      // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
+      // the property column is narrow, so horizontal scrolling would hide most of the
+      // template. The Developer View is where it gets a gutter and the full width.
+      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, "html", { title: f.label });
+    }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;
     // adding inserts an empty row (it saves once the author types a name). When the
@@ -2563,6 +5223,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
     const fbinding = body.querySelector("#f-brt-binding");
+    const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
     // the called decision, so editing the id/result variable never drops it.
     const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
@@ -2570,6 +5231,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
       decisionId: (fdecision.value || "").trim(),
       resultVariable: (fresultvar.value || "").trim(),
       bindingType: currentBinding(),
+      // Evaluating a decision is a job like any other, so the task carries the same
+      // retry budget (ADR-0135); cleared means the engine's default, written as no
+      // attribute at all.
+      retries: ((fbrtretries && fbrtretries.value) || "").trim() || undefined,
     });
     const saveDecision = () => savePreservingPanel(() => {
       upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
@@ -2577,6 +5242,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
     if (fbinding) fbinding.addEventListener("change", saveDecision);
+    if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
     // choice is the presence of the atlas:temisConnector extension the compiler
@@ -2600,6 +5266,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fconnector.addEventListener("change", () => savePreservingPanel(() => {
         upsertExt(modeler, element, "atlas:TemisConnector", { connector: (fconnector.value || "").trim() });
       }));
+      fillConnectorDatalist(api, body.querySelector("#dl-connector"), "temis");
     }
 
     // Decision picker: populate from the DMN references' decisions and, on pick,
@@ -2674,9 +5341,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
         savePreservingPanel(() => {
           upsertExt(modeler, element, "zeebe:CalledDecision", {
+            // Picking a decision fills in the id and result variable; everything else
+            // the task already carries (binding, retry budget) survives the pick.
+            ...calledDecisionProps(),
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
-            bindingType: currentBinding(),
           });
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
@@ -2798,16 +5467,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const kind = group.dataset.kind;
         const wrap = group.querySelector(".io-map-list");
         [...wrap.querySelectorAll(".io-map")].forEach((card) => wireCard(card, group));
+        // Start collapsed on open like the other groups (all but General), and share the
+        // panel's collapse memory so a re-render keeps the author's chosen state.
+        group.classList.toggle("collapsed", groupCtl.isCollapsed(group.dataset.group || ""));
         // Section collapse: clicking the head toggles it, but not via the add button.
         group.querySelector(".io-group-head").addEventListener("click", (e) => {
           if (e.target.closest(".io-group-add")) return;
-          group.classList.toggle("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), group.classList.toggle("collapsed"));
         });
         // Add an auto-named, expanded card (Camunda-style) and focus its name so the
         // author can rename it immediately; save so it persists even if left as-is.
         group.querySelector(".io-group-add").addEventListener("click", (e) => {
           e.stopPropagation();
           group.classList.remove("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), false);
           const idx = wrap.querySelectorAll(".io-map").length;
           const tmp = document.createElement("div");
           tmp.innerHTML = ioMapCardHTML(kind, idx, "", ioMapDefaultName(kind));
@@ -2821,6 +5494,133 @@ function wireProperties(root, modeler, api, projectId, toast) {
           name.select();
         });
       }
+    }
+
+    // Call activity: the whole <zeebe:calledElement> is rewritten on any field
+    // change, so editing one field never drops the others (ADR-0076). Propagation
+    // flags are written as booleans (moddle omits a value equal to its default);
+    // the compiler reads an absent flag as true, matching Zeebe.
+    const fcallpid = body.querySelector("#f-call-processid");
+    if (fcallpid) {
+      const fcallbind = body.querySelector("#f-call-binding");
+      const fcallpp = body.querySelector("#f-call-prop-parent");
+      const fcallpc = body.querySelector("#f-call-prop-child");
+      const saveCall = () => savePreservingPanel(() => {
+        upsertExt(modeler, element, "zeebe:CalledElement", {
+          processId: (fcallpid.value || "").trim(),
+          bindingType: fcallbind.value === "deployment" ? "deployment" : "latest",
+          propagateAllParentVariables: fcallpp.checked,
+          propagateAllChildVariables: fcallpc.checked,
+        });
+      });
+      fcallpid.addEventListener("change", saveCall);
+      fcallbind.addEventListener("change", saveCall);
+      fcallpp.addEventListener("change", saveCall);
+      fcallpc.addEventListener("change", saveCall);
+
+      // Suggest existing callees — deployed processes and saved drafts — so the
+      // Process ID is a pick, not blind typing; free text stays allowed for a callee
+      // that doesn't exist yet (ADR-0076). Best-effort: a load failure just leaves an
+      // empty suggestion list.
+      const proclist = body.querySelector("#f-call-proc-list");
+      if (proclist) {
+        (async () => {
+          try {
+            const [procs, drafts] = await Promise.all([
+              api("GET", "/api/v1/processes").catch(() => []),
+              api("GET", "/api/v1/drafts").catch(() => []),
+            ]);
+            const seen = new Set();
+            const opts = [];
+            const add = (id, label) => {
+              id = (id || "").trim();
+              if (!id || seen.has(id)) return;
+              seen.add(id);
+              opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
+            };
+            (procs || []).forEach((p) => add(p.processId,
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+            (drafts || []).forEach((d) => add(d.processId,
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+            proclist.innerHTML = opts.join("");
+          } catch { /* suggestions are best-effort */ }
+        })();
+      }
+
+      // "＋ Create new process" scaffolds the called process the caller points at and
+      // opens it (ADR-0076): it saves this caller first (drafts persist only on save,
+      // so navigating away would otherwise drop its edits), then creates a starter
+      // draft keyed by the process id and navigates to it in the modeler.
+      const newbtn = body.querySelector("#f-call-newproc");
+      if (newbtn) {
+        newbtn.addEventListener("click", async () => {
+          let pid = (fcallpid.value || "").trim();
+          if (!pid) {
+            const typed = prompt("Process ID for the new called process:", "");
+            if (typed == null) return;
+            pid = typed.trim();
+            if (!pid) return;
+          }
+          pid = pid.replace(/\s+/g, "_");
+          newbtn.disabled = true;
+          try {
+            // Point the caller at this child, then persist the caller so its unsaved
+            // edits survive the navigation.
+            fcallpid.value = pid;
+            saveCall();
+            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const { xml: callerXml } = await modeler.saveXML({ format: true });
+            await api("POST", savePath, callerXml, true);
+            if (collab && collab.markSaved) collab.markSaved();
+            // Scaffold the child only if no draft already holds that id — never clobber
+            // existing work; just open it in that case.
+            const existing = await api("GET", "/api/v1/drafts").catch(() => []);
+            if ((existing || []).some((d) => (d.processId || "") === pid)) {
+              toast(`Opening existing draft “${pid}”`, "ok");
+            } else {
+              await api("POST", savePath, calleeXML(pid, pid), true);
+              toast(`Created called process “${pid}”`, "ok");
+            }
+            location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
+          } catch (e) {
+            toast("Could not create the process: " + e.message, "err");
+            newbtn.disabled = false;
+          }
+        });
+      }
+    }
+
+    // Loop (ADR-0077 multi-instance, ADR-0133 standard loop): the whole loop
+    // characteristics element is rewritten on any field change so editing one field
+    // never leaves a stale sibling. Mode, the collection/count choice, and the
+    // condition-check choice re-render the panel (fields appear/vanish); the text
+    // fields save on blur. Writing the element is what makes bpmn-js redraw the
+    // marker, so the icon follows the Mode select by construction.
+    const fmiMode = body.querySelector("#f-mi-mode");
+    if (fmiMode) {
+      const v = (sel) => { const el = body.querySelector(sel); return el ? (el.value || "").trim() : ""; };
+      const saveMI = () => savePreservingPanel(() => saveMultiInstance(modeler, element, {
+        mode: fmiMode.value,
+        src: v("#f-mi-src") || "collection",
+        inputCollection: v("#f-mi-inputCollection"),
+        inputElement: v("#f-mi-inputElement"),
+        cardinality: v("#f-mi-cardinality"),
+        outputCollection: v("#f-mi-outputCollection"),
+        outputElement: v("#f-mi-outputElement"),
+        completion: v("#f-mi-completion"),
+        loopCondition: v("#f-mi-loopcond"),
+        loopMaximum: v("#f-mi-loopmax"),
+        testBefore: v("#f-mi-testbefore") === "before",
+      }));
+      fmiMode.addEventListener("change", () => { saveMI(); show(element); });
+      const fmiSrc = body.querySelector("#f-mi-src");
+      if (fmiSrc) fmiSrc.addEventListener("change", () => { saveMI(); show(element); });
+      ["#f-mi-inputCollection", "#f-mi-inputElement", "#f-mi-cardinality",
+        "#f-mi-outputCollection", "#f-mi-outputElement", "#f-mi-completion",
+        "#f-mi-loopcond", "#f-mi-loopmax", "#f-mi-testbefore"].forEach((sel) => {
+        const el = body.querySelector(sel);
+        if (el) el.addEventListener("change", saveMI);
+      });
     }
 
     const fassignee = body.querySelector("#f-assignee");
@@ -2888,6 +5688,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
       });
     }
 
+    const finterrupting = body.querySelector("#f-interrupting");
+    if (finterrupting) {
+      finterrupting.addEventListener("change", () => {
+        // isInterrupting flips bpmn-js's solid/dashed event-subprocess start marker, and
+        // re-renders so the timer editor can offer (or drop) the Cycle kind (ADR-0082).
+        try { modeling.updateProperties(element, { isInterrupting: finterrupting.value === "true" }); } catch { /* stale */ }
+        show(element);
+      });
+    }
+
     const ftimerkind = body.querySelector("#f-timerkind");
     const ftimerval = body.querySelector("#f-timerval");
     if (ftimerkind || ftimerval) {
@@ -2931,7 +5741,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgref = body.querySelector("#f-msgref");
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (!med) return;
         const v = fmsgref.value;
         savePreservingPanel(() => {
@@ -2949,15 +5759,99 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
       fmsgname.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
     if (fcorrkey) {
       fcorrkey.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) setMessageCorrelationKey(modeler, med.messageRef, (fcorrkey.value || "").trim());
+      });
+    }
+    const fsigref = body.querySelector("#f-sigref");
+    if (fsigref) {
+      fsigref.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (!sed) return;
+        const v = fsigref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkSignal(modeler, element, sed, createSignal(modeler, ""));
+          } else if (v === "") {
+            linkSignal(modeler, element, sed, null);
+          } else {
+            linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
+          }
+        });
+        show(element); // re-render so the name field matches the chosen signal
+      });
+    }
+    const fsigname = body.querySelector("#f-signame");
+    if (fsigname) {
+      fsigname.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+      });
+    }
+    const ferrref = body.querySelector("#f-errref");
+    if (ferrref) {
+      ferrref.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (!eed) return;
+        const v = ferrref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkError(modeler, element, eed, createError(modeler, ""));
+          } else if (v === "") {
+            linkError(modeler, element, eed, null);
+          } else {
+            linkError(modeler, element, eed, listErrors(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen error
+      });
+    }
+    const ferrcode = body.querySelector("#f-errcode");
+    if (ferrcode) {
+      ferrcode.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (eed && eed.errorRef) eed.errorRef.errorCode = (ferrcode.value || "").trim();
+      });
+    }
+    const fescref = body.querySelector("#f-escref");
+    if (fescref) {
+      fescref.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (!eed) return;
+        const v = fescref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkEscalation(modeler, element, eed, createEscalation(modeler, ""));
+          } else if (v === "") {
+            linkEscalation(modeler, element, eed, null);
+          } else {
+            linkEscalation(modeler, element, eed, listEscalations(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen escalation
+      });
+    }
+    const fesccode = body.querySelector("#f-esccode");
+    if (fesccode) {
+      fesccode.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (eed && eed.escalationRef) eed.escalationRef.escalationCode = (fesccode.value || "").trim();
+      });
+    }
+    const flinkname = body.querySelector("#f-linkname");
+    if (flinkname) {
+      flinkname.addEventListener("change", () => {
+        const led = linkDefOf(element.businessObject);
+        if (led) {
+          try { modeling.updateModdleProperties(element, led, { name: (flinkname.value || "").trim() }); } catch { /* stale */ }
+        }
       });
     }
 
@@ -2993,6 +5887,53 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }));
     }
 
+    // A conditional event's FEEL predicate lives on its bpmn:ConditionalEventDefinition as a
+    // <condition> FormalExpression body (ADR-0137). Clearing it removes the condition (the
+    // compiler then rejects the empty predicate at deploy, surfaced in the Problems panel).
+    const fcondition = body.querySelector("#f-condition");
+    if (fcondition) {
+      fcondition.addEventListener("change", () => savePreservingPanel(() => {
+        const ced = conditionalDefOf(element.businessObject);
+        if (!ced) return;
+        const raw = (fcondition.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateModdleProperties(element, ced, { condition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = ced;
+        try { modeling.updateModdleProperties(element, ced, { condition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+
+    // An ad-hoc subprocess's completion condition lives on the container as a
+    // <completionCondition> FormalExpression, and cancelRemainingInstances is a plain
+    // attribute (ADR-0143). Clearing the condition removes it, so the subprocess finishes
+    // when every contained activity is done.
+    const fadhoccond = body.querySelector("#f-adhoccond");
+    if (fadhoccond) {
+      fadhoccond.addEventListener("change", () => savePreservingPanel(() => {
+        const raw = (fadhoccond.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateProperties(element, { completionCondition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = element.businessObject;
+        try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+    const fadhoccancel = body.querySelector("#f-adhoccancel");
+    if (fadhoccancel) {
+      fadhoccancel.addEventListener("change", () => savePreservingPanel(() => {
+        // Only the non-default (false) is written, so a default ad-hoc stays attribute-free.
+        const cancel = fadhoccancel.value === "true";
+        try { modeling.updateProperties(element, { cancelRemainingInstances: cancel ? undefined : false }); } catch { /* stale */ }
+      }));
+    }
+
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
     // completion + live validation + a Test panel). The textareas keep their
     // identity, so the change-to-save handlers wired above are untouched.
@@ -3004,6 +5945,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-condition", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-adhoccond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
@@ -3013,6 +5956,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
   }
+
+  // F2 in any code-bearing field of this page opens the Developer View (ADR-0145).
+  // The context is resolved at press time, so it always describes the element that
+  // is selected now rather than whatever was rendered when the panel was built.
+  installDevShortcut(document, (field) => devViewContext(modeler, api, field));
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
 
@@ -3165,13 +6113,52 @@ function wireActions(root, modeler, api, toast, projectId) {
       const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
+      docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
+      // deferred change (held back to protect these edits) can sync in (ADR-0140).
+      if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");
     } finally {
       saveBtn.disabled = false;
     }
   });
+
+  // Auto-layout re-flows the diagram: the current model is sent to the server,
+  // which discards its diagram interchange and regenerates a clean left-to-right
+  // layout (the same generator that lays out a layout-less deployed model), then
+  // the reflowed model is re-imported. Purely a rendering convenience — it moves
+  // shapes and edges, never touching the semantic model — so a tangle of a
+  // hand-drawn diagram can be straightened out in one click.
+  const layoutBtn = root.querySelector("#autolayout");
+  layoutBtn.addEventListener("click", async () => {
+    layoutBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const relaid = await api("POST", "/api/v1/layout", xml, true);
+      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      modeler.get("canvas").zoom("fit-viewport");
+      toast("Diagram auto-laid out", "ok");
+    } catch (e) {
+      toast("auto-layout failed: " + e.message, "err");
+    } finally {
+      layoutBtn.disabled = false;
+    }
+  });
+
+  // F8 triggers the same auto-layout (the shortcut is otherwise unbound). Captured
+  // at the document so it works wherever focus sits in the editor; cleanup() removes
+  // it on navigation away. Ignored while a layout is already running or when the
+  // user is typing in a field, so it never eats an F8 meant for something else.
+  onLayoutKey = (e) => {
+    if (e.key !== "F8" || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const el = document.activeElement;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    e.preventDefault();
+    if (!layoutBtn.disabled) layoutBtn.click();
+  };
+  document.addEventListener("keydown", onLayoutKey, true);
 
   root.querySelector("#export").addEventListener("click", async () => {
     try {
@@ -3183,6 +6170,141 @@ function wireActions(root, modeler, api, toast, projectId) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) { toast("export failed: " + e.message, "err"); }
+  });
+
+  // Documentation (ADR-0143): publish the process as a structured PDF — the
+  // diagram plus every element's prose — as an immutable numbered version, and
+  // manage the revocable public link that puts a version in front of readers who
+  // have no Atlas account. The document is produced here in the browser, where
+  // the authoritative picture already lives; the panel is the whole surface.
+  const docBtn = root.querySelector("#docexport");
+  const docPanel = root.querySelector("#doc-panel");
+  const docErr = root.querySelector("#doc-err");
+  const docHistory = root.querySelector("#doc-history");
+  const docPublish = root.querySelector("#doc-publish");
+  const closeDoc = () => { docPanel.hidden = true; docErr.textContent = ""; };
+
+  // renderDocHistory draws one process's published versions, newest first, each
+  // with its download and its sharing state. Sharing is per version, so every
+  // row carries its own control.
+  const renderDocHistory = (versions) => {
+    if (!versions.length) {
+      docHistory.innerHTML = `<p class="muted doc-empty">No version published yet.</p>`;
+      return;
+    }
+    docHistory.innerHTML = versions.map((v) => {
+      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const by = v.createdBy ? " · " + esc(v.createdBy) : "";
+      const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
+      const share = v.shareUrl
+        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
+           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="Revoke the shared link for this version">Revoke</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="Share a link to this documentation version">Share…</button>`;
+      return `<div class="doc-version">
+        <div class="doc-version-head">
+          <b>v${v.version}</b>
+          <span class="muted">${esc(when)}${by} · ${v.elementCount} elements</span>
+        </div>
+        ${note}
+        <div class="row">
+          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
+          ${share}
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+    // Retention (ADR-0143): every version keeps a PDF, so an old archive grows
+    // without bound. Offer a one-click prune to the newest few when there is
+    // enough history to be worth trimming.
+    if (versions.length > 1) {
+      docHistory.innerHTML += `<div class="doc-prune row">
+        <span class="muted">Keep newest</span>
+        <input id="doc-keep" type="number" min="1" value="5" style="width:4em"/>
+        <button class="btn neutral small" id="doc-prune" title="Delete older documentation versions">Prune older versions</button>
+      </div>`;
+    }
+  };
+
+  // loadDocHistory reads the history for whatever process the diagram currently
+  // declares. A diagram that has never been documented simply has none.
+  const loadDocHistory = async () => {
+    const collection = collectDocumentation(modeler);
+    if (!collection.processId) { docHistory.innerHTML = ""; return; }
+    try {
+      const versions = await api("GET", `/api/v1/processes/${encodeURIComponent(collection.processId)}/documentation`);
+      renderDocHistory(versions || []);
+    } catch (e) {
+      docHistory.innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  };
+
+  const openDoc = async () => {
+    docPanel.hidden = false;
+    docErr.textContent = "";
+    const bo = rootProcess(modeler);
+    const titleField = root.querySelector("#doc-title");
+    if (!titleField.value) titleField.value = (bo && bo.name) || "";
+    docHistory.innerHTML = `<p class="muted doc-empty">Loading…</p>`;
+    await loadDocHistory();
+  };
+
+  docBtn.addEventListener("click", () => { docPanel.hidden ? openDoc() : closeDoc(); });
+  root.querySelector("#doc-cancel").addEventListener("click", closeDoc);
+
+  docPublish.addEventListener("click", async () => {
+    docPublish.disabled = true;
+    docErr.textContent = "";
+    try {
+      await exportDocumentation({
+        modeler, api,
+        title: root.querySelector("#doc-title").value.trim(),
+        note: root.querySelector("#doc-note").value.trim(),
+      });
+      root.querySelector("#doc-note").value = "";
+      toast("Documentation version published", "ok");
+      await loadDocHistory();
+    } catch (e) {
+      docErr.textContent = e.message;
+    } finally {
+      docPublish.disabled = false;
+    }
+  });
+
+  // Sharing, revoking, deleting a version, and pruning are delegated: the history
+  // is re-rendered on every change, so binding per row would leak listeners.
+  docHistory.addEventListener("click", async (e) => {
+    const attr = (name) => e.target.getAttribute && e.target.getAttribute(name);
+    const shareId = attr("data-share");
+    const unshareId = attr("data-unshare");
+    const deleteId = attr("data-delete");
+    const prune = e.target.id === "doc-prune";
+    if (!shareId && !unshareId && !deleteId && !prune) return;
+
+    // Deleting a version and pruning both destroy a published artifact and its
+    // PDF, so both confirm first — this is not a click to make lightly.
+    if (deleteId && !confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+
+    let keep = 0;
+    let processId = "";
+    if (prune) {
+      const keepField = docHistory.querySelector("#doc-keep");
+      keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
+      processId = collectDocumentation(modeler).processId;
+      if (!processId) return;
+      if (!confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+    }
+
+    e.target.disabled = true;
+    try {
+      if (shareId) await api("POST", `/api/v1/documentation/${encodeURIComponent(shareId)}/share`);
+      else if (unshareId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(unshareId)}/share`);
+      else if (deleteId) await api("DELETE", `/api/v1/documentation/${encodeURIComponent(deleteId)}`);
+      else if (prune) await api("POST", `/api/v1/processes/${encodeURIComponent(processId)}/documentation/prune`, { keep });
+      await loadDocHistory();
+    } catch (err) {
+      docErr.textContent = err.message;
+      e.target.disabled = false;
+    }
   });
 
   // Deploy opens a panel that offers two actions: "Deploy only" makes the model
@@ -3239,14 +6361,23 @@ function wireActions(root, modeler, api, toast, projectId) {
   // showDeploySuccess replaces the panel form with a confirmation that carries a
   // link into Operations — the deploy→run→observe roundtrip. `href` targets the
   // started instance (Deploy & run) or the process (Deploy only / collaboration).
-  const showDeploySuccess = (message, href) => {
+  const showDeploySuccess = (message, href, warnings) => {
     dactions.hidden = true;
     derr.textContent = "";
+    // A deploy can succeed and still not run as written — a connector reference
+    // naming something nobody configured, or configured as another kind. The server
+    // does not refuse it (deploying before the connectors exist is legitimate), so
+    // this is the moment to say it, while the author is still here (ADR-0158).
+    const warned = (warnings || []).length
+      ? `<div class="deploy-warnings"><b>⚠ Deployed, but this will not run as written:</b>
+          <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`
+      : "";
     dbody.innerHTML = `<div class="deploy-success">
       <p class="deploy-success-msg">✓ ${esc(message)}</p>
+      ${warned}
       <div class="row">
         <a class="btn" href="${href}">Open in Operations →</a>
-        <button type="button" class="btn neutral" id="deploy-done">Close</button>
+        <button type="button" class="btn neutral" id="deploy-done" title="Close this dialog">Close</button>
       </div>
     </div>`;
     const done = dbody.querySelector("#deploy-done");
@@ -3268,7 +6399,11 @@ function wireActions(root, modeler, api, toast, projectId) {
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const dep = await api("POST", "/api/v1/deployments", xml, true);
+      // Carry the editor's project so the deployment files under the same folder as
+      // its draft on the Modeler home (ADR-0034); omitted when editing outside a
+      // project, which deploys to Ungrouped.
+      const depPath = "/api/v1/deployments" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const dep = await api("POST", depPath, xml, true);
       const all = dep.deployments || [{ key: dep.key, processId: dep.processId, version: dep.version }];
       if (all.length > 1) {
         // A collaboration deploys one definition per pool; which pool to start is
@@ -3276,17 +6411,18 @@ function wireActions(root, modeler, api, toast, projectId) {
         // Start variables don't apply here — there's no single instance to seed.
         const msg = `Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`;
         toast(msg, "ok");
-        showDeploySuccess(msg, "#/operations");
+        showDeploySuccess(msg, "#/operations", dep.warnings);
       } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
         const msg = `Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`;
         toast(msg, "ok");
-        showDeploySuccess(msg, await resolveInstanceLink(dep.key));
+        showDeploySuccess(msg, await resolveInstanceLink(dep.key), dep.warnings);
       } else {
         const msg = `Deployed ${dep.processId} v${dep.version}`;
-        toast(msg, "ok");
-        showDeploySuccess(msg, `#/operations/p/${dep.key}`);
+        toast((dep.warnings || []).length ? msg + ` — with ${dep.warnings.length} warning${dep.warnings.length === 1 ? "" : "s"}` : msg,
+          (dep.warnings || []).length ? "warn" : "ok");
+        showDeploySuccess(msg, `#/operations/p/${dep.key}`, dep.warnings);
       }
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
@@ -3315,6 +6451,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // variables are listed below the diagram.
 export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
@@ -3325,11 +6462,13 @@ export async function mountLive(root, { api, toast, key, instance }) {
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      docTitle(`${procName} · Operations`);
       versions = procs
         .filter((x) => x.processId === here.processId)
         .sort((a, b) => b.version - a.version);
     }
   } catch { /* header/version picker are best-effort */ }
+  if (gen !== generation) return; // superseded before we wrote this view's shell
 
   const versionOptions = versions.length
     ? versions.map((v) =>
@@ -3347,20 +6486,21 @@ export async function mountLive(root, { api, toast, key, instance }) {
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
-        <button class="btn" id="start">Start instance</button>
-        <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
+        <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
+        <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
-        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="refresh" title="Reload the live view">Refresh</button>
         <button class="btn neutral" id="vars-toggle" aria-pressed="true" title="Show or hide the variables panel">Variables</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
+        <span class="pill err" id="incident-pill" style="margin-left:8px" hidden><span class="dot"></span><b id="incident-count">0</b>&nbsp;incidents</span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
         <div class="row">
-          <button class="btn" id="start-go">Start instance</button>
-          <button class="btn neutral" id="start-cancel">Cancel</button>
+          <button class="btn" id="start-go" title="Start the instance with these variables">Start instance</button>
+          <button class="btn neutral" id="start-cancel" title="Close without starting">Cancel</button>
           <span class="err" id="start-err"></span>
         </div>
       </div>
@@ -3373,6 +6513,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         <span class="legend-swatch live"></span> live token
         <span class="legend-swatch history" style="margin-left:12px"></span> passed through
         <span class="badge" style="margin-left:12px">N</span> token count
+        <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -3392,6 +6533,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -3420,12 +6562,16 @@ export async function mountLive(root, { api, toast, key, instance }) {
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
+  const incidentPill = root.querySelector("#incident-pill");
+  const incidentEl = root.querySelector("#incident-count");
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
+  let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
+  let incidentsTruncated = false;  // more elements are parked than the overlay lists
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
@@ -3435,13 +6581,28 @@ export async function mountLive(root, { api, toast, key, instance }) {
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
+  let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
+  // Bulk-terminate selection over the "All instances" list. selectMode shows a
+  // checkbox on each active card; picked holds the ticked instance keys. Above
+  // TERMINATE_TYPE_THRESHOLD the confirm modal makes the operator type the count, so a
+  // large irreversible terminate can't be a single mis-click.
+  let selectMode = false;
+  let scopeAllActive = false; // "All active" chose the whole version (filter mode), not a hand-picked set
+  const picked = new Set();
+  const TERMINATE_TYPE_THRESHOLD = 50;
 
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
   // operator's current selection isn't reset on every poll. Newest activity first.
+  // Scope the fetch to this definition with ?process=: the list endpoint caps
+  // active and finished instances independently per call, so a global fetch can
+  // truncate this version's lone running instance out of the active page during a
+  // flood (its finished instances survive in the separate finished cap), leaving
+  // the picker showing only completed ones. Filtering server-side keeps the cap
+  // per-definition, so a running instance is never dropped.
   async function refreshInstances() {
     let all;
-    try { all = await api("GET", "/api/v1/instances"); }
+    try { all = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(key)); }
     catch { return; } // transient; the picker just keeps its current options
     instances = all
       .filter((r) => r.processDefKey === key)
@@ -3602,16 +6763,43 @@ export async function mountLive(root, { api, toast, key, instance }) {
     }
     let html;
     if (selected === "all") {
+      // Prune ticks for instances that have since left the active set (finished or
+      // gone), so the "Terminate N" count and the request never carry stale keys.
+      const activeKeys = new Set(instances.filter((r) => r.state === "active").map((r) => r.key));
+      for (const k of [...picked]) if (!activeKeys.has(k)) picked.delete(k);
+      const activeInsts = instances.filter((r) => r.state === "active");
+      // "Select all active" targets every running instance of this version — including
+      // any beyond the listed page — so it uses the runtime count when it is larger.
+      const allActive = Math.max(runningCount, activeInsts.length);
+      const head = !activeInsts.length
+        ? `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>`
+        : `<div class="vp-head">
+            <span class="vp-title">Variables · all instances (${instances.length})</span>
+            <span class="vp-actions">${selectMode
+              ? (() => {
+                  const n = scopeAllActive ? allActive : picked.size;
+                  return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
+                 <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
+                 <button class="btn neutral sm" data-term-off title="Leave selection mode">Done</button>`;
+                })()
+              : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
+            </span>
+          </div>`;
       html = !instances.length
         ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
           <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
-        : `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>
-        <div class="vp-insts">${instances.map((r) => {
+        : `${head}
+        <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
-          return `<div class="vp-inst">
+          const active = r.state === "active";
+          const on = scopeAllActive ? active : picked.has(r.key);
+          return `<div class="vp-inst${selectMode && on ? " picked" : ""}">
             <div class="vp-inst-head">
+              ${selectMode && active
+                ? `<label class="vp-pick" title="Select for termination"><input type="checkbox" data-pick="${r.key}"${on ? " checked" : ""}/></label>`
+                : ""}
               <b title="Select this instance">${r.key}</b>
-              ${r.state === "active"
+              ${active
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
                 : `<span class="pill">${esc(r.state)}</span>`}
               <span class="vp-inst-actions">${ts.length
@@ -3641,11 +6829,27 @@ export async function mountLive(root, { api, toast, key, instance }) {
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
+    html = livePanelHTML() + html;
     if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
     varPanel.innerHTML = html;
     updateElapsed();
   }
+
+  // livePanelHTML renders what is parked in view: which element, in which instance,
+  // why, and the one action that resumes it (ADR-0061). It leads the variables panel
+  // because an incident is the reason nothing else in that panel is changing — the
+  // question "why is this task still open?" is answered here, next to the diagram,
+  // instead of in a separate Incidents view an operator has to think to visit
+  // (ADR-0150). The block itself comes from incidents.js, so the replay's Details tab
+  // renders the identical thing rather than a second dialect of it (ADR-0151).
+  function livePanelHTML() {
+    return incidentPanelHTML(incidents, {
+      truncated: incidentsTruncated,
+      rows: incidents.map((inc) => incidentRowHTML(inc, { label: inc.elementId })).join(""),
+    });
+  }
+
 
   async function poll() {
     await refreshInstances();
@@ -3677,6 +6881,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
     // The business rule tasks the selected instance has already decided — each gets
     // a clickable badge that opens its decision inspection (ADR-0066).
     const decidedEls = new Set(decisions.map((d) => d.elementId));
+    // The elements whose token is parked behind an incident (ADR-0061). Without this
+    // the diagram draws a stuck task exactly like a waiting one, and the view reads
+    // "still running" for a process that has been failing for hours (ADR-0150).
+    incidents = rt.incidents || [];
+    incidentsTruncated = !!rt.incidentsTruncated;
+    const incidentsByElement = new Map();
+    for (const inc of incidents) {
+      const arr = incidentsByElement.get(inc.elementId) || [];
+      arr.push(inc);
+      incidentsByElement.set(inc.elementId, arr);
+    }
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
@@ -3688,13 +6903,35 @@ export async function mountLive(root, { api, toast, key, instance }) {
       const marker = live ? "atlas-active" : "atlas-visited";
       canvas.addMarker(e.elementId, marker);
       marked.push([e.elementId, marker]);
-      const count = live ? e.tokens : e.visits;
-      const title = live
-        ? `${e.tokens} live token(s)`
-        : `${e.visits} token(s) passed through`;
+      // A parked element is drawn red over its live-token green, and says why: the
+      // badge carries the incident message, the panel below carries the resolve.
+      const elIncidents = incidentsByElement.get(e.elementId) || [];
+      if (elIncidents.length) {
+        canvas.addMarker(e.elementId, "atlas-incident");
+        marked.push([e.elementId, "atlas-incident"]);
+        const label = elIncidents.length === 1 ? "incident" : `${elIncidents.length} incidents`;
+        overlays.add(e.elementId, "incident", {
+          position: { bottom: 4, left: 4 },
+          html: `<div class="incident-badge" title="${esc(elIncidents[0].message || "")}">&#9888; ${label}</div>`,
+        });
+      }
+      // Two badges per element: how many tokens have already passed through
+      // (gray) and how many are live here right now (green). A visit is recorded
+      // on activation, so e.visits already counts the live tokens — the number
+      // that has moved on is the difference. Gray sits left, green right, reading
+      // past → present. Each badge is drawn only when non-zero, so a purely
+      // historical element keeps a single gray badge and a just-entered one a
+      // single green badge (no "0", never a doubled count).
+      const passed = Math.max(0, e.visits - e.tokens);
+      const grayBadge = passed > 0
+        ? `<div class="token-badge history" title="${passed} token(s) passed through">${passed}</div>`
+        : "";
+      const greenBadge = e.tokens > 0
+        ? `<div class="token-badge" title="${e.tokens} live token(s)">${e.tokens}</div>`
+        : "";
       overlays.add(e.elementId, "tokens", {
         position: { bottom: 4, right: 4 },
-        html: `<div class="token-badge${live ? "" : " history"}" title="${title}">${count}</div>`,
+        html: `<div class="token-badges">${grayBadge}${greenBadge}</div>`,
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
       // jumps to its form. One waiting task → straight to it; several (only under
@@ -3718,6 +6955,9 @@ export async function mountLive(root, { api, toast, key, instance }) {
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
+    incidentEl.textContent = incidents.length + (incidentsTruncated ? "+" : "");
+    incidentPill.hidden = incidents.length === 0;
+    runningCount = rt.instances || 0;
     renderVariables();
   }
 
@@ -3780,6 +7020,126 @@ export async function mountLive(root, { api, toast, key, instance }) {
       cancelBtn.disabled = false;
     }
   });
+
+  // --- Bulk terminate over the "All instances" list ---
+  // Ticking, "All active", and the mode toggles all funnel through one delegated
+  // listener on the panel, since its innerHTML is rebuilt every poll.
+  varPanel.addEventListener("change", (e) => {
+    const cb = e.target.closest("input[data-pick]");
+    if (!cb) return;
+    const k = Number(cb.dataset.pick);
+    // A manual tick means the operator is hand-picking, so drop the whole-version
+    // scope and fall back to the explicit set (seeding it from what was shown ticked).
+    if (scopeAllActive) {
+      scopeAllActive = false;
+      for (const r of instances) if (r.state === "active") picked.add(r.key);
+    }
+    if (cb.checked) picked.add(k); else picked.delete(k);
+    renderVariables();
+  });
+  varPanel.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (t.closest("[data-term-on]")) { selectMode = true; renderVariables(); return; }
+    if (t.closest("[data-term-off]")) { selectMode = false; scopeAllActive = false; picked.clear(); renderVariables(); return; }
+    if (t.closest("[data-term-all]")) {
+      // Toggle whole-version scope; ticks are implied by scopeAllActive, so clear the
+      // explicit set to avoid a stale count when it is turned off again.
+      scopeAllActive = !scopeAllActive;
+      picked.clear();
+      renderVariables();
+      return;
+    }
+    if (t.closest("[data-term-go]")) { await runTerminate(); return; }
+  });
+
+  // The incident block's two actions — resolve, and correct the variables the retry
+  // will run against — are the shared ones, so this panel and the replay's Details tab
+  // behave identically (ADR-0151/0152).
+  bindIncidentActions(varPanel, {
+    api, toast,
+    incidents: () => incidents,
+    onChanged: poll,
+  });
+
+  // runTerminate confirms, then terminates either the whole version (filter mode,
+  // drained in batches while the server reports remaining) or the hand-picked set,
+  // and refreshes the view.
+  async function runTerminate() {
+    const activeInsts = instances.filter((r) => r.state === "active");
+    const allActive = Math.max(runningCount, activeInsts.length);
+    const count = scopeAllActive ? allActive : picked.size;
+    if (!count) return;
+    const scopeAll = scopeAllActive;
+    if (!(await confirmTerminate(count, scopeAll))) return;
+    const btn = varPanel.querySelector("[data-term-go]");
+    if (btn) btn.disabled = true;
+    try {
+      let terminated = 0;
+      if (scopeAll) {
+        // Drain the whole version in bounded batches (server caps per call).
+        for (let guard = 0; guard < 1000; guard++) {
+          const res = await api("POST", "/api/v1/instances/terminate", { processDefKey: key });
+          terminated += res.terminated || 0;
+          if (!res.remaining) break;
+        }
+      } else {
+        const res = await api("POST", "/api/v1/instances/terminate", { keys: [...picked] });
+        terminated = res.terminated || 0;
+      }
+      toast(`Terminated ${terminated} instance${terminated === 1 ? "" : "s"}`, "ok");
+      selectMode = false; scopeAllActive = false; picked.clear();
+      await refreshInstances();
+      await poll();
+    } catch (err) {
+      toast("terminate failed: " + err.message, "err");
+    } finally {
+      const b = varPanel.querySelector("[data-term-go]");
+      if (b) b.disabled = false;
+    }
+  }
+
+  // confirmTerminate shows a modal that scales its friction to the blast radius: a
+  // plain confirm for a small set, and — above TERMINATE_TYPE_THRESHOLD — a type-the-
+  // count gate so a large irreversible terminate can't be a single click. Resolves
+  // true only when the operator confirms (and, when gated, typed the exact count).
+  function confirmTerminate(count, scopeAll) {
+    return new Promise((resolve) => {
+      const gated = count > TERMINATE_TYPE_THRESHOLD;
+      const ov = document.createElement("div");
+      ov.className = "modal-ov";
+      const scopeText = scopeAll
+        ? `every running instance of this version`
+        : `${count} selected instance${count === 1 ? "" : "s"}`;
+      ov.innerHTML = `
+        <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
+          <div class="modal-head"><h2>Terminate ${count} instance${count === 1 ? "" : "s"}?</h2></div>
+          <div class="modal-body">
+            <p class="muted" style="margin:0 0 10px">This discards each token and moves ${scopeText} to the finished list as <b>terminated</b>. This can't be undone.</p>
+            ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+              <input id="term-confirm-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
+          </div>
+          <div class="modal-foot">
+            <button class="btn neutral" data-term-cancel title="Close without terminating">Cancel</button>
+            <button class="btn danger" data-term-confirm ${gated ? "disabled" : ""} title="Terminate the selected instances">Terminate ${count}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      const input = ov.querySelector("#term-confirm-input");
+      const confirmBtn = ov.querySelector("[data-term-confirm]");
+      const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
+      const onKey = (e) => { if (e.key === "Escape") close(false); };
+      document.addEventListener("keydown", onKey);
+      if (input) {
+        input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
+        input.focus();
+      } else {
+        confirmBtn.focus();
+      }
+      ov.querySelector("[data-term-cancel]").addEventListener("click", () => close(false));
+      confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
+      ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+    });
+  }
 
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
@@ -3959,6 +7319,7 @@ function runDotAnimation(layer, waypoints, dur, cancelled) {
 // the order it actually happened, so a finished collaboration replays its exchange.
 export async function mountCollaboration(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live">
@@ -3966,12 +7327,12 @@ export async function mountCollaboration(root, { api, toast, key }) {
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="collab-title">Collaboration</b></span>
         <div style="flex:1"></div>
-        <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="refresh" title="Reload the message flow">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="flow-count">0</b>&nbsp;messages</span>
       </div>
       <div class="replay-bar">
-        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn play" id="play" title="Play the message sequence">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous message">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next message">&#9197;</button>
         <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Message timeline"/>
@@ -4001,6 +7362,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4191,6 +7553,77 @@ export async function mountCollaboration(root, { api, toast, key }) {
   liveTimer = setInterval(poll, 1500);
 }
 
+// mountTaskProcess renders a compact, read-only process view for a single instance,
+// meant to sit inside the Tasks detail pane so a task assignee can see, at a glance,
+// what has already run and what is still ahead. It overlays the instance's progress
+// on the definition diagram: elements walked so far are grayed (atlas-visited), live
+// tokens are highlighted (atlas-active / atlas-token-waiting), and the task's own
+// element is outlined in blue (atlas-selected) as "you are here". Unlike the full
+// Operations replay it is a static snapshot with no transport bar, and — crucially —
+// it owns its own viewer and does NOT touch the shared navigation lifecycle
+// (cleanup/current/generation), so it can live alongside the Tasks view. Returns a
+// handle with destroy(); the caller tears it down when the selection changes.
+export async function mountTaskProcess(container, { api, instanceKey, activeElementId }) {
+  let viewer = null;
+  let destroyed = false;
+  const handle = {
+    destroy() {
+      destroyed = true;
+      if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
+    },
+  };
+  const fail = (msg) => { if (!destroyed && container) container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`; };
+
+  let lib;
+  try { lib = await loadBpmn(); } catch (e) { fail("Could not load the diagram viewer: " + e.message); return handle; }
+  if (destroyed) return handle;
+
+  // The timeline resolves the instance's definition (for the diagram) and carries
+  // its progress (steps walked + the current token frame).
+  let tl;
+  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); }
+  catch (e) { fail("Could not load the process progress: " + e.message); return handle; }
+  if (destroyed) return handle;
+  if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return handle; }
+
+  container.innerHTML = "";
+  viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+    if (destroyed) return handle;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (destroyed) return handle;
+    fail("Could not render the process diagram: " + e.message);
+    return handle;
+  }
+  if (destroyed) return handle;
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+
+  const frames = tl.frames || [];
+  const steps = tl.steps || [];
+  const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
+  const liveOn = new Set(tokens.map((t) => t.elementId));
+  // Everything walked so far, grayed — except where a token lives now (that must
+  // read as active, not history) and the task's own element (shown as "you are here").
+  for (const s of steps) {
+    if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeElementId) continue;
+    if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
+  }
+  // Live tokens on other branches, highlighted green (or orange while waiting at a join).
+  for (const token of tokens) {
+    if (token.elementId === activeElementId || !registry.get(token.elementId)) continue;
+    canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
+  }
+  // The task's own element: "you are here".
+  if (activeElementId && registry.get(activeElementId)) canvas.addMarker(activeElementId, "atlas-selected");
+  return handle;
+}
+
 // mountInstanceReplay renders one process instance read-only and replays it step
 // by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
 // definition diagram with per-element execution-count badges and a play/step/scrub
@@ -4202,6 +7635,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live ops-replay">
@@ -4210,16 +7644,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <div class="ops-fields">
           <div><label>Process Instance Key</label><span id="m-key" class="mono">${esc(String(key))}</span></div>
           <div><label>Version</label><span id="m-version">&mdash;</span></div>
+          <div id="m-vtag-wrap" hidden><label>Version tag</label><span id="m-vtag" class="ver-tag"></span></div>
           <div><label>Start Date</label><span id="m-start">&mdash;</span></div>
           <div><label>End Date</label><span id="m-end">&mdash;</span></div>
           <div><label>State</label><span class="pill" id="rp-state">&mdash;</span></div>
+          <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
-        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
       <div class="replay-bar">
-        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn play" id="play" title="Play the replay">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous step">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next step">&#9197;</button>
         <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Replay frames"/>
@@ -4229,6 +7666,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <option value="2">2&times;</option>
             <option value="0.5">0.5&times;</option>
           </select></label>
+        <label class="bar-toggle" title="Show the selected element's input and output variables on the diagram"><input type="checkbox" id="tg-io"> I/O on diagram</label>
         <span class="clock" id="clock">no steps yet</span>
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
@@ -4243,9 +7681,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
         <div class="ops-detail">
           <div class="ops-tabs" id="rp-tabs">
-            <button data-tab="details" class="active">Details</button>
-            <button data-tab="variables">Variables</button>
-            <button data-tab="decisions">Decisions</button>
+            <button data-tab="details" class="active" title="Show this step’s details">Details</button>
+            <button data-tab="variables" title="Show the process variables at this step">Variables</button>
+            <button data-tab="decisions" title="Show the decisions evaluated at this step">Decisions</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
@@ -4258,7 +7696,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             <span class="var-modal-title mono" id="var-modal-title"></span>
             <span class="vtag obj" id="var-modal-tag"></span>
             <span style="flex:1"></span>
-            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="">Copy JSON</button>
+            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="" title="Copy all variables as JSON">Copy JSON</button>
             <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
           </div>
           <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
@@ -4274,6 +7712,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -4285,7 +7724,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  // Superseded while the timeline was in flight — do NOT build a viewer or touch
+  // the DOM, which now belongs to the newer mount.
+  if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
+  // Return to this process's instance view — the Live view the replay was opened from —
+  // rather than all the way to the top-level Instances list (still one click away in the
+  // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
+  root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // Migrating is offered only where it means something: an instance still running has
+  // tokens to rebind, a finished one has none, and the button would be an invitation to
+  // an action the engine would refuse (ADR-0162).
+  const migrateBtn = root.querySelector("#rp-migrate");
+  if (tl.state === "active") {
+    migrateBtn.hidden = false;
+    migrateBtn.addEventListener("click", () => migrateInstanceFlow({
+      api, toast,
+      instanceKey: key,
+      processId: tl.processId,
+      fromVersion: tl.version,
+      fromProcessDefKey: tl.processDefKey,
+      // The replay is a fold of the instance's history and the migration changes what
+      // that history means, so it is re-read from scratch rather than patched.
+      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+    }));
+  }
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4295,11 +7758,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     await viewer.importXML(typeof xml === "string" ? xml : String(xml));
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
+    // A newer navigation destroyed this viewer mid-import; the error is expected
+    // and the #canvas now belongs to that mount, so leave it untouched.
+    if (gen !== generation) return;
     root.querySelector("#canvas").innerHTML =
       `<div class="coming"><p>Could not render this instance's diagram.</p>
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // superseded while the diagram imported
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
@@ -4327,17 +7794,35 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let badges = [];   // overlay ids for the execution-count badges
   let visits = {};   // elementId → cumulative execution count (the badge number)
   let selEik = 0;    // selected element-instance key (0 = none / process root)
+  // Which side of a selected element's variables the tab shows: "in" as they stood when
+  // the token entered, "out" as they stood once it finished (ADR-0159). A task that
+  // writes its result on completion has nothing on entry, so a bare "as of activation"
+  // view reports "no variables" for an element that plainly produced some.
+  let varSide = "in";
   let selElId = "";  // selected diagram element id (may cover several instances)
+  // A migration is the one history row that is not an element at all (ADR-0162), so it
+  // cannot be selected by element instance key like every other. Index into steps, -1
+  // for none.
+  let selMig = -1;
   let activeTab = "details";
   let showEnd = false; // history shows end date instead of start date
   let playing = false;
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
+  let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
+  // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
+  // shown — so its own contribution stands out from the values it merely inherited.
+  let changedNames = null;
   let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
+  // Whether the selected element carries its in/out card on the diagram, and the
+  // overlay ids + content signature backing it (see drawIOOverlay).
+  let showIO = localStorage.getItem("atlas.replay.io") !== "0";
+  let ioOverlays = [];
+  let ioSig = "";
 
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
@@ -4351,6 +7836,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   };
 
   function stepLabel(s) {
+    if (s && s.action === "migrate") {
+      const m = s.migration || {};
+      // Name both ends the way an operator reads a process — by version — and fall back
+      // to the definition key when a side has since been deleted and nothing can say
+      // what version it was.
+      const side = (ver, k) => (ver ? `v${ver}` : `#${k}`);
+      return `Migrated ${side(m.fromVersion, m.fromProcessDefKey)} \u2192 ${side(m.toVersion, m.toProcessDefKey)}`;
+    }
     const el = registry.get(s.elementId);
     const bo = el && el.businessObject;
     return (bo && (bo.name || bo.id)) || s.elementId || "?";
@@ -4364,50 +7857,333 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // drawBadges overlays each executed element with its cumulative execution count
   // (ADR-0022 visit history), like Operate's numbered badges. Data comes from the
   // per-instance runtime endpoint; a still-running instance's counts grow on poll.
+  //
+  // A looping activity is counted differently, because the raw number reads wrong there:
+  // the engine activates the activity once as the loop's *body* and once more per round,
+  // so a loop that ran five times badges 6 and leaves the reader to work out why. What a
+  // reader of a loop wants is how often it ran, so that is what the badge says — rounds,
+  // with the arithmetic in its tooltip. A loop that ran none says 0 rather than nothing:
+  // an activity reached and walked past is precisely the case worth seeing.
   function drawBadges() {
     for (const id of badges) { try { overlays.remove(id); } catch { /* gone */ } }
     badges = [];
-    for (const [elId, count] of Object.entries(visits)) {
-      if (!count || !registry.get(elId)) continue;
+    const rounds = {};   // looping element id → rounds run in this instance
+    const looping = {};  // looping element id → times the loop itself was entered
+    for (const s of steps) {
+      if (!s.loop) continue;
+      if (s.loop.round) rounds[s.elementId] = (rounds[s.elementId] || 0) + 1;
+      else looping[s.elementId] = (looping[s.elementId] || 0) + 1;
+    }
+    const ids = new Set([...Object.keys(visits), ...Object.keys(looping)]);
+    for (const elId of ids) {
+      if (!registry.get(elId)) continue;
+      const isLoop = looping[elId] > 0;
+      const count = isLoop ? (rounds[elId] || 0) : visits[elId];
+      if (!isLoop && !count) continue;
+      const title = isLoop
+        ? `${count} ${count === 1 ? "run" : "runs"} of this loop` +
+          (looping[elId] > 1 ? ` · the activity was entered ${looping[elId]} times` : "")
+        : `${count} ${count === 1 ? "execution" : "executions"}`;
       try {
-        badges.push(overlays.add(elId, { position: { top: -12, right: 12 }, html: `<span class="ops-badge">${count}</span>` }));
+        badges.push(overlays.add(elId, { position: { top: -12, right: 12 },
+          html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${
+            isLoop ? `<span class="ops-badge-m" aria-hidden="true">\u21BB</span>` : ""}<span>${count}</span></span>` }));
       } catch { /* element not in this diagram */ }
     }
   }
 
-  async function loadBadges() {
+  // loadRuntime reads the per-instance overlay: the visit counts the badges show, and
+  // the incidents parked in this instance (ADR-0150 puts them on the runtime response,
+  // point-looked-up per token, so the replay needs no second request). It runs on every
+  // poll rather than only when the step set grows: an incident is raised on an element
+  // that has *already* been activated, so it adds no step — waiting for one would mean
+  // a replay that never mentions the fault that stopped it (ADR-0151).
+  async function loadRuntime() {
     let rt;
     try { rt = await api("GET", `/api/v1/processes/${tl.processDefKey}/runtime?instance=${key}`); }
     catch { return; }
     if (current !== viewer) return;
     const next = {};
     for (const e of rt.elements || []) if (e.visits > 0) next[e.elementId] = e.visits;
+    const visitsChanged = JSON.stringify(next) !== JSON.stringify(visits);
     visits = next;
-    drawBadges();
+    if (visitsChanged) drawBadges();
+
+    const nextIncidents = rt.incidents || [];
+    const sig = (list) => list.map((i) => `${i.elementInstanceKey}:${i.raisedAt}`).join(",");
+    if (sig(nextIncidents) === sig(incidents)) return;
+    incidents = nextIncidents;
+    drawIncidentBadges();
+    renderOverlay();   // the stuck element's outline, at whatever frame the playhead is on
+    renderHistory();   // its row in the instance history
+    renderDetail();    // the panel that resolves it
+    updateIncidentMeta();
   }
+
+  // --- Incidents on the replayed instance (ADR-0151) ---
+  // A replay is where an operator reconstructs what went wrong, so the fault that
+  // actually stopped the instance belongs here and not only on the live diagram: the
+  // stuck element is outlined and badged, its history row is flagged, and the Details
+  // panel resolves it with the same one-click action the live view uses.
+  const incidentByEik = (eik) => incidents.find((i) => String(i.elementInstanceKey) === String(eik)) || null;
+  const incidentElementIds = () => new Set(incidents.map((i) => i.elementId).filter(Boolean));
+
+  // drawIncidentBadges puts the live view's ⚠ badge on every element holding one. It
+  // keeps its own overlay ids, so a refresh replaces exactly these. Like the live
+  // view's, the badge is a label rather than a control (it lets the click through to
+  // the element beneath, which selects it and shows the incident in Details).
+  const incBadgeIds = [];
+  function drawIncidentBadges() {
+    for (const id of incBadgeIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    for (const elId of incidentElementIds()) {
+      if (!registry.get(elId)) continue;
+      const list = incidents.filter((i) => i.elementId === elId);
+      const label = list.length === 1 ? "incident" : `${list.length} incidents`;
+      try {
+        incBadgeIds.push(overlays.add(elId, "atlas-incident", {
+          position: { bottom: 4, left: 4 },
+          html: `<div class="incident-badge" title="${esc(list[0].message || "")}">&#9888; ${label}</div>`,
+        }));
+      } catch { /* element not in this diagram */ }
+    }
+  }
+
+  // updateIncidentMeta shows (or hides) the header's incident count, so a stuck
+  // instance says so beside its state instead of only deep in the diagram.
+  function updateIncidentMeta() {
+    const wrap = root.querySelector("#m-inc-wrap");
+    if (!wrap) return;
+    wrap.hidden = incidents.length === 0;
+    root.querySelector("#m-inc-n").textContent = String(incidents.length);
+  }
+
+  // incidentBlock renders the incidents this panel is responsible for: the selected
+  // element instance's own, or — with nothing selected — every one this instance
+  // holds, so the fault is reachable from the panel the replay opens on. Same block,
+  // same action as the live view's (incidents.js).
+  function incidentBlock(step) {
+    const list = step
+      ? incidents.filter((i) => String(i.elementInstanceKey) === String(step.elementInstanceKey))
+      : incidents;
+    return incidentPanelHTML(list, {
+      rows: list.map((i) => incidentRowHTML(i, { label: elementLabelOf(i.elementId), showInstance: false })).join(""),
+    });
+  }
+
+  // elementLabelOf names the element an incident sits on, from the rendered diagram.
+  const elementLabelOf = (elId) => {
+    const el = elId ? registry.get(elId) : null;
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || elId || "";
+  };
 
   // stepsForElement returns every recorded activation of one diagram element, in
   // order (a looped or multi-instance element appears more than once).
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
+  // drawCallActivityLinks marks every call activity whose child instance is known with
+  // a button that opens the child's replay (same window). It used to be an invisible
+  // hotspot laid over the shape's "+" marker, on the theory that the marker already
+  // means "there is a process inside": but an affordance that only appears once the
+  // pointer is already on it is one nobody finds, and operators reported never
+  // discovering the drill-in at all. So it is a badge that is simply always visible,
+  // in the shape's one free corner — the type icon, the execution count and the
+  // incident badge hold the other three, and the in/out card hangs below the shape.
+  //
+  // It complements the Details panel's link and is rebuilt whenever the step set grows.
+  // One badge per element (the first child); a multi-instance call activity's
+  // per-iteration children are reachable by selecting each iteration in the history.
+  const caLinkIds = [];
+  function drawCallActivityLinks() {
+    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    const seen = new Set();
+    for (const s of steps) {
+      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
+      seen.add(s.elementId);
+      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      try {
+        caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+          position: { bottom: 3, right: 3 },
+          // Hold its size against the zoom: a control that shrinks with the canvas is
+          // back to being invisible on a diagram wide enough to need scrolling, which
+          // is exactly the diagram that has call activities on it.
+          scale: { min: 0.9, max: 1.25 },
+          html: `<a class="ca-child-btn" href="#/operations/i/${s.childInstanceKey}"
+            title="Open the called process's instance replay"
+            aria-label="Open the called process's instance replay">&#8627;</a>`,
+        }));
+      } catch { /* element not in this diagram */ }
+    }
+  }
+
+  // docOf reads an element's <bpmn:documentation> — what the modeler wrote about this
+  // step — straight off the rendered model (ADR-0025). The replay already imported the
+  // diagram, so the prose is in the browser: answering "what is this element for?" in
+  // Operations costs no extra request and works for every element, run or not.
+  const docOf = (elId) => {
+    const el = elId ? registry.get(elId) : null;
+    return el ? readDocumentation(el.businessObject) : "";
+  };
+  // docBlock renders that prose below the property list — a block, not a <dd>, because
+  // it is paragraphs rather than a value. Nothing at all when the element is undocumented.
+  const docBlock = (text) => (text ? `<div class="ops-doc"><h4>Documentation</h4><p>${esc(text)}</p></div>` : "");
+
+  // manualBlock reports that this step was forced by a person rather than driven by the
+  // engine (ADR-0159): who completed the parked job by hand, when, and the reason they
+  // gave. It leads the block list because it changes how every other fact on the step
+  // should be read — the element did not finish on its own. Nothing at all for an
+  // ordinary step, so its presence alone is the signal.
+  const manualBlock = (s) => {
+    const m = s && s.manual;
+    if (!m) return "";
+    const who = m.actor ? esc(m.actor) : "an operator";
+    return `<div class="ops-manual">
+      <h4>&#10003; Completed manually</h4>
+      <p>This task was finished by hand by <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} —
+        the engine did not complete it on its own.</p>
+      <p class="ops-manual-reason">${esc(m.reason || "")}</p>
+    </div>`;
+  };
+
+  // loopBlock explains the loop a step belongs to (ADR-0077/0133). A looping activity's
+  // rounds are otherwise a column of identical rows, and the question they raise — why it
+  // went round again, or why it stopped where it did — is answered by three things the
+  // step carries: the condition as the author wrote it, the cap, and the values that
+  // condition's own variables held for this round. None of it is re-derived here; the
+  // server reads the model and the log and says what they say.
+  const loopBlock = (s) => {
+    const l = s && s.loop;
+    if (!l) return "";
+    const std = l.kind === "loop";
+    const mark = std ? "\u21BB" : "\u2261";
+    const head = l.round
+      ? `Round ${l.round}${l.maximum ? ` of at most ${l.maximum}` : ""}`
+      : `${l.rounds || 0} round${l.rounds === 1 ? "" : "s"} ran`;
+    const rows = [];
+    if (l.collection) {
+      rows.push(`<dt>Iterate over</dt><dd><code>${esc(l.collection)}</code></dd>`);
+    }
+    if (l.condition) {
+      rows.push(`<dt>${std ? "Repeat while" : "Complete when"}</dt><dd><code>${esc(l.condition)}</code></dd>`);
+      rows.push(`<dt>Checked</dt><dd>${l.testBefore
+        ? "before each run — the activity may be skipped entirely"
+        : "after each run — the activity always runs at least once"}</dd>`);
+    } else if (std) {
+      rows.push(`<dt>Repeat while</dt><dd class="hint">no condition — the maximum is this loop's only bound</dd>`);
+    }
+    if (l.maximum) rows.push(`<dt>Max iterations</dt><dd>${esc(String(l.maximum))}</dd>`);
+    if ((l.reads || []).length) {
+      rows.push(`<dt>It read</dt><dd>${l.reads.map((v) =>
+        `<code>${esc(v.name)}</code> = <span class="c-val">${esc(ioValueText(v))}</span>`).join(", ")}</dd>`);
+    }
+    if ((l.missing || []).length) {
+      rows.push(`<dt>Not in scope</dt><dd>${l.missing.map((n) => `<code>${esc(n)}</code>`).join(", ")}
+        <span class="hint">— nothing of that name is visible here, so the condition never holds</span></dd>`);
+    }
+    return `<div class="ops-loop">
+      <h4>${mark} ${esc(head)}</h4>
+      ${rows.length ? `<dl class="ops-props">${rows.join("")}</dl>` : ""}
+      ${l.outcome ? `<p class="ops-loop-out">${loopOutcomeText(l)}</p>` : ""}
+      ${!l.round && !l.rounds && l.collection
+      ? `<p class="ops-loop-out">No round ran: <b>iterate over</b> did not come out as a list.
+           A FEEL expression that reads a name nothing holds — or one value where a list was meant —
+           yields no rounds at all, and the activity is walked past.</p>`
+      : ""}
+    </div>`;
+  };
+
+  // loopOutcomeText says what followed this round, in the operator's terms. "stopped"
+  // without a reason is a multi-instance: it ends when its collection runs out or its
+  // completion condition holds, and the log records neither as a fact of its own, so the
+  // sentence stops where the record does.
+  const loopOutcomeText = (l) => {
+    switch (l.outcome) {
+      case "repeated": return "The loop ran the activity again after this round.";
+      case "running": return "This round has not finished.";
+      case "terminated": return "This round was torn down before it finished — the instance was cancelled, or a boundary event interrupted it.";
+    }
+    switch (l.stopReason) {
+      case "maximum": return `The loop stopped here: <b>max iterations (${esc(String(l.maximum))})</b> was reached.`;
+      case "condition": return `The loop stopped here: <b>repeat while</b> no longer held.`;
+      case "ceiling": return "The loop stopped here: the engine's safety ceiling for a loop that states no maximum. Resolve the incident to grant it another 1000 runs.";
+    }
+    return "The loop ended with this round.";
+  };
+
+  // migrationDetail is the Details tab for the one history row that is not an element:
+  // the point at which an operator rebound this instance to another version of its
+  // process (ADR-0162). It says what it says plainly, because the consequence is easy to
+  // misread — the steps above this row ran on a *different* model, so an element named
+  // there may not be on the diagram at all, and one that is may have changed.
+  function migrationDetail(s) {
+    const m = s.migration || {};
+    const side = (ver, tag, k) => {
+      if (!ver) return `<span class="mono">#${esc(String(k))}</span> <span class="hint">(no longer deployed)</span>`;
+      return `Version ${esc(String(ver))}${tag ? ` <span class="hint">(${esc(tag)})</span>` : ""}`;
+    };
+    const who = m.actor ? esc(m.actor) : "an operator";
+    return `<dl class="ops-props">
+      <dt>Event</dt><dd>Migrated to another version</dd>
+      <dt>From</dt><dd>${side(m.fromVersion, m.fromVersionTag, m.fromProcessDefKey)}</dd>
+      <dt>To</dt><dd>${side(m.toVersion, m.toVersionTag, m.toProcessDefKey)}</dd>
+      <dt>Date</dt><dd>${esc(fmtDateTime(m.at || s.at))}</dd>
+      <dt>By</dt><dd>${who}</dd>
+    </dl>
+    <div class="ops-mig">
+      <h4>&#8644; The model changed here</h4>
+      <p>This instance kept its variables, its tasks and everything already done, and
+        carried on under the newer version. The steps <b>above</b> this point ran on the
+        earlier one, so they name that version's elements — the diagram shows the version
+        the instance is on <b>now</b>.</p>
+      <p class="ops-mig-reason">${esc(m.reason || "")}</p>
+    </div>`;
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
+    // A migration selected in the history is not an element at all: it has no element
+    // instance and no diagram shape, so it is answered before either of the branches
+    // below — the first of which treats "no element instance" as "nothing selected".
+    if (selMig >= 0 && steps[selMig] && steps[selMig].migration) {
+      detailEl.innerHTML = migrationDetail(steps[selMig]);
+      return;
+    }
     if (!selEik) {
+      // An element the operator clicked that this instance never reached has no step to
+      // report — but it does have an identity and, often, the documentation explaining
+      // what it would have done. Show that instead of silently falling back to the
+      // process panel, which looked like the click had missed.
+      if (selElId) {
+        const el = registry.get(selElId);
+        const bo = (el && el.businessObject) || {};
+        detailEl.innerHTML = `<dl class="ops-props">
+          <dt>Element</dt><dd>${esc(bo.name || selElId)}</dd>
+          <dt>Type</dt><dd>${esc(shortType(bo.$type) || "—")}</dd>
+          <dt>Element ID</dt><dd class="mono">${esc(selElId)}</dd>
+          <dt class="hint" colspan>Not reached in this instance.</dt>
+        </dl>${docBlock(docOf(selElId))}`;
+        return;
+      }
       detailEl.innerHTML = `<dl class="ops-props">
         <dt>Process</dt><dd>${esc(titleEl.textContent)}</dd>
         <dt>Instance Key</dt><dd class="mono">${esc(String(key))}</dd>
         <dt>State</dt><dd>${esc(stateEl.textContent)}</dd>
         <dt>Elements executed</dt><dd>${steps.length}</dd>
         <dt class="hint" colspan>Select an element in the diagram or the history to inspect it.</dt>
-      </dl>`;
+      </dl>${incidentBlock()}${docBlock(readDocumentation(processBusinessObject(viewer, tl.processId)))}`;
       return;
     }
     const s = stepByEik(selEik);
     if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
     const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
     const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    // A call activity links to the child instance it started (ADR-0076), so an
+    // operator drills from caller to child in one click, same window.
+    const child = s.childInstanceKey
+      ? `<dt>Called process</dt><dd><a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; Instance ${esc(String(s.childInstanceKey))}</a></dd>`
+      : "";
     detailEl.innerHTML = `<dl class="ops-props">
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
@@ -4416,8 +8192,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
-      ${from}${rel}
-    </dl>`;
+      ${from}${rel}${child}
+    </dl>${loopBlock(s)}${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
   }
 
   // A JSON variable's stored value is a JSON string; these read its shape without
@@ -4445,9 +8221,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const complex = isComplexVar(v);
     let valCell;
     if (complex) {
-      valCell = `<button class="v-open" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)}">
-          <span class="more" aria-hidden="true">···</span>
-          <span class="v-sum">${esc(jsonSummary(v.value))}</span>
+      // A list and an object read almost alike once their text is truncated — the peek of
+      // [{"Nachname":…}] and of {"Nachname":…} differ by one character, off the left edge
+      // of what fits. So the summary carries the brackets, and the row expands in place:
+      // the shape of a structure is the thing an operator is looking at it for.
+      const arr = jsonTypeLabel(v.value) === "array";
+      valCell = `<button class="v-open" type="button" aria-expanded="false" data-vkey="${esc(varRef(v))}"
+          data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}"
+          title="Show ${esc(v.name)}">
+          <span class="v-chev" aria-hidden="true">▸</span>
+          <span class="v-sum">${arr ? "[" : "{"}${esc(jsonSummary(v.value))}${arr ? "]" : "}"}</span>
           <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
     } else {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
@@ -4457,12 +8240,64 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
       : `<span class="vtag">${esc(v.kind)}</span>`;
     const copyData = complex ? prettyJSON(v.value) : v.value;
-    return `<tr>
-      <td class="c-name" title="${esc(v.name)}">${esc(v.name)}</td>
+    // A subprocess-local variable (an input mapping) carries the id of the
+    // subprocess it lives in; label it so it reads apart from a process variable
+    // (ADR-0074). A process-scope variable has no scope and no chip.
+    const scopeChip = v.scope
+      ? ` <span class="c-scope" title="${v.local
+        ? `Local to this element — its input mapping, or the round's loop counter`
+        : `Local to subprocess ${esc(v.scope)}`}">${esc(v.scope)}</span>`
+      : "";
+    // A value the process did not compute: an operator set it by hand on the running
+    // instance (ADR-0098). The audit log has carried who did it since that landed and
+    // the timeline has returned it all along; showing it is what makes an operator
+    // correction reviewable rather than an unexplained jump in the values (ADR-0158).
+    // On the Output side, mark what this element itself contributed — a value it wrote
+    // or rewrote — so its result stands apart from what it merely inherited (ADR-0159).
+    const changedChip = changedNames && changedNames.has(varRef(v))
+      ? ` <span class="c-changed" title="Written by this element">+</span>`
+      : "";
+    const actorChip = v.actor
+      ? ` <span class="c-actor" title="Set by ${esc(v.actor)} — an operator correction, not a value the process computed">✎ ${esc(v.actor)}</span>`
+      : "";
+    const row = `<tr>
+      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${changedChip}${actorChip}</td>
       <td class="c-valcell">${valCell}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
     </tr>`;
+    if (!complex) return row;
+    // Rendered with the row and hidden, rather than built on the click: the rows are
+    // rewritten on every poll and every frame, and an expansion that lived only in the
+    // click handler would collapse under the reader every 1.5 seconds.
+    return row + `<tr class="v-struct" data-dt-detail data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
+      <pre class="vj-body">${highlightJSON(v.value)}</pre>
+      <button class="v-big" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}"
+        data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)} in a window">⤢ Open in a window</button>
+    </td></tr>`;
+  }
+
+  // Which structures the reader has opened, by variable ref. The rows are rewritten on
+  // every poll and every frame, so without this an expansion would close under them —
+  // but it belongs to the set it was opened in. Carried to the next element, or to the
+  // other side of the same one, it re-opens a structure nobody asked for, which reads as
+  // "these come open by default". varsContext is what the current rows are *of*; when it
+  // changes the openings go with it.
+  const expandedVars = new Set();
+  let varsContext = "";
+
+  // syncCollapseAll shows the toolbar's collapse control exactly while something is open,
+  // so the way out of a wall of JSON is where the reader is looking, not only on the row
+  // they opened (which the JSON itself may have pushed off screen).
+  function syncCollapseAll() {
+    const btn = varsEl.querySelector("#v-collapse");
+    if (btn) btn.hidden = expandedVars.size === 0;
+  }
+
+  // collapseAllVars closes every open structure and redraws the rows.
+  function collapseAllVars() {
+    expandedVars.clear();
+    renderVarRows();
   }
 
   // renderVarRows fills the table body from the current variable set, honoring the
@@ -4477,6 +8312,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
       : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+    for (const key of expandedVars) {
+      const struct = body.querySelector(`.v-struct[data-vkey="${CSS.escape(key)}"]`);
+      const open = body.querySelector(`.v-open[data-vkey="${CSS.escape(key)}"]`);
+      if (!struct || !open) continue; // that variable is not in this set (filtered, or gone)
+      struct.hidden = false;
+      open.setAttribute("aria-expanded", "true");
+      open.querySelector(".v-chev").textContent = "\u25BE";
+    }
+    syncCollapseAll();
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -4486,11 +8330,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     varsEl.innerHTML = `
       <div class="vp-head v-toolbar">
         <span class="vp-title" id="v-scope">Variables</span>
+        <span class="v-side" id="v-side" hidden>
+          <button type="button" class="v-side-btn" data-side="in" title="The variables as they stood when the token entered this element">Input</button>
+          <button type="button" class="v-side-btn" data-side="out" title="The variables as they stood once this element finished — its result, output mappings included">Output</button>
+        </span>
         <span class="vp-count" id="v-count">0 variables</span>
         <span class="v-filter">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
           <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
         </span>
+        <button type="button" class="btn ghost small v-collapse" id="v-collapse" hidden
+                title="Close every structure opened in the table">&#9662; Collapse all</button>
         <span class="vp-actions" id="v-copyall"></span>
       </div>
       <div class="v-scroll">
@@ -4502,6 +8352,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const filterEl = varsEl.querySelector("#v-filter");
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
+    varsEl.querySelector("#v-collapse").addEventListener("click", collapseAllVars);
+    varsEl.querySelector("#v-side").addEventListener("click", (e) => {
+      const b = e.target.closest(".v-side-btn");
+      if (!b) return;
+      varSide = b.dataset.side;
+      renderVars();
+    });
     varsBuilt = true;
   }
 
@@ -4512,17 +8369,50 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function renderVars() {
     if (!varsBuilt) buildVarsShell();
     let src, scope;
+    const sideEl = varsEl.querySelector("#v-side");
+    changedNames = null;
     if (selEik) {
       const s = stepByEik(selEik);
-      src = s ? s.variables : [];
-      scope = s ? `As of <b>${esc(stepLabel(s))}</b> activation` : "Variables";
+      // What the element could see on entry is its whole scope chain: the process (and
+      // subprocess) fold, plus the locals of its own scope — its input mappings, and for
+      // one round of a loop that round's loopCounter and item (ADR-0068/0077/0133).
+      // Without the locals a loop iteration reported only the process variables, which is
+      // why six rounds of one task all read identically.
+      const entry = [...((s && s.variables) || []), ...localsOf(s)];
+      const after = (s && s.variablesAfter) || null;
+      // Offer the two sides only for an element that has finished; while it is still
+      // running there is no "after" to show. Landing on Output when the element saw
+      // nothing on entry keeps the panel from reading as empty for a task whose whole
+      // contribution is its result.
+      sideEl.hidden = !after;
+      if (!after) varSide = "in";
+      else if (varSide === "in" && !entry.length && after.length) varSide = "out";
+      for (const b of sideEl.querySelectorAll(".v-side-btn")) b.classList.toggle("active", b.dataset.side === varSide);
+      const out = varSide === "out" && after;
+      src = out ? after : entry;
+      if (out) {
+        // Mark what this element actually contributed — the very set the diagram's
+        // in/out card labels "out", so the two surfaces can never tell different stories.
+        changedNames = new Set((writtenBy(s) || []).map(varRef));
+      }
+      scope = s
+        ? `${out ? "After" : "As of"} <b>${esc(stepLabel(s))}</b> ${out ? "completion" : "activation"}`
+        : "Variables";
     } else {
+      sideEl.hidden = true;
       const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
       const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
       src = cur ? cur.variables : [];
       scope = cur ? `As of step ${playhead} · <b>${esc(stepLabel(cur))}</b>` : "Variables";
     }
     curVarList = src || [];
+    // The rows are about to be of a different element (or the other side of one): what the
+    // reader opened in the previous set does not carry over to this one.
+    const ctx = `${selEik || 0}\u0000${varSide}\u0000${selEik ? "" : String(playhead)}`;
+    if (ctx !== varsContext) {
+      varsContext = ctx;
+      expandedVars.clear();
+    }
     varsEl.querySelector("#v-scope").innerHTML = scope;
     varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
     renderVarRows();
@@ -4610,17 +8500,34 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
     }
-    // Count tokens per element so several tokens on one node (both arrivals at a
-    // join) fan out instead of stacking into one dot.
-    const perEl = {};
+    // Several tokens on one node — both arrivals at a join, a loop's body and the round
+    // running under it — fan out along its top edge instead of stacking. They are grouped
+    // per element first, because how many there are decides how they are drawn: a shape is
+    // only so wide, so past what fits the rest collapse into a count rather than marching
+    // off the edge or piling up on each other.
+    const byEl = new Map();
     for (const token of tokens) {
-      const el = registry.get(token.elementId);
-      if (!el) continue;
+      if (!registry.get(token.elementId)) continue;
       const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
       canvas.addMarker(token.elementId, marker);
       marked.push([token.elementId, marker]);
-      const n = perEl[token.elementId] = (perEl[token.elementId] || 0) + 1;
-      drawTokenDot(el, tokenColor(token.tokenId), n - 1);
+      if (!byEl.has(token.elementId)) byEl.set(token.elementId, []);
+      byEl.get(token.elementId).push(token);
+    }
+    for (const [elId, list] of byEl) {
+      const el = registry.get(elId);
+      const room = Math.max(1, Math.floor(((el.width || 100) - 14) / TOKEN_DOT_STEP));
+      const dots = list.length <= room ? list.length : Math.max(1, room - 1);
+      list.slice(0, dots).forEach((token, i) => drawTokenDot(el, tokenColor(token.tokenId), i));
+      if (list.length > dots) drawTokenCount(el, list.length - dots, dots);
+    }
+    // An incident is a fact about *now*, not about the frame being replayed, so the
+    // stuck element stays outlined wherever the playhead sits — drawn after the token
+    // markers, which the .djs-element.atlas-incident rule is written to win over.
+    for (const elId of incidentElementIds()) {
+      if (!registry.get(elId)) continue;
+      canvas.addMarker(elId, "atlas-incident");
+      marked.push([elId, "atlas-incident"]);
     }
     const legend = root.querySelector("#token-legend");
     legend.innerHTML = tokens.length ? tokens.map((token) =>
@@ -4637,20 +8544,163 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(selElId, "atlas-selected");
       marked.push([selElId, "atlas-selected"]);
     }
+    drawIOOverlay();
+  }
+
+  // --- The selected element's in/out card, on the diagram ---
+  // The Variables tab answers "what did the whole instance hold at this point". This
+  // answers the narrower question an operator asks while reading the diagram itself:
+  // what went *into* this task, and what came *out* of it. Both halves are what actually
+  // happened, not what the model declares — in is the element's own input mappings as
+  // they were evaluated into its local scope (ADR-0068, carried on the step as `inputs`),
+  // out is the difference between the variables it saw on entry and the ones it left
+  // behind (ADR-0159). The card is informational: it never takes pointer events, so it
+  // cannot come between the operator and the element underneath it.
+  const IO_ROWS = 6; // beyond this the card stops being glanceable; the tab has them all
+
+  // varRef identifies a variable across two snapshots of the same instance. A
+  // subprocess-local shadows nothing — it is a distinct variable that happens to share a
+  // name with one in an enclosing scope — so the scope belongs in the key (ADR-0074).
+  const varRef = (v) => v.scope + "\u0000" + v.name;
+
+  // localsOf is what lives in the element instance's own scope: its evaluated input
+  // mappings and, for one round of a loop, that round's counter and item. They are
+  // labeled with the element's id so they read apart from the process variables they sit
+  // among, the same way a subprocess-local does (ADR-0074).
+  const localsOf = (s) => ((s && s.inputs) || []).map((v) => ({ ...v, scope: s.elementId, local: true }));
+
+  // writtenBy is what an element itself contributed: every value it added or rewrote
+  // between its activation and its completion. null while it is still running — there
+  // is no "after" yet, which is a different statement from "it wrote nothing".
+  function writtenBy(s) {
+    const after = (s && s.variablesAfter) || null;
+    if (!after) return null;
+    const before = new Map(((s && s.variables) || []).map((v) => [varRef(v), v.value]));
+    return after.filter((v) => !before.has(varRef(v)) || before.get(varRef(v)) !== v.value);
+  }
+
+  const ioValueText = (v) => {
+    const text = isComplexVar(v) ? jsonSummary(v.value) : String(v.value);
+    return text.length > 30 ? text.slice(0, 29) + "…" : text;
+  };
+  const ioSection = (kind, list, empty) => {
+    const rows = (list || []).slice(0, IO_ROWS).map((v) => `<div class="io-row">
+        <span class="io-n">${esc(v.name)}</span>
+        <span class="io-v">${esc(ioValueText(v))}</span>
+      </div>`).join("");
+    const rest = (list || []).length - IO_ROWS;
+    return `<div class="io-sec ${kind}">
+        <span class="io-lbl">${kind}</span>
+        <div class="io-rows">${rows || `<div class="io-none">${esc(empty)}</div>`}${
+      rest > 0 ? `<div class="io-more">+${rest} more</div>` : ""}</div>
+      </div>`;
+  };
+
+  // ioLoopLine is the loop's own section on the card: which round this is, what the loop
+  // repeats while (or completes when), the values that condition read, and what the loop
+  // decided (ADR-0077/0133). Laid out in the same name/value rows as the in and out
+  // sections, so a read reads like any other value — the Details tab carries the prose.
+  const ioLoopLine = (s) => {
+    const l = s && s.loop;
+    if (!l || !l.round) return "";
+    const rows = [];
+    if (l.condition) {
+      rows.push([l.kind === "loop" ? "repeat while" : "complete when", l.condition]);
+    } else {
+      rows.push(["no condition", l.maximum ? `max ${l.maximum}` : ""]);
+    }
+    for (const v of l.reads || []) rows.push([v.name, ioValueText(v)]);
+    for (const name of l.missing || []) rows.push([name, "not in scope"]);
+    const verdict = l.outcome === "repeated" ? "run again"
+      : l.outcome === "stopped" ? `stop${l.stopReason ? ` (${l.stopReason})` : ""}`
+      : l.outcome === "terminated" ? "torn down" : "";
+    if (verdict) rows.push(["then", verdict]);
+    return `<div class="io-sec loop">
+        <span class="io-lbl">\u21BB ${esc(String(l.round))}${l.maximum ? `/${esc(String(l.maximum))}` : ""}</span>
+        <div class="io-rows">${rows.map(([n, v]) => `<div class="io-row">
+          <span class="io-n">${esc(n)}</span><span class="io-v">${esc(v)}</span></div>`).join("")}</div>
+      </div>`;
+  };
+
+  // ioOverlayHTML builds the card, or "" when there is nothing worth covering the
+  // diagram with: no selection, or an element that neither took mapped inputs nor
+  // wrote anything.
+  function ioOverlayHTML() {
+    if (!showIO || !selElId || !selEik) return "";
+    const s = stepByEik(selEik);
+    if (!s) return "";
+    const ins = s.inputs || [];
+    const outs = writtenBy(s);
+    const loop = ioLoopLine(s);
+    if (!ins.length && !(outs && outs.length) && !loop) return "";
+    return `<div class="io-ov">
+        <div class="io-ov-h">${esc(stepLabel(s))}</div>
+        ${ioSection("in", ins, "no input mapping")}
+        ${outs ? ioSection("out", outs, "wrote nothing") : ioSection("out", null, "still running")}
+        ${loop}
+      </div>`;
+  }
+
+  // drawIOOverlay re-attaches the card to the selected element. renderOverlay runs on
+  // every frame and every 1.5s poll, so it re-draws only when the card's content (or the
+  // element it belongs to) actually changed — otherwise a scrub would rebuild the same
+  // DOM dozens of times.
+  function drawIOOverlay() {
+    const html = ioOverlayHTML();
+    const sig = html ? selElId + "\u0000" + html : "";
+    if (sig === ioSig) return;
+    ioSig = sig;
+    for (const id of ioOverlays) { try { overlays.remove(id); } catch { /* gone */ } }
+    ioOverlays = [];
+    const el = html && registry.get(selElId);
+    if (!el) return;
+    try {
+      ioOverlays.push(overlays.add(selElId, {
+        position: { top: (el.height || 80) + 10, left: 0 },
+        scale: { min: 0.7, max: 1.15 },
+        html,
+      }));
+    } catch { /* element not in this diagram */ }
   }
 
   // drawTokenDot places a filled token marker at the top-left of an element (index
   // offsets stacked tokens so concurrent ones on the same node stay distinct). The
   // dot lives on the replay layer, so it tracks pan/zoom like the moving dot.
+  // A token dot is 20px across (a 9px halo with a 2px stroke), so the step between two of
+  // them has to clear that — at the 16px it used to be, every pair on one element drew
+  // partly on top of the one before it, which is the normal case for a loop rather than a
+  // corner one.
+  const TOKEN_DOT_STEP = 21;
+
   function drawTokenDot(el, color, index) {
     const NS = "http://www.w3.org/2000/svg";
     const g = document.createElementNS(NS, "g");
-    g.setAttribute("transform", `translate(${el.x + 6 + index * 16} ${el.y + 6})`);
+    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
     const halo = document.createElementNS(NS, "circle");
     halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
     const dot = document.createElementNS(NS, "circle");
     dot.setAttribute("r", "6"); dot.setAttribute("fill", color);
     g.appendChild(halo); g.appendChild(dot);
+    dotLayer.appendChild(g);
+  }
+
+  // drawTokenCount stands in for the tokens that did not fit on the shape: "+3" in the
+  // next dot's place. The legend below the diagram lists every token by id either way, so
+  // nothing is lost by not drawing them all — what would be lost is the ability to read
+  // the ones that are drawn.
+  function drawTokenCount(el, count, index) {
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
+    const pill = document.createElementNS(NS, "rect");
+    pill.setAttribute("x", "-12"); pill.setAttribute("y", "-9");
+    pill.setAttribute("width", "26"); pill.setAttribute("height", "18"); pill.setAttribute("rx", "9");
+    pill.setAttribute("fill", "#fff"); pill.setAttribute("stroke", "#94a3b8"); pill.setAttribute("stroke-width", "2");
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", "1"); label.setAttribute("y", "4"); label.setAttribute("text-anchor", "middle");
+    label.setAttribute("font-size", "11"); label.setAttribute("font-weight", "600"); label.setAttribute("fill", "#334155");
+    label.textContent = `+${count}`;
+    g.appendChild(pill); g.appendChild(label);
     dotLayer.appendChild(g);
   }
 
@@ -4662,7 +8712,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const pos = steps[i] ? steps[i].position : 0;
       row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
       row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
-      row.classList.toggle("sel", steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0);
+      row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0) || i === selMig);
     });
     const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
@@ -4686,12 +8736,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       return;
     }
     const rows = steps.map((s, i) => {
+      if (s.action === "migrate") {
+        // Drawn as a rule across the list rather than another element row: the steps
+        // above it and below it are on different versions of the process, and that is
+        // the one thing this row exists to say.
+        return `<div class="ops-hrow mig" data-i="${i}" data-eik="0"
+            title="${esc((s.migration && s.migration.reason) || "Migrated to another version")}">
+          <span class="ops-hicon mig">&#8644;</span>
+          <span class="ops-hname">${esc(stepLabel(s))}</span>
+          <span class="ops-htime">${esc(fmtClock(s.at))}</span>
+        </div>`;
+      }
       const done = s.endAt > 0;
-      const icon = done ? "&#10003;" : "&#9679;";
+      const inc = incidentByEik(s.elementInstanceKey);
+      const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
       const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
-      return `<div class="ops-hrow" data-i="${i}" data-eik="${s.elementInstanceKey || 0}">
-        <span class="ops-hicon ${done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}</span>
+      // A loop runs the same node again and again, so without its round number every
+      // iteration is an identical row and the operator cannot tell which one they are
+      // reading (ADR-0077/0133).
+      const round = s.iteration
+        ? ` <span class="ops-hiter" title="Round ${s.iteration} of this loop">#${s.iteration}</span>`
+        : "";
+      return `<div class="ops-hrow${inc ? " inc" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}"${
+        inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
+        <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
+        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");
@@ -4705,6 +8774,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       pause();
       if (i < 0) { selectElement("", 0); return; }
       const s = steps[i];
+      if (s.action === "migrate") {
+        // It names no element, so there is nothing to select on the diagram and nothing
+        // to animate — but the playhead still moves, so the surrounding steps read in
+        // the order they happened.
+        selMig = i; selElId = ""; selEik = 0;
+        renderOverlay(); renderInspector();
+        const at = frames.findIndex((f) => f.position >= s.position);
+        setPlayhead(at < 0 ? frames.length : at);
+        highlightHistory();
+        return;
+      }
       selectElement(s.elementId, s.elementInstanceKey || 0);
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
@@ -4716,6 +8796,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // selectElement cross-highlights the diagram, the history and the inspector for
   // one element instance (or clears the selection when elId is empty).
   function selectElement(elId, eik) {
+    selMig = -1;
     selElId = elId;
     // Without a specific instance, default to this element's last activation so the
     // inspector has facts to show (clicking the diagram picks the whole element).
@@ -4803,7 +8884,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   function applyMeta(next) {
     titleEl.textContent = processName();
+    docTitle(`${processName()} · Instance ${key}`);
     root.querySelector("#m-version").textContent = next.version != null ? "v" + next.version : "—";
+    const vtag = next.versionTag || "";
+    const vtWrap = root.querySelector("#m-vtag-wrap");
+    if (vtWrap) {
+      if (vtag) { root.querySelector("#m-vtag").textContent = vtag; vtWrap.hidden = false; }
+      else { vtWrap.hidden = true; }
+    }
     root.querySelector("#m-start").textContent = steps.length ? fmtDateTime(steps[0].at) : "—";
     const end = next.state !== "active" && steps.length ? Math.max(...steps.map((s) => s.endAt || 0)) : 0;
     root.querySelector("#m-end").textContent = end ? fmtDateTime(end) : "—";
@@ -4824,12 +8912,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       steps = list; frames = nextFrames;
       scrub.max = String(frames.length);
       renderHistory();
-      loadBadges();
+      drawCallActivityLinks();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();
     }
     applyMeta(next);
+    await loadRuntime();
     await refreshDecisions();
   }
 
@@ -4854,6 +8943,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     selectElement(el.id, 0);
   });
 
+  // The Details panel's incident actions are HTML inside a tab body that re-renders,
+  // so they are wired by delegation on the view root — the same actions, with the same
+  // semantics, the live view offers beside its diagram (ADR-0150/0151/0152).
+  bindIncidentActions(root, {
+    api, toast,
+    within: "#tab-details",
+    incidents: () => incidents,
+    onChanged: poll,
+  });
+
   root.querySelectorAll("#rp-tabs button").forEach((b) => b.addEventListener("click", () => {
     activeTab = b.dataset.tab;
     root.querySelectorAll("#rp-tabs button").forEach((x) => x.classList.toggle("active", x === b));
@@ -4862,6 +8961,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     decEl.hidden = activeTab !== "decisions";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
+  // The in/out card can cover whatever the modeler drew below a task, so it is the
+  // operator's call — and it is remembered, since that preference is about how they
+  // read a diagram, not about this one instance.
+  const ioToggle = root.querySelector("#tg-io");
+  ioToggle.checked = showIO;
+  ioToggle.addEventListener("change", (e) => {
+    showIO = e.target.checked;
+    localStorage.setItem("atlas.replay.io", showIO ? "1" : "0");
+    drawIOOverlay();
+  });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();
@@ -4871,9 +8980,27 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   // A "···" button in the Variables table opens its object/array value in the modal.
   varsEl.addEventListener("click", (e) => {
+    // The value cell expands the structure in place — the common case is a glance at the
+    // shape, not a window. The window is one step further in, from inside the expansion.
+    const big = e.target.closest(".v-big");
+    if (big && varsEl.contains(big)) {
+      openVarModal(big.dataset.name, big.dataset.json, big.dataset.type);
+      return;
+    }
     const open = e.target.closest(".v-open");
     if (!open || !varsEl.contains(open)) return;
-    openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+    const key = open.dataset.vkey;
+    const struct = varsEl.querySelector(`.v-struct[data-vkey="${CSS.escape(key)}"]`);
+    if (!struct) { // no expansion rendered (shouldn't happen) — fall back to the window
+      openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+      return;
+    }
+    const show = struct.hidden;
+    struct.hidden = !show;
+    open.setAttribute("aria-expanded", String(show));
+    open.querySelector(".v-chev").textContent = show ? "\u25BE" : "\u25B8";
+    if (show) expandedVars.add(key); else expandedVars.delete(key);
+    syncCollapseAll(); // the toolbar's way out appears with the first open structure
   });
   modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
   modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });

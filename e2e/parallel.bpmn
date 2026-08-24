@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Defs_par" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- Parallel gateway: the split forks onto both branches; the join waits for both and
+       merges to a single token, so the process completes exactly once. -->
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="Start"><bpmn:outgoing>s1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:parallelGateway id="Gw_s">
+      <bpmn:incoming>s1</bpmn:incoming>
+      <bpmn:outgoing>sa</bpmn:outgoing>
+      <bpmn:outgoing>sb</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="TaskA"><bpmn:incoming>sa</bpmn:incoming><bpmn:outgoing>ja</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="TaskB"><bpmn:incoming>sb</bpmn:incoming><bpmn:outgoing>jb</bpmn:outgoing></bpmn:task>
+    <bpmn:parallelGateway id="Gw_j">
+      <bpmn:incoming>ja</bpmn:incoming>
+      <bpmn:incoming>jb</bpmn:incoming>
+      <bpmn:outgoing>e1</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:endEvent id="End"><bpmn:incoming>e1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="s1" sourceRef="Start" targetRef="Gw_s" />
+    <bpmn:sequenceFlow id="sa" sourceRef="Gw_s" targetRef="TaskA" />
+    <bpmn:sequenceFlow id="sb" sourceRef="Gw_s" targetRef="TaskB" />
+    <bpmn:sequenceFlow id="ja" sourceRef="TaskA" targetRef="Gw_j" />
+    <bpmn:sequenceFlow id="jb" sourceRef="TaskB" targetRef="Gw_j" />
+    <bpmn:sequenceFlow id="e1" sourceRef="Gw_j" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diag">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="P">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="150" y="162" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_s_di" bpmnElement="Gw_s"><dc:Bounds x="240" y="155" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TaskA_di" bpmnElement="TaskA"><dc:Bounds x="360" y="60" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TaskB_di" bpmnElement="TaskB"><dc:Bounds x="360" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_j_di" bpmnElement="Gw_j"><dc:Bounds x="520" y="155" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="620" y="162" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="186" y="180" /><di:waypoint x="240" y="180" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="sa_di" bpmnElement="sa"><di:waypoint x="265" y="155" /><di:waypoint x="265" y="100" /><di:waypoint x="360" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="sb_di" bpmnElement="sb"><di:waypoint x="265" y="205" /><di:waypoint x="265" y="300" /><di:waypoint x="360" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ja_di" bpmnElement="ja"><di:waypoint x="460" y="100" /><di:waypoint x="545" y="100" /><di:waypoint x="545" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="jb_di" bpmnElement="jb"><di:waypoint x="460" y="300" /><di:waypoint x="545" y="300" /><di:waypoint x="545" y="205" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e1_di" bpmnElement="e1"><di:waypoint x="570" y="180" /><di:waypoint x="620" y="180" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

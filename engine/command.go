@@ -36,6 +36,35 @@ type Command struct {
 	// so — like StartVars, on the same non-hot-path completion intent — it never
 	// touches the token-movement fast path.
 	Decision *model.DecisionEvaluationValue
+	// Actor identifies who submitted an external variable-modify command (ADR-0098):
+	// the acting principal's username, frozen into the audit event the modify emits so
+	// the "who changed it" trail is durable and replayable. Empty for every other
+	// command (and for a modify made with auth off / by an unidentified caller). It
+	// rides only on the non-hot-path IntentVariableModify command, so it never touches
+	// the token-movement fast path.
+	Actor string
+	// Reason is the operator's justification for an intervention that forces a step the
+	// engine would not have taken on its own — completing a parked job by hand (ADR-0159).
+	// It rides only on such a command, alongside Manual, and is frozen into the audit event
+	// the handler emits, so "why" is as durable and replayable as "who". Empty for every
+	// other command, so it never touches the token-movement fast path.
+	Reason string
+	// Manual marks a completion an operator forced rather than a worker reporting real
+	// work (ADR-0159). It is the explicit gate for the audit record — never inferred from
+	// Reason being set — so a manual completion is always attributable even if the reason
+	// is somehow empty, and a worker's completion never mints an operator-action record.
+	Manual bool
+	// RetryBackoff is the delay (unix-nanoseconds) a worker asked to wait before its failed
+	// job may be retried (ADR-0111). It rides only on the non-hot-path IntentJobFailed command;
+	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's
+	// RetryDueDate (invariant I6). 0 means retry immediately (the pre-0111 behavior).
+	RetryBackoff int64
+	// LeaseFor is how long (in nanoseconds) a worker asked to hold a job it is activating
+	// (ADR-0007). It rides only on the non-hot-path IntentJobActivated command; like
+	// RetryBackoff, the handler reads the clock at command time and freezes
+	// now+LeaseFor into the job's LeaseExpiresAt, so a replay lands on the same instant
+	// (invariant I6).
+	LeaseFor int64
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

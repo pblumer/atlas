@@ -1,6 +1,9 @@
 package model
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"sort"
+)
 
 // Value is the typed payload of a record. Each implementation owns a fixed
 // binary layout. encode appends to a caller-owned buffer (no allocation when
@@ -36,10 +39,22 @@ type ElementInstanceValue struct {
 	TokenID       uint64
 	ParentTokenID uint64
 	SourceFlowId  int32
+	// MultiInstance marks an element instance's role in a multi-instance activity
+	// (ADR-0077): 0 = not multi-instance, 1 = the body (the scope that seeds the
+	// iterations), 2 = an inner iteration (running the node's real behavior, scoped
+	// under the body). Append-compatible: an old record without it decodes to 0.
+	MultiInstance uint8
+	// EventGatewayKey labels a catch event armed by an event-based gateway with the
+	// gateway's element-instance key — its race group (ADR-0110). The first armed catch to
+	// fire cancels every other live instance sharing this key. 0 for every element not armed
+	// by an event gateway. Append-compatible: an old record without it decodes to 0.
+	EventGatewayKey uint64
 }
 
 const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
 const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
+const elementInstanceMISize = elementInstanceSize + 1
+const elementInstanceEGSize = elementInstanceMISize + 8
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -52,7 +67,9 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	dst = append(dst, v.MultiInstance)
+	return binary.LittleEndian.AppendUint64(dst, v.EventGatewayKey)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -70,6 +87,12 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 		v.ParentTokenID = binary.LittleEndian.Uint64(src[45:])
 		v.SourceFlowId = int32(binary.LittleEndian.Uint32(src[53:]))
 	}
+	if len(src) >= elementInstanceMISize {
+		v.MultiInstance = src[57]
+	}
+	if len(src) >= elementInstanceEGSize {
+		v.EventGatewayKey = binary.LittleEndian.Uint64(src[58:])
+	}
 	return nil
 }
 
@@ -84,8 +107,36 @@ type JobValue struct {
 	ElementInstanceKey uint64
 	JobType            int32 // interned string → index
 	Retries            int32
-	Deadline           int64
-	Assignee           string
+	// Deadline is the *user task* due date (ADR-0032) — when the work is due, not
+	// anything about a worker. It is displayed and sorted on, and a job carrying one is
+	// as pullable as any other. The worker lease lives in LeaseExpiresAt below; the two
+	// were nearly conflated, and a user task with a due date would then have been
+	// invisible to every worker.
+	Deadline int64
+	Assignee string
+	// RetryDueDate is the unix-nano instant a failed-but-retryable job may be handed to a
+	// worker again — a retry backoff (ADR-0111). While it is non-zero and in the future the
+	// job is held OFF the activatable index; a retry timer clears it when the backoff elapses.
+	// 0 means "pullable now" (no backoff), which is every job's steady state. Append-compatible:
+	// an old record without it decodes to 0.
+	RetryDueDate int64
+	// LeaseExpiresAt is the unix-nano instant an external worker's claim on this job runs
+	// out (ADR-0007). While it is non-zero the job is held OFF the activatable index and
+	// Assignee names the holder; a lease timer clears it when the deadline passes, and the
+	// job is offered again. 0 means unheld, which is every job's steady state.
+	// Append-compatible: an old record without it decodes to 0.
+	LeaseExpiresAt int64
+	// LeaseEpoch counts how many times this job has been leased, and is the fencing
+	// token a worker presents when it reports an outcome (ADR-0007's third open item).
+	// Assignee alone does not fence: two instances of one worker deployment share a
+	// name, so a completion from a holder whose lease expired would be accepted while
+	// the second instance still holds the job. The epoch differs per lease, so a
+	// stale report presents a number the job has moved past and is refused.
+	//
+	// It is incremented at command time and written into the JobActivated event, never
+	// recomputed on replay (I6). Append-compatible: an old record decodes to 0, which
+	// reads correctly as "never leased".
+	LeaseEpoch uint64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -98,7 +149,10 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.JobType))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Retries))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
-	return appendString(dst, v.Assignee)
+	dst = appendString(dst, v.Assignee)
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
+	return binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -110,11 +164,22 @@ func (v *JobValue) decode(src []byte) error {
 	v.JobType = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.Retries = int32(binary.LittleEndian.Uint32(src[20:]))
 	v.Deadline = int64(binary.LittleEndian.Uint64(src[24:]))
-	assignee, _, err := readString(src[jobSize:])
+	assignee, rest, err := readString(src[jobSize:])
 	if err != nil {
 		return err
 	}
 	v.Assignee = assignee
+	// RetryDueDate, LeaseExpiresAt and LeaseEpoch are appended fields: a record written
+	// before any of them ends earlier and leaves it zero (ADR-0111, ADR-0007).
+	if len(rest) >= 8 {
+		v.RetryDueDate = int64(binary.LittleEndian.Uint64(rest))
+	}
+	if len(rest) >= 16 {
+		v.LeaseExpiresAt = int64(binary.LittleEndian.Uint64(rest[8:]))
+	}
+	if len(rest) >= 24 {
+		v.LeaseEpoch = binary.LittleEndian.Uint64(rest[16:])
+	}
 	return nil
 }
 
@@ -132,9 +197,33 @@ type TimerValue struct {
 	// start timer is precisely one with ProcessInstanceKey == 0 and
 	// ProcessDefKey != 0; TargetElementId then names its timer-start element.
 	ProcessDefKey uint64
+	// JobKey marks a job timer: non-zero means this timer, when due, acts on the job with
+	// that key rather than firing an element. 0 for every ordinary (catch/boundary/start/
+	// TTL) timer. Append-compatible: an old record decodes to 0.
+	JobKey uint64
+	// JobKind says *which* hold on the job this timer releases, and is only meaningful
+	// with JobKey set. Two holds can sit on one job at once — a worker leases it and then
+	// fails it with a backoff (ADR-0007 and ADR-0111) — and each timer must release only
+	// its own, or the lease expiry would hand the job out early and defeat the backoff.
+	// Append-compatible: a record written before this field decodes to JobTimerRetry,
+	// which is what every job timer was.
+	JobKind JobTimerKind
 }
 
+// JobTimerKind distinguishes the holds a job timer releases.
+type JobTimerKind int32
+
+const (
+	// JobTimerRetry releases a retry backoff (ADR-0111). Zero so pre-existing records,
+	// which are all retry timers, decode correctly.
+	JobTimerRetry JobTimerKind = 0
+	// JobTimerLease releases a worker's lease when it expires (ADR-0007).
+	JobTimerLease JobTimerKind = 1
+)
+
 const timerSize = 8 + 8 + 4 + 8 + 4 + 8
+const timerJobSize = timerSize + 8
+const timerJobKindSize = timerJobSize + 4
 
 func (*TimerValue) ValueType() ValueType { return VTTimer }
 
@@ -144,7 +233,9 @@ func (v *TimerValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.TargetElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.DueDate))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
-	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.JobKind))
 }
 
 func (v *TimerValue) decode(src []byte) error {
@@ -157,6 +248,16 @@ func (v *TimerValue) decode(src []byte) error {
 	v.DueDate = int64(binary.LittleEndian.Uint64(src[20:]))
 	v.Repetitions = int32(binary.LittleEndian.Uint32(src[28:]))
 	v.ProcessDefKey = binary.LittleEndian.Uint64(src[32:])
+	// JobKey is an appended field: a record written before it ends at timerSize and leaves it
+	// zero (an ordinary timer, ADR-0111).
+	if len(src) >= timerJobSize {
+		v.JobKey = binary.LittleEndian.Uint64(src[timerSize:])
+	}
+	// JobKind likewise: a record written before it decodes to JobTimerRetry, which every
+	// job timer was until leases existed (ADR-0007).
+	if len(src) >= timerJobKindSize {
+		v.JobKind = JobTimerKind(binary.LittleEndian.Uint32(src[timerJobSize:]))
+	}
 	return nil
 }
 
@@ -195,6 +296,26 @@ type ProcessInstanceValue struct {
 	CompletedAt    int64  // unix nano when it reached a terminal state; 0 while active
 	CreatedAt      int64  // unix nano when the instance was activated
 	CorrelationKey string // message correlation key a message-start instance began with; "" otherwise
+	// ParentElementInstanceKey is the call-activity element instance that started
+	// this instance as its child, 0 for a root instance (API/message/timer start).
+	// A completing child resumes its caller through it (ADR-0076).
+	ParentElementInstanceKey uint64
+	// ExpiryDueDate is the due date (unix nano) of this instance's TTL expiry timer,
+	// 0 when the definition has no TTL (ADR-0085). Stored so completion/termination can
+	// cancel that timer by key (the instance key) without scanning the timer index.
+	ExpiryDueDate int64
+	// CompletedPosition is the log position of the instance's terminal event, set only
+	// on the history record (0 while active, and 0 on records written before this field,
+	// ADR-0115). Since the terminal event is an instance's last, it is the instance's
+	// highest position — so history retention can prove every event is exported
+	// (CompletedPosition <= exported position) before hard-deleting the instance.
+	CompletedPosition uint64
+	// PurgeDueDate is when history retention is scheduled to hard-delete this finished
+	// instance: CompletedAt + the definition's atlas:historyTtl, 0 when it declares none
+	// (ADR-0146). Frozen on the terminal event so applyToState can index the instance by
+	// it — and read back from the purge event to drop that index entry — without either
+	// fold reading a clock or a definition.
+	PurgeDueDate int64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -210,7 +331,11 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = append(dst, byte(v.State))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
-	return appendString(dst, v.CorrelationKey)
+	dst = appendString(dst, v.CorrelationKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -227,11 +352,31 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 		return nil
 	}
 	v.CreatedAt = int64(binary.LittleEndian.Uint64(rest))
-	key, _, err := readString(rest[8:])
+	key, tail, err := readString(rest[8:])
 	if err != nil {
 		return err
 	}
 	v.CorrelationKey = key
+	// ParentElementInstanceKey is a later appended field: a record written before it
+	// ends after the correlation key and leaves it zero (a root instance).
+	if len(tail) >= 8 {
+		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
+	}
+	// ExpiryDueDate is a later appended field: a record written before it ends after
+	// the parent key and leaves it zero (no TTL).
+	if len(tail) >= 16 {
+		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
+	}
+	// CompletedPosition is a later appended field: a record written before it ends
+	// after the expiry due date and leaves it zero (no terminal position recorded).
+	if len(tail) >= 24 {
+		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
+	}
+	// PurgeDueDate is the newest appended field: a record written before it ends after
+	// the completed position and leaves it zero (no history TTL scheduled it).
+	if len(tail) >= 32 {
+		v.PurgeDueDate = int64(binary.LittleEndian.Uint64(tail[24:]))
+	}
 	return nil
 }
 
@@ -431,6 +576,281 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 	return nil
 }
 
+// VariableAuditValue records one external variable override for audit (ADR-0098):
+// who set which variable, to what value, on which scope. It is keyed under its
+// owning ProcessInstanceKey as append-only history — one record per variable an
+// operator sets — so the "who changed it" trail folds into the same instance
+// timeline as the variable snapshot at the same log position, and survives the
+// instance finishing. Actor is the acting principal's username, or "" when auth is
+// off (single-user) or the caller is unidentified. Name/Kind/Bool/Text mirror the
+// VariableValue that was written, so the audit row is self-contained. Like a variable
+// it carries genuine runtime data, so its encoding is length-prefixed.
+type VariableAuditValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ScopeKey           uint64 // the scope the variable was written to (root or a sub-scope)
+	Actor              string // who performed the override; "" when auth is off / unidentified
+	Name               string // the variable that was set
+	Kind               VarKind
+	Bool               bool
+	Text               string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*VariableAuditValue) ValueType() ValueType { return VTVariableAudit }
+
+func (v *VariableAuditValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Actor)
+	dst = appendString(dst, v.Name)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *VariableAuditValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ScopeKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	actor, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
+// OperatorActionKind is the verb of an operator intervention. It is a small closed
+// vocabulary encoded as a byte rather than free text, so the log never carries a
+// model string (invariant I5) and the record stays fixed-width apart from its two
+// genuinely free-form fields.
+type OperatorActionKind uint8
+
+const (
+	// OperatorActionCompleteJob is an operator completing a parked job by hand, the
+	// job a worker would otherwise have completed (ADR-0159).
+	OperatorActionCompleteJob OperatorActionKind = iota + 1
+	// OperatorActionMigrate is an operator rebinding a running instance to another
+	// deployed version of its process (ADR-0162). It is the audit half of the
+	// migration: the rebinding itself is VTProcessMigration, and this record is what
+	// makes it visible — who, why, and at which log position the instance stopped being
+	// the old version and started being the new one, which is what lets the replay
+	// resolve each step through the definition that was in force at it.
+	OperatorActionMigrate
+)
+
+func (k OperatorActionKind) String() string {
+	switch k {
+	case OperatorActionCompleteJob:
+		return "completeJob"
+	case OperatorActionMigrate:
+		return "migrate"
+	default:
+		return "OperatorActionKind(?)"
+	}
+}
+
+// OperatorActionValue records one operator intervention on a running instance for
+// audit (ADR-0159): who forced what, on which element, and why. ADR-0098 made an
+// operator's variable corrections durable and replayable; this is its counterpart for
+// the act itself — completing a parked job by hand — so a step the engine did not drive
+// on its own is never indistinguishable from one it did. It is keyed under its owning
+// ProcessInstanceKey as append-only history, folds into the same instance timeline at
+// its log position, and survives the instance finishing.
+//
+// The element is referenced by ElementInstanceKey, never by its id: element ids are
+// interned at compile time and never written to the log as text (invariant I5), so a
+// reader resolves the id from the element instance exactly as the timeline already
+// does. Actor is the acting principal's username, or "" when auth is off (single-user)
+// or the caller is unidentified; Reason is the operator's justification, required by
+// the surfaces that mint these records. Both are genuine runtime data, so — like a
+// variable — the encoding is length-prefixed.
+type OperatorActionValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ElementInstanceKey uint64 // the element the action was applied to; 0 when instance-wide
+	JobKey             uint64 // the job that was acted on; 0 when the action is not job-scoped
+	Kind               OperatorActionKind
+	Actor              string // who performed it; "" when auth is off / unidentified
+	Reason             string // why — free text supplied by the operator
+	// FromProcessDefKey is the definition the instance was on *before* the action, set
+	// only by OperatorActionMigrate and 0 for every other kind (ADR-0162). The instance
+	// record names the definition it is on now; each migration record names the one
+	// before it, so a chain of migrations reads back as a chain of log-position ranges
+	// — which is how the replay knows to resolve a step recorded under the old version
+	// through the old version's compiled graph. Append-compatible: a record written
+	// before this field decodes to 0, which is what every non-migration record means.
+	FromProcessDefKey uint64
+}
+
+func (*OperatorActionValue) ValueType() ValueType { return VTOperatorAction }
+
+func (v *OperatorActionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	dst = append(dst, byte(v.Kind))
+	dst = appendString(dst, v.Actor)
+	dst = appendString(dst, v.Reason)
+	return binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+}
+
+func (v *OperatorActionValue) decode(src []byte) error {
+	if len(src) < 25 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.JobKey = binary.LittleEndian.Uint64(src[16:])
+	v.Kind = OperatorActionKind(src[24])
+	actor, rest, err := readString(src[25:])
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	reason, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Reason = reason
+	// Appended after the two strings, so a record written before it simply ends here
+	// and the field stays 0 — which is what every kind but a migration means by it.
+	v.FromProcessDefKey = 0
+	if len(rest) >= 8 {
+		v.FromProcessDefKey = binary.LittleEndian.Uint64(rest)
+	}
+	return nil
+}
+
+// MaxMigrationMappings bounds the element mapping a single migration event may carry.
+// The mapping covers the element indices an instance's *live* records reference — a
+// handful for an ordinary instance, more for a wide multi-instance activity — never the
+// size of either graph, so this is far above anything real and exists to keep a
+// corrupt or hostile record from asking the decoder for an unbounded allocation.
+const MaxMigrationMappings = 4096
+
+// ElementMapping is one element index in the source definition's compiled graph and
+// the index that means the same element in the target's. Indices, never ids: element
+// ids are interned at compile time and never written to the log as text (invariant I5),
+// so the API resolves an operator's element-id overrides into indices before the
+// command is ever submitted.
+type ElementMapping struct {
+	From int32
+	To   int32
+}
+
+// ProcessMigrationValue rebinds a running instance from one deployed version of its
+// process to another (ADR-0162). It carries the two definition keys and the fully
+// materialized element mapping — every index the instance's live records reference —
+// because applyToState must reproduce the rebinding from the event alone.
+//
+// That is the whole design constraint. A fold that *derived* the mapping from the two
+// compiled processes would depend on the matching algorithm's code, so an algorithm
+// improved in a later release would replay an old log into a different state, and two
+// builds of Atlas could disagree about where a token is (invariants I4/I6). The
+// matching runs once, at command time, where it can also be refused.
+//
+// Element instance keys are *not* in the mapping and never change: a migration rewrites
+// bindings, it does not terminate and recreate, which is what lets variables, data
+// objects, jobs and the whole scope tree ride through untouched — they are keyed by
+// element instance key, not by element index.
+type ProcessMigrationValue struct {
+	ProcessInstanceKey uint64
+	FromProcessDefKey  uint64
+	ToProcessDefKey    uint64
+	// Mapping is ordered by From and carries no duplicate From, so a fold can binary
+	// search it and a reader can compare two migrations without normalizing first.
+	// NewProcessMigration establishes both.
+	Mapping []ElementMapping
+}
+
+// NewProcessMigration builds a migration value from a from→to index map, ordering the
+// mapping by source index so the encoding of a given migration is byte-identical
+// whatever order the caller discovered it in. A map has no order, and an event whose
+// bytes depend on Go's map iteration is an event whose log is not reproducible.
+func NewProcessMigration(piKey, fromDefKey, toDefKey uint64, mapping map[int32]int32) ProcessMigrationValue {
+	v := ProcessMigrationValue{
+		ProcessInstanceKey: piKey,
+		FromProcessDefKey:  fromDefKey,
+		ToProcessDefKey:    toDefKey,
+		Mapping:            make([]ElementMapping, 0, len(mapping)),
+	}
+	for from, to := range mapping {
+		v.Mapping = append(v.Mapping, ElementMapping{From: from, To: to})
+	}
+	sort.Slice(v.Mapping, func(i, j int) bool { return v.Mapping[i].From < v.Mapping[j].From })
+	return v
+}
+
+// Target returns the index the given source element index maps to, and whether the
+// mapping covers it. An uncovered index is not an error here — the fold leaves such a
+// record alone — because validation at command time is what guarantees no *live* record
+// carries one (ADR-0162).
+func (v *ProcessMigrationValue) Target(from int32) (int32, bool) {
+	i := sort.Search(len(v.Mapping), func(i int) bool { return v.Mapping[i].From >= from })
+	if i < len(v.Mapping) && v.Mapping[i].From == from {
+		return v.Mapping[i].To, true
+	}
+	return 0, false
+}
+
+func (*ProcessMigrationValue) ValueType() ValueType { return VTProcessMigration }
+
+func (v *ProcessMigrationValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ToProcessDefKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(v.Mapping)))
+	for _, m := range v.Mapping {
+		dst = binary.LittleEndian.AppendUint32(dst, uint32(m.From))
+		dst = binary.LittleEndian.AppendUint32(dst, uint32(m.To))
+	}
+	return dst
+}
+
+func (v *ProcessMigrationValue) decode(src []byte) error {
+	if len(src) < 28 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.FromProcessDefKey = binary.LittleEndian.Uint64(src[8:])
+	v.ToProcessDefKey = binary.LittleEndian.Uint64(src[16:])
+	n := binary.LittleEndian.Uint32(src[24:])
+	if n > MaxMigrationMappings {
+		return ErrShortBuffer // a count no real migration produces: refuse to size an allocation from it
+	}
+	rest := src[28:]
+	if uint32(len(rest)) < n*8 {
+		return ErrShortBuffer
+	}
+	v.Mapping = make([]ElementMapping, n)
+	for i := range v.Mapping {
+		v.Mapping[i].From = int32(binary.LittleEndian.Uint32(rest[i*8:]))
+		v.Mapping[i].To = int32(binary.LittleEndian.Uint32(rest[i*8+4:]))
+	}
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -486,6 +906,53 @@ func (v *MessageSubscriptionValue) decode(src []byte) error {
 	return nil
 }
 
+// SignalSubscriptionValue is an open subscription to a broadcast signal: an
+// element instance (a signal intermediate catch event, later a signal boundary
+// or event subprocess) waiting for a named signal. It is the
+// MessageSubscriptionValue shape (ADR-0020) minus the correlation key — a signal
+// matches by name alone and fans out 1:n, so there is nothing to correlate on
+// (ADR-0088). The SignalName is the sole match key a broadcast scans for.
+type SignalSubscriptionValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	SignalName         string
+	// ProcessDefKey and ElementId identify the waiting catch on its diagram; set at
+	// subscribe time from the element instance and carried so the record locates its
+	// own state index entry (invariant I4), mirroring MessageSubscriptionValue.
+	ProcessDefKey uint64
+	ElementId     int32
+}
+
+func (*SignalSubscriptionValue) ValueType() ValueType { return VTSignal }
+
+func (v *SignalSubscriptionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = appendString(dst, v.SignalName)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+}
+
+func (v *SignalSubscriptionValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.SignalName = name
+	if len(rest) < 12 {
+		return ErrShortBuffer
+	}
+	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	return nil
+}
+
 // MessageFlowValue is one delivered message flow, retained as history so the
 // collaboration replay can show which message crossed to which receiving element
 // and when (ADR-0038). It is produced when a message correlates a catch event or
@@ -503,6 +970,36 @@ type MessageFlowValue struct {
 }
 
 func (*MessageFlowValue) ValueType() ValueType { return VTMessageFlow }
+
+// InboundDeliveryValue advances an external event source's inbound high-water mark
+// (ADR-0075). SourceID is an opaque per-source identifier (e.g. a clio connector +
+// watched subject) the engine never interprets; SourceSeq is that source's
+// monotonic sequence up to which delivery has been applied. Folding these into a
+// per-source high-water mark lets a replayed at-least-once publish be skipped.
+type InboundDeliveryValue struct {
+	SourceID  string
+	SourceSeq uint64
+}
+
+func (*InboundDeliveryValue) ValueType() ValueType { return VTInboundDelivery }
+
+func (v *InboundDeliveryValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.SourceSeq)
+	return appendString(dst, v.SourceID)
+}
+
+func (v *InboundDeliveryValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.SourceSeq = binary.LittleEndian.Uint64(src[0:])
+	id, _, err := readString(src[8:])
+	if err != nil {
+		return err
+	}
+	v.SourceID = id
+	return nil
+}
 
 func (v *MessageFlowValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.SenderProcessInstanceKey)
@@ -599,6 +1096,51 @@ func (v *IncidentValue) decode(src []byte) error {
 	return nil
 }
 
+// CompensableValue is one completed compensable activity: an activity that bore a
+// compensation boundary and finished successfully, retained so a later compensation
+// throw can run its handler (ADR-0103). It is keyed under ScopeKey in completion order
+// (by the event's log position), so a reverse scan yields reverse completion order.
+// ElementId identifies the compensated activity (for activityRef matching); HandlerNode
+// is the compensation handler to activate; Seq carries the record's key sequence back on
+// the consume event so its index entry can be deleted. All fields are fixed-width.
+type CompensableValue struct {
+	ProcessInstanceKey uint64
+	ProcessDefKey      uint64
+	ScopeKey           uint64 // FlowScopeKey the compensable activity lived in
+	ElementInstanceKey uint64 // the completed activity's element-instance key
+	Seq                uint64 // the record's key sequence (log position), set on consume
+	ElementId          int32  // the compensable activity's compiled node id
+	HandlerNode        int32  // the compensation handler's compiled node id
+}
+
+const compensableSize = 8 + 8 + 8 + 8 + 8 + 4 + 4
+
+func (*CompensableValue) ValueType() ValueType { return VTCompensable }
+
+func (v *CompensableValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.Seq)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.HandlerNode))
+}
+
+func (v *CompensableValue) decode(src []byte) error {
+	if len(src) < compensableSize {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[8:])
+	v.ScopeKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[24:])
+	v.Seq = binary.LittleEndian.Uint64(src[32:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[40:]))
+	v.HandlerNode = int32(binary.LittleEndian.Uint32(src[44:]))
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -615,6 +1157,8 @@ func newValue(vt ValueType) Value {
 		return &VariableValue{}
 	case VTMessageSubscription:
 		return &MessageSubscriptionValue{}
+	case VTSignal:
+		return &SignalSubscriptionValue{}
 	case VTMessageFlow:
 		return &MessageFlowValue{}
 	case VTDataObject:
@@ -623,6 +1167,16 @@ func newValue(vt ValueType) Value {
 		return &IncidentValue{}
 	case VTDecisionEvaluation:
 		return &DecisionEvaluationValue{}
+	case VTInboundDelivery:
+		return &InboundDeliveryValue{}
+	case VTVariableAudit:
+		return &VariableAuditValue{}
+	case VTCompensable:
+		return &CompensableValue{}
+	case VTOperatorAction:
+		return &OperatorActionValue{}
+	case VTProcessMigration:
+		return &ProcessMigrationValue{}
 	default:
 		return nil
 	}

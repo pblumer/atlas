@@ -70,17 +70,29 @@ func TestProjectLifecycle(t *testing.T) {
 		t.Fatalf("filtered drafts = %v, want just wip-1", drafts)
 	}
 
-	// The project list now reports one artifact.
+	// The project list now reports one artifact. The protected system project
+	// (ADR-0119) is always present and carries no artifacts, so ignore it.
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/projects", "", "")
 	var projs []struct {
 		ID        string `json:"id"`
 		Artifacts int    `json:"artifacts"`
+		Protected bool   `json:"protected"`
 	}
 	if err := json.Unmarshal(body, &projs); err != nil {
 		t.Fatalf("decode projects: %v (%s)", err, body)
 	}
-	if len(projs) != 1 || projs[0].Artifacts != 1 {
-		t.Fatalf("projects = %+v, want one project with 1 artifact", projs)
+	var userProjs []struct {
+		ID        string `json:"id"`
+		Artifacts int    `json:"artifacts"`
+		Protected bool   `json:"protected"`
+	}
+	for _, pr := range projs {
+		if !pr.Protected {
+			userProjs = append(userProjs, pr)
+		}
+	}
+	if len(userProjs) != 1 || userProjs[0].Artifacts != 1 {
+		t.Fatalf("user projects = %+v, want one project with 1 artifact", userProjs)
 	}
 
 	// Rename, and see the new name plus the preserved artifact count.

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // This file is the HTTP surface for identity (ADR-0044): the auth endpoints
@@ -23,11 +25,11 @@ const maxUserBytes = 64 << 10 // 64 KiB
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxUserBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
 	}
 	if err := json.Unmarshal(body, dst); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return false
 	}
 	return true
@@ -84,7 +86,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	username := strings.TrimSpace(payload.Username)
 	if username == "" || payload.Password == "" {
-		writeError(w, http.StatusBadRequest, "username and password are required")
+		httpapi.Error(w, http.StatusBadRequest, "username and password are required")
 		return
 	}
 	var (
@@ -94,20 +96,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() { u, ok, lookErr = s.users.byUsername(username) })
 	if lookErr != nil {
-		writeError(w, http.StatusInternalServerError, "login: "+lookErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "login: "+lookErr.Error())
 		return
 	}
 	if !ok || u.Disabled || !checkPassword(u.PasswordHash, payload.Password) {
-		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		httpapi.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 	token, err := s.sessions.create(u)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "login: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "login: "+err.Error())
 		return
 	}
 	setSessionCookie(w, r, token, s.sessions.ttl)
-	writeJSON(w, http.StatusOK, u.toPublic())
+	httpapi.JSON(w, http.StatusOK, u.toPublic())
 }
 
 // handleLogout ends the caller's session and clears the cookie. It is idempotent:
@@ -117,7 +119,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.sessions.destroy(c.Value)
 	}
 	clearSessionCookie(w, r)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // handleMe reports whether auth is enforced and who, if anyone, is logged in. The
@@ -125,9 +127,9 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // is enabled the route is gated, so a nil principal only occurs with auth off (or
 // a mid-session deletion), reported as {authEnabled, user:null}.
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	p := principalFrom(r.Context())
+	p := httpapi.PrincipalFrom(r.Context())
 	if p == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
 		return
 	}
 	var (
@@ -135,16 +137,16 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { u, ok, loadErr = s.users.get(p.UserID) })
+	s.do(func() { u, ok, loadErr = s.users.Get(p.UserID) })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "me: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "me: "+loadErr.Error())
 		return
 	}
 	if !ok {
-		writeJSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": u.toPublic()})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": u.toPublic()})
 }
 
 // handleListUsers returns every account (public projection), oldest first.
@@ -156,16 +158,16 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []User
-		recs, loadErr = s.users.loadAll()
+		recs, loadErr = s.users.LoadAll()
 		for _, u := range recs {
 			list = append(list, u.toPublic())
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list users: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list users: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleListAssignableUsers returns the accounts a task can be assigned to — a
@@ -182,7 +184,7 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 	var loadErr error
 	s.do(func() {
 		var recs []User
-		recs, loadErr = s.users.loadAll()
+		recs, loadErr = s.users.LoadAll()
 		for _, u := range recs {
 			if u.Disabled {
 				continue
@@ -191,10 +193,10 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list assignable users: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list assignable users: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleCreateUser creates a local user. Body:
@@ -218,21 +220,21 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(payload.Username)
 	email := strings.TrimSpace(payload.Email)
 	if username == "" {
-		writeError(w, http.StatusBadRequest, "username is required")
+		httpapi.Error(w, http.StatusBadRequest, "username is required")
 		return
 	}
 	if len(payload.Password) < minPasswordLen {
-		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		httpapi.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 	hash, err := hashPassword(payload.Password)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "create user: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create user: "+err.Error())
 		return
 	}
 	id, err := newUserID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "create user: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create user: "+err.Error())
 		return
 	}
 	now := time.Now().Unix()
@@ -270,17 +272,17 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		saveErr = s.users.save(rec)
+		saveErr = s.users.Save(rec)
 	})
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "create user: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create user: "+saveErr.Error())
 		return
 	}
 	if conflict != "" {
-		writeError(w, http.StatusConflict, conflict)
+		httpapi.Error(w, http.StatusConflict, conflict)
 		return
 	}
-	writeJSON(w, http.StatusCreated, rec.toPublic())
+	httpapi.JSON(w, http.StatusCreated, rec.toPublic())
 }
 
 // handleGetUser returns one account by id, or 404.
@@ -294,14 +296,14 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		ok      bool
 		loadErr error
 	)
-	s.do(func() { u, ok, loadErr = s.users.get(id) })
+	s.do(func() { u, ok, loadErr = s.users.Get(id) })
 	switch {
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "read user: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read user: "+loadErr.Error())
 	case !ok:
-		writeError(w, http.StatusNotFound, "no user with that id")
+		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	default:
-		writeJSON(w, http.StatusOK, u.toPublic())
+		httpapi.JSON(w, http.StatusOK, u.toPublic())
 	}
 }
 
@@ -333,7 +335,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		disabling bool
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -367,21 +369,21 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		// Guard against locking everyone out: if the result is not an enabled admin
 		// and no other enabled admin remains, refuse.
 		if !(u.hasRole(RoleAdmin) && !u.Disabled) {
-			all, e := s.users.loadAll()
+			all, e := s.users.LoadAll()
 			if e != nil {
 				opErr = e
 				return
 			}
 			if enabledAdminCount(all, id) == 0 {
 				// Only a problem if this user *was* the last enabled admin.
-				if prev, _, _ := s.users.get(id); prev.hasRole(RoleAdmin) && !prev.Disabled {
+				if prev, _, _ := s.users.Get(id); prev.hasRole(RoleAdmin) && !prev.Disabled {
 					lockout = true
 					return
 				}
 			}
 		}
 		u.UpdatedAt = time.Now().Unix()
-		if opErr = s.users.save(u); opErr != nil {
+		if opErr = s.users.Save(u); opErr != nil {
 			return
 		}
 		updated = u
@@ -389,18 +391,18 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "update user: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "update user: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no user with that id")
+		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	case conflict != "":
-		writeError(w, http.StatusConflict, conflict)
+		httpapi.Error(w, http.StatusConflict, conflict)
 	case lockout:
-		writeError(w, http.StatusConflict, "cannot remove the last enabled admin")
+		httpapi.Error(w, http.StatusConflict, "cannot remove the last enabled admin")
 	default:
 		if disabling {
 			s.sessions.destroyUser(id)
 		}
-		writeJSON(w, http.StatusOK, updated.toPublic())
+		httpapi.JSON(w, http.StatusOK, updated.toPublic())
 	}
 }
 
@@ -417,12 +419,12 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(payload.Password) < minPasswordLen {
-		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		httpapi.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 	hash, err := hashPassword(payload.Password)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "set password: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "set password: "+err.Error())
 		return
 	}
 	var (
@@ -430,7 +432,7 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		opErr error
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -441,15 +443,15 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		found = true
 		u.PasswordHash = hash
 		u.UpdatedAt = time.Now().Unix()
-		opErr = s.users.save(u)
+		opErr = s.users.Save(u)
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "set password: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "set password: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no user with that id")
+		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"id": id})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"id": id})
 	}
 }
 
@@ -467,7 +469,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		opErr   error
 	)
 	s.do(func() {
-		u, ok, e := s.users.get(id)
+		u, ok, e := s.users.Get(id)
 		if e != nil {
 			opErr = e
 			return
@@ -477,7 +479,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if u.hasRole(RoleAdmin) && !u.Disabled {
-			all, e := s.users.loadAll()
+			all, e := s.users.LoadAll()
 			if e != nil {
 				opErr = e
 				return
@@ -487,15 +489,15 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		opErr = s.users.delete(id)
+		opErr = s.users.Delete(id)
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "delete user: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete user: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no user with that id")
+		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	case lockout:
-		writeError(w, http.StatusConflict, "cannot delete the last enabled admin")
+		httpapi.Error(w, http.StatusConflict, "cannot delete the last enabled admin")
 	default:
 		s.sessions.destroyUser(id)
 		w.WriteHeader(http.StatusNoContent)

@@ -8,12 +8,16 @@ import (
 	"io"
 )
 
-// serverName and serverVersion identify this MCP server to clients in the
-// initialize handshake.
-const (
-	serverName    = "atlas-mcp"
-	serverVersion = "0.1.0-dev"
+// serverName identifies this MCP server to clients in the initialize handshake.
+const serverName = "atlas-mcp"
 
+// serverVersion is reported alongside serverName in the initialize handshake. It
+// is a var, not a const, so a release build can stamp the tag into it with
+// -ldflags "-X github.com/pblumer/atlas/mcp.serverVersion=0.3.0", matching the
+// product version the api package reports.
+var serverVersion = "0.3.0-dev"
+
+const (
 	// defaultProtocolVersion is the MCP revision we advertise when a client does
 	// not request one. We echo the client's requested version when we support it
 	// (see negotiateVersion) so newer clients interoperate cleanly.

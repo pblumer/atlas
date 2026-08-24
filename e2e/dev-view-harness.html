@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Developer View e2e harness</title>
+    <!-- Drives the real api/web/dev-view.js against three code-bearing fields (a FEEL
+         expression, a documentation text, a JSON value) and mock server round trips,
+         so the test can prove F2 opens the modal, the panes insert at the caret, and
+         Apply / Cancel do the right thing with the field's value. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="props" style="padding: 20px; display: grid; gap: 16px">
+      <label class="field"
+        ><span>Expression (FEEL)</span>
+        <textarea id="feel-fld" rows="3">amount</textarea>
+      </label>
+      <label class="field"
+        ><span>Documentation</span>
+        <textarea id="doc-fld" rows="3"># Titel</textarea>
+      </label>
+      <label class="field"
+        ><span>Payload</span>
+        <textarea id="json-fld" rows="3">{"a":1}</textarea>
+      </label>
+    </div>
+    <script type="module">
+      import { attachFeelEditor } from "/feel.js";
+      import { installDevShortcut, markDevField, openDevView, devViewOpen } from "/dev-view.js";
+
+      const feelFld = document.getElementById("feel-fld");
+      const docFld = document.getElementById("doc-fld");
+      const jsonFld = document.getElementById("json-fld");
+
+      // The FEEL field is a code editor inline too, exactly as the property panel
+      // builds it — so the test also covers the "</>" affordance markDevField adds.
+      attachFeelEditor(feelFld, { variables: ["amount"] });
+
+      markDevField(feelFld, "feel");
+      markDevField(docFld, "markdown", { title: "Documentation" });
+      markDevField(jsonFld, "json");
+
+      // What the property panel would collect for the selected element.
+      const variables = [
+        { name: "amount", detail: "input mapping ← order.total", scope: "input" },
+        { name: "gross", detail: "FEEL script result", scope: "output" },
+        { name: "orderId", detail: "start variable", scope: "process" },
+        { name: "email", detail: "form field · Antrag", scope: "form" },
+        { name: "Beleg", detail: "data object", scope: "data" },
+      ];
+
+      window.__validateCalls = [];
+      window.__evaluateCalls = [];
+      const validate = async (expression) => {
+        window.__validateCalls.push(expression);
+        return /\bboom\b/.test(expression) ? { ok: false, error: "1:1: boom" } : { ok: true };
+      };
+      const evaluate = async (expression, vars) => {
+        window.__evaluateCalls.push({ expression, vars });
+        return { ok: true, result: 42, kind: "number" };
+      };
+
+      // Stands in for the live-values lookup (processes → instances → variables).
+      // __samples lets a test make it empty, slow or broken.
+      window.__sampleCalls = [];
+      // Two instances of the process, as the Modeler's lookup would return them:
+      // the running one first, an older finished one after it.
+      window.__instances = [
+        {
+          key: 4711, state: "active", version: 3, createdAt: 1755500000000,
+          values: {
+            amount: { value: "1250.5", kind: "number" },
+            orderId: { value: "A-2026-0042", kind: "string" },
+            email: { value: '{"to":"anna@example.com","cc":[]}', kind: "json" },
+          },
+        },
+        {
+          key: 4088, state: "completed", version: 2, createdAt: 1755100000000,
+          values: {
+            amount: { value: "12", kind: "number" },
+            orderId: { value: "A-2025-0007", kind: "string" },
+          },
+        },
+      ];
+      const samples = async (o = {}) => {
+        window.__sampleCalls.push(o);
+        const rows = window.__instances;
+        if (!rows || !rows.length) return null;
+        const chosen = rows.find((r) => r.key === o.instanceKey) || rows[0];
+        return {
+          instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+          values: chosen.values,
+          instances: rows.map(({ values, ...meta }) => meta),
+        };
+      };
+
+      installDevShortcut(document, (field) =>
+        field.dataset.devlang === "feel"
+          ? { variables, validate, evaluate, samples }
+          : { variables, samples });
+
+      // Records what the panel's save wiring would see.
+      window.__changes = [];
+      for (const el of [feelFld, docFld, jsonFld]) {
+        el.addEventListener("change", () => window.__changes.push({ id: el.id, value: el.value }));
+      }
+
+      window.__open = devViewOpen;
+      window.__openDevView = openDevView;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

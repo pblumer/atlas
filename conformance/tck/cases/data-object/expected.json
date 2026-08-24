@@ -1,0 +1,24 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "load",
+    "record",
+    "seed",
+    "start"
+  ],
+  "path": [
+    "start",
+    "seed",
+    "record",
+    "load",
+    "end"
+  ],
+  "variables": {
+    "amount": "100",
+    "order_copy": "100"
+  },
+  "dataObjects": [
+    "order[approved]=100"
+  ]
+}

@@ -40,6 +40,8 @@ func TestRecordRoundTrip(t *testing.T) {
 				TokenID:            NewKey(3, 4),
 				ParentTokenID:      NewKey(3, 5),
 				SourceFlowId:       9,
+				MultiInstance:      2,            // an inner multi-instance iteration (ADR-0077)
+				EventGatewayKey:    NewKey(3, 6), // armed by an event-based gateway (ADR-0110)
 			},
 		},
 		{
@@ -52,6 +54,7 @@ func TestRecordRoundTrip(t *testing.T) {
 				JobType:            42,
 				Retries:            3,
 				Deadline:           1_700_000_000,
+				RetryDueDate:       1_700_000_030_000_000_000, // backing off after a failure (ADR-0111)
 			},
 		},
 		{
@@ -123,6 +126,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "retry-backoff timer carries a job key",
+			vt:     VTTimer,
+			intent: IntentTimerCreated,
+			value: &TimerValue{
+				// A retry-backoff timer re-activates its job when due (ADR-0111): no element.
+				ProcessInstanceKey: NewKey(2, 20),
+				DueDate:            1_700_000_500,
+				JobKey:             NewKey(2, 22),
+			},
+		},
+		{
 			name:   "start timer carries a process definition key",
 			vt:     VTTimer,
 			intent: IntentTimerCreated,
@@ -172,11 +186,36 @@ func TestRecordRoundTrip(t *testing.T) {
 			vt:     VTProcessInstance,
 			intent: IntentCompleted,
 			value: &ProcessInstanceValue{
-				ProcessDefKey:  NewKey(3, 2),
-				State:          PICompleted,
-				CompletedAt:    1_700_000_000_000_000_000,
-				CreatedAt:      1_699_999_999_000_000_000,
-				CorrelationKey: "order-42",
+				ProcessDefKey:     NewKey(3, 2),
+				State:             PICompleted,
+				CompletedAt:       1_700_000_000_000_000_000,
+				CreatedAt:         1_699_999_999_000_000_000,
+				CorrelationKey:    "order-42",
+				CompletedPosition: 4_242,
+			},
+		},
+		{
+			name:   "finished process instance scheduled for a history purge",
+			vt:     VTProcessInstance,
+			intent: IntentCompleted,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:     NewKey(3, 2),
+				State:             PICompleted,
+				CompletedAt:       1_700_000_000_000_000_000,
+				CreatedAt:         1_699_999_999_000_000_000,
+				CompletedPosition: 4_242,
+				PurgeDueDate:      1_700_604_800_000_000_000,
+			},
+		},
+		{
+			name:   "child process instance with a TTL expiry due date",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:            NewKey(3, 2),
+				CreatedAt:                1_699_999_999_000_000_000,
+				ParentElementInstanceKey: NewKey(2, 7),
+				ExpiryDueDate:            1_700_000_600_000_000_000,
 			},
 		},
 		{
@@ -191,8 +230,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "inbound delivery high-water",
+			vt:     VTInboundDelivery,
+			intent: IntentInboundDeliveryApplied,
+			value: &InboundDeliveryValue{
+				SourceID:  "clio:orders-clio:/orders",
+				SourceSeq: 1_700_000_042,
+			},
+		},
+		{
 			name:   "header only, no payload",
-			vt:     VTSignal, // a value type without a payload codec yet
+			vt:     VTError, // a value type without a payload codec yet (VTSignal gained one in ADR-0088)
 			intent: IntentActivating,
 			value:  nil,
 		},
@@ -238,6 +286,35 @@ func TestProcessInstanceDecodeLegacy(t *testing.T) {
 	}
 	if !reflect.DeepEqual(v, want) {
 		t.Errorf("legacy decode = %+v, want %+v", v, want)
+	}
+}
+
+func TestElementInstanceDecodeLegacy(t *testing.T) {
+	// A record written before MultiInstance was appended is just the prior fixed
+	// layout (through SourceFlowId). It must still decode, leaving MultiInstance at 0
+	// (ADR-0017/0077).
+	full := (&ElementInstanceValue{
+		ProcessInstanceKey: NewKey(3, 1),
+		ProcessDefKey:      NewKey(3, 2),
+		ElementId:          17,
+		FlowScopeKey:       NewKey(3, 3),
+		BpmnElementType:    5,
+		TokenID:            NewKey(3, 4),
+		ParentTokenID:      NewKey(3, 5),
+		SourceFlowId:       9,
+		MultiInstance:      2,
+	}).encode(nil)
+	legacy := full[:elementInstanceSize] // drop the trailing MultiInstance byte
+
+	var v ElementInstanceValue
+	if err := v.decode(legacy); err != nil {
+		t.Fatalf("decode legacy: %v", err)
+	}
+	if v.MultiInstance != 0 {
+		t.Errorf("legacy MultiInstance = %d, want 0 (absent → default)", v.MultiInstance)
+	}
+	if v.SourceFlowId != 9 || v.TokenID != NewKey(3, 4) {
+		t.Errorf("legacy decode lost prior fields: %+v", v)
 	}
 }
 
@@ -287,7 +364,7 @@ func TestReadRecordUnknownVersion(t *testing.T) {
 func TestEncodedSize(t *testing.T) {
 	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{}}
 	buf := AppendRecord(nil, &r)
-	if want := HeaderSize + elementInstanceSize; len(buf) != want {
+	if want := HeaderSize + elementInstanceEGSize; len(buf) != want {
 		t.Errorf("encoded size = %d, want %d", len(buf), want)
 	}
 }

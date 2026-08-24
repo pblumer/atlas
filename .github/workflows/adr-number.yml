@@ -1,0 +1,76 @@
+name: ADR numbering
+
+# An ADR is written on a branch without a number. "The next free number" has no
+# stable answer there — two branches open at once both see the same one and both
+# take it — so the record lives at docs/adr/draft-<slug>.md until it lands here.
+# This job answers the question where it has one answer: on main, after the merge.
+# It renames the file, fixes the heading, adds the index row and rewrites every
+# citation. With no drafts present it does nothing, which is almost every push.
+#
+# The full argument, and what to do if this job goes red, is in the ADR on
+# merge-time numbering (see docs/adr/README.md § Writing a record).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One numbering run at a time: two concurrent runs would both compute "the next
+# free number" against the same main and reintroduce exactly the collision this
+# whole scheme exists to remove.
+concurrency:
+  group: adr-number
+  cancel-in-progress: false
+
+jobs:
+  number:
+    name: assign numbers to merged drafts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Assign a number to every draft
+        run: go run ./docs/adr/cmd/adrnum
+
+      # A push made with GITHUB_TOKEN deliberately does not trigger another
+      # workflow run — that is what keeps this job from waking itself, and it also
+      # means CI will not check the commit it makes. So check it here: the citation
+      # rewrite edits comments across the tree, and a citation inside a string
+      # literal would be a real code change.
+      - name: Verify the result
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./docs/adr/
+
+      - name: Commit and push
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No drafts to number."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Assign ADR numbers to the records merged into main"
+          # Rebase first: a push that landed while this job ran would otherwise
+          # reject ours, and the numbering commit touches only docs/adr and the
+          # citations of the drafts it numbered.
+          git pull --rebase origin main
+          if ! git push origin HEAD:main; then
+            echo "::error::Could not push the ADR numbering commit to main."
+            echo "The records below are merged but still unnumbered. Run 'make adr-number'"
+            echo "on an up-to-date main, review the diff, and push it yourself:"
+            git --no-pager show --stat --oneline HEAD
+            exit 1
+          fi

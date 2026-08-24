@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "activities": [
+    "approve",
+    "end",
+    "start"
+  ],
+  "path": [
+    "start",
+    "approve",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

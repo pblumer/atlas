@@ -13,6 +13,8 @@
 package job
 
 import (
+	"sync"
+
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -60,93 +62,216 @@ type Engine interface {
 	RunUntilIdle() error
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
-	FailJob(jobKey uint64, retries int32, message string)
+	FailJob(jobKey uint64, retries int32, message string, backoff int64)
+}
+
+// Outcome is what one job's handler produced: the job, what it completed with,
+// and the error that failed it. Exactly one of Completion and Err is meaningful.
+type Outcome struct {
+	Job        Job
+	Completion Completion
+	Err        error
 }
 
 // Runner dispatches activatable jobs to registered handlers.
+//
+// A handler is registered as a *factory* rather than a handler, because handlers
+// read state and no longer run on the goroutine that owns it: each round binds its
+// handlers to that round's [state.Reader], a consistent read view taken while the
+// run loop was held (ADR-0157 step 6). The connector packages are unchanged by
+// this — their Handler constructors already take a reader, so the factory is one
+// closure at the registration site.
 type Runner struct {
-	store    *state.Store
-	engine   Engine
-	handlers map[int32]CompletingHandler
+	store     *state.Store
+	engine    Engine
+	factories map[int32]func(state.Reader) CompletingHandler
+	// Concurrency bounds how many handlers a round runs at once.
+	//
+	// Serial dispatch had one virtue: a backlog could not become a thundering herd.
+	// Running handlers concurrently (ADR-0157 step 6) is what ended the amplification
+	// of a burst, but unbounded it would trade one failure for another — a thousand
+	// parked jobs becoming a thousand simultaneous outbound calls, exhausting file
+	// descriptors here and hammering whatever is on the other end. The cap keeps the
+	// throughput and drops the herd.
+	Concurrency int
 }
+
+// DefaultConcurrency is how many handlers a round runs at once when nothing says
+// otherwise. It is well above serial, so a burst still drains quickly, and well
+// below the point where the sockets and memory of one round are a problem.
+const DefaultConcurrency = 16
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
-	return &Runner{store: store, engine: engine, handlers: map[int32]CompletingHandler{}}
+	return &Runner{
+		store: store, engine: engine,
+		factories:   map[int32]func(state.Reader) CompletingHandler{},
+		Concurrency: DefaultConcurrency,
+	}
 }
 
 // Handle registers an output-less worker for a job type. The type is the interned
 // index the compiler assigned (cross-process, globally consistent job-type
 // interning is a later concern).
-func (r *Runner) Handle(jobType int32, h Handler) {
-	r.handlers[jobType] = func(j Job) (Completion, error) { return Completion{}, h(j) }
+func (r *Runner) Handle(jobType int32, build func(state.Reader) Handler) {
+	r.factories[jobType] = func(rd state.Reader) CompletingHandler {
+		h := build(rd)
+		return func(j Job) (Completion, error) { return Completion{}, h(j) }
+	}
 }
 
 // HandleWithOutput registers a worker whose completion writes output variables
 // back into the instance (e.g. a service-task worker that returns variables). Same
 // dispatch as Handle; the only difference is that its returned variables ride along
 // on the CompleteJob command.
-func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) {
-	r.handlers[jobType] = func(j Job) (Completion, error) {
-		outputs, err := h(j)
-		return Completion{Outputs: outputs}, err
+func (r *Runner) HandleWithOutput(jobType int32, build func(state.Reader) OutputHandler) {
+	r.factories[jobType] = func(rd state.Reader) CompletingHandler {
+		h := build(rd)
+		return func(j Job) (Completion, error) {
+			outputs, err := h(j)
+			return Completion{Outputs: outputs}, err
+		}
 	}
 }
 
 // HandleCompleting registers a worker whose completion carries both output
 // variables and a decision evaluation to retain (the DMN worker, ADR-0066). Same
 // dispatch as the others; its Completion rides along on the CompleteJob command.
-func (r *Runner) HandleCompleting(jobType int32, h CompletingHandler) { r.handlers[jobType] = h }
+func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) CompletingHandler) {
+	r.factories[jobType] = build
+}
 
-// PollOnce pulls every activatable job of a registered type, runs its handler,
-// and submits a completion command for each that succeeds. It returns how many
-// jobs it dispatched. The submitted completions are processed on the next
-// RunUntilIdle.
-func (r *Runner) PollOnce() (int, error) {
-	dispatched := 0
-	for jobType, h := range r.handlers {
+// Unhandle removes the in-process worker for a job type, so its jobs park for an
+// external one instead (ADR-0168).
+//
+// It exists as a removal rather than a condition at each registration site because
+// the registrations are spread across the server — a managed connector kind
+// registers through its own descriptor, the script languages through their loop,
+// the rest inline — and a switch that has to be remembered at ten places is a switch
+// that will be missed at one.
+func (r *Runner) Unhandle(jobType int32) { delete(r.factories, jobType) }
+
+// Handles reports whether an in-process worker is registered for a job type.
+//
+// It is what keeps one job from being worked twice: an external worker leasing by
+// type must be refused a type this runner is already draining, because nothing
+// else separates them — the runner does not lease, it simply dispatches whatever
+// is activatable (ADR-0157). Relocating a kind to an external worker therefore
+// means not registering its handler here.
+func (r *Runner) Handles(jobType int32) bool {
+	_, ok := r.factories[jobType]
+	return ok
+}
+
+// Claim collects every activatable job of a registered type. It reads state, so it
+// runs on the goroutine that owns it — the run loop — and it does nothing slow: the
+// work itself happens in [Runner.Work], off the loop.
+func (r *Runner) Claim() ([]Job, error) {
+	var jobs []Job
+	for jobType := range r.factories {
 		var keys []uint64
 		if err := r.store.ActivatableJobs(jobType, func(k uint64) error {
 			keys = append(keys, k)
 			return nil
 		}); err != nil {
-			return dispatched, err
+			return jobs, err
 		}
 		for _, k := range keys {
 			jv, ok, err := r.store.GetJob(k)
 			if err != nil {
-				return dispatched, err
+				return jobs, err
 			}
 			if !ok {
 				continue // completed since the scan; skip
 			}
-			job := Job{
+			jobs = append(jobs, Job{
 				Key:                k,
 				Type:               jv.JobType,
 				ProcessInstanceKey: jv.ProcessInstanceKey,
 				ElementInstanceKey: jv.ElementInstanceKey,
 				Retries:            jv.Retries,
-			}
-			completion, err := h(job)
-			if err != nil {
-				// A worker that can't complete its job must not abort the whole
-				// Drive — otherwise one failing job (e.g. a business rule task whose
-				// decision model isn't deployed) poisons the run loop and fails every
-				// future deploy or completion that drives jobs. Route the failure into
-				// the incident model instead (ADR-0061): FailJob retries the job while
-				// retries remain, then raises an incident that parks the token. Count
-				// it as progress so Drive loops to apply the FailJob command; when the
-				// job parks (or completes on a retry) it drops off the activatable
-				// index and Drive terminates.
-				r.engine.FailJob(job.Key, job.Retries-1, err.Error())
-				dispatched++
-				continue
-			}
-			r.engine.CompleteJobWithDecision(k, completion.Decision, completion.Outputs...)
-			dispatched++
+			})
 		}
 	}
-	return dispatched, nil
+	return jobs, nil
+}
+
+// Work runs the handlers for claimed jobs and returns what each produced. This is
+// the part that must NOT hold the run loop: a handler makes the outbound call a
+// connector exists for, and holding the single writer for its duration is the
+// stall ADR-0155 measured and ADR-0157 step 6 removes.
+//
+// Handlers run concurrently, one goroutine per job. That is also what ends the
+// amplification of the serial runner: a burst of parked jobs against a dead host
+// used to cost one timeout after another, and now costs the slowest of them.
+//
+// reader is the round's consistent read view. Handlers are built against it here,
+// so each sees one coherent state rather than whatever the writer has reached.
+func (r *Runner) Work(jobs []Job, reader state.Reader) []Outcome {
+	built := map[int32]CompletingHandler{}
+	var runnable []Job
+	for _, j := range jobs {
+		if _, ok := built[j.Type]; !ok {
+			factory, handled := r.factories[j.Type]
+			if !handled {
+				continue // an external worker's job; not ours to touch
+			}
+			built[j.Type] = factory(reader)
+		}
+		runnable = append(runnable, j)
+	}
+	outcomes := make([]Outcome, len(runnable))
+	limit := r.Concurrency
+	if limit <= 0 {
+		limit = DefaultConcurrency
+	}
+	slots := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for i, j := range runnable {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			completion, err := built[j.Type](j)
+			outcomes[i] = Outcome{Job: j, Completion: completion, Err: err}
+		}()
+	}
+	wg.Wait()
+	return outcomes
+}
+
+// Submit turns a round's outcomes into commands. It mutates engine state, so like
+// [Runner.Claim] it runs on the run loop.
+//
+// A failure is routed into the incident model (ADR-0061) rather than returned: one
+// job that cannot complete — a business rule task whose decision model is not
+// deployed, say — must not poison the run, or every later deploy and completion
+// that drives jobs would fail with it. FailJob retries while retries remain, then
+// parks the token on an incident. The in-process runner retries immediately
+// (backoff 0); a worker-supplied backoff arrives through the HTTP fail endpoint
+// instead (ADR-0111).
+func (r *Runner) Submit(outcomes []Outcome) {
+	for _, o := range outcomes {
+		if o.Err != nil {
+			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
+			continue
+		}
+		r.engine.CompleteJobWithDecision(o.Job.Key, o.Completion.Decision, o.Completion.Outputs...)
+	}
+}
+
+// PollOnce claims, works and submits one round on the calling goroutine. It is the
+// simple synchronous form — used by [Runner.Drive] and by callers that own the loop
+// themselves; a server that must keep the loop free drives the three steps itself.
+func (r *Runner) PollOnce() (int, error) {
+	jobs, err := r.Claim()
+	if err != nil {
+		return 0, err
+	}
+	outcomes := r.Work(jobs, r.store)
+	r.Submit(outcomes)
+	return len(outcomes), nil
 }
 
 // Drive runs the engine and dispatches jobs alternately until the system is

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // This file implements ADR-0071 "sharing scopes": a private-vs-shared access
@@ -93,15 +95,37 @@ func isScopeRole(role string) bool {
 //   - A shared project grants each listed user member their stored role; a
 //     private project grants nobody but owner/admin, so flipping to private
 //     revokes members without clearing the list.
-func (p project) effectiveRole(pr *Principal, authEnabled bool) string {
+func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 	if !authEnabled {
 		return ScopeRoleOwner
 	}
 	if pr == nil {
 		return ""
 	}
-	if pr.hasRole(RoleAdmin) {
+	if pr.HasRole(RoleAdmin) {
 		return ScopeRoleOwner
+	}
+	// A deploy agent (ADR-0129) is a peer Atlas that published here, not a person.
+	// Sharing scopes cannot express it — there is no account to own or be a member
+	// of anything — and what it may do is already bounded, tightly, by the
+	// middleware allowlist: push a bundle, and read back what this server runs for
+	// an application. Viewer is what those reads need.
+	//
+	// Trade-off, accepted and worth stating: this is viewer on *every* application,
+	// not only the ones a given peer published, so a leaked token could read the
+	// deployment counts of applications it never shipped. The allowlist keeps that
+	// to exactly one read-only endpoint; narrowing it further would mean the
+	// receiver tracking which peer owns which application, which is state ADR-0129
+	// deliberately keeps on the publishing side.
+	if pr.HasRole(RoleDeployAgent) {
+		return ScopeRoleViewer
+	}
+	// A protected system project (ADR-0122) is visible to every authenticated
+	// principal so its platform processes can be found and started, but it grants
+	// no more than viewer here — mutation is separately refused for all callers by
+	// the protected guard, so no member/owner role on it is meaningful.
+	if p.Protected {
+		return ScopeRoleViewer
 	}
 	if p.OwnerID == "" {
 		return "" // legacy/ownerless: only admin manages it (handled above)
@@ -126,7 +150,7 @@ func (p project) effectiveRole(pr *Principal, authEnabled bool) string {
 // caller who has some access but not enough gets 403. The check is pure (it only
 // reads the request's Principal), so it is safe to call anywhere.
 func (s *Server) checkProjectRole(r *http.Request, p project, minRole string) (int, string) {
-	rank := scopeRank(p.effectiveRole(principalFrom(r.Context()), s.authEnabled))
+	rank := scopeRank(p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled))
 	switch {
 	case rank == 0:
 		return http.StatusNotFound, "no project with that id"
@@ -149,7 +173,7 @@ func (s *Server) authorizeProject(r *http.Request, id, minRole string) (project,
 		ok     bool
 		getErr error
 	)
-	s.do(func() { proj, ok, getErr = s.projects.get(id) })
+	s.do(func() { proj, ok, getErr = s.projects.Get(id) })
 	if getErr != nil {
 		return project{}, http.StatusInternalServerError, "read project: " + getErr.Error()
 	}
@@ -172,28 +196,32 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 	userID := r.PathValue("userId")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		Role string `json:"role"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	if !isScopeRole(payload.Role) {
-		writeError(w, http.StatusBadRequest, `role must be "viewer" or "editor"`)
+		httpapi.Error(w, http.StatusBadRequest, `role must be "viewer" or "editor"`)
 		return
 	}
 
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleOwner)
 	if code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := protectedGuard(proj); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	if userID == proj.OwnerID {
-		writeError(w, http.StatusBadRequest, "the owner already has full access and cannot be added as a member")
+		httpapi.Error(w, http.StatusBadRequest, "the owner already has full access and cannot be added as a member")
 		return
 	}
 
@@ -206,7 +234,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		if s.authEnabled {
 			// Only grant to a real identity. With auth off there is no user store
 			// to consult (and sharing is moot), so the check is skipped.
-			if _, ok, e := s.users.get(userID); e != nil {
+			if _, ok, e := s.users.Get(userID); e != nil {
 				lookupErr = e
 				return
 			} else if !ok {
@@ -217,7 +245,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		proj.Members = upsertMember(proj.Members, userID, payload.Role)
 		proj.Visibility = VisibilityShared
 		proj.UpdatedAt = time.Now().Unix()
-		if sErr = s.projects.save(proj); sErr != nil {
+		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(proj.ID)
@@ -229,13 +257,13 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case lookupErr != nil:
-		writeError(w, http.StatusInternalServerError, "look up user: "+lookupErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "look up user: "+lookupErr.Error())
 	case userMissing:
-		writeError(w, http.StatusBadRequest, "no user with that id")
+		httpapi.Error(w, http.StatusBadRequest, "no user with that id")
 	case sErr != nil:
-		writeError(w, http.StatusInternalServerError, "share project: "+sErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "share project: "+sErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, view)
+		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
 
@@ -249,7 +277,11 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleOwner)
 	if code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if code, msg := protectedGuard(proj); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 
@@ -260,7 +292,7 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 	s.do(func() {
 		proj.Members = removeMember(proj.Members, userID)
 		proj.UpdatedAt = time.Now().Unix()
-		if sErr = s.projects.save(proj); sErr != nil {
+		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
 		n, e := s.countArtifactsInProject(proj.ID)
@@ -271,10 +303,10 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 		view = s.projectViewFor(r, proj, n)
 	})
 	if sErr != nil {
-		writeError(w, http.StatusInternalServerError, "unshare project: "+sErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "unshare project: "+sErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, view)
+	httpapi.JSON(w, http.StatusOK, view)
 }
 
 // upsertMember adds a user member with the given role, or updates the role if

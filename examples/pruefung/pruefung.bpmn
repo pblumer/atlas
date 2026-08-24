@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Prüfung mit Zeitlimit und DMN-Bewertung — ein Assessment als BPMN-Prozess.
+
+  Zeigt drei Dinge, die eine Workflow-Engine einer reinen Prüfungssoftware
+  voraushat: ein hartes Zeitlimit als unterbrechendes Boundary-Timer-Event, die
+  Bewertung als fachlich pflegbare DMN-Entscheidung (nicht im Code), und einen
+  ergebnisabhängigen Folgeschritt.
+
+    Start "Prüfung gestartet"
+     → User-Task "Prüfung ablegen"     (Formular pruefung-fragen → antwort1..4)
+        └─ Boundary-Timer PT45M (interrupting): Zeit abgelaufen → Ende
+     → Script "Punkte zählen"          (antwort1..4 → punkte, je 25 P., FEEL)
+     → Business-Rule "Bewerten"        (DMN Notenschluessel: punkte →
+                                         bewertung {bestanden, note})
+     → Exklusiv-Gateway "bestanden?"
+          bewertung.bestanden = true  → Ende "Prüfung bestanden"
+          sonst (default)             → Ende "Prüfung nicht bestanden"
+
+  Läuft der Boundary-Timer ab, bevor die Prüfung abgegeben wird, wird der
+  User-Task unterbrochen (cancelActivity per Default) und der Prozess endet in
+  "Zeit abgelaufen" — ohne Bewertung. Die Punktegrenze und die Notenstufen
+  stehen in notenschluessel.dmn; das Prozessmodell bleibt davon unberührt.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_pruefung" targetNamespace="http://atlas/examples">
+  <process id="proc_pruefung" name="Prüfung mit Zeitlimit" isExecutable="true">
+
+    <startEvent id="start" name="Prüfung gestartet">
+      <outgoing>f_start_pruefung</outgoing>
+    </startEvent>
+
+    <userTask id="pruefung" name="Prüfung ablegen">
+      <extensionElements>
+        <zeebe:formDefinition formId="pruefung-fragen"/>
+      </extensionElements>
+      <incoming>f_start_pruefung</incoming>
+      <outgoing>f_pruefung_punkte</outgoing>
+    </userTask>
+
+    <boundaryEvent id="frist" name="45 Min abgelaufen" attachedToRef="pruefung">
+      <outgoing>f_frist_timeout</outgoing>
+      <timerEventDefinition>
+        <timeDuration>PT45M</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <scriptTask id="punkte" name="Punkte zählen">
+      <extensionElements>
+        <zeebe:script resultVariable="punkte"
+          expression="= (if antwort1 = &quot;event&quot; then 25 else 0) + (if antwort2 = &quot;group&quot; then 25 else 0) + (if antwort3 = &quot;one&quot; then 25 else 0) + (if antwort4 = &quot;deploy&quot; then 25 else 0)"/>
+      </extensionElements>
+      <incoming>f_pruefung_punkte</incoming>
+      <outgoing>f_punkte_bewerten</outgoing>
+    </scriptTask>
+
+    <businessRuleTask id="bewerten" name="Bewerten (DMN)">
+      <extensionElements>
+        <zeebe:calledDecision decisionId="Notenschluessel" resultVariable="bewertung" retries="3"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=punkte" target="punkte"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_punkte_bewerten</incoming>
+      <outgoing>f_bewerten_gw</outgoing>
+    </businessRuleTask>
+
+    <exclusiveGateway id="gw" name="bestanden?" default="f_gw_fail">
+      <incoming>f_bewerten_gw</incoming>
+      <outgoing>f_gw_pass</outgoing>
+      <outgoing>f_gw_fail</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="end_pass" name="Prüfung bestanden">
+      <incoming>f_gw_pass</incoming>
+    </endEvent>
+
+    <endEvent id="end_fail" name="Prüfung nicht bestanden">
+      <incoming>f_gw_fail</incoming>
+    </endEvent>
+
+    <endEvent id="end_timeout" name="Zeit abgelaufen">
+      <incoming>f_frist_timeout</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_pruefung" sourceRef="start" targetRef="pruefung"/>
+    <sequenceFlow id="f_pruefung_punkte" sourceRef="pruefung" targetRef="punkte"/>
+    <sequenceFlow id="f_punkte_bewerten" sourceRef="punkte" targetRef="bewerten"/>
+    <sequenceFlow id="f_bewerten_gw" sourceRef="bewerten" targetRef="gw"/>
+    <sequenceFlow id="f_gw_pass" name="bestanden" sourceRef="gw" targetRef="end_pass">
+      <conditionExpression>= bewertung.bestanden</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_fail" name="durchgefallen" sourceRef="gw" targetRef="end_fail"/>
+    <sequenceFlow id="f_frist_timeout" sourceRef="frist" targetRef="end_timeout"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_pruefung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="162" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruefung" bpmnElement="pruefung">
+        <dc:Bounds x="260" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_frist" bpmnElement="frist">
+        <dc:Bounds x="292" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="230" y="205" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_punkte" bpmnElement="punkte">
+        <dc:Bounds x="430" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_bewerten" bpmnElement="bewerten">
+        <dc:Bounds x="600" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="770" y="115" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="762" y="80" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_pass" bpmnElement="end_pass">
+        <dc:Bounds x="890" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="864" y="162" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_fail" bpmnElement="end_fail">
+        <dc:Bounds x="777" y="250" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="742" y="290" width="106" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_timeout" bpmnElement="end_timeout">
+        <dc:Bounds x="292" y="300" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="268" y="340" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_pruefung" bpmnElement="f_start_pruefung">
+        <di:waypoint x="196" y="140"/><di:waypoint x="260" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pruefung_punkte" bpmnElement="f_pruefung_punkte">
+        <di:waypoint x="360" y="140"/><di:waypoint x="430" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_punkte_bewerten" bpmnElement="f_punkte_bewerten">
+        <di:waypoint x="530" y="140"/><di:waypoint x="600" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_bewerten_gw" bpmnElement="f_bewerten_gw">
+        <di:waypoint x="700" y="140"/><di:waypoint x="770" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_pass" bpmnElement="f_gw_pass">
+        <di:waypoint x="820" y="140"/><di:waypoint x="890" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="833" y="118" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_fail" bpmnElement="f_gw_fail">
+        <di:waypoint x="795" y="165"/><di:waypoint x="795" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="800" y="185" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frist_timeout" bpmnElement="f_frist_timeout">
+        <di:waypoint x="310" y="198"/><di:waypoint x="310" y="300"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

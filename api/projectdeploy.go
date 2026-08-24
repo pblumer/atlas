@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // projectDeployResp reports the outcome of deploying a whole project: the BPMN
@@ -35,7 +37,39 @@ type projectDeployResp struct {
 // the ADR-0014 follow-up); and the final BPMN deploy loop is not atomic against a
 // mid-loop persist failure (same as a multi-pool deploy).
 func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	out := s.deployApplicationBundle(r, r.PathValue("id"))
+	out.write(w)
+}
+
+// bundleOutcome is the result of one bundle-deploy attempt, kept separate from the
+// writing of it so both the deploy route and the ADR-0128 publish route can drive
+// the same logic and then render it their own way (publish additionally mints a
+// release). Exactly one of errMsg / resp is meaningful: a non-empty errMsg is an
+// {error} payload at status, otherwise resp is written as JSON at status.
+type bundleOutcome struct {
+	resp   projectDeployResp
+	status int
+	errMsg string
+	// deployed is true only when the whole bundle registered, which is the gate for
+	// minting a release (all-or-nothing, ADR-0034/0127).
+	deployed bool
+	// proj is the resolved application, valid once past the lookup/authz phase.
+	proj project
+}
+
+// write renders the outcome onto the response.
+func (o bundleOutcome) write(w http.ResponseWriter) {
+	if o.errMsg != "" {
+		httpapi.Error(w, o.status, o.errMsg)
+		return
+	}
+	httpapi.JSON(w, o.status, o.resp)
+}
+
+// deployApplicationBundle runs the "validate all, then deploy all" bundle deploy
+// for one application and reports the outcome without writing a response. See
+// handleDeployProject for the semantics and the honest limitations.
+func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutcome {
 
 	// Phase 1 (on-loop): load the project and its artifacts.
 	var (
@@ -46,11 +80,11 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		refs            []dmnRef
 	)
 	s.do(func() {
-		if proj, ok, getErr = s.projects.get(id); getErr != nil || !ok {
+		if proj, ok, getErr = s.projects.Get(id); getErr != nil || !ok {
 			return
 		}
 		var allDrafts []draft
-		if allDrafts, loadErr = s.drafts.loadAll(); loadErr != nil {
+		if allDrafts, loadErr = s.drafts.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, d := range allDrafts {
@@ -59,7 +93,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var allRefs []dmnRef
-		if allRefs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+		if allRefs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
 			return
 		}
 		for _, rec := range allRefs {
@@ -70,21 +104,22 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
-		return
+		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "read project: " + getErr.Error()}
 	case !ok:
-		writeError(w, http.StatusNotFound, "no project with that id")
-		return
+		return bundleOutcome{status: http.StatusNotFound, errMsg: "no project with that id"}
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "list artifacts: "+loadErr.Error())
-		return
+		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "list artifacts: " + loadErr.Error()}
 	}
 	// Deploying a project's artifacts is a write on the project, so it needs the
 	// editor role (ADR-0071). This gates the design-time action; it does not
 	// isolate the resulting running instances, which stay out of scope.
 	if code, msg := s.checkProjectRole(r, proj, ScopeRoleEditor); code != 0 {
-		writeError(w, code, msg)
-		return
+		return bundleOutcome{status: code, errMsg: msg, proj: proj}
+	}
+	// A protected system project is deployed only by the startup bootstrap
+	// (ADR-0122); refuse deploying it through the API, for every caller.
+	if code, msg := protectedGuard(proj); code != 0 {
+		return bundleOutcome{status: code, errMsg: msg, proj: proj}
 	}
 
 	// Phase 2 (off-loop): DMN preflight. Resolve + validate every reference; a
@@ -97,16 +132,14 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	for _, rec := range refs {
 		res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
-			return
+			return bundleOutcome{status: http.StatusInternalServerError, errMsg: "resolve dmn model: " + err.Error(), proj: proj}
 		}
 		if !res.Valid {
 			invalidRefs++
 		} else {
 			xml, err := s.dmnResolver.Resolve(r.Context(), rec.ModelRef)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
-				return
+				return bundleOutcome{status: http.StatusInternalServerError, errMsg: "resolve dmn model: " + err.Error(), proj: proj}
 			}
 			models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
 		}
@@ -117,12 +150,11 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if invalidRefs > 0 {
-		writeJSON(w, http.StatusConflict, projectDeployResp{
+		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 			ID: proj.ID, Name: proj.Name, Deployed: false,
 			Reason:      fmt.Sprintf("%d DMN reference(s) unresolved or invalid", invalidRefs),
 			Definitions: []deployedProcess{}, References: refReports,
-		})
-		return
+		}}
 	}
 
 	// Phase 3-prep (off-loop): compile every draft and match it to the DMN model
@@ -133,12 +165,11 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	for i, d := range drafts {
 		deployables, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(d.XML)))
 		if err != nil {
-			writeJSON(w, http.StatusConflict, projectDeployResp{
+			return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
 				Reason:      fmt.Sprintf("draft %q does not compile: %s", d.ProcessID, err.Error()),
 				Definitions: []deployedProcess{}, References: refReports,
-			})
-			return
+			}}
 		}
 		needed := draftDecisions(deployables)
 		if len(needed) == 0 {
@@ -146,12 +177,11 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		}
 		xmls, ok := coverModels(models, needed)
 		if !ok {
-			writeJSON(w, http.StatusConflict, projectDeployResp{
+			return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
 				Reason:      fmt.Sprintf("draft %q references decision(s) %v not provided by any DMN reference in this project", d.ProcessID, needed),
 				Definitions: []deployedProcess{}, References: refReports,
-			})
-			return
+			}}
 		}
 		dmnForDraft[i] = xmls
 	}
@@ -164,7 +194,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		deployedAt := time.Now().Unix()
 		for i, d := range drafts {
-			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt)
+			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID)
 			if pErr != nil {
 				persistErr = pErr
 				return
@@ -173,16 +203,15 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if persistErr != nil {
-		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
-		return
+		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "persist deployment: " + persistErr.Error(), proj: proj}
 	}
 	if deployed == nil {
 		deployed = []deployedProcess{}
 	}
-	writeJSON(w, http.StatusOK, projectDeployResp{
+	return bundleOutcome{status: http.StatusOK, deployed: true, proj: proj, resp: projectDeployResp{
 		ID: proj.ID, Name: proj.Name, Deployed: true,
 		Definitions: deployed, References: refReports,
-	})
+	}}
 }
 
 // resolvedModel is one project DMN reference resolved for the bundle: its model

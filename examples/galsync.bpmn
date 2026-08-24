@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  GALSync — cross-forest Global Address List synchronisation.
+
+  MIM ships this as a management agent. In Atlas it is a *process*, and that is the
+  point of the model rather than an apology for it: GALSync is not a protocol, it is a
+  policy — "represent forest A's mailboxes as contacts in forest B's address book".
+  Every mechanism it needs already exists as a connector; what MIM buries in sync
+  rules and join logic is here as sequence flow anyone can read and change.
+
+  The loop carries its own position. The DirSync cookie goes out of `dirsyncCookie`
+  and the server's new one comes back into the same variable, so the process holds its
+  place with no state anywhere else (ADR-0166, third amendment).
+
+  Set up per deployment:
+    dirsyncCookie     — leave unset on the first run; it reads the whole source forest
+    quellForest       — ldaps://dc.forest-a.example:636
+    zielForest        — ldaps://dc.forest-b.example:636
+    zielOU            — ou=galsync,dc=forest-b,dc=example
+  The bind passwords are references (ADR-0041): the worker resolves
+  ATLAS_CONNECTOR_GALSYNC_QUELLE_TOKEN and ATLAS_CONNECTOR_GALSYNC_ZIEL_TOKEN from its
+  own environment, so no credential appears in this file.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="defs_galsync"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="galsync" name="GALSync (cross-forest address list)" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Start GALSync"/>
+
+    <!-- One DirSync pass over the source forest. The first pass (no cookie) reads
+         everything; every later one reads only what changed, which is what makes a
+         reconciliation affordable to run every few minutes. -->
+    <bpmn:serviceTask id="lese_aenderungen" name="Änderungen lesen (DirSync)">
+      <bpmn:extensionElements>
+        <atlas:adConnector url="=quellForest" bindDN="=quellBindDN" bindSecret="GALSYNC_QUELLE"
+                           operation="sync" baseDN="=quellBasis"
+                           filter="(&amp;(objectClass=user)(mail=*))"
+                           cookieVariable="dirsyncCookie" resultVariable="aenderungen"
+                           maxEntries="500"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <!-- One pass per changed object. Sequential, so a forest-wide first run does not
+         open five hundred connections to the target at once. -->
+    <bpmn:subProcess id="je_aenderung" name="je Änderung">
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=aenderungen.entries" inputElement="eintrag"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+
+      <bpmn:startEvent id="eintrag_start"/>
+
+      <!-- AD reports a deletion as a change carrying isDeleted, not as an absence —
+           it is the only signal a leaver gives, so it is the first thing branched on. -->
+      <bpmn:exclusiveGateway id="geloescht" name="gelöscht?"/>
+
+      <bpmn:serviceTask id="entferne_kontakt" name="Kontakt entfernen">
+        <bpmn:extensionElements>
+          <atlas:adConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
+                             operation="delete"
+                             dn="=&quot;cn=&quot; + eintrag.attributes.cn[1] + &quot;,&quot; + zielOU"/>
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+
+      <!-- Is this person already in the target address book? The AD connector
+           deliberately has no search (ADR-0166) — reading a directory belongs to the
+           generic LDAP connector, so that is what looks the contact up. -->
+      <bpmn:serviceTask id="suche_kontakt" name="Kontakt suchen">
+        <bpmn:extensionElements>
+          <atlas:ldapConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
+                               operation="search" baseDN="=zielOU" scope="one"
+                               filter="=&quot;(targetAddress=SMTP:&quot; + eintrag.attributes.mail[1] + &quot;)&quot;"
+                               maxEntries="2" resultVariable="treffer"/>
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+
+      <bpmn:exclusiveGateway id="vorhanden" name="vorhanden?"/>
+
+      <!-- targetAddress is what makes the entry a *mail-enabled* contact: mail sent to
+           it is forwarded to the source forest rather than bouncing. -->
+      <bpmn:scriptTask id="baue_kontakt" name="Kontaktattribute bilden">
+        <bpmn:extensionElements>
+          <zeebe:script expression="={
+              displayName:   eintrag.attributes.displayName[1],
+              mail:          eintrag.attributes.mail[1],
+              targetAddress: &quot;SMTP:&quot; + eintrag.attributes.mail[1],
+              mailNickname:  eintrag.attributes.cn[1],
+              extensionAttribute15: &quot;galsync&quot;
+            }" resultVariable="kontakt"/>
+        </bpmn:extensionElements>
+      </bpmn:scriptTask>
+
+      <bpmn:serviceTask id="lege_kontakt_an" name="Kontakt anlegen">
+        <bpmn:extensionElements>
+          <atlas:adConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
+                             operation="create-contact"
+                             dn="=&quot;cn=&quot; + eintrag.attributes.cn[1] + &quot;,&quot; + zielOU"
+                             entryVariable="kontakt"/>
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+
+      <bpmn:serviceTask id="aktualisiere_kontakt" name="Kontakt aktualisieren">
+        <bpmn:extensionElements>
+          <atlas:adConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
+                             operation="update-attributes"
+                             dn="=treffer[1].dn" entryVariable="kontakt"/>
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+
+      <bpmn:exclusiveGateway id="eintrag_join"/>
+      <bpmn:endEvent id="eintrag_ende"/>
+
+      <bpmn:sequenceFlow id="e1" sourceRef="eintrag_start" targetRef="geloescht"/>
+      <bpmn:sequenceFlow id="e2" sourceRef="geloescht" targetRef="entferne_kontakt">
+        <bpmn:conditionExpression>=eintrag.attributes.isDeleted != null</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="e3" sourceRef="geloescht" targetRef="suche_kontakt"/>
+      <bpmn:sequenceFlow id="e4" sourceRef="suche_kontakt" targetRef="baue_kontakt"/>
+      <bpmn:sequenceFlow id="e5" sourceRef="baue_kontakt" targetRef="vorhanden"/>
+      <bpmn:sequenceFlow id="e6" sourceRef="vorhanden" targetRef="aktualisiere_kontakt">
+        <bpmn:conditionExpression>=count(treffer) &gt; 0</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="e7" sourceRef="vorhanden" targetRef="lege_kontakt_an"/>
+      <bpmn:sequenceFlow id="e8" sourceRef="entferne_kontakt" targetRef="eintrag_join"/>
+      <bpmn:sequenceFlow id="e9" sourceRef="aktualisiere_kontakt" targetRef="eintrag_join"/>
+      <bpmn:sequenceFlow id="e10" sourceRef="lege_kontakt_an" targetRef="eintrag_join"/>
+      <bpmn:sequenceFlow id="e11" sourceRef="eintrag_join" targetRef="eintrag_ende"/>
+    </bpmn:subProcess>
+
+    <!-- DirSync says whether more changes are already waiting. When they are the loop
+         goes straight round; otherwise it sleeps first. -->
+    <bpmn:exclusiveGateway id="mehr" name="mehr Änderungen?"/>
+
+    <bpmn:intermediateCatchEvent id="warte" name="warten">
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="lese_aenderungen"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="lese_aenderungen" targetRef="je_aenderung"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="je_aenderung" targetRef="mehr"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="mehr" targetRef="lese_aenderungen">
+      <bpmn:conditionExpression>=aenderungen.more</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f5" sourceRef="mehr" targetRef="warte"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="warte" targetRef="lese_aenderungen"/>
+  </bpmn:process>
+</bpmn:definitions>

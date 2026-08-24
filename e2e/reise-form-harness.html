@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<!--
+  Test-only harness (never embedded in api/web). Renders the reisebuchung start
+  form with the REAL vendored form-js bundle, so an e2e test can verify the two
+  in-form ("Ebene A") behaviours the example promises: the conditional Reisepass
+  field and the cascading Ziel list. Mirrors the pattern of harness.html.
+-->
+<link rel="stylesheet" href="/vendor/form-js/form-js.css"/>
+</head>
+<body>
+<div id="host"></div>
+<script type="module">
+import { Form } from "/vendor/form-js/form-viewer.js";
+
+// The exact schema shipped as examples/reisebuchung/reise-start.form.json.
+const schema = {
+  type: "default",
+  id: "reise-start",
+  components: [
+    { type: "select", key: "reiseart", label: "Reiseart", values: [
+      { label: "Inland", value: "Inland" },
+      { label: "EU-Ausland", value: "EU" },
+      { label: "Fernreise", value: "Fernreise" }
+    ], validate: { required: true } },
+    { type: "select", key: "ziel", label: "Ziel",
+      valuesExpression: '=if reiseart = "Fernreise" then [{value: "th", label: "Thailand"}, {value: "us", label: "USA"}, {value: "jp", label: "Japan"}] else if reiseart = "EU" then [{value: "es", label: "Spanien"}, {value: "fr", label: "Frankreich"}, {value: "it", label: "Italien"}] else [{value: "sylt", label: "Sylt"}, {value: "bayern", label: "Bayern"}, {value: "harz", label: "Harz"}]',
+      validate: { required: true } },
+    { type: "textfield", key: "reisepassNr", label: "Reisepass-Nr.",
+      conditional: { hide: '=reiseart != "Fernreise"' } },
+    { type: "datetime", subtype: "date", key: "geburtsdatum", dateLabel: "Geburtsdatum",
+      validate: { required: true } }
+  ]
+};
+
+let form = null;
+window.__err = null;
+
+// Render (or re-render) the form with the given data. Re-importing applies the
+// conditional/hide and valuesExpression evaluation for the supplied data.
+window.render = async (data) => {
+  window.__err = null;
+  try {
+    if (form) { form.destroy(); form = null; }
+    form = new Form({ container: document.querySelector("#host") });
+    await form.importSchema(schema, data || {});
+  } catch (e) { window.__err = String(e && e.message || e); throw e; }
+};
+
+// Read what is on screen: which field labels are present (a hidden field is
+// removed from the DOM), and the option labels the Ziel dropdown offers.
+window.readState = () => {
+  const labels = [...document.querySelectorAll(".fjs-form-field label, .fjs-form-field .fjs-form-field-label")]
+    .map(l => l.textContent.trim());
+  const has = (t) => labels.some(l => l.startsWith(t));
+  const zielOptions = [...document.querySelectorAll(".fjs-dropdownlist .fjs-dropdownlist-item, .fjs-dropdownlist [role='option'], ul[role='listbox'] li")]
+    .map(o => o.textContent.trim()).filter(Boolean);
+  return { labels, hasReiseart: has("Reiseart"), hasZiel: has("Ziel"),
+           hasReisepass: has("Reisepass"), hasGeburtsdatum: has("Geburtsdatum"), zielOptions };
+};
+
+window.ready = window.render({}).then(() => true);
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: data-based exclusive choice with a default flow.
+
+  Start -> script "set_betrag" (= 250 -> betrag) -> exclusive gateway.
+  The gateway takes "f_high" when betrag > 1000, otherwise the default "f_low".
+  Seeded with betrag = 250, so the default branch fires deterministically and
+  grade becomes "L". Realizes WCP-4 (Exclusive Choice) and WCP-5 (Simple Merge).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_exclusive" targetNamespace="http://atlas/conformance">
+  <process id="exclusive-gateway" name="Exclusive choice" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="set_betrag" name="Set betrag">
+      <extensionElements>
+        <zeebe:script expression="= 250" resultVariable="betrag"/>
+      </extensionElements>
+    </scriptTask>
+    <exclusiveGateway id="gw" name="Betrag?" default="f_low"/>
+    <scriptTask id="high" name="Grade H">
+      <extensionElements>
+        <zeebe:script expression="= &quot;H&quot;" resultVariable="grade"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="low" name="Grade L">
+      <extensionElements>
+        <zeebe:script expression="= &quot;L&quot;" resultVariable="grade"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_betrag"/>
+    <sequenceFlow id="f2" sourceRef="set_betrag" targetRef="gw"/>
+    <sequenceFlow id="f_high" name="betrag &gt; 1000" sourceRef="gw" targetRef="high">
+      <conditionExpression>= betrag &gt; 1000</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_low" name="default" sourceRef="gw" targetRef="low"/>
+    <sequenceFlow id="f3" sourceRef="high" targetRef="end"/>
+    <sequenceFlow id="f4" sourceRef="low" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="exclusive-gateway">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_set_betrag" bpmnElement="set_betrag"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw"><dc:Bounds x="440" y="175" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="428" y="146" width="74" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_high" bpmnElement="high"><dc:Bounds x="560" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_low" bpmnElement="low"><dc:Bounds x="560" y="280" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="740" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="440" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_high" bpmnElement="f_high"><di:waypoint x="490" y="200"/><di:waypoint x="560" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_low" bpmnElement="f_low"><di:waypoint x="465" y="225"/><di:waypoint x="465" y="320"/><di:waypoint x="560" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="660" y="200"/><di:waypoint x="740" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="660" y="320"/><di:waypoint x="758" y="320"/><di:waypoint x="758" y="218"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

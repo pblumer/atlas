@@ -1,0 +1,13 @@
+{
+  "name": "message-start",
+  "model": "message-start.bpmn",
+  "features": [
+    "message-start"
+  ],
+  "start": {
+    "correlation": "",
+    "kind": "message",
+    "name": "order-placed"
+  },
+  "driver": null
+}

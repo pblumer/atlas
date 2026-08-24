@@ -1,0 +1,11 @@
+{
+  "name": "multi-instance",
+  "model": "multi-instance.bpmn",
+  "features": [
+    "multi-instance"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

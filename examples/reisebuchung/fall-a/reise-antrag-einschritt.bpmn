@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reiseantrag (Fall A) — EIN Formular, EIN Prozessschritt.
+
+  Gegenstück zu examples/reisebuchung/reisebuchung.bpmn (Fall B). Dort verzweigt
+  der Prozess (DMN + Inclusive-Gateways) auf mehrere User-Tasks; hier trägt EIN
+  User-Task ein einziges, in sich abhängiges Formular (reise-antrag) — die
+  kaskadierende Zielauswahl und die bedingten Fernreise-/Minderjährigen-Felder
+  laufen komplett im Formular (form-js). Der Prozess bekommt genau EINE Abgabe.
+
+    Start → User-Task "Reiseantrag erfassen" (Formular reise-antrag)
+          → Script "Antrag zusammenfassen"
+          → Ende
+
+  Wann Fall A statt Fall B? Wenn dieselbe Person alles in einer Sitzung ausfüllt,
+  ohne Warten/Genehmigung/anderen Akteur dazwischen — dann ist die Mehrstufigkeit
+  reine UI (im Client geblättert), kein Prozess. Siehe fall-a/README.md.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_reise_antrag" targetNamespace="http://atlas/examples">
+  <process id="proc_reise_antrag" name="Reiseantrag (ein Schritt)" isExecutable="true">
+
+    <startEvent id="start" name="Antrag gestartet">
+      <outgoing>f_start_erfassen</outgoing>
+    </startEvent>
+
+    <userTask id="erfassen" name="Reiseantrag erfassen">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-antrag"/>
+      </extensionElements>
+      <incoming>f_start_erfassen</incoming>
+      <outgoing>f_erfassen_pruefen</outgoing>
+    </userTask>
+
+    <scriptTask id="zusammenfassen" name="Antrag zusammenfassen">
+      <extensionElements>
+        <zeebe:script resultVariable="zusammenfassung"
+          expression="= {reiseart: reiseart, ziel: ziel, mitVertreter: vertreterName != null}"/>
+      </extensionElements>
+      <incoming>f_erfassen_pruefen</incoming>
+      <outgoing>f_pruefen_end</outgoing>
+    </scriptTask>
+
+    <endEvent id="end" name="Antrag eingereicht">
+      <incoming>f_pruefen_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_erfassen" sourceRef="start" targetRef="erfassen"/>
+    <sequenceFlow id="f_erfassen_pruefen" sourceRef="erfassen" targetRef="zusammenfassen"/>
+    <sequenceFlow id="f_pruefen_end" sourceRef="zusammenfassen" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_reise_antrag">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="162" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erfassen" bpmnElement="erfassen">
+        <dc:Bounds x="240" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zusammenfassen" bpmnElement="zusammenfassen">
+        <dc:Bounds x="390" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="540" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="522" y="162" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_erfassen" bpmnElement="f_start_erfassen">
+        <di:waypoint x="196" y="140"/><di:waypoint x="240" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erfassen_pruefen" bpmnElement="f_erfassen_pruefen">
+        <di:waypoint x="340" y="140"/><di:waypoint x="390" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pruefen_end" bpmnElement="f_pruefen_end">
+        <di:waypoint x="490" y="140"/><di:waypoint x="540" y="140"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

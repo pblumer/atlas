@@ -58,7 +58,7 @@ Chosen option: **Option 2 — a buildless vanilla-JS app shell.**
   - **Modeler** — BPMN modeling and the editor.
   - **Tasks** — human task list *(placeholder until the engine supports user tasks)*.
   - **Operations** — running-instance inspection/operator tooling *(placeholder)*.
-  - **Insights** — analytics over the exported event stream *(placeholder)*.
+  - **Panorama** — analytics over the exported event stream *(placeholder)*.
   - Only Console and Modeler are functional now; the rest render an honest
     "coming soon" state so the shell is complete but nothing is faked.
 

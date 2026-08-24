@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas incidents-on-the-diagram e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view and instance replay against a mock
+         `api` that holds two unresolved incidents. Both read them off the runtime overlay
+         (ADR-0150 puts them there; ADR-0151 gives the replay the same surface), so both
+         should mark the stuck element, list the fault, and resolve it in place — the
+         resolve POST is served here, so a resolved incident really does disappear on the
+         next poll. The mock also serves the connector the parked task resolves through,
+         so the third way out of an incident — reconfigure the integration and retry
+         against it (ADR-0160) — is driven end to end too. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* Both views are read-only here; the palette and the floating legend would only
+         intercept clicks meant for the shapes and their badges. */
+      .djs-palette, .token-legend { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive, mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const DEF = 7;                 // the deployed definition the live view renders
+      const STUCK = "900001";        // the instance whose replay the tests open
+      const OTHER = "900002";        // a second instance, stuck on the same element
+      window.__DEF = DEF;
+      window.__STUCK = STUCK;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_inc" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="zahlung" name="Zahlung" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Rechnung eingegangen"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="Task_pay" name="Zahlung auslösen">
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="Bezahlt"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Task_pay"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Task_pay" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="zahlung">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_pay_di" bpmnElement="Task_pay"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="440" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Two tokens parked on the same service task, in two different instances — the
+      // shape the "all instances" scope has to aggregate. Mutable: resolving really
+      // removes one, so the next poll clears its badge.
+      // Both incidents name the connector their task resolves through (ADR-0160), so
+      // the operator can go from "this is stuck" to "this is the integration that is
+      // wrong" without leaving the diagram.
+      const CONN = { connector: "Patrick Blumer", connectorKind: "mail", connectorId: "c1" };
+      let incidents = [
+        {
+          elementInstanceKey: "1001", processInstanceKey: STUCK, processDefKey: DEF,
+          processId: "zahlung", jobKey: "5001", elementId: "Task_pay", elementIndex: 1,
+          type: "job", raisedAt: ns(T + 4000), message: "payment gateway refused: 503",
+          ...CONN,
+        },
+        {
+          elementInstanceKey: "2001", processInstanceKey: OTHER, processDefKey: DEF,
+          processId: "zahlung", jobKey: "5002", elementId: "Task_pay", elementIndex: 1,
+          type: "job", raisedAt: ns(T + 9000), message: "payment gateway refused: 503",
+          ...CONN,
+        },
+      ];
+      window.__resolved = [];             // {key, retries} per resolve call the views made
+      window.__varWrites = [];            // {instance, variables} per operator override
+      window.__connPatches = [];          // {id, body} per connector edit
+      window.__incidents = () => incidents;
+
+      // The managed connector the mail task resolves through, as the connector list
+      // serves it — including why the runtime could not build a client for it, which
+      // is what the incident's message is really about (ADR-0158).
+      let connectors = [{
+        id: "c1", name: "Patrick Blumer", kind: "mail", provider: "smtp",
+        endpoint: "smtp.office365.com:587", sender: "bot@example.com",
+        credentialsRef: "o365_pw", enabled: true, createdAt: ns(T),
+        problem: "smtp: dial tcp: connection refused",
+      }];
+      // Flips the incidents to a connector nobody configured — the other branch the
+      // row has to render, where there is nothing to open and the Console is the way.
+      window.__unconfigureConnector = () => {
+        incidents = incidents.map((i) => ({ ...i, connectorId: "" }));
+        connectors = [];
+      };
+
+      // The instance's variables, as the operator override reads and writes them
+      // (ADR-0098). "betrag" is the value a fix would correct before retrying.
+      let instanceVars = { betrag: 42, empfaenger: "" };
+
+      const instances = [
+        { key: Number(STUCK), processDefKey: DEF, state: "active", createdAt: ns(T), variables: [{ name: "betrag", value: "42", kind: "number" }] },
+        { key: Number(OTHER), processDefKey: DEF, state: "active", createdAt: ns(T + 5000), variables: [] },
+      ];
+
+      // The replayed instance walked Start_1 → Task_pay and is parked there.
+      const step = (elementId, type, i) => ({
+        elementId, elementInstanceKey: String(1000 + i),
+        at: ns(T + i * 1000), endAt: i === 0 ? ns(T + 500) : 0,
+        position: i + 1, type, tokenId: "1", variables: [],
+      });
+      const steps = [step("Start_1", "bpmn:StartEvent", 0), step("Task_pay", "bpmn:ServiceTask", 1)];
+      // The parked step's snapshot carries one value the process computed and one an
+      // operator set by hand — the audit's actor rides along on the timeline (ADR-0098).
+      steps[1].variables = [
+        { name: "betrag", value: "42", kind: "number" },
+        { name: "empfaenger", value: "patrick@blumer.net", kind: "string", actor: "admin" },
+      ];
+      const frames = steps.map((s, i) => ({
+        position: i + 1, at: s.at,
+        tokens: [{ elementId: s.elementId, elementInstanceKey: s.elementInstanceKey, tokenId: "1", state: "active" }],
+      }));
+
+      const api = async (method, url, body) => {
+        if (method === "PATCH") {
+          const c = url.match(/\/connectors\/([\w-]+)$/);
+          if (c) {
+            window.__connPatches.push({ id: c[1], body });
+            connectors = connectors.map((x) => (x.id === c[1] ? { ...x, ...body, problem: "" } : x));
+            return connectors.find((x) => x.id === c[1]);
+          }
+          return {};
+        }
+        if (method === "POST") {
+          if (url === "/api/v1/connectors/test") return { ok: true, detail: "Connected and authenticated." };
+          const m = url.match(/\/incidents\/(\w+)\/resolve$/);
+          if (m) {
+            window.__resolved.push({ key: m[1], retries: body && body.retries });
+            incidents = incidents.filter((i) => i.elementInstanceKey !== m[1]);
+            return { elementInstanceKey: m[1] };
+          }
+          const v = url.match(/\/instances\/(\w+)\/variables$/);
+          if (v) {
+            window.__varWrites.push({ instance: v[1], variables: body && body.variables });
+            instanceVars = { ...instanceVars, ...(body && body.variables) };
+            return { instanceKey: v[1] };
+          }
+          return {};
+        }
+        if (/\/instances\/\w+\/variables$/.test(url)) return instanceVars;
+        if (url === "/api/v1/connectors") return connectors;
+        if (url === "/api/v1/processes") {
+          return [{ key: DEF, processId: "zahlung", name: "Zahlung", version: 1 }];
+        }
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?process=")) return instances;
+        if (url === "/api/v1/tasks") return [];
+        if (url.includes("/runtime")) {
+          // The overlay carries the incidents (ADR-0150): scoped to one instance when the
+          // caller asks for one, which is how the live view isolates a selection and how
+          // the replay gets exactly its own.
+          const inst = new URL(url, location.origin).searchParams.get("instance");
+          const inView = inst ? incidents.filter((i) => i.processInstanceKey === inst) : incidents;
+          return {
+            instances: inst ? 1 : 2, tokens: inst ? 1 : 2,
+            incidents: inView,
+            incidentsTruncated: false,
+            elements: [
+              { elementId: "Start_1", type: "bpmn:StartEvent", tokens: 0, visits: inst ? 1 : 2, incidents: 0 },
+              { elementId: "Task_pay", type: "bpmn:ServiceTask", tokens: inst ? 1 : 2, visits: inst ? 1 : 2, incidents: inView.length },
+            ],
+          };
+        }
+        if (/\/instances\/\d+\/timeline$/.test(url)) {
+          return { instanceKey: STUCK, processDefKey: DEF, processId: "zahlung", version: 1, state: "active", steps, frames };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+
+      window.__mountLive = (instance) => mountLive(view, { api, toast: noop, key: DEF, instance });
+      window.__mountReplay = () => mountInstanceReplay(view, { api, toast: noop, key: STUCK });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

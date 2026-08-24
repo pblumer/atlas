@@ -1,0 +1,4 @@
+state: completed
+path: on_order -> record -> end
+vars:
+  recorded=1

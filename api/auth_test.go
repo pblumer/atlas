@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 func TestHashAndCheckPassword(t *testing.T) {
@@ -52,9 +54,9 @@ func TestUserAndPrincipalHasRole(t *testing.T) {
 	if !u.hasRole("admin") || u.hasRole("owner") {
 		t.Fatalf("User.hasRole wrong")
 	}
-	p := &Principal{Roles: []string{"user"}}
-	if p.hasRole("admin") || !p.hasRole("user") {
-		t.Fatalf("Principal.hasRole wrong")
+	p := &httpapi.Principal{Roles: []string{"user"}}
+	if p.HasRole("admin") || !p.HasRole("user") {
+		t.Fatalf("Principal.HasRole wrong")
 	}
 }
 
@@ -120,6 +122,12 @@ func TestRequiresAuth(t *testing.T) {
 		{"/", false},
 		{"/index.html", false},
 		{"/healthz", false},
+		// A kubelet has no session either, and a readiness probe that 401s would take
+		// the pod out of rotation for good the moment --auth is turned on (ADR-0142).
+		{"/readyz", false},
+		// A Prometheus scrape carries no session, so gating /metrics would silently
+		// break monitoring the moment --auth is turned on (ADR-0142).
+		{"/metrics", false},
 		{"/api/v1/auth/login", false},
 		{"/api/v1/info", false},
 		{"/api/v1/openapi.json", false},
@@ -140,7 +148,7 @@ func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 
 	// A protected request with no cookie is rejected.
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := principalFrom(r.Context())
+		p := httpapi.PrincipalFrom(r.Context())
 		if p == nil {
 			w.WriteHeader(http.StatusTeapot)
 			return
@@ -177,7 +185,7 @@ func TestWithAuthDisabledPassesThrough(t *testing.T) {
 	reached := false
 	h := s.withAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
-		if principalFrom(r.Context()) != nil {
+		if httpapi.PrincipalFrom(r.Context()) != nil {
 			t.Errorf("no principal expected when auth disabled")
 		}
 	}))
@@ -219,10 +227,10 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
 	req.Header.Set("Authorization", "Bearer sekret")
 	p := s.principalFor(req)
-	if p == nil || p.Username != servicePrincipalName {
-		t.Fatalf("service principal not resolved: %+v", p)
+	if p == nil || p.UserID != servicePrincipalName || p.Username != servicePrincipalName {
+		t.Fatalf("service principal not resolved with stable identity: %+v", p)
 	}
-	if p.hasRole(RoleAdmin) {
+	if p.HasRole(RoleAdmin) {
 		t.Fatalf("service principal must not be admin")
 	}
 
@@ -240,7 +248,7 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 	reached := false
 	h := s.withAuth(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		reached = true
-		if principalFrom(r.Context()) == nil {
+		if httpapi.PrincipalFrom(r.Context()) == nil {
 			t.Error("principal missing in context")
 		}
 	}))
@@ -285,14 +293,14 @@ func TestRequireAdmin(t *testing.T) {
 	// Non-admin principal -> 403.
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/v1/users", nil)
-	req = req.WithContext(withPrincipal(req.Context(), &Principal{Roles: []string{"user"}}))
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{Roles: []string{"user"}}))
 	if s.requireAdmin(rec, req) {
 		t.Fatalf("non-admin should be denied")
 	}
 	// Admin principal -> allowed.
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("GET", "/api/v1/users", nil)
-	req = req.WithContext(withPrincipal(req.Context(), &Principal{Roles: []string{"admin"}}))
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{Roles: []string{"admin"}}))
 	if !s.requireAdmin(rec, req) {
 		t.Fatalf("admin should be allowed")
 	}
