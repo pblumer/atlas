@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook takes on the process developer's role, and builds a whole application in
+  front of you.** Everything the handbook taught so far was a *piece*: a recipe per BPMN
+  pattern, a tutorial per process. The question it left unanswered is the one an author
+  actually faces on day one — not "how does a boundary timer work" but "what belongs in the
+  form, what in the decision table, what in its own process, and how do the four artifacts
+  become one deployable thing". Two new chapters answer it. **Die Rolle des
+  Prozess-Developers** states what the role owns (the application, the models, the forms,
+  the decisions, the connections, the releases), the eight-step working cycle from clarifying
+  the domain to migrating running instances, a placement table that settles nine cases out of
+  ten (a field that depends on another → the form; a rule with many combinations → a DMN
+  table; something that can happen at any time → an event subprocess), eight rules of the
+  craft, and a definition of done. **Werkstatt: eine kleine Applikation bauen** then builds
+  one — an applicant-management application of two processes, three forms and one decision —
+  in ten steps, each explaining *why that element*, and installs it into the reader's own
+  instance at the press of a button: application, decision, forms, both drafts, publish as
+  release 1, one case started. The models render from the page itself, so the diagram in the
+  chapter is the diagram the Modeler shows.
+
+  The application is deliberately past toy size, because that is where the interesting
+  questions live: the DMN decision's output `runden` is a **list**, and a sequential
+  multi-instance call activity iterates it — so *the decision table decides how often the
+  interview subprocess runs*, and a third round is a row in a table rather than a change to a
+  model. The call is an explicit **contract** (`propagateAll…="false"` plus an `ioMapping`),
+  and *both* ends of the called process satisfy it — including the one where the deadline
+  expired and nobody answered. Every foreign system is an ADR-0120 **mockup**, so the whole
+  thing runs end to end before a single real connection exists, and "create the contract in
+  the HR system" fails one run in five on purpose, so the error boundary that turns an
+  unreachable system into a task for a human is something the reader *experiences* rather
+  than reads about. It ships as `examples/bewerbermanagement/` with its own README, and
+  `go test ./examples` regenerates the copy embedded in the handbook, so the chapter cannot
+  drift from the files it teaches.
+
 - **A loop says what it was told to repeat while — and what it decided**
   (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and
   what that round read and wrote, but not the one thing an author asks when a loop does

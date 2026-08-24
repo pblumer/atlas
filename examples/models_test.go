@@ -137,29 +137,27 @@ func unnamespacedExtensions(t *testing.T, path string) []string {
 // operation the connector does not have — shipped as a file that looks like an
 // example and fails the moment someone deploys it.
 //
+// It walks the same tree as the namespace test, so the per-scenario subdirectories
+// (bewerbermanagement/, pruefung/, reisebuchung/, …) are covered too — a top-level
+// glob left every multi-file example, which is exactly where a model is most likely
+// to reference something that is not there.
+//
 // The conformance suite's neg-* fixtures are excluded because failing to compile is
 // exactly what they are for.
 func TestShippedModelsCompile(t *testing.T) {
-	for _, dir := range modelDirs {
-		files, err := filepath.Glob(filepath.Join(dir, "*.bpmn"))
-		if err != nil {
-			t.Fatalf("glob %s: %v", dir, err)
+	for _, path := range shippedModels(t) {
+		if strings.HasPrefix(filepath.Base(path), "neg-") {
+			continue // a fixture whose whole purpose is to be rejected
 		}
-		for _, path := range files {
-			name := filepath.Base(path)
-			if strings.HasPrefix(name, "neg-") {
-				continue // a fixture whose whole purpose is to be rejected
+		t.Run(path, func(t *testing.T) {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("open: %v", err)
 			}
-			t.Run(filepath.Join(dir, name), func(t *testing.T) {
-				f, err := os.Open(path)
-				if err != nil {
-					t.Fatalf("open: %v", err)
-				}
-				defer f.Close()
-				if _, err := compiler.Parse(1, 1, f); err != nil {
-					t.Errorf("does not compile: %v", err)
-				}
-			})
-		}
+			defer f.Close()
+			if _, err := compiler.Parse(1, 1, f); err != nil {
+				t.Errorf("does not compile: %v", err)
+			}
+		})
 	}
 }

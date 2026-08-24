@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Vorprüfung — die Einladungsregeln der Applikation "Bewerbermanagement" als
+  DMN-Entscheidung.
+
+  Eingaben:  abschluss ("keiner" | "lehre" | "bachelor" | "master")
+             erfahrungJahre (Zahl)
+  Ausgaben:  empfehlung ("interview" | "absage")
+             runden     (Liste der Interviewrunden, leer bei Absage)
+
+  hitPolicy FIRST — die Regeln sind bewusst von der stärksten zur schwächsten
+  sortiert und dürfen sich überlappen; die erste passende gewinnt. Die letzte
+  Regel ist der Auffangfall und trifft immer, damit keine Bewerbung ohne Antwort
+  bleibt.
+
+  id und name der Entscheidung sind absichtlich identisch: der Business-Rule-Task
+  verweist mit decisionId="bw-vorpruefung" darauf, und Atlas löst eine
+  Entscheidung über ihren NAMEN auf. Weichen die beiden voneinander ab, findet
+  der Deploy die Entscheidung nicht und weist die Applikation zurück.
+
+  Der interessante Teil ist die Ausgabe `runden`: eine FEEL-Liste. Der Prozess
+  iteriert mit einer Multi-Instance-Call-Activity darüber, also bestimmt DIESE
+  Tabelle, wie oft der Interview-Teilprozess läuft. Eine dritte Runde für
+  Führungsstellen einzuführen heisst: eine Zeile hier ändern — nicht das
+  Prozessmodell.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_bw_vorpruefung" name="bw-vorpruefung" namespace="http://atlas/dmn">
+  <inputData id="id_abschluss" name="abschluss"/>
+  <inputData id="id_erfahrung" name="erfahrungJahre"/>
+  <decision id="bw-vorpruefung" name="bw-vorpruefung">
+    <informationRequirement><requiredInput href="#id_abschluss"/></informationRequirement>
+    <informationRequirement><requiredInput href="#id_erfahrung"/></informationRequirement>
+    <decisionTable id="dt_vorpruefung" hitPolicy="FIRST">
+      <input id="in_abschluss" label="abschluss">
+        <inputExpression id="ie_abschluss" typeRef="string"><text>abschluss</text></inputExpression>
+      </input>
+      <input id="in_erfahrung" label="erfahrungJahre">
+        <inputExpression id="ie_erfahrung" typeRef="number"><text>erfahrungJahre</text></inputExpression>
+      </input>
+      <output id="out_empfehlung" label="empfehlung" name="empfehlung" typeRef="string"/>
+      <output id="out_runden" label="runden" name="runden"/>
+      <rule id="r_senior">
+        <description>Master mit fünf Jahren Erfahrung: Fach- und Führungsinterview.</description>
+        <inputEntry id="i_senior_a"><text>"master"</text></inputEntry>
+        <inputEntry id="i_senior_e"><text>&gt;= 5</text></inputEntry>
+        <outputEntry id="o_senior_emp"><text>"interview"</text></outputEntry>
+        <outputEntry id="o_senior_run"><text>["Fachinterview", "Führungsinterview"]</text></outputEntry>
+      </rule>
+      <rule id="r_studium">
+        <description>Studium mit mindestens zwei Jahren Erfahrung: ein Fachinterview.</description>
+        <inputEntry id="i_studium_a"><text>"master", "bachelor"</text></inputEntry>
+        <inputEntry id="i_studium_e"><text>&gt;= 2</text></inputEntry>
+        <outputEntry id="o_studium_emp"><text>"interview"</text></outputEntry>
+        <outputEntry id="o_studium_run"><text>["Fachinterview"]</text></outputEntry>
+      </rule>
+      <rule id="r_lehre">
+        <description>Lehre schlägt Studium, wenn die Erfahrung stimmt: ein Fachinterview.</description>
+        <inputEntry id="i_lehre_a"><text>"lehre"</text></inputEntry>
+        <inputEntry id="i_lehre_e"><text>&gt;= 5</text></inputEntry>
+        <outputEntry id="o_lehre_emp"><text>"interview"</text></outputEntry>
+        <outputEntry id="o_lehre_run"><text>["Fachinterview"]</text></outputEntry>
+      </rule>
+      <rule id="r_absage">
+        <description>Auffangfall: keine Einladung, aber eine Antwort.</description>
+        <inputEntry id="i_absage_a"><text>-</text></inputEntry>
+        <inputEntry id="i_absage_e"><text>-</text></inputEntry>
+        <outputEntry id="o_absage_emp"><text>"absage"</text></outputEntry>
+        <outputEntry id="o_absage_run"><text>[]</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

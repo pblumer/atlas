@@ -2,6 +2,39 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "the-handbook-takes-on-the-process-developer-s-role-and-build",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook now builds a whole application with you",
+        "de": "Das Handbuch baut jetzt eine ganze Applikation mit Ihnen"
+      },
+      "summary": {
+        "en": "Two new chapters take the process developer's side of the work. The first says what the role owns and where a rule belongs — in the form, in a decision table, in its own process. The second builds an applicant-management application in front of you: two processes, three forms, one decision table that decides how many interview rounds run, a system that fails on purpose so you meet the error path. One button installs the whole thing into your instance and starts a case.",
+        "de": "Zwei neue Kapitel nehmen die Sicht des Prozess-Developers ein. Das erste sagt, was zur Rolle gehört und wo eine Regel hingehört — ins Formular, in eine Entscheidungstabelle, in einen eigenen Prozess. Das zweite baut vor Ihren Augen eine Bewerbermanagement-Applikation: zwei Prozesse, drei Formulare, eine Entscheidungstabelle, die über die Zahl der Interviewrunden bestimmt, und ein Umsystem, das absichtlich ausfällt, damit Sie den Fehlerweg erleben. Ein Knopf installiert das Ganze in Ihrer Instanz und startet einen Fall."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Handbook from the grid menu (top left) — or the Handbook link on the Console.",
+          "In the table of contents, pick “Process developer” → “Workshop: an application”.",
+          "Press “Install & start the application”, then follow the two interview tasks in the inbox."
+        ],
+        "de": [
+          "Handbuch über das Raster-Menü oben links öffnen — oder über den Handbuch-Link auf der Konsole.",
+          "Im Inhaltsverzeichnis „Prozess-Developer“ → „Werkstatt: eine Applikation“ wählen.",
+          "Auf „Applikation installieren & starten“ drücken und dann den beiden Interview-Aufgaben im Posteingang folgen."
+        ]
+      }
+    },
+    {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
       "version": "Unreleased",
       "date": null,
@@ -84,6 +117,34 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-a-gateway-routes-into-keeps-its-result",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A repeated step reached through a gateway keeps its collected results",
+        "de": "Ein wiederholter Schritt hinter einem Gateway behält seine gesammelten Ergebnisse"
+      },
+      "summary": {
+        "en": "An activity that repeats once per list entry collects what each round produced into a list for the steps that follow. When the only way into that activity was an exclusive gateway, every round still ran and still produced its result — but the collected list was thrown away as the activity finished, so the next step read nothing at all. It is kept now.",
+        "de": "Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe für die folgenden Schritte in einer Liste. Führte der einzige Weg in diese Aktivität über ein exklusives Gateway, liefen zwar alle Durchläufe und lieferten ihr Ergebnis — die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen, und der nächste Schritt las nichts. Sie bleibt jetzt erhalten."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -268,63 +329,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-model-that-maps-onto-loopcounter-is-refused-at-deploy",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Writing to the loop counter is caught before it runs",
-        "de": "Ein Schreiben auf den Schleifenzähler wird vor dem Lauf abgefangen"
-      },
-      "summary": {
-        "en": "Every round of a loop is handed its number as loopCounter, and a model may read it freely. A mapping that writes to that name overwrote the engine's own count, and the loop then ran until somebody cancelled it. The deploy now refuses such a model and names the element and the mapping, instead of leaving it to be discovered on a runaway instance.",
-        "de": "Jeder Durchlauf einer Schleife bekommt seine Nummer als loopCounter, und ein Modell darf sie frei lesen. Ein Mapping, das auf diesen Namen schreibt, überschrieb die Zählung der Engine, und die Schleife lief dann, bis jemand sie abbrach. Der Deploy weist ein solches Modell jetzt ab und benennt Element und Mapping, statt es an einer davonlaufenden Instanz sichtbar werden zu lassen."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "atlas-worker-the-same-binary-working-jobs-outside-the-engine",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "A task's work can run outside the engine",
-        "de": "Die Arbeit einer Aufgabe kann außerhalb der Engine laufen"
-      },
-      "summary": {
-        "en": "The work behind a service task no longer has to run inside Atlas itself. The same binary, started as a worker, asks Atlas for the jobs it was told to handle, does them and reports back — so a slow or unreachable system occupies the worker instead of the engine. A worker that dies mid-job does not lose it: the job is offered again once its hold expires, and a worker that comes back too late can no longer complete work that has been given to someone else.",
-        "de": "Die Arbeit hinter einer Service-Aufgabe muss nicht mehr in Atlas selbst laufen. Dieselbe Binärdatei, als Worker gestartet, fragt Atlas nach den Aufgabentypen, für die sie zuständig ist, erledigt sie und meldet das Ergebnis zurück — ein langsames oder nicht erreichbares System blockiert damit den Worker statt die Engine. Stirbt ein Worker mitten in der Arbeit, geht sie nicht verloren: Der Job wird nach Ablauf seiner Reservierung erneut angeboten, und ein zu spät zurückkehrender Worker kann Arbeit, die inzwischen jemand anderem gehört, nicht mehr abschließen."
-      },
-      "link": {
-        "label": "ADR-0157",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
-      },
-      "tags": [
-        "Operations",
-        "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
       }
     }
   ]

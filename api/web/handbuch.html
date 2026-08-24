@@ -132,6 +132,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:190px}
 #tour-start{border:0;cursor:pointer}
 #tut-start{border:0;cursor:pointer}
+#wk-install{border:0;cursor:pointer}
+#wk-install:disabled{opacity:.6;cursor:default}
 #tour-start:disabled{opacity:.6;cursor:default}
 .tour-status{margin-top:12px;font-size:14px;color:var(--muted);min-height:20px}
 .tour-status.ok{color:var(--ok);font-weight:600}
@@ -168,6 +170,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 .rz-xml{margin:2px 0 0}
 .rz-xml>summary{cursor:pointer;font-size:13.5px;color:var(--muted);padding:4px 0;list-style-position:inside}
 .rz-xml>summary:hover{color:var(--accent)}
+
+/* ---- workshop: the two models are the chapter's subject, not an illustration
+   beside a recipe, so they get the height to stay readable ---- */
+#werkstatt .rz-diagram{min-height:200px}
+#werkstatt .rz-diagram svg{max-height:520px}
 </style>
 </head>
 <body>
@@ -207,6 +214,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
+    <h4 data-l="de">Prozess-Developer</h4><h4 data-l="en">Process developer</h4>
+    <a href="#rolle"><span data-l="de">Die Rolle</span><span data-l="en">The role</span></a>
+    <a href="#werkstatt"><span data-l="de">Werkstatt: eine Applikation</span><span data-l="en">Workshop: an application</span></a>
     <h4 data-l="de">Nachschlagen</h4><h4 data-l="en">Reference</h4>
     <a href="#glossar"><span data-l="de">Glossar</span><span data-l="en">Glossary</span></a>
     <a href="#ressourcen"><span data-l="de">Ressourcen</span><span data-l="en">Resources</span></a>
@@ -1889,6 +1899,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en" style="margin:.3em 0 0">From here it's a small step: replace the amount threshold with a
           <a href="#rz-dmn">DMN decision</a>, wire "create order" to a <a href="/#/modeler/repository">REST connector</a>,
           or add a second approval level as a <a href="#rz-parallel">parallel</a> branch.</p>
+        <p data-l="de" style="margin:.6em 0 0">Und wenn aus dem einen Prozess eine ganze Anwendung werden soll:
+          <a href="#werkstatt">Werkstatt: eine kleine Applikation bauen</a> setzt zwei Prozesse, drei Formulare und
+          eine Entscheidung zu einer publizierbaren Applikation zusammen.</p>
+        <p data-l="en" style="margin:.6em 0 0">And when the one process should become a whole application:
+          <a href="#werkstatt">Workshop: building a small application</a> assembles two processes, three forms and a
+          decision into one publishable application.</p>
       </div>
     </section>
 
@@ -2093,6 +2109,629 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener"><code>deploy/</code>&nbsp;↗</a>.</p>
     </section>
 
+    <!-- ==================== ROLE: PROCESS DEVELOPER ==================== -->
+    <section id="rolle">
+      <h2 data-l="de">Die Rolle des Prozess-Developers</h2><h2 data-l="en">The process developer's role</h2>
+      <p class="lead" data-l="de">Ein <b>Prozess-Developer</b> baut aus einer fachlichen Anforderung eine laufende
+        Applikation &ndash; ohne sie zu programmieren. Die Rolle sitzt zwischen Fachbereich und Software-Entwicklung:
+        nah genug an der Fachlichkeit, um die Regeln wirklich zu verstehen, nah genug an der Technik, um zu wissen,
+        was eine Engine garantiert und was nicht. Dieses Kapitel beschreibt die Rolle; das n&auml;chste baut mit dir
+        eine ganze Applikation.</p>
+      <p class="lead" data-l="en">A <b>process developer</b> turns a business requirement into a running
+        application &ndash; without programming it. The role sits between the business and software engineering:
+        close enough to the domain to really understand the rules, close enough to the technology to know what an
+        engine guarantees and what it does not. This chapter describes the role; the next one builds a whole
+        application with you.</p>
+
+      <h3 data-l="de">Was dir geh&ouml;rt</h3><h3 data-l="en">What you own</h3>
+      <table>
+        <thead><tr>
+          <th><span data-l="de">Artefakt</span><span data-l="en">Artifact</span></th>
+          <th><span data-l="de">Was du daran entscheidest</span><span data-l="en">What you decide about it</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b data-l="de">Die Applikation</b><b data-l="en">The application</b></td>
+            <td><span data-l="de">Der Schnitt: was geh&ouml;rt zusammen, was wird gemeinsam publiziert und versioniert.</span><span data-l="en">The boundary: what belongs together, what is published and versioned as one.</span></td></tr>
+          <tr><td><b data-l="de">Prozessmodelle</b><b data-l="en">Process models</b></td>
+            <td><span data-l="de">Der Ablauf, die Zust&auml;ndigkeiten, die Fristen &ndash; und jeder Weg, den ein Fall nehmen kann, auch die unsch&ouml;nen.</span><span data-l="en">The flow, the responsibilities, the deadlines &ndash; and every path a case can take, the ugly ones included.</span></td></tr>
+          <tr><td><b data-l="de">Formulare</b><b data-l="en">Forms</b></td>
+            <td><span data-l="de">Was Menschen sehen und eingeben &ndash; und damit, welche Variablen &uuml;berhaupt entstehen.</span><span data-l="en">What people see and type &ndash; and therefore which variables come into existence at all.</span></td></tr>
+          <tr><td><b data-l="de">Entscheidungen (DMN)</b><b data-l="en">Decisions (DMN)</b></td>
+            <td><span data-l="de">Welche Regeln aus dem Modell heraus in eine Tabelle wandern, die der Fachbereich lesen kann.</span><span data-l="en">Which rules move out of the model into a table the business can read.</span></td></tr>
+          <tr><td><b data-l="de">Anbindungen</b><b data-l="en">Connections</b></td>
+            <td><span data-l="de">Welches Umsystem an welchem Schritt h&auml;ngt &ndash; und was passiert, wenn es nicht antwortet.</span><span data-l="en">Which system hangs off which step &ndash; and what happens when it does not answer.</span></td></tr>
+          <tr><td><b data-l="de">Releases</b><b data-l="en">Releases</b></td>
+            <td><span data-l="de">Wann eine Version rausgeht, und was mit den Instanzen passiert, die noch auf der alten laufen.</span><span data-l="en">When a version ships, and what happens to the instances still running on the old one.</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3 data-l="de">Der Arbeitszyklus</h3><h3 data-l="en">The working cycle</h3>
+      <ol class="steps">
+        <li><b data-l="de">Fachlichkeit kl&auml;ren</b><b data-l="en">Clarify the domain</b>
+          <p data-l="de">Wer l&ouml;st einen Fall aus, wer arbeitet daran, wie viele sind es am Tag, wie lange darf er
+            dauern &ndash; und <i>was darf schiefgehen</i>. Die letzte Frage wird am h&auml;ufigsten vergessen und
+            bestimmt am meisten am Modell.</p>
+          <p data-l="en">Who triggers a case, who works on it, how many per day, how long may it take &ndash; and
+            <i>what is allowed to go wrong</i>. The last question is the one most often skipped, and the one that
+            shapes the model most.</p></li>
+        <li><b data-l="de">Den Fall schneiden</b><b data-l="en">Cut the case</b>
+          <p data-l="de">Was ist <b>eine Instanz</b>? Eine Bewerbung, eine Bestellung, ein Ger&auml;t &ndash; nicht
+            &bdquo;der Bewerbungsprozess&ldquo;. Und: welcher Teil taucht so oft auf, dass er ein eigener,
+            aufrufbarer Prozess sein sollte?</p>
+          <p data-l="en">What is <b>one instance</b>? One application, one order, one device &ndash; not "the hiring
+            process". And: which part recurs often enough to become its own callable process?</p></li>
+        <li><b data-l="de">Den Datenvertrag festlegen</b><b data-l="en">Fix the data contract</b>
+          <p data-l="de">Welche Variablen tr&auml;gt eine Instanz, wer schreibt sie, wer liest sie. Schreib sie auf,
+            bevor du modellierst &ndash; sonst schreibt das Modell sie f&uuml;r dich, und zwar dreimal verschieden.</p>
+          <p data-l="en">Which variables an instance carries, who writes them, who reads them. Write them down before
+            you model &ndash; otherwise the model writes them for you, three different ways.</p></li>
+        <li><b data-l="de">Den Happy Path modellieren</b><b data-l="en">Model the happy path</b>
+          <p data-l="de">Eine gerade Linie, f&uuml;nf bis neun Schritte. Wenn der Weg ohne Zwischenf&auml;lle nicht
+            auf eine Achse passt, ist der Fall zu gross geschnitten.</p>
+          <p data-l="en">One straight line, five to nine steps. If the uneventful path does not fit on one axis, the
+            case is cut too big.</p></li>
+        <li><b data-l="de">Abweichungen erg&auml;nzen</b><b data-l="en">Add the deviations</b>
+          <p data-l="de">Fristen, R&uuml;ckfragen, Abbr&uuml;che, ausgefallene Umsysteme. Jede Abweichung bekommt
+            einen sichtbaren Weg im Diagramm &ndash; nicht eine Bedingung mehr in einem Gateway.</p>
+          <p data-l="en">Deadlines, queries, cancellations, systems that are down. Every deviation gets a visible
+            path on the diagram &ndash; not one more condition inside a gateway.</p></li>
+        <li><b data-l="de">Umsysteme erst simulieren</b><b data-l="en">Simulate the systems first</b>
+          <p data-l="de">Ein <a href="#rz-service">Service-Task im Mockup-Modus</a> antwortet mit Verz&ouml;gerung,
+            Ergebnis und Ausfallquote &ndash; du kannst den ganzen Ablauf durchspielen, bevor irgendeine echte
+            Schnittstelle existiert. Die Anbindung ersetzt sp&auml;ter genau dieses eine Element.</p>
+          <p data-l="en">A <a href="#rz-service">service task in mockup mode</a> answers with a delay, a result and a
+            failure rate &ndash; you can play the whole flow through before any real interface exists. The real
+            connection later replaces exactly that one element.</p></li>
+        <li><b data-l="de">Durchspielen und testen</b><b data-l="en">Play it through and test</b>
+          <p data-l="de">Erst <a href="#testen">simulieren</a>, dann echte Instanzen mit typischen <i>und</i>
+            untypischen Daten. Grenzwerte, leere Felder, der Fall, der zur&uuml;ckgezogen wird.</p>
+          <p data-l="en">First <a href="#testen">simulate</a>, then real instances with typical <i>and</i> atypical
+            data. Boundaries, empty fields, the case that gets withdrawn.</p></li>
+        <li><b data-l="de">Publizieren, betreiben, weiterentwickeln</b><b data-l="en">Publish, operate, evolve</b>
+          <p data-l="de">Die Applikation als Ganzes publizieren, in <a href="/#/operations">Operations</a> zusehen,
+            die n&auml;chste Version bauen &ndash; und wissen, dass laufende Instanzen ihre Version behalten, bis du
+            sie migrierst.</p>
+          <p data-l="en">Publish the application as a whole, watch it in <a href="/#/operations">Operations</a>, build
+            the next version &ndash; knowing that running instances keep their version until you migrate them.</p></li>
+      </ol>
+
+      <h3 data-l="de">Die Schnittfrage: wo geh&ouml;rt das hin?</h3><h3 data-l="en">The placement question: where does this belong?</h3>
+      <p data-l="de">Die h&auml;ufigste Fehlentscheidung ist nicht ein falsches Element, sondern das richtige am
+        falschen Ort. Diese Tabelle beantwortet neun von zehn F&auml;llen:</p>
+      <p data-l="en">The most common mistake is not the wrong element, it is the right element in the wrong place.
+        This table settles nine cases out of ten:</p>
+      <table>
+        <thead><tr>
+          <th><span data-l="de">Du willst&hellip;</span><span data-l="en">You want to&hellip;</span></th>
+          <th><span data-l="de">Geh&ouml;rt in&hellip;</span><span data-l="en">Belongs in&hellip;</span></th>
+          <th><span data-l="de">Warum</span><span data-l="en">Why</span></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span data-l="de">ein Feld ein- oder ausblenden, eine Auswahl von einer anderen abh&auml;ngig machen</span><span data-l="en">show or hide a field, make one choice depend on another</span></td>
+            <td><b data-l="de">ins Formular</b><b data-l="en">the form</b></td>
+            <td><span data-l="de">Es passiert w&auml;hrend des Ausf&uuml;llens, nicht zwischen zwei Schritten. Der Prozess erf&auml;hrt nur das Ergebnis.</span><span data-l="en">It happens while typing, not between two steps. The process only learns the outcome.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">nach einer Handvoll Bedingungen abzweigen</span><span data-l="en">branch on a handful of conditions</span></td>
+            <td><b data-l="de">ins Gateway</b><b data-l="en">a gateway</b></td>
+            <td><span data-l="de">Der Weg unterscheidet sich sichtbar &ndash; und Sichtbarkeit ist der Sinn des Diagramms.</span><span data-l="en">The path visibly differs &ndash; and visibility is what the diagram is for.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">eine Regel mit vielen Kombinationen auswerten</span><span data-l="en">evaluate a rule with many combinations</span></td>
+            <td><b data-l="de">in eine <a href="#dmn">DMN-Tabelle</a></b><b data-l="en">a <a href="#dmn">DMN table</a></b></td>
+            <td><span data-l="de">Sie &auml;ndert sich &ouml;fter als der Ablauf, und der Fachbereich soll sie lesen und pflegen k&ouml;nnen.</span><span data-l="en">It changes more often than the flow, and the business should be able to read and maintain it.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">aus vorhandenen Variablen etwas ausrechnen</span><span data-l="en">compute something from existing variables</span></td>
+            <td><b data-l="de">in einen <a href="#rz-script-value">Script-Task</a></b><b data-l="en">a <a href="#rz-script-value">script task</a></b></td>
+            <td><span data-l="de">Kein Worker n&ouml;tig, l&auml;uft in der Engine, im Replay nachvollziehbar.</span><span data-l="en">No worker needed, runs in the engine, visible in the replay.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">ein fremdes System lesen oder ver&auml;ndern</span><span data-l="en">read or change a foreign system</span></td>
+            <td><b data-l="de">in einen <a href="#formulare">Connector</a> am Service-Task</b><b data-l="en">a <a href="#formulare">connector</a> on a service task</b></td>
+            <td><span data-l="de">Die Zugangsdaten geh&ouml;ren in den Vault, nicht ins Modell &ndash; und der Schritt ist wiederholbar.</span><span data-l="en">Credentials belong in the vault, not the model &ndash; and the step is retryable.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">einen Ablauf wiederverwenden, der mehrfach vorkommt</span><span data-l="en">reuse a flow that occurs more than once</span></td>
+            <td><b data-l="de">in einen eigenen Prozess (<a href="#rz-call-activity">Call-Activity</a>)</b><b data-l="en">its own process (<a href="#rz-call-activity">call activity</a>)</b></td>
+            <td><span data-l="de">Einzeln testbar, einzeln versionierbar, von mehreren Aufrufern nutzbar.</span><span data-l="en">Testable on its own, versionable on its own, usable by several callers.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">auf etwas reagieren, das <i>an einem Schritt</i> passieren kann</span><span data-l="en">react to something that can happen <i>at one step</i></span></td>
+            <td><b data-l="de">an ein <a href="#rz-boundary-timer">Boundary-Event</a></b><b data-l="en">a <a href="#rz-boundary-timer">boundary event</a></b></td>
+            <td><span data-l="de">Frist, Fehler oder Nachricht h&auml;ngt sichtbar an der Aktivit&auml;t, die sie betrifft.</span><span data-l="en">A deadline, error or message hangs visibly on the activity it concerns.</span></td>
+          </tr>
+          <tr>
+            <td><span data-l="de">auf etwas reagieren, das <i>jederzeit</i> passieren kann</span><span data-l="en">react to something that can happen <i>at any time</i></span></td>
+            <td><b data-l="de">in einen <a href="#rz-event-sub">Event-Subprozess</a></b><b data-l="en">an <a href="#rz-event-sub">event subprocess</a></b></td>
+            <td><span data-l="de">Ein Abbruch h&auml;ngt an keinem Schritt &ndash; er h&auml;ngt am ganzen Fall.</span><span data-l="en">A cancellation hangs on no single step &ndash; it hangs on the whole case.</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 data-l="de">Handwerksregeln</h3><h3 data-l="en">Rules of the craft</h3>
+      <ul>
+        <li><b data-l="de">Benenne im Imperativ.</b><b data-l="en">Name in the imperative.</b>
+          <span data-l="de">&bdquo;Vertrag anlegen&ldquo;, nicht &bdquo;Vertragsanlage&ldquo;. Ein Task ist eine Handlung; ein Ereignis ist ein Zustand (&bdquo;Bewerbung eingegangen&ldquo;).</span>
+          <span data-l="en">"Create the contract", not "Contract creation". A task is an action; an event is a state ("Application received").</span></li>
+        <li><b data-l="de">Das Diagramm ist kein Programm.</b><b data-l="en">The diagram is not a program.</b>
+          <span data-l="de">Wenn du anf&auml;ngst, Gateways zu verschachteln, ist die Regel eine <a href="#dmn">Entscheidung</a> und geh&ouml;rt in eine Tabelle.</span>
+          <span data-l="en">The moment you start nesting gateways, the rule is a <a href="#dmn">decision</a> and belongs in a table.</span></li>
+        <li><b data-l="de">Variablen sind eine &ouml;ffentliche Schnittstelle.</b><b data-l="en">Variables are a public interface.</b>
+          <span data-l="de">Formulare, Skripte, Entscheidungen und Connectors lesen dieselben Namen. Benenne sie einmal richtig; ein Zielname ist immer eine Variable, nie ein Pfad mit Punkt.</span>
+          <span data-l="en">Forms, scripts, decisions and connectors read the same names. Get them right once; a write target is always a variable, never a dotted path.</span></li>
+        <li><b data-l="de">Jeder Fall bekommt eine Antwort.</b><b data-l="en">Every case gets an answer.</b>
+          <span data-l="de">Ein Default-Zweig, der ins Leere l&auml;uft, ist ein Kunde, der nie wieder von dir h&ouml;rt.</span>
+          <span data-l="en">A default branch that goes nowhere is a customer who never hears from you again.</span></li>
+        <li><b data-l="de">Fehler sind Fachlichkeit.</b><b data-l="en">Failure is part of the domain.</b>
+          <span data-l="de">&bdquo;Umsystem nicht erreichbar&ldquo; ist ein Weg im Modell, kein <a href="#betrieb">Incident</a>. Ein Incident ist, was du <i>nicht</i> vorhergesehen hast.</span>
+          <span data-l="en">"System unreachable" is a path in the model, not an <a href="#betrieb">incident</a>. An incident is what you did <i>not</i> foresee.</span></li>
+        <li><b data-l="de">Dokumentiere im Modell.</b><b data-l="en">Document inside the model.</b>
+          <span data-l="de">Das <a href="#designen">Dokumentationsfeld</a> reist mit jedem Deploy, Export und jeder Version mit; ein Kommentar im Chat nicht. An einer User-Task ist es die Arbeitsanweisung, die im Posteingang &uuml;ber dem Formular steht.</span>
+          <span data-l="en">The <a href="#designen">documentation field</a> travels with every deploy, export and version; a comment in a chat does not. On a user task it is the work instruction shown above the form in the inbox.</span></li>
+        <li><b data-l="de">Zeit ist ein Ereignis, kein Warten.</b><b data-l="en">Time is an event, not waiting.</b>
+          <span data-l="de">Eine Frist ist ein <a href="#rz-boundary-timer">Timer</a> im Modell &ndash; sichtbar, durabel, im Replay nachvollziehbar. Kein <code>sleep</code> in einem Skript.</span>
+          <span data-l="en">A deadline is a <a href="#rz-boundary-timer">timer</a> in the model &ndash; visible, durable, replayable. Never a <code>sleep</code> in a script.</span></li>
+        <li><b data-l="de">Rechne mit dem zweiten Versuch.</b><b data-l="en">Expect the second attempt.</b>
+          <span data-l="de">Ein Schritt, der ein Umsystem ver&auml;ndert, kann wiederholt werden. Gib ihm einen fachlichen Schl&uuml;ssel mit, damit zweimal ausf&uuml;hren nicht zweimal buchen heisst.</span>
+          <span data-l="en">A step that changes a foreign system can be retried. Give it a business key so running twice does not mean booking twice.</span></li>
+      </ul>
+
+      <div class="note tip">
+        <span class="lbl" data-l="de">Definition of Done</span><span class="lbl" data-l="en">Definition of done</span>
+        <p data-l="de" style="margin:.3em 0 0">Ein Prozess ist fertig, wenn: jeder Zweig endet &middot; jeder
+          menschliche Schritt ein Formular <i>und</i> eine Arbeitsanweisung hat &middot; jedes Umsystem einen
+          Ausfallweg hat &middot; jede Frist im Modell steht &middot; das Diagramm auf einer Achse lesbar ist
+          &middot; die Variablen benannt und dokumentiert sind &middot; du ihn mit untypischen Daten laufen lassen
+          hast und in <a href="/#/operations">Operations</a> nachvollziehen konntest, warum er den Weg genommen hat,
+          den er genommen hat.</p>
+        <p data-l="en" style="margin:.3em 0 0">A process is done when: every branch ends &middot; every human step
+          has a form <i>and</i> a work instruction &middot; every foreign system has a failure path &middot; every
+          deadline is in the model &middot; the diagram reads along one axis &middot; the variables are named and
+          documented &middot; you have run it with atypical data and could tell from <a href="/#/operations">Operations</a>
+          why it took the path it took.</p>
+      </div>
+    </section>
+
+    <!-- ==================== WORKSHOP: BUILD A SMALL APPLICATION ==================== -->
+    <section id="werkstatt">
+      <h2 data-l="de">Werkstatt: eine kleine Applikation bauen</h2><h2 data-l="en">Workshop: building a small application</h2>
+      <p class="lead" data-l="de">Das <a href="#tutorial">End-to-End-Tutorial</a> hat einen Prozess gebaut. Hier
+        bauen wir eine <b>Applikation</b>: mehrere Prozesse, mehrere Formulare, eine Entscheidung &ndash; zusammen
+        publiziert, zusammen versioniert. Der Fall ist ein <b>Bewerbermanagement</b>, gross genug, dass die
+        interessanten Fragen auftauchen, klein genug, dass es in ein Kapitel passt.</p>
+      <p class="lead" data-l="en">The <a href="#tutorial">end-to-end tutorial</a> built one process. Here we build an
+        <b>application</b>: several processes, several forms, a decision &ndash; published together, versioned
+        together. The case is <b>applicant management</b>: big enough for the interesting questions to show up,
+        small enough to fit in one chapter.</p>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Der Fall</span><span class="lbl" data-l="en">The case</span>
+        <p data-l="de" style="margin:.3em 0 0">Eine Bewerbung geht ein. Sie wird best&auml;tigt und vorgepr&uuml;ft;
+          je nach Abschluss und Erfahrung folgen <b>eine oder zwei</b> Interviewrunden. Danach entscheidet HR &uuml;ber
+          die Einstellung; bei einer Zusage wird der Vertrag im HR-System angelegt. Eine Bewerbung kann
+          <b>jederzeit</b> zur&uuml;ckgezogen werden, HR kann eine Entscheidung liegen lassen, und das HR-System f&auml;llt
+          gelegentlich aus. Alle vier S&auml;tze stehen am Ende im Modell.</p>
+        <p data-l="en" style="margin:.3em 0 0">An application arrives. It is acknowledged and pre-screened;
+          depending on degree and experience, <b>one or two</b> interview rounds follow. HR then decides on hiring;
+          on a yes the contract is created in the HR system. An applicant can withdraw <b>at any time</b>, HR can
+          leave a decision sitting, and the HR system goes down now and then. All four sentences end up in the
+          model.</p>
+      </div>
+
+      <h3 data-l="de">Erst installieren, dann lesen</h3><h3 data-l="en">Install first, read second</h3>
+      <p data-l="de">Der Knopf legt die komplette Applikation in <i>dieser</i> Atlas-Instanz an &ndash;
+        Applikation, drei Formulare, die DMN-Entscheidung, beide Prozesse &ndash; publiziert sie als Release&nbsp;1
+        und startet eine Bewerbung. Danach liest sich der Rest des Kapitels an einem laufenden Fall.</p>
+      <p data-l="en">The button creates the complete application in <i>this</i> Atlas instance &ndash; application,
+        three forms, the DMN decision, both processes &ndash; publishes it as release&nbsp;1 and starts one
+        application. The rest of the chapter then reads against a running case.</p>
+      <div class="card tour">
+        <div class="tour-controls">
+          <label class="tour-field">
+            <span data-l="de">Abschluss</span><span data-l="en">Degree</span>
+            <select id="wk-abschluss">
+              <option value="master">Master</option>
+              <option value="bachelor">Bachelor</option>
+              <option value="lehre">Lehre / apprenticeship</option>
+              <option value="keiner">kein Abschluss / none</option>
+            </select>
+          </label>
+          <label class="tour-field">
+            <span data-l="de">Erfahrung (Jahre)</span><span data-l="en">Experience (years)</span>
+            <input id="wk-jahre" type="number" value="6" min="0" step="1">
+          </label>
+          <button id="wk-install" class="pilllink" type="button">
+            <span data-l="de">📦 Applikation installieren &amp; starten</span><span data-l="en">📦 Install &amp; start the application</span>
+          </button>
+        </div>
+        <div id="wk-status" class="tour-status" role="status" aria-live="polite"></div>
+        <div id="wk-done" class="note tip" hidden style="margin:14px 0 0">
+          <a class="pilllink" href="/#/tasks"><span data-l="de">&rarr; Zum Posteingang</span><span data-l="en">&rarr; Go to the inbox</span></a>
+          <a class="pilllink ghost" href="/#/operations"><span data-l="de">&rarr; In Operations ansehen</span><span data-l="en">&rarr; Watch in Operations</span></a>
+          <a class="pilllink ghost" href="/#/modeler"><span data-l="de">&rarr; Im Modeler &ouml;ffnen</span><span data-l="en">&rarr; Open in the Modeler</span></a>
+        </div>
+      </div>
+      <p class="muted" style="font-size:13px" data-l="de">Die Artefakte liegen auch im Repository unter
+        <code>examples/bewerbermanagement/</code> &ndash; dieselben Dateien, die der Knopf hochl&auml;dt.</p>
+      <p class="muted" style="font-size:13px" data-l="en">The artifacts also live in the repository under
+        <code>examples/bewerbermanagement/</code> &ndash; the same files the button uploads.</p>
+
+      <h3 data-l="de">Der Bauplan</h3><h3 data-l="en">The blueprint</h3>
+      <table>
+        <thead><tr>
+          <th><span data-l="de">Artefakt</span><span data-l="en">Artifact</span></th>
+          <th><span data-l="de">Id</span><span data-l="en">Id</span></th>
+          <th><span data-l="de">Rolle</span><span data-l="en">Role</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td><span data-l="de">Prozess</span><span data-l="en">Process</span></td><td><code>bw-bewerbung</code></td>
+            <td><span data-l="de">Der Hauptprozess: ein Fall von Eingang bis Zusage oder Absage.</span><span data-l="en">The main process: one case from arrival to yes or no.</span></td></tr>
+          <tr><td><span data-l="de">Prozess</span><span data-l="en">Process</span></td><td><code>bw-interview</code></td>
+            <td><span data-l="de">Eine Interviewrunde &ndash; eigenst&auml;ndig deployt, aufgerufen als Call-Activity.</span><span data-l="en">One interview round &ndash; deployed on its own, called as a call activity.</span></td></tr>
+          <tr><td><span data-l="de">Entscheidung</span><span data-l="en">Decision</span></td><td><code>bw-vorpruefung</code></td>
+            <td><span data-l="de">Wer eingeladen wird &ndash; und in wie vielen Runden.</span><span data-l="en">Who gets invited &ndash; and for how many rounds.</span></td></tr>
+          <tr><td><span data-l="de">Formular</span><span data-l="en">Form</span></td><td><code>bw-bewerbung-eingang</code></td>
+            <td><span data-l="de">Das Start-Formular &ndash; und damit der Datenvertrag.</span><span data-l="en">The start form &ndash; and thus the data contract.</span></td></tr>
+          <tr><td><span data-l="de">Formular</span><span data-l="en">Form</span></td><td><code>bw-interview-feedback</code></td>
+            <td><span data-l="de">Feedback je Runde.</span><span data-l="en">Feedback per round.</span></td></tr>
+          <tr><td><span data-l="de">Formular</span><span data-l="en">Form</span></td><td><code>bw-entscheidung</code></td>
+            <td><span data-l="de">Die Einstellungsentscheidung.</span><span data-l="en">The hiring decision.</span></td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <span class="lbl" data-l="de">Ein Pr&auml;fix je Applikation</span><span class="lbl" data-l="en">One prefix per application</span>
+        <p data-l="de" style="margin:.3em 0 0">Prozess-, Formular- und Entscheidungs-Ids leben pro Server in
+          <i>einem</i> Namensraum. <code>bw-</code> vor allem ist die billigste Kollisionsvermeidung, die es gibt
+          &ndash; und beim Lesen einer Instanz sieht man sofort, wozu ein Artefakt geh&ouml;rt.</p>
+        <p data-l="en" style="margin:.3em 0 0">Process, form and decision ids share <i>one</i> namespace per server.
+          A <code>bw-</code> in front of everything is the cheapest collision avoidance there is &ndash; and when
+          reading an instance you see at once what an artifact belongs to.</p>
+      </div>
+
+      <h3 data-l="de">Das Ziel</h3><h3 data-l="en">The target</h3>
+      <div class="recipe" id="wk-main">
+        <h4><span class="rz-emoji" aria-hidden="true">📦</span>
+          <span data-l="de">Hauptprozess <code>bw-bewerbung</code></span><span data-l="en">Main process <code>bw-bewerbung</code></span></h4>
+        <div class="rz-diagram" data-wk-model="bw-bewerbung">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen&hellip;</span><span class="rz-dhint" data-l="en">Loading diagram&hellip;</span>
+        </div>
+        <p class="rz-how"><span data-l="de">Eine gerade Hauptachse; jede Abweichung hat ihre eigene Spur. Oben die
+          Erinnerung, rechts der Fehlerweg des HR-Systems, unten die Absage &ndash; und ganz unten, an keinem Schritt
+          h&auml;ngend, der R&uuml;ckzug.</span><span data-l="en">One straight main axis; every deviation gets its own lane.
+          The reminder above, the HR system's failure path to the right, the rejection below &ndash; and at the very
+          bottom, attached to no step at all, the withdrawal.</span></p>
+      </div>
+
+      <h3 data-l="de">In zehn Schritten gebaut</h3><h3 data-l="en">Built in ten steps</h3>
+      <ol class="steps">
+        <li><b data-l="de">Die Applikation anlegen</b><b data-l="en">Create the application</b>
+          <p data-l="de">Zuerst die Klammer, dann der Inhalt: eine <a href="/#/modeler">Applikation</a> ist das, was
+            gemeinsam publiziert, versioniert und exportiert wird. Jedes Artefakt, das du danach anlegst, geh&ouml;rt
+            ihr &ndash; ein Formular ohne Applikation findet beim Publizieren niemand.</p>
+          <p data-l="en">The bracket first, the content second: an <a href="/#/modeler">application</a> is what gets
+            published, versioned and exported as one. Every artifact you create afterwards belongs to it &ndash; a
+            form without an application is one nobody finds at publish time.</p></li>
+
+        <li><b data-l="de">Das Start-Formular ist der Datenvertrag</b><b data-l="en">The start form is the data contract</b>
+          <p data-l="de">Was hier nicht erfasst wird, existiert im Prozess nicht. Zwei Felder verdienen einen zweiten
+            Blick: <code>abschluss</code> und <code>erfahrungJahre</code> sind die Eingaben der DMN-Entscheidung,
+            und <code>email</code> wird sp&auml;ter der <b>Korrelationsschl&uuml;ssel</b> f&uuml;r den R&uuml;ckzug.
+            Namen also nicht nach Gef&uuml;hl vergeben &ndash; drei andere Artefakte lesen sie.</p>
+          <p data-l="en">What is not captured here does not exist in the process. Two fields deserve a second look:
+            <code>abschluss</code> and <code>erfahrungJahre</code> are the DMN decision's inputs, and
+            <code>email</code> later becomes the <b>correlation key</b> for the withdrawal. So do not name them by
+            feel &ndash; three other artifacts read them.</p>
+          <pre><code>{ "key": "abschluss", "type": "select", "label": "H&ouml;chster Abschluss",
+  "values": [ { "label": "Master", "value": "master" }, &hellip; ] }</code></pre></li>
+
+        <li><b data-l="de">Die Regel in eine Tabelle</b><b data-l="en">The rule into a table</b>
+          <p data-l="de">&bdquo;Master mit f&uuml;nf Jahren: zwei Runden; Studium mit zwei Jahren: eine Runde; Lehre
+            mit f&uuml;nf: eine Runde; sonst Absage&ldquo; &ndash; als Gateway-Kaskade w&auml;re das vier
+            verschachtelte Rauten. Als <a href="#dmn">DMN-Tabelle</a> ist es vier Zeilen, die HR selbst pflegen kann.
+            Der Clou steht in der zweiten Ausgabespalte: <code>runden</code> ist eine <b>Liste</b>, keine Zahl.</p>
+          <p data-l="en">"Master with five years: two rounds; a degree with two years: one round; apprenticeship with
+            five: one round; otherwise reject" &ndash; as a gateway cascade that is four nested diamonds. As a
+            <a href="#dmn">DMN table</a> it is four rows HR can maintain. The trick is in the second output column:
+            <code>runden</code> is a <b>list</b>, not a number.</p>
+          <table>
+            <thead><tr>
+              <th>abschluss (in)</th><th>erfahrungJahre (in)</th><th>empfehlung (out)</th><th>runden (out)</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>"master"</td><td>&gt;= 5</td><td>"interview"</td><td><code>["Fachinterview", "F&uuml;hrungsinterview"]</code></td></tr>
+              <tr><td>"master", "bachelor"</td><td>&gt;= 2</td><td>"interview"</td><td><code>["Fachinterview"]</code></td></tr>
+              <tr><td>"lehre"</td><td>&gt;= 5</td><td>"interview"</td><td><code>["Fachinterview"]</code></td></tr>
+              <tr><td>&ndash;</td><td>&ndash;</td><td>"absage"</td><td><code>[]</code></td></tr>
+            </tbody>
+          </table>
+          <p data-l="de">Hit-Policy <b>FIRST</b>: die Regeln d&uuml;rfen sich &uuml;berlappen, die erste passende
+            gewinnt, und die letzte Zeile f&auml;ngt alles auf &ndash; kein Fall bleibt ohne Antwort. Der
+            Business-Rule-Task ruft die Tabelle auf und legt das Ergebnis in einer Variablen ab:</p>
+          <p data-l="en">Hit policy <b>FIRST</b>: rules may overlap, the first match wins, and the last row catches
+            everything &ndash; no case is left without an answer. The business rule task calls the table and puts the
+            result in a variable:</p>
+          <pre><code>&lt;businessRuleTask id="pruefung" name="Vorpr&uuml;fung"&gt;
+  &lt;extensionElements&gt;
+    &lt;zeebe:calledDecision decisionId="bw-vorpruefung" resultVariable="pruefung"/&gt;
+    &lt;zeebe:ioMapping&gt;
+      &lt;zeebe:input source="=abschluss" target="abschluss"/&gt;
+      &lt;zeebe:input source="=erfahrungJahre" target="erfahrungJahre"/&gt;
+    &lt;/zeebe:ioMapping&gt;
+  &lt;/extensionElements&gt;
+&lt;/businessRuleTask&gt;</code></pre>
+          <p data-l="de"><code>pruefung</code> enth&auml;lt danach <code>{ empfehlung: "interview", runden:
+            ["Fachinterview", "F&uuml;hrungsinterview"] }</code>.</p>
+          <p data-l="en"><code>pruefung</code> then holds <code>{ empfehlung: "interview", runden:
+            ["Fachinterview", "F&uuml;hrungsinterview"] }</code>.</p>
+          <div class="note warn" style="margin:12px 0 0">
+            <span class="lbl" data-l="de">Stolperstein</span><span class="lbl" data-l="en">Gotcha</span>
+            <p data-l="de" style="margin:.3em 0 0">Atlas l&ouml;st eine Entscheidung &uuml;ber ihren <b>Namen</b> auf.
+              Halte <code>id</code> und <code>name</code> der <code>&lt;decision&gt;</code> identisch, sonst findet
+              der Deploy sie nicht und weist die ganze Applikation zur&uuml;ck.</p>
+            <p data-l="en" style="margin:.3em 0 0">Atlas resolves a decision by its <b>name</b>. Keep the
+              <code>&lt;decision&gt;</code>'s <code>id</code> and <code>name</code> identical, otherwise the deploy
+              cannot find it and refuses the whole application.</p>
+          </div></li>
+
+        <li><b data-l="de">Auf das Ergebnis verzweigen</b><b data-l="en">Branch on the result</b>
+          <p data-l="de">Das <a href="#rz-xor">Gateway</a> entscheidet nichts mehr &ndash; es liest nur, was die
+            Tabelle entschieden hat. Der <b>Default-Zweig</b> f&uuml;hrt zur Absage: was nicht ausdr&uuml;cklich
+            eingeladen wird, wird abgesagt.</p>
+          <p data-l="en">The <a href="#rz-xor">gateway</a> decides nothing any more &ndash; it only reads what the
+            table decided. The <b>default flow</b> leads to the rejection: whatever is not explicitly invited gets a
+            rejection.</p>
+          <pre><code>&lt;sequenceFlow id="f_gw_interviews" name="einladen"
+              sourceRef="gw_pruefung" targetRef="interviews"&gt;
+  &lt;conditionExpression&gt;= pruefung.empfehlung = "interview"&lt;/conditionExpression&gt;
+&lt;/sequenceFlow&gt;</code></pre></li>
+
+        <li><b data-l="de">Zerlegen: das Interview wird ein eigener Prozess</b><b data-l="en">Decompose: the interview becomes its own process</b>
+          <p data-l="de">Eine Interviewrunde ist ein Ablauf f&uuml;r sich: Termin, Gespr&auml;ch, Feedback, Frist.
+            Sie kommt <i>mehrfach</i> vor. Also wird sie ein eigenst&auml;ndig deployter Prozess
+            (<code>bw-interview</code>), den eine <a href="#rz-call-activity">Call-Activity</a> aufruft &ndash; einzeln
+            testbar, einzeln versionierbar, sp&auml;ter auch von anderen Prozessen nutzbar.</p>
+          <p data-l="en">One interview round is a flow in itself: schedule, conversation, feedback, deadline. It
+            occurs <i>more than once</i>. So it becomes a separately deployed process
+            (<code>bw-interview</code>) that a <a href="#rz-call-activity">call activity</a> calls &ndash; testable on
+            its own, versionable on its own, usable by other processes later.</p>
+          <p data-l="de">Der Aufruf ist ein <b>Vertrag</b>, kein gemeinsamer Datentopf. Beide
+            <code>propagateAll&hellip;</code>-Flags stehen auf <code>false</code>, und die
+            <code>ioMapping</code> sagt genau, was rein- und was rausgeht:</p>
+          <p data-l="en">The call is a <b>contract</b>, not a shared bucket of data. Both
+            <code>propagateAll&hellip;</code> flags are <code>false</code>, and the <code>ioMapping</code> states
+            exactly what goes in and what comes out:</p>
+          <pre><code>&lt;zeebe:calledElement processId="bw-interview"
+    propagateAllParentVariables="false" propagateAllChildVariables="false"/&gt;
+&lt;zeebe:ioMapping&gt;
+  &lt;zeebe:input  source="=name"   target="name"/&gt;
+  &lt;zeebe:input  source="=stelle" target="stelle"/&gt;
+  &lt;zeebe:input  source="=runde"  target="runde"/&gt;
+  &lt;zeebe:output source="=bewertung" target="bewertung"/&gt;
+&lt;/zeebe:ioMapping&gt;</code></pre>
+          <p data-l="de">Ohne diese Flags erbt der Teilprozess alles, was der Fall gerade mit sich tr&auml;gt, und
+            gibt alles zur&uuml;ck. Das funktioniert &ndash; bis jemand im Teilprozess eine Variable umbenennt und der
+            Aufrufer stillschweigend kaputtgeht.</p>
+          <p data-l="en">Without those flags the child inherits everything the case happens to carry and hands
+            everything back. That works &ndash; until someone renames a variable in the child and the caller breaks
+            silently.</p></li>
+
+        <li><b data-l="de">Wiederholen: einmal je Runde</b><b data-l="en">Repeat: once per round</b>
+          <p data-l="de">Wie oft der Teilprozess l&auml;uft, hat die DMN-Tabelle entschieden. Die
+            <a href="#rz-multi-instance">Multi-Instance</a> iteriert &uuml;ber
+            <code>pruefung.runden</code>, <b>seriell</b> &ndash; die zweite Runde ergibt erst nach dem Feedback der
+            ersten Sinn &ndash; und sammelt jede R&uuml;ckgabe in <code>bewertungen</code>:</p>
+          <p data-l="en">How often the child runs was decided by the DMN table. The
+            <a href="#rz-multi-instance">multi-instance</a> iterates over <code>pruefung.runden</code>,
+            <b>sequentially</b> &ndash; a second round only makes sense after the first one's feedback &ndash; and
+            collects each return value into <code>bewertungen</code>:</p>
+          <pre><code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;
+  &lt;extensionElements&gt;
+    &lt;zeebe:loopCharacteristics inputCollection="=pruefung.runden" inputElement="runde"
+        outputCollection="bewertungen" outputElement="=bewertung"/&gt;
+  &lt;/extensionElements&gt;
+&lt;/multiInstanceLoopCharacteristics&gt;</code></pre>
+          <p data-l="de">Eine dritte Runde einzuf&uuml;hren heisst jetzt: <b>eine Zeile in der Tabelle &auml;ndern</b>.
+            Das Modell bleibt, wie es ist. Genau daf&uuml;r trennt man Regel und Ablauf.</p>
+          <p data-l="en">Introducing a third round now means: <b>change one row in the table</b>. The model stays as
+            it is. That separation of rule and flow is the whole point.</p>
+          <div class="note warn" style="margin:12px 0 0">
+            <span class="lbl" data-l="de">Der Vertrag gilt auf jedem Weg</span><span class="lbl" data-l="en">The contract holds on every path</span>
+            <p data-l="de" style="margin:.3em 0 0">Der Teilprozess hat zwei Enden: Feedback erfasst &ndash; oder Frist
+              abgelaufen. <b>Beide</b> schreiben eine <code>bewertung</code>; das Fristende schreibt eine mit
+              &bdquo;nein&ldquo; und einer Notiz. F&auml;nde die Sammelstelle beim Zusammenf&uuml;hren nichts vor, h&auml;tte
+              die Liste ein Loch &ndash; und die Auswertung r&auml;chte sich einen Schritt sp&auml;ter.</p>
+            <p data-l="en" style="margin:.3em 0 0">The child has two ends: feedback captured &ndash; or deadline
+              expired. <b>Both</b> write a <code>bewertung</code>; the deadline writes one with "no" and a note. If
+              the collector found nothing there, the list would have a hole &ndash; and the evaluation one step later
+              would pay for it.</p>
+          </div></li>
+
+        <li><b data-l="de">Verdichten, damit ein Mensch entscheiden kann</b><b data-l="en">Condense it so a human can decide</b>
+          <p data-l="de">Eine Liste von Objekten ist keine Entscheidungsgrundlage. Ein
+            <a href="#rz-script-list">Inline-Script</a> macht daraus einen Satz &ndash; erst das Urteil &uuml;ber alle
+            Runden, dann jede Runde einzeln:</p>
+          <p data-l="en">A list of objects is not something to decide on. An
+            <a href="#rz-script-list">inline script</a> turns it into one sentence &ndash; first the verdict over all
+            rounds, then each round:</p>
+          <pre><code>= (if every b in bewertungen satisfies b.empfehlung = "ja"
+     then "Alle Runden empfehlen: ja" else "Nicht alle Runden empfehlen")
+  + " &mdash; "
+  + string join(for b in bewertungen
+                return b.runde + ": " + b.empfehlung + " (" + b.notiz + ")", " | ")</code></pre>
+          <p data-l="de">Das Ergebnis steht im Formular der Aufgabe <b>Einstellung entscheiden</b>. Und weil ein
+            Mensch eine Aufgabe auch mal liegen l&auml;sst, h&auml;ngt ein <b>nicht unterbrechender</b>
+            <a href="#rz-boundary-timer">Boundary-Timer</a> (P3D) daran, der nebenher eine Erinnerung ausl&ouml;st,
+            <i>ohne</i> die Aufgabe abzubrechen. Eine unterbrechende Frist w&auml;re hier fachlich falsch: eine
+            Bewerbung darf nicht verfallen, sie soll nur nicht liegen bleiben.</p>
+          <p data-l="en">The result shows up in the form of the <b>decide on hiring</b> task. And because a human
+            does leave a task sitting, a <b>non-interrupting</b>
+            <a href="#rz-boundary-timer">boundary timer</a> (P3D) hangs on it, firing a reminder alongside
+            <i>without</i> cancelling the task. An interrupting deadline would be wrong here: an application must not
+            expire, it should just not be forgotten.</p></li>
+
+        <li><b data-l="de">Umsysteme: erst simulieren, dann anbinden</b><b data-l="en">Foreign systems: simulate first, connect later</b>
+          <p data-l="de">Vier Schritte reden mit der Aussenwelt: Eingangsbest&auml;tigung, Erinnerung, Absage und
+            &bdquo;Vertrag im HR-System anlegen&ldquo;. Keiner davon braucht f&uuml;r dieses Kapitel eine echte
+            Anbindung &ndash; sie laufen im <b>Mockup-Modus</b>, in dem die Engine das Umsystem selbst simuliert:
+            mit Antwortzeit, geskripteter Antwort und Ausfallquote.</p>
+          <p data-l="en">Four steps talk to the outside world: acknowledgement, reminder, rejection and "create the
+            contract in the HR system". None of them needs a real connection for this chapter &ndash; they run in
+            <b>mockup mode</b>, where the engine simulates the system itself: response time, scripted answer, failure
+            rate.</p>
+          <pre><code>&lt;atlas:mockupConnector minDuration="PT1S" maxDuration="PT4S"
+    resultExpression="={ vertragsnummer: &amp;quot;V-2026-0815&amp;quot; }"
+    resultVariable="vertrag"
+    failRate="0.2" errorCode="HR_UNERREICHBAR"/&gt;</code></pre>
+          <p data-l="de">So l&auml;uft die Applikation <b>end-to-end, bevor eine einzige Schnittstelle existiert</b> &ndash;
+            und der Fachbereich sieht den echten Ablauf statt eines Foliensatzes. Steht die REST- oder
+            Mail-Anbindung sp&auml;ter, ersetzt sie genau dieses eine Element; der Rest des Modells bleibt
+            unber&uuml;hrt.</p>
+          <p data-l="en">That makes the application run <b>end to end before a single interface exists</b> &ndash; and
+            the business sees the real flow instead of a slide deck. When the REST or mail connection arrives later,
+            it replaces exactly that one element; the rest of the model is untouched.</p></li>
+
+        <li><b data-l="de">Wenn das Umsystem ausf&auml;llt</b><b data-l="en">When the system is down</b>
+          <p data-l="de">Die <code>failRate</code> von 0.2 ist kein Gag: in etwa jedem f&uuml;nften Lauf wirft
+            &bdquo;Vertrag im HR-System anlegen&ldquo; den Fehler <code>HR_UNERREICHBAR</code>. Eine
+            <a href="#rz-boundary-error">Error-Boundary</a> f&auml;ngt ihn und macht daraus eine <b>Aufgabe f&uuml;r
+            einen Menschen</b> &ndash; &bdquo;Vertrag manuell anlegen&ldquo;.</p>
+          <p data-l="en">The <code>failRate</code> of 0.2 is not a joke: in roughly every fifth run "create the
+            contract in the HR system" throws <code>HR_UNERREICHBAR</code>. An
+            <a href="#rz-boundary-error">error boundary</a> catches it and turns it into <b>a task for a human</b>
+            &ndash; "create the contract by hand".</p>
+          <p data-l="de">Das ist der Unterschied zwischen einem modellierten Fehlerweg und einem
+            <a href="#betrieb">Incident</a>: der Fall ist nicht steckengeblieben, er ist <i>zugewiesen</i>. Ein
+            Incident bleibt das, was du nicht vorhergesehen hast &ndash; und daf&uuml;r ist Operations da.</p>
+          <p data-l="en">That is the difference between a modelled failure path and an
+            <a href="#betrieb">incident</a>: the case is not stuck, it is <i>assigned</i>. An incident stays what you
+            did not foresee &ndash; and that is what Operations is for.</p></li>
+
+        <li><b data-l="de">Was jederzeit passieren kann</b><b data-l="en">What can happen at any time</b>
+          <p data-l="de">Ein R&uuml;ckzug h&auml;ngt an keinem Schritt &ndash; er kann vor der Vorpr&uuml;fung kommen,
+            zwischen zwei Interviews, nach der Zusage. Genau daf&uuml;r gibt es den
+            <a href="#rz-event-sub">Event-Subprozess</a>: er h&auml;ngt am ganzen Prozess. Sein Start ist
+            <b>unterbrechend</b>, beendet den Fall also und r&auml;umt eine offene Interview-Aufgabe aus dem
+            Posteingang.</p>
+          <p data-l="en">A withdrawal hangs on no step &ndash; it can arrive before the screening, between two
+            interviews, after the offer. That is exactly what an
+            <a href="#rz-event-sub">event subprocess</a> is for: it hangs on the whole process. Its start is
+            <b>interrupting</b>, so it ends the case and clears an open interview task out of the inbox.</p>
+          <pre><code>&lt;message id="msg_rueckzug" name="bw-rueckzug"&gt;
+  &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey="=email"/&gt;&lt;/extensionElements&gt;
+&lt;/message&gt;</code></pre>
+          <p data-l="de">Der <b>Korrelationsschl&uuml;ssel</b> ist die E-Mail-Adresse aus dem Start-Formular &ndash;
+            deshalb war Schritt&nbsp;2 wichtiger, als er aussah. Ausl&ouml;sen l&auml;sst sich die Nachricht von
+            aussen:</p>
+          <p data-l="en">The <b>correlation key</b> is the e-mail address from the start form &ndash; which is why
+            step&nbsp;2 mattered more than it looked. The message can be published from outside:</p>
+          <pre><code>curl -X POST /api/v1/messages -H 'Content-Type: application/json' \
+  -d '{"name":"bw-rueckzug","correlationKey":"ada@example.org"}'</code></pre>
+          <div class="note warn" style="margin:12px 0 0">
+            <span class="lbl" data-l="de">Scope-Regel</span><span class="lbl" data-l="en">Scope rule</span>
+            <p data-l="de" style="margin:.3em 0 0">Was ein Subprozess in seinem eigenen Scope schreibt, verschwindet
+              mit ihm. Der Vermerk <code>status = "zur&uuml;ckgezogen"</code> &uuml;berlebt nur, weil eine
+              <code>ioMapping</code>-Ausgabe am Subprozess ihn herausreicht.</p>
+            <p data-l="en" style="margin:.3em 0 0">What a subprocess writes in its own scope disappears with it. The
+              note <code>status = "zur&uuml;ckgezogen"</code> survives only because an <code>ioMapping</code> output on
+              the subprocess hands it out.</p>
+          </div></li>
+
+        <li><b data-l="de">Publizieren &ndash; alles auf einmal</b><b data-l="en">Publish &ndash; everything at once</b>
+          <p data-l="de">Beim <b>Publizieren</b> pr&uuml;ft Atlas die Applikation als Ganzes: l&ouml;st jede
+            DMN-Referenz auf, bindet die Entscheidungen an die Business-Rule-Tasks, kompiliert beide Prozesse. Ein
+            einziger Fehler &ndash; eine Entscheidung, die kein Modell liefert &ndash; weist den ganzen Bundle-Deploy
+            zur&uuml;ck, statt ein halbes Release zu hinterlassen. Danach steht ein <b>Release</b> mit einer
+            Versionsnummer und einer Momentaufnahme dessen, was ausgeliefert wurde.</p>
+          <p data-l="en"><b>Publishing</b> validates the application as a whole: every DMN reference is resolved, the
+            decisions are bound to the business rule tasks, both processes are compiled. A single failure &ndash; a
+            decision no model provides &ndash; refuses the entire bundle deploy instead of leaving half a release
+            behind. What you get is a <b>release</b> with a version number and a snapshot of what shipped.</p>
+          <pre><code>POST /api/v1/applications                      &rarr; applicationId
+POST /api/v1/dmn-models?name=bw-vorpruefung    &rarr; modelRef
+POST /api/v1/dmnrefs        { projectId, modelRef }
+POST /api/v1/forms          { id, projectId, schema }   &times; 3
+POST /api/v1/drafts?projectId=&hellip;   &lt;bewerbung.bpmn&gt;, &lt;interview.bpmn&gt;
+POST /api/v1/applications/{id}/publish         &rarr; definitions + release</code></pre>
+          <p data-l="de">Genau diese Reihenfolge geht auch der Knopf oben. Laufende Instanzen bleiben auf ihrer
+            Version, bis du sie migrierst &ndash; ein Release &auml;ndert nie einen Fall, der schon unterwegs ist.</p>
+          <p data-l="en">That is the exact order the button above follows. Running instances stay on their version
+            until you migrate them &ndash; a release never changes a case that is already under way.</p></li>
+      </ol>
+
+      <h3 data-l="de">Der Teilprozess</h3><h3 data-l="en">The subprocess</h3>
+      <div class="recipe" id="wk-interview">
+        <h4><span class="rz-emoji" aria-hidden="true">🗣️</span>
+          <span data-l="de">Teilprozess <code>bw-interview</code></span><span data-l="en">Subprocess <code>bw-interview</code></span></h4>
+        <div class="rz-diagram" data-wk-model="bw-interview">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen&hellip;</span><span class="rz-dhint" data-l="en">Loading diagram&hellip;</span>
+        </div>
+        <p class="rz-how"><span data-l="de">Vier Elemente, zwei Enden &ndash; und beide Enden erf&uuml;llen den
+          Datenvertrag. Kein Start-Formular: dieser Prozess wird nicht von Hand gestartet, sondern aufgerufen.</span><span data-l="en">Four elements, two ends &ndash; and both ends satisfy the data contract. No start form: this
+          process is not started by hand, it is called.</span></p>
+      </div>
+
+      <h3 data-l="de">Jetzt ausprobieren</h3><h3 data-l="en">Now try it</h3>
+      <ol>
+        <li data-l="de"><b>Master, 6 Jahre</b> installieren (oben) &rarr; im <a href="/#/tasks">Posteingang</a>
+          wartet <b>Feedback erfassen</b>, Runde &bdquo;Fachinterview&ldquo;. Abschicken &rarr; dieselbe Aufgabe
+          kommt ein zweites Mal, jetzt f&uuml;r &bdquo;F&uuml;hrungsinterview&ldquo;. Das ist die serielle
+          Multi-Instance, von innen gesehen.</li>
+        <li data-l="en"><b>Master, 6 years</b> installed (above) &rarr; the <a href="/#/tasks">inbox</a> holds
+          <b>capture feedback</b> for the round "Fachinterview". Submit &rarr; the same task appears a second time,
+          now for "F&uuml;hrungsinterview". That is the sequential multi-instance, seen from the inside.</li>
+        <li data-l="de">Danach <b>Einstellung entscheiden</b>: das Fazit im Formular ist das Ergebnis des
+          <code>string join</code> aus Schritt&nbsp;7. Zusagen &rarr; mit etwas Pech (jeder f&uuml;nfte Lauf)
+          erscheint <b>Vertrag manuell anlegen</b> &ndash; der Fehlerweg, live.</li>
+        <li data-l="en">Then <b>decide on hiring</b>: the summary in the form is the output of the
+          <code>string join</code> from step&nbsp;7. Say yes &rarr; with a bit of bad luck (every fifth run)
+          <b>create the contract by hand</b> shows up &ndash; the failure path, live.</li>
+        <li data-l="de">Eine zweite Bewerbung mit <b>kein Abschluss, 0 Jahre</b> installieren &rarr; sie l&auml;uft
+          ohne jede Aufgabe direkt in die Absage. In <a href="/#/operations">Operations</a> siehst du im Replay,
+          welche DMN-Regel gegriffen hat.</li>
+        <li data-l="en">Install a second application with <b>no degree, 0 years</b> &rarr; it runs straight into the
+          rejection with no task at all. In <a href="/#/operations">Operations</a> the replay shows which DMN rule
+          fired.</li>
+        <li data-l="de">Den <b>R&uuml;ckzug</b> ausl&ouml;sen (curl aus Schritt&nbsp;10, mit der E-Mail der
+          Bewerbung) &rarr; der Fall endet in &bdquo;Zur&uuml;ckgezogen&ldquo;, eine offene Aufgabe verschwindet aus
+          dem Posteingang.</li>
+        <li data-l="en">Trigger the <b>withdrawal</b> (the curl from step&nbsp;10, with the application's e-mail)
+          &rarr; the case ends in "withdrawn" and an open task disappears from the inbox.</li>
+      </ol>
+
+      <div class="note tip">
+        <span class="lbl" data-l="de">Was hier gebaut wurde</span><span class="lbl" data-l="en">What you built here</span>
+        <p data-l="de" style="margin:.3em 0 0">Eine Applikation aus zwei Prozessen, drei Formularen und einer
+          Entscheidung, mit einem Regelwerk, das der Fachbereich pflegt, einem Teilprozess mit explizitem
+          Datenvertrag, f&uuml;nf simulierten Umsystemen, einem Fehlerweg, einer Erinnerung und einem Abbruch, der
+          jederzeit eintreffen darf. Das ist kein Spielzeug mehr &ndash; das ist der Umfang, in dem echte
+          Applikationen anfangen.</p>
+        <p data-l="en" style="margin:.3em 0 0">An application of two processes, three forms and one decision, with a
+          rule set the business maintains, a subprocess with an explicit data contract, five simulated systems, a
+          failure path, a reminder and a cancellation that may arrive at any time. This is not a toy any more &ndash;
+          this is the size at which real applications start.</p>
+      </div>
+
+      <h3 data-l="de">Weiterbauen</h3><h3 data-l="en">Keep building</h3>
+      <ul>
+        <li data-l="de"><b>Echt anbinden:</b> &bdquo;Eingangsbest&auml;tigung senden&ldquo; an einen Mail-Connector,
+          &bdquo;Vertrag im HR-System anlegen&ldquo; an einen REST-Connector &ndash; je ein Element, sonst nichts.</li>
+        <li data-l="en"><b>Connect for real:</b> point "send acknowledgement" at a mail connector and "create the
+          contract" at a REST connector &ndash; one element each, nothing else.</li>
+        <li data-l="de"><b>Eine dritte Runde</b> f&uuml;r F&uuml;hrungsstellen: eine Zeile in der DMN-Tabelle.</li>
+        <li data-l="en"><b>A third round</b> for leadership roles: one row in the DMN table.</li>
+        <li data-l="de"><b>Anschluss ans Onboarding:</b> &bdquo;Eingestellt&ldquo; startet den
+          Onboarding-Prozess &ndash; dort f&auml;ngt der n&auml;chste Lebenszyklus an.</li>
+        <li data-l="en"><b>Hand over to onboarding:</b> "hired" starts the onboarding process &ndash; where the next
+          lifecycle begins.</li>
+        <li data-l="de"><b>Version 2 bauen</b> und in <a href="/#/operations">Operations</a> zusehen, wie laufende
+          Instanzen auf Version 1 bleiben, bis du sie migrierst.</li>
+        <li data-l="en"><b>Build version 2</b> and watch in <a href="/#/operations">Operations</a> how running
+          instances stay on version 1 until you migrate them.</li>
+      </ul>
+    </section>
+
     <!-- ==================== GLOSSARY ==================== -->
     <section id="glossar">
       <h2 data-l="de">Glossar</h2><h2 data-l="en">Glossary</h2>
@@ -2279,6 +2918,109 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
   });
 })();
 </script>
+<script type="application/json" id="bw-data">{"application":{"name":"Bewerbermanagement","key":"bewerbermanagement"},"decision":{"handle":"bw-vorpruefung","name":"bw-vorpruefung","xml":"\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Vorprüfung — die Einladungsregeln der Applikation \"Bewerbermanagement\" als\n  DMN-Entscheidung.\n\n  Eingaben:  abschluss (\"keiner\" | \"lehre\" | \"bachelor\" | \"master\")\n             erfahrungJahre (Zahl)\n  Ausgaben:  empfehlung (\"interview\" | \"absage\")\n             runden     (Liste der Interviewrunden, leer bei Absage)\n\n  hitPolicy FIRST — die Regeln sind bewusst von der stärksten zur schwächsten\n  sortiert und dürfen sich überlappen; die erste passende gewinnt. Die letzte\n  Regel ist der Auffangfall und trifft immer, damit keine Bewerbung ohne Antwort\n  bleibt.\n\n  id und name der Entscheidung sind absichtlich identisch: der Business-Rule-Task\n  verweist mit decisionId=\"bw-vorpruefung\" darauf, und Atlas löst eine\n  Entscheidung über ihren NAMEN auf. Weichen die beiden voneinander ab, findet\n  der Deploy die Entscheidung nicht und weist die Applikation zurück.\n\n  Der interessante Teil ist die Ausgabe `runden`: eine FEEL-Liste. Der Prozess\n  iteriert mit einer Multi-Instance-Call-Activity darüber, also bestimmt DIESE\n  Tabelle, wie oft der Interview-Teilprozess läuft. Eine dritte Runde für\n  Führungsstellen einzuführen heisst: eine Zeile hier ändern — nicht das\n  Prozessmodell.\n--\u003e\n\u003cdefinitions xmlns=\"https://www.omg.org/spec/DMN/20191111/MODEL/\"\n             id=\"defs_bw_vorpruefung\" name=\"bw-vorpruefung\" namespace=\"http://atlas/dmn\"\u003e\n  \u003cinputData id=\"id_abschluss\" name=\"abschluss\"/\u003e\n  \u003cinputData id=\"id_erfahrung\" name=\"erfahrungJahre\"/\u003e\n  \u003cdecision id=\"bw-vorpruefung\" name=\"bw-vorpruefung\"\u003e\n    \u003cinformationRequirement\u003e\u003crequiredInput href=\"#id_abschluss\"/\u003e\u003c/informationRequirement\u003e\n    \u003cinformationRequirement\u003e\u003crequiredInput href=\"#id_erfahrung\"/\u003e\u003c/informationRequirement\u003e\n    \u003cdecisionTable id=\"dt_vorpruefung\" hitPolicy=\"FIRST\"\u003e\n      \u003cinput id=\"in_abschluss\" label=\"abschluss\"\u003e\n        \u003cinputExpression id=\"ie_abschluss\" typeRef=\"string\"\u003e\u003ctext\u003eabschluss\u003c/text\u003e\u003c/inputExpression\u003e\n      \u003c/input\u003e\n      \u003cinput id=\"in_erfahrung\" label=\"erfahrungJahre\"\u003e\n        \u003cinputExpression id=\"ie_erfahrung\" typeRef=\"number\"\u003e\u003ctext\u003eerfahrungJahre\u003c/text\u003e\u003c/inputExpression\u003e\n      \u003c/input\u003e\n      \u003coutput id=\"out_empfehlung\" label=\"empfehlung\" name=\"empfehlung\" typeRef=\"string\"/\u003e\n      \u003coutput id=\"out_runden\" label=\"runden\" name=\"runden\"/\u003e\n      \u003crule id=\"r_senior\"\u003e\n        \u003cdescription\u003eMaster mit fünf Jahren Erfahrung: Fach- und Führungsinterview.\u003c/description\u003e\n        \u003cinputEntry id=\"i_senior_a\"\u003e\u003ctext\u003e\"master\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003cinputEntry id=\"i_senior_e\"\u003e\u003ctext\u003e\u0026gt;= 5\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_senior_emp\"\u003e\u003ctext\u003e\"interview\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_senior_run\"\u003e\u003ctext\u003e[\"Fachinterview\", \"Führungsinterview\"]\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_studium\"\u003e\n        \u003cdescription\u003eStudium mit mindestens zwei Jahren Erfahrung: ein Fachinterview.\u003c/description\u003e\n        \u003cinputEntry id=\"i_studium_a\"\u003e\u003ctext\u003e\"master\", \"bachelor\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003cinputEntry id=\"i_studium_e\"\u003e\u003ctext\u003e\u0026gt;= 2\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_studium_emp\"\u003e\u003ctext\u003e\"interview\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_studium_run\"\u003e\u003ctext\u003e[\"Fachinterview\"]\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_lehre\"\u003e\n        \u003cdescription\u003eLehre schlägt Studium, wenn die Erfahrung stimmt: ein Fachinterview.\u003c/description\u003e\n        \u003cinputEntry id=\"i_lehre_a\"\u003e\u003ctext\u003e\"lehre\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003cinputEntry id=\"i_lehre_e\"\u003e\u003ctext\u003e\u0026gt;= 5\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_lehre_emp\"\u003e\u003ctext\u003e\"interview\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_lehre_run\"\u003e\u003ctext\u003e[\"Fachinterview\"]\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_absage\"\u003e\n        \u003cdescription\u003eAuffangfall: keine Einladung, aber eine Antwort.\u003c/description\u003e\n        \u003cinputEntry id=\"i_absage_a\"\u003e\u003ctext\u003e-\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003cinputEntry id=\"i_absage_e\"\u003e\u003ctext\u003e-\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_absage_emp\"\u003e\u003ctext\u003e\"absage\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_absage_run\"\u003e\u003ctext\u003e[]\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n    \u003c/decisionTable\u003e\n  \u003c/decision\u003e\n\u003c/definitions\u003e"},"forms":[{"id":"bw-bewerbung-eingang","name":"Bewerbung – Eingang","schema":{"type":"default","id":"bw-bewerbung-eingang","components":[{"type":"text","text":"# 📨 Bewerbung\n\nDie Felder dieses Formulars sind der **Datenvertrag** des Prozesses: `abschluss` und `erfahrungJahre` gehen in die DMN-Vorprüfung, `email` korreliert eine spätere Rückzugs-Nachricht."},{"key":"name","type":"textfield","label":"Name","validate":{"required":true}},{"key":"email","type":"textfield","label":"E-Mail","description":"Korrelationsschlüssel für die Nachricht bw-rueckzug.","validate":{"required":true}},{"key":"stelle","type":"textfield","label":"Beworben auf","validate":{"required":true}},{"key":"abschluss","type":"select","label":"Höchster Abschluss","values":[{"label":"Kein Abschluss","value":"keiner"},{"label":"Lehre / Berufsausbildung","value":"lehre"},{"label":"Bachelor","value":"bachelor"},{"label":"Master","value":"master"}],"validate":{"required":true}},{"key":"erfahrungJahre","type":"number","label":"Berufserfahrung (Jahre)","validate":{"required":true,"min":0}}]}},{"id":"bw-interview-feedback","name":"Interview – Feedback","schema":{"type":"default","id":"bw-interview-feedback","components":[{"type":"text","text":"# 🗣️ Interview-Feedback\n\nHalte direkt nach dem Gespräch fest, ob du diese Person für die Stelle empfiehlst. Runde, Name und Stelle kommen aus dem Aufruf des Teilprozesses — sie sind hier nur zu lesen."},{"key":"runde","type":"textfield","label":"Runde","disabled":true},{"key":"name","type":"textfield","label":"Bewerbung von","disabled":true},{"key":"stelle","type":"textfield","label":"Beworben auf","disabled":true},{"key":"empfehlung","type":"select","label":"Empfehlung","values":[{"label":"Ja – weiter","value":"ja"},{"label":"Nein – nicht weiter","value":"nein"}],"validate":{"required":true}},{"key":"notiz","type":"textarea","label":"Begründung","description":"Zwei Sätze genügen. Sie stehen später im Fazit der Einstellungsentscheidung.","validate":{"required":true}}]}},{"id":"bw-entscheidung","name":"Bewerbung – Entscheidung","schema":{"type":"default","id":"bw-entscheidung","components":[{"type":"text","text":"# ✅ Einstellungsentscheidung\n\nDas Fazit fasst alle Interviewrunden zusammen: erst das Urteil über alle Runden, dann jede Runde einzeln. Die Entscheidung selbst trifft ein Mensch — deshalb steht hier ein User-Task und kein Gateway."},{"key":"name","type":"textfield","label":"Bewerbung von","disabled":true},{"key":"stelle","type":"textfield","label":"Beworben auf","disabled":true},{"key":"interviewFazit","type":"textarea","label":"Fazit aus den Interviews","disabled":true},{"key":"zusage","type":"checkbox","label":"Zusagen"},{"key":"begruendung","type":"textarea","label":"Begründung","description":"Geht in die Absage bzw. in die Personalakte.","validate":{"required":true}}]}}],"processes":[{"processId":"bw-bewerbung","xml":"\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Bewerbung bearbeiten — der Hauptprozess der Applikation \"Bewerbermanagement\".\n\n  Das durchgängige Beispiel des Handbuch-Kapitels „Werkstatt: eine kleine\n  Applikation bauen\" (/handbuch.html#werkstatt). Es zeigt, wie ein\n  Prozess-Developer eine Applikation aus mehreren Artefakten zusammensetzt:\n  zwei Prozesse, drei Formulare, eine DMN-Entscheidung — publiziert als EINE\n  Applikation, damit alles gemeinsam versioniert und deployt wird.\n\n    Start \"Bewerbung eingegangen\"      (Formular bw-bewerbung-eingang)\n     → Mockup-Service-Task \"Eingangsbestätigung senden\"\n     → Business-Rule-Task \"Vorprüfung\"  (DMN bw-vorpruefung →\n                                          pruefung {empfehlung, runden})\n     → (X) \"Einladen?\"\n          empfehlung = \"interview\" → Interviews\n          sonst (Default)          → Absage\n     → Call-Activity \"Interview durchführen\"   (Multi-Instance, seriell,\n          einmal je Eintrag in pruefung.runden; ruft bw-interview auf und\n          sammelt je Runde eine bewertung in bewertungen)\n     → Script \"Interviews auswerten\"    (every … satisfies + string join\n                                          → interviewFazit)\n     → User-Task \"Einstellung entscheiden\"   (Formular bw-entscheidung)\n        └─ Boundary-Timer P3D, nicht unterbrechend → Erinnerung\n     → (X) \"Zusage?\"\n          zusage = true → Mockup \"Vertrag im HR-System anlegen\"\n                            └─ Error-Boundary HR_UNERREICHBAR\n                                 → User-Task \"Vertrag manuell anlegen\"\n          sonst (Default) → Absage\n     ⟳ Event-Subprozess \"Rückzug\" (Nachricht bw-rueckzug, unterbrechend):\n          kann JEDERZEIT eintreffen und beendet den Fall.\n\n  Warum die Elemente so gewählt sind, steht in der \u003cdocumentation\u003e am jeweiligen\n  Element — der Modeler zeigt sie im Feld „Dokumentation\", die Tasks-App zeigt\n  sie der bearbeitenden Person über dem Formular, und das Replay zeigt sie neben\n  dem Diagramm.\n\n  Beide Service-Tasks laufen im Mockup-Modus (ADR-0120): die Engine simuliert\n  das Umsystem selbst, mit Antwortzeit und Ausfallquote. Die Applikation läuft\n  damit end-to-end, bevor eine einzige echte Anbindung existiert — und \"Vertrag\n  im HR-System anlegen\" fällt in etwa jedem fünften Lauf aus, damit der\n  Fehlerpfad nicht nur gemodellt, sondern auch erlebt wird.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas.dev/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_bw_bewerbung\" targetNamespace=\"http://atlas/examples\"\u003e\n\n  \u003cmessage id=\"msg_rueckzug\" name=\"bw-rueckzug\"\u003e\n    \u003cextensionElements\u003e\n      \u003czeebe:subscription correlationKey=\"=email\"/\u003e\n    \u003c/extensionElements\u003e\n  \u003c/message\u003e\n\n  \u003cerror id=\"err_hr\" name=\"HR-System nicht erreichbar\" errorCode=\"HR_UNERREICHBAR\"/\u003e\n\n  \u003cprocess id=\"bw-bewerbung\" name=\"Bewerbung bearbeiten\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eFührt eine Bewerbung von der Eingangsbestätigung bis zur Zusage oder Absage.\n\nStartvariablen (Formular bw-bewerbung-eingang): name, email, stelle, abschluss (\"keiner\" | \"lehre\" | \"bachelor\" | \"master\"), erfahrungJahre (Zahl).\nErgebnisvariablen: pruefung {empfehlung, runden}, bewertungen (Liste je Interviewrunde), interviewFazit, zusage, begruendung.\n\nTeil der Applikation \"Bewerbermanagement\": ruft bw-interview auf und nutzt die DMN-Entscheidung bw-vorpruefung. Alle Artefakte tragen das Präfix bw- und werden gemeinsam publiziert.\u003c/documentation\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Bewerbung eingegangen\"\u003e\n      \u003cdocumentation\u003eStartet, sobald jemand das Bewerbungsformular abschickt. Das Start-Formular ist zugleich der Datenvertrag des Prozesses: alles, was später gerechnet oder entschieden wird, kommt von hier oder wird daraus abgeleitet.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"bw-bewerbung-eingang\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003coutgoing\u003ef_start_eingang\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cserviceTask id=\"eingang\" name=\"Eingangsbestätigung senden\"\u003e\n      \u003cdocumentation\u003eBestätigt der bewerbenden Person den Eingang — die erste Zusage, die eine Bewerbung verdient, und der Grund, warum dieser Schritt vor der Prüfung steht.\n\nLäuft im Mockup-Modus: die Engine simuliert das Mailsystem mit ein bis drei Sekunden Antwortzeit. Für den Produktivbetrieb wird hier ein Mail-Connector gebunden — das Modell ändert sich dabei nur an diesem einen Element.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT3S\"\n          resultExpression=\"={ kanal: \u0026quot;E-Mail\u0026quot;, an: email }\"\n          resultVariable=\"bestaetigung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_eingang\u003c/incoming\u003e\n      \u003coutgoing\u003ef_eingang_pruefung\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cbusinessRuleTask id=\"pruefung\" name=\"Vorprüfung\"\u003e\n      \u003cdocumentation\u003eEntscheidet aus Abschluss und Berufserfahrung, ob eingeladen wird und wie viele Interviewrunden es gibt.\n\nBewusst eine DMN-Tabelle und kein Gateway-Gestrüpp: die Regel ändert sich häufiger als der Ablauf, und HR kann sie in der Tabelle lesen und pflegen, ohne das Prozessmodell anzufassen. Das Ergebnis ist ein Kontext {empfehlung, runden} in der Variablen pruefung.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:calledDecision decisionId=\"bw-vorpruefung\" resultVariable=\"pruefung\"/\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=abschluss\" target=\"abschluss\"/\u003e\n          \u003czeebe:input source=\"=erfahrungJahre\" target=\"erfahrungJahre\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_eingang_pruefung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_pruefung_gw\u003c/outgoing\u003e\n    \u003c/businessRuleTask\u003e\n\n    \u003cexclusiveGateway id=\"gw_pruefung\" name=\"Einladen?\" default=\"f_gw_pruefung_absage\"\u003e\n      \u003cdocumentation\u003eVerzweigt auf das Ergebnis der Vorprüfung. Das Gateway entscheidet nichts selbst — es liest nur, was die DMN-Tabelle entschieden hat. Der Default-Zweig führt zur Absage: was nicht ausdrücklich eingeladen wird, wird abgesagt, und kein Fall bleibt unbeantwortet.\u003c/documentation\u003e\n      \u003cincoming\u003ef_pruefung_gw\u003c/incoming\u003e\n      \u003coutgoing\u003ef_gw_interviews\u003c/outgoing\u003e\n      \u003coutgoing\u003ef_gw_pruefung_absage\u003c/outgoing\u003e\n    \u003c/exclusiveGateway\u003e\n\n    \u003ccallActivity id=\"interviews\" name=\"Interview durchführen\"\u003e\n      \u003cdocumentation\u003eRuft den eigenständigen Prozess bw-interview auf — einmal je Runde aus pruefung.runden, seriell, weil die zweite Runde erst nach dem Feedback der ersten Sinn ergibt.\n\nDer Aufruf ist ein Vertrag, kein Datentopf: propagateAllParentVariables=\"false\" schickt nur name, stelle und runde hinein, propagateAllChildVariables=\"false\" holt nur bewertung heraus. So kann der Teilprozess weiterentwickelt werden, ohne dass hier etwas kaputtgeht.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:calledElement processId=\"bw-interview\"\n          propagateAllParentVariables=\"false\" propagateAllChildVariables=\"false\"/\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=name\" target=\"name\"/\u003e\n          \u003czeebe:input source=\"=stelle\" target=\"stelle\"/\u003e\n          \u003czeebe:input source=\"=runde\" target=\"runde\"/\u003e\n          \u003czeebe:output source=\"=bewertung\" target=\"bewertung\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_gw_interviews\u003c/incoming\u003e\n      \u003coutgoing\u003ef_interviews_auswertung\u003c/outgoing\u003e\n      \u003cmultiInstanceLoopCharacteristics isSequential=\"true\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:loopCharacteristics inputCollection=\"=pruefung.runden\" inputElement=\"runde\"\n            outputCollection=\"bewertungen\" outputElement=\"=bewertung\"/\u003e\n        \u003c/extensionElements\u003e\n      \u003c/multiInstanceLoopCharacteristics\u003e\n    \u003c/callActivity\u003e\n\n    \u003cscriptTask id=\"auswertung\" name=\"Interviews auswerten\"\u003e\n      \u003cdocumentation\u003eVerdichtet die gesammelten Bewertungen zu einem Satz, den ein Mensch in der Aufgabe lesen kann: erst das Urteil über alle Runden (every … satisfies), dann jede Runde einzeln (for … return + string join).\n\nEin Inline-FEEL-Script, kein Worker: die Berechnung braucht nichts ausser den Variablen, die die Instanz schon trägt — und sie gehört genau hierhin, nicht ins Formular, damit sie im Replay nachvollziehbar bleibt.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:script expression=\"= (if every b in bewertungen satisfies b.empfehlung = \u0026quot;ja\u0026quot; then \u0026quot;Alle Runden empfehlen: ja\u0026quot; else \u0026quot;Nicht alle Runden empfehlen\u0026quot;) + \u0026quot; — \u0026quot; + string join(for b in bewertungen return b.runde + \u0026quot;: \u0026quot; + b.empfehlung + \u0026quot; (\u0026quot; + b.notiz + \u0026quot;)\u0026quot;, \u0026quot; | \u0026quot;)\"\n          resultVariable=\"interviewFazit\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_interviews_auswertung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_auswertung_entscheidung\u003c/outgoing\u003e\n    \u003c/scriptTask\u003e\n\n    \u003cuserTask id=\"entscheidung\" name=\"Einstellung entscheiden\"\u003e\n      \u003cdocumentation\u003eLies das Fazit aus allen Interviewrunden und entscheide über die Einstellung. Ob die Runden einstimmig waren, steht im ersten Satz — die Entscheidung bleibt deine.\n\nBitte begründe kurz: die Begründung geht in die Absage bzw. in die Personalakte.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"hr\"/\u003e\n        \u003czeebe:formDefinition formId=\"bw-entscheidung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_auswertung_entscheidung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_entscheidung_gw\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cboundaryEvent id=\"erinnerung_timer\" name=\"nach 3 Tagen\" attachedToRef=\"entscheidung\" cancelActivity=\"false\"\u003e\n      \u003cdocumentation\u003eNicht unterbrechend: die Erinnerung läuft neben der offenen Aufgabe her, statt sie abzubrechen. Eine unterbrechende Frist wäre hier falsch — eine unbeantwortete Bewerbung darf nicht verfallen, sie soll nur nicht liegen bleiben.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_erinnerung\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDuration\u003eP3D\u003c/timeDuration\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cserviceTask id=\"erinnerung\" name=\"Erinnerung senden\"\u003e\n      \u003cdocumentation\u003eStupst HR an, dass eine Entscheidung offen ist. Ebenfalls Mockup — im Produktivbetrieb ein Mail-Connector an die Gruppe hr.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ erinnert: true }\"\n          resultVariable=\"erinnerung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_erinnerung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_erinnerung_end\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cendEvent id=\"end_erinnert\" name=\"Erinnert\"\u003e\n      \u003cdocumentation\u003eBeendet nur den Erinnerungszweig. Der Hauptzweig — die offene Aufgabe — läuft weiter.\u003c/documentation\u003e\n      \u003cincoming\u003ef_erinnerung_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cexclusiveGateway id=\"gw_zusage\" name=\"Zusage?\" default=\"f_gw_zusage_absage\"\u003e\n      \u003cdocumentation\u003eLiest die Entscheidung aus dem Formular. Auch hier führt der Default zur Absage — der Weg, den ein Fall nimmt, wenn niemand ausdrücklich zusagt.\u003c/documentation\u003e\n      \u003cincoming\u003ef_entscheidung_gw\u003c/incoming\u003e\n      \u003coutgoing\u003ef_gw_vertrag\u003c/outgoing\u003e\n      \u003coutgoing\u003ef_gw_zusage_absage\u003c/outgoing\u003e\n    \u003c/exclusiveGateway\u003e\n\n    \u003cserviceTask id=\"vertrag\" name=\"Vertrag im HR-System anlegen\"\u003e\n      \u003cdocumentation\u003eLegt den Vertragsdatensatz im HR-System an — der eine Schritt, bei dem der Prozess ein fremdes System verändert.\n\nMockup mit Ausfallquote: in etwa jedem fünften Lauf wirft der Task den Fehler HR_UNERREICHBAR. Das ist Absicht — ein Umsystem fällt aus, und ein Prozess, der das nicht modelliert, bleibt im Produktivbetrieb stecken.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT4S\"\n          resultExpression=\"={ vertragsnummer: \u0026quot;V-2026-0815\u0026quot; }\"\n          resultVariable=\"vertrag\"\n          failRate=\"0.2\" errorCode=\"HR_UNERREICHBAR\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_gw_vertrag\u003c/incoming\u003e\n      \u003coutgoing\u003ef_vertrag_end\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cboundaryEvent id=\"vertrag_fehler\" name=\"HR-System nicht erreichbar\" attachedToRef=\"vertrag\"\u003e\n      \u003cdocumentation\u003eFängt den fachlichen Fehler des Umsystems ab und leitet ihn in einen Weg, den ein Mensch gehen kann. Unterbrechend, weil der automatische Versuch gescheitert ist und nicht weiterlaufen darf.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_fehler_manuell\u003c/outgoing\u003e\n      \u003cerrorEventDefinition errorRef=\"err_hr\"/\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cuserTask id=\"vertrag_manuell\" name=\"Vertrag manuell anlegen\"\u003e\n      \u003cdocumentation\u003eDas HR-System war nicht erreichbar. Lege den Vertrag dort von Hand an und schliesse die Aufgabe ab, sobald das erledigt ist.\n\nDer Fall ist damit nicht verloren, sondern zugewiesen — genau das unterscheidet einen modellierten Fehlerpfad von einem Incident.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"hr\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_fehler_manuell\u003c/incoming\u003e\n      \u003coutgoing\u003ef_manuell_end\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cendEvent id=\"end_manuell\" name=\"Manuell eingestellt\"\u003e\n      \u003cincoming\u003ef_manuell_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cendEvent id=\"end_eingestellt\" name=\"Eingestellt\"\u003e\n      \u003cdocumentation\u003eHier hört diese Applikation auf — und das Onboarding fängt an (siehe examples/onboarding).\u003c/documentation\u003e\n      \u003cincoming\u003ef_vertrag_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cexclusiveGateway id=\"gw_absage\"\u003e\n      \u003cdocumentation\u003eFührt die beiden Absage-Wege zusammen — die frühe aus der Vorprüfung und die späte aus der Entscheidung —, damit \"Absage senden\" nur einmal im Modell steht.\u003c/documentation\u003e\n      \u003cincoming\u003ef_gw_pruefung_absage\u003c/incoming\u003e\n      \u003cincoming\u003ef_gw_zusage_absage\u003c/incoming\u003e\n      \u003coutgoing\u003ef_gwabsage_absage\u003c/outgoing\u003e\n    \u003c/exclusiveGateway\u003e\n\n    \u003cserviceTask id=\"absage\" name=\"Absage senden\"\u003e\n      \u003cdocumentation\u003eSagt ab — mit der Begründung aus der Entscheidung, sofern es eine gab. Mockup wie die Eingangsbestätigung.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ kanal: \u0026quot;E-Mail\u0026quot;, an: email }\"\n          resultVariable=\"absage\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_gwabsage_absage\u003c/incoming\u003e\n      \u003coutgoing\u003ef_absage_end\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cendEvent id=\"end_abgelehnt\" name=\"Abgelehnt\"\u003e\n      \u003cincoming\u003ef_absage_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csubProcess id=\"rueckzug\" name=\"Rückzug\" triggeredByEvent=\"true\"\u003e\n      \u003cdocumentation\u003eEin Bewerber kann jederzeit zurückziehen — vor der Vorprüfung, zwischen zwei Interviews, nach der Zusage. Genau dafür ist ein Event-Subprozess da: er hängt an keinem Punkt des Ablaufs, sondern am ganzen Prozess.\n\nAusgelöst durch die Nachricht bw-rueckzug, korreliert über die E-Mail-Adresse:\nPOST /api/v1/messages {\"name\":\"bw-rueckzug\",\"correlationKey\":\"ada@example.org\"}\n\nDie Output-Zuordnung ist kein Beiwerk: was ein Subprozess in seinem Scope schreibt, verschwindet mit ihm (ADR-0074). Ohne sie wäre `status` genau so lange gesetzt, wie niemand hinschaut.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:output source=\"=status\" target=\"status\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cstartEvent id=\"start_rueckzug\" name=\"Rückzug gemeldet\" isInterrupting=\"true\"\u003e\n        \u003cdocumentation\u003eUnterbrechend: der Rückzug beendet den laufenden Fall, statt neben ihm herzulaufen. Eine offene Interview-Aufgabe verschwindet damit aus dem Posteingang.\u003c/documentation\u003e\n        \u003coutgoing\u003ef_rueckzug_erfassen\u003c/outgoing\u003e\n        \u003cmessageEventDefinition messageRef=\"msg_rueckzug\"/\u003e\n      \u003c/startEvent\u003e\n      \u003cscriptTask id=\"rueckzug_erfassen\" name=\"Rückzug vermerken\"\u003e\n        \u003cdocumentation\u003eHält fest, wie der Fall geendet hat. Ohne diesen Vermerk sähe eine zurückgezogene Bewerbung in der Auswertung aus wie eine abgelehnte.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script expression=\"= \u0026quot;zurückgezogen\u0026quot;\" resultVariable=\"status\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_rueckzug_erfassen\u003c/incoming\u003e\n        \u003coutgoing\u003ef_erfassen_end\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n      \u003cendEvent id=\"end_rueckzug\" name=\"Zurückgezogen\"\u003e\n        \u003cincoming\u003ef_erfassen_end\u003c/incoming\u003e\n      \u003c/endEvent\u003e\n      \u003csequenceFlow id=\"f_rueckzug_erfassen\" sourceRef=\"start_rueckzug\" targetRef=\"rueckzug_erfassen\"/\u003e\n      \u003csequenceFlow id=\"f_erfassen_end\" sourceRef=\"rueckzug_erfassen\" targetRef=\"end_rueckzug\"/\u003e\n    \u003c/subProcess\u003e\n\n    \u003csequenceFlow id=\"f_start_eingang\" sourceRef=\"start\" targetRef=\"eingang\"/\u003e\n    \u003csequenceFlow id=\"f_eingang_pruefung\" sourceRef=\"eingang\" targetRef=\"pruefung\"/\u003e\n    \u003csequenceFlow id=\"f_pruefung_gw\" sourceRef=\"pruefung\" targetRef=\"gw_pruefung\"/\u003e\n    \u003csequenceFlow id=\"f_gw_interviews\" name=\"einladen\" sourceRef=\"gw_pruefung\" targetRef=\"interviews\"\u003e\n      \u003cconditionExpression\u003e= pruefung.empfehlung = \"interview\"\u003c/conditionExpression\u003e\n    \u003c/sequenceFlow\u003e\n    \u003csequenceFlow id=\"f_gw_pruefung_absage\" name=\"absagen\" sourceRef=\"gw_pruefung\" targetRef=\"gw_absage\"/\u003e\n    \u003csequenceFlow id=\"f_interviews_auswertung\" sourceRef=\"interviews\" targetRef=\"auswertung\"/\u003e\n    \u003csequenceFlow id=\"f_auswertung_entscheidung\" sourceRef=\"auswertung\" targetRef=\"entscheidung\"/\u003e\n    \u003csequenceFlow id=\"f_entscheidung_gw\" sourceRef=\"entscheidung\" targetRef=\"gw_zusage\"/\u003e\n    \u003csequenceFlow id=\"f_gw_vertrag\" name=\"ja\" sourceRef=\"gw_zusage\" targetRef=\"vertrag\"\u003e\n      \u003cconditionExpression\u003e= zusage\u003c/conditionExpression\u003e\n    \u003c/sequenceFlow\u003e\n    \u003csequenceFlow id=\"f_gw_zusage_absage\" name=\"nein\" sourceRef=\"gw_zusage\" targetRef=\"gw_absage\"/\u003e\n    \u003csequenceFlow id=\"f_vertrag_end\" sourceRef=\"vertrag\" targetRef=\"end_eingestellt\"/\u003e\n    \u003csequenceFlow id=\"f_erinnerung\" sourceRef=\"erinnerung_timer\" targetRef=\"erinnerung\"/\u003e\n    \u003csequenceFlow id=\"f_erinnerung_end\" sourceRef=\"erinnerung\" targetRef=\"end_erinnert\"/\u003e\n    \u003csequenceFlow id=\"f_fehler_manuell\" sourceRef=\"vertrag_fehler\" targetRef=\"vertrag_manuell\"/\u003e\n    \u003csequenceFlow id=\"f_manuell_end\" sourceRef=\"vertrag_manuell\" targetRef=\"end_manuell\"/\u003e\n    \u003csequenceFlow id=\"f_gwabsage_absage\" sourceRef=\"gw_absage\" targetRef=\"absage\"/\u003e\n    \u003csequenceFlow id=\"f_absage_end\" sourceRef=\"absage\" targetRef=\"end_abgelehnt\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane\" bpmnElement=\"bw-bewerbung\"\u003e\n      \u003cbpmndi:BPMNShape id=\"di_start\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"160\" y=\"222\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"136\" y=\"262\" width=\"84\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_eingang\" bpmnElement=\"eingang\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_pruefung\" bpmnElement=\"pruefung\"\u003e\n        \u003cdc:Bounds x=\"400\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_gw_pruefung\" bpmnElement=\"gw_pruefung\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"550\" y=\"215\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"545\" y=\"185\" width=\"60\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_interviews\" bpmnElement=\"interviews\"\u003e\n        \u003cdc:Bounds x=\"650\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_auswertung\" bpmnElement=\"auswertung\"\u003e\n        \u003cdc:Bounds x=\"800\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_entscheidung\" bpmnElement=\"entscheidung\"\u003e\n        \u003cdc:Bounds x=\"950\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_erinnerung_timer\" bpmnElement=\"erinnerung_timer\"\u003e\n        \u003cdc:Bounds x=\"982\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1022\" y=\"186\" width=\"76\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_erinnerung\" bpmnElement=\"erinnerung\"\u003e\n        \u003cdc:Bounds x=\"950\" y=\"60\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_erinnert\" bpmnElement=\"end_erinnert\"\u003e\n        \u003cdc:Bounds x=\"1100\" y=\"82\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1094\" y=\"122\" width=\"48\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_gw_zusage\" bpmnElement=\"gw_zusage\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"1100\" y=\"215\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1097\" y=\"185\" width=\"56\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_vertrag\" bpmnElement=\"vertrag\"\u003e\n        \u003cdc:Bounds x=\"1200\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_vertrag_fehler\" bpmnElement=\"vertrag_fehler\"\u003e\n        \u003cdc:Bounds x=\"1232\" y=\"262\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1276\" y=\"292\" width=\"104\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_vertrag_manuell\" bpmnElement=\"vertrag_manuell\"\u003e\n        \u003cdc:Bounds x=\"1200\" y=\"360\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_manuell\" bpmnElement=\"end_manuell\"\u003e\n        \u003cdc:Bounds x=\"1350\" y=\"382\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1326\" y=\"422\" width=\"84\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_eingestellt\" bpmnElement=\"end_eingestellt\"\u003e\n        \u003cdc:Bounds x=\"1350\" y=\"222\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1338\" y=\"190\" width=\"60\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_gw_absage\" bpmnElement=\"gw_absage\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"1100\" y=\"495\" width=\"50\" height=\"50\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_absage\" bpmnElement=\"absage\"\u003e\n        \u003cdc:Bounds x=\"1200\" y=\"480\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_abgelehnt\" bpmnElement=\"end_abgelehnt\"\u003e\n        \u003cdc:Bounds x=\"1350\" y=\"502\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1338\" y=\"542\" width=\"60\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_rueckzug\" bpmnElement=\"rueckzug\" isExpanded=\"true\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"600\" width=\"420\" height=\"160\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_start_rueckzug\" bpmnElement=\"start_rueckzug\"\u003e\n        \u003cdc:Bounds x=\"290\" y=\"662\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"272\" y=\"702\" width=\"72\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_rueckzug_erfassen\" bpmnElement=\"rueckzug_erfassen\"\u003e\n        \u003cdc:Bounds x=\"380\" y=\"640\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_rueckzug\" bpmnElement=\"end_rueckzug\"\u003e\n        \u003cdc:Bounds x=\"530\" y=\"662\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"512\" y=\"702\" width=\"72\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"di_f_start_eingang\" bpmnElement=\"f_start_eingang\"\u003e\n        \u003cdi:waypoint x=\"196\" y=\"240\"/\u003e\u003cdi:waypoint x=\"250\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_eingang_pruefung\" bpmnElement=\"f_eingang_pruefung\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"240\"/\u003e\u003cdi:waypoint x=\"400\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_pruefung_gw\" bpmnElement=\"f_pruefung_gw\"\u003e\n        \u003cdi:waypoint x=\"500\" y=\"240\"/\u003e\u003cdi:waypoint x=\"550\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_gw_interviews\" bpmnElement=\"f_gw_interviews\"\u003e\n        \u003cdi:waypoint x=\"600\" y=\"240\"/\u003e\u003cdi:waypoint x=\"650\" y=\"240\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"600\" y=\"214\" width=\"50\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_gw_pruefung_absage\" bpmnElement=\"f_gw_pruefung_absage\"\u003e\n        \u003cdi:waypoint x=\"575\" y=\"265\"/\u003e\u003cdi:waypoint x=\"575\" y=\"520\"/\u003e\u003cdi:waypoint x=\"1100\" y=\"520\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"583\" y=\"280\" width=\"50\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_interviews_auswertung\" bpmnElement=\"f_interviews_auswertung\"\u003e\n        \u003cdi:waypoint x=\"750\" y=\"240\"/\u003e\u003cdi:waypoint x=\"800\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_auswertung_entscheidung\" bpmnElement=\"f_auswertung_entscheidung\"\u003e\n        \u003cdi:waypoint x=\"900\" y=\"240\"/\u003e\u003cdi:waypoint x=\"950\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_entscheidung_gw\" bpmnElement=\"f_entscheidung_gw\"\u003e\n        \u003cdi:waypoint x=\"1050\" y=\"240\"/\u003e\u003cdi:waypoint x=\"1100\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_gw_vertrag\" bpmnElement=\"f_gw_vertrag\"\u003e\n        \u003cdi:waypoint x=\"1150\" y=\"240\"/\u003e\u003cdi:waypoint x=\"1200\" y=\"240\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1156\" y=\"214\" width=\"30\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_gw_zusage_absage\" bpmnElement=\"f_gw_zusage_absage\"\u003e\n        \u003cdi:waypoint x=\"1125\" y=\"265\"/\u003e\u003cdi:waypoint x=\"1125\" y=\"495\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1133\" y=\"280\" width=\"34\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_vertrag_end\" bpmnElement=\"f_vertrag_end\"\u003e\n        \u003cdi:waypoint x=\"1300\" y=\"240\"/\u003e\u003cdi:waypoint x=\"1350\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_erinnerung\" bpmnElement=\"f_erinnerung\"\u003e\n        \u003cdi:waypoint x=\"1000\" y=\"182\"/\u003e\u003cdi:waypoint x=\"1000\" y=\"140\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_erinnerung_end\" bpmnElement=\"f_erinnerung_end\"\u003e\n        \u003cdi:waypoint x=\"1050\" y=\"100\"/\u003e\u003cdi:waypoint x=\"1100\" y=\"100\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_fehler_manuell\" bpmnElement=\"f_fehler_manuell\"\u003e\n        \u003cdi:waypoint x=\"1250\" y=\"298\"/\u003e\u003cdi:waypoint x=\"1250\" y=\"360\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_manuell_end\" bpmnElement=\"f_manuell_end\"\u003e\n        \u003cdi:waypoint x=\"1300\" y=\"400\"/\u003e\u003cdi:waypoint x=\"1350\" y=\"400\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_gwabsage_absage\" bpmnElement=\"f_gwabsage_absage\"\u003e\n        \u003cdi:waypoint x=\"1150\" y=\"520\"/\u003e\u003cdi:waypoint x=\"1200\" y=\"520\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_absage_end\" bpmnElement=\"f_absage_end\"\u003e\n        \u003cdi:waypoint x=\"1300\" y=\"520\"/\u003e\u003cdi:waypoint x=\"1350\" y=\"520\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_rueckzug_erfassen\" bpmnElement=\"f_rueckzug_erfassen\"\u003e\n        \u003cdi:waypoint x=\"326\" y=\"680\"/\u003e\u003cdi:waypoint x=\"380\" y=\"680\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_erfassen_end\" bpmnElement=\"f_erfassen_end\"\u003e\n        \u003cdi:waypoint x=\"480\" y=\"680\"/\u003e\u003cdi:waypoint x=\"530\" y=\"680\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"},{"processId":"bw-interview","xml":"\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Interview durchführen — der wiederverwendbare Teilprozess der Applikation\n  \"Bewerbermanagement\".\n\n  bw-bewerbung ruft ihn als Call-Activity auf, einmal je Interviewrunde. Er ist\n  ein eigenständig deployter Prozess, kein eingebetteter Subprozess: so kann ihn\n  später auch ein anderer Prozess aufrufen (etwa eine interne Bewerbung), und er\n  lässt sich einzeln testen und versionieren.\n\n    Start \"Interview angesetzt\"        (Eingabe: name, stelle, runde)\n     → Mockup-Service-Task \"Termin vereinbaren\"\n     → User-Task \"Feedback erfassen\"    (Formular bw-interview-feedback)\n        └─ Boundary-Timer P14D (unterbrechend)\n             → Script \"Ohne Feedback bewerten\" → Ende \"Frist abgelaufen\"\n     → Script \"Bewertung erstellen\"\n     → Ende \"Interview abgeschlossen\"   (Ausgabe: bewertung)\n\n  Der Datenvertrag ist die eigentliche Lektion: hinein gehen genau name, stelle\n  und runde, heraus kommt genau `bewertung`. BEIDE Enden erfüllen ihn — auch der\n  Fristablauf schreibt eine bewertung, sonst fehlte dem Aufrufer beim Einsammeln\n  der Multi-Instance-Ergebnisse ein Eintrag und die Instanz bliebe mit einem\n  Incident stehen.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas.dev/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_bw_interview\" targetNamespace=\"http://atlas/examples\"\u003e\n\n  \u003cprocess id=\"bw-interview\" name=\"Interview durchführen\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eFührt eine einzelne Interviewrunde durch und liefert genau eine Bewertung zurück.\n\nEingabe (vom Aufrufer gemappt): name, stelle, runde.\nAusgabe: bewertung {runde, empfehlung (\"ja\" | \"nein\"), notiz}.\n\nTeil der Applikation \"Bewerbermanagement\". Aufgerufen von bw-bewerbung als Call-Activity, einmal je Eintrag in pruefung.runden.\u003c/documentation\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Interview angesetzt\"\u003e\n      \u003cdocumentation\u003eKein Start-Formular: dieser Prozess wird nicht von Hand gestartet, sondern vom Aufrufer — der die Eingabevariablen mitgibt.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_start_termin\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cserviceTask id=\"termin\" name=\"Termin vereinbaren\"\u003e\n      \u003cdocumentation\u003eSchlägt der bewerbenden Person Termine vor und hält den bestätigten fest. Mockup-Modus — im Produktivbetrieb hängt hier die Kalender-Anbindung.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT3S\"\n          resultExpression=\"={ vereinbart: true, kanal: \u0026quot;Video\u0026quot; }\"\n          resultVariable=\"termin\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_termin\u003c/incoming\u003e\n      \u003coutgoing\u003ef_termin_feedback\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cuserTask id=\"feedback\" name=\"Feedback erfassen\"\u003e\n      \u003cdocumentation\u003eHalte direkt nach dem Gespräch fest, ob du diese Person für die Stelle empfiehlst, und begründe es in zwei Sätzen. Beides geht in die Einstellungsentscheidung ein.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"hr\"/\u003e\n        \u003czeebe:formDefinition formId=\"bw-interview-feedback\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_termin_feedback\u003c/incoming\u003e\n      \u003coutgoing\u003ef_feedback_bewerten\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cboundaryEvent id=\"frist\" name=\"14 Tage ohne Feedback\" attachedToRef=\"feedback\"\u003e\n      \u003cdocumentation\u003eUnterbrechend, im Gegensatz zur Erinnerung im Hauptprozess: eine Runde ohne Feedback muss irgendwann enden, sonst wartet die ganze Bewerbung auf sie.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_frist_kein\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDuration\u003eP14D\u003c/timeDuration\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cscriptTask id=\"bewerten\" name=\"Bewertung erstellen\"\u003e\n      \u003cdocumentation\u003eBaut aus den Formularfeldern die eine Variable, die der Aufrufer erwartet. Der Teilprozess entscheidet damit selbst, wie sein Ergebnis aussieht — der Aufrufer kennt nur `bewertung`, nicht die Feldnamen des Formulars.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:script expression=\"= { runde: runde, empfehlung: empfehlung, notiz: notiz }\"\n          resultVariable=\"bewertung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_feedback_bewerten\u003c/incoming\u003e\n      \u003coutgoing\u003ef_bewerten_end\u003c/outgoing\u003e\n    \u003c/scriptTask\u003e\n\n    \u003cendEvent id=\"end_ok\" name=\"Interview abgeschlossen\"\u003e\n      \u003cincoming\u003ef_bewerten_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cscriptTask id=\"kein_feedback\" name=\"Ohne Feedback bewerten\"\u003e\n      \u003cdocumentation\u003eErfüllt den Datenvertrag auch dann, wenn niemand geantwortet hat: eine Bewertung mit der Empfehlung \"nein\" und einer Notiz, die den Grund nennt. Ohne diesen Schritt fehlte dem Aufrufer ein Listeneintrag.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:script expression=\"= { runde: runde, empfehlung: \u0026quot;nein\u0026quot;, notiz: \u0026quot;Kein Feedback innerhalb der Frist\u0026quot; }\"\n          resultVariable=\"bewertung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_frist_kein\u003c/incoming\u003e\n      \u003coutgoing\u003ef_kein_end\u003c/outgoing\u003e\n    \u003c/scriptTask\u003e\n\n    \u003cendEvent id=\"end_frist\" name=\"Frist abgelaufen\"\u003e\n      \u003cincoming\u003ef_kein_end\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_termin\" sourceRef=\"start\" targetRef=\"termin\"/\u003e\n    \u003csequenceFlow id=\"f_termin_feedback\" sourceRef=\"termin\" targetRef=\"feedback\"/\u003e\n    \u003csequenceFlow id=\"f_feedback_bewerten\" sourceRef=\"feedback\" targetRef=\"bewerten\"/\u003e\n    \u003csequenceFlow id=\"f_bewerten_end\" sourceRef=\"bewerten\" targetRef=\"end_ok\"/\u003e\n    \u003csequenceFlow id=\"f_frist_kein\" sourceRef=\"frist\" targetRef=\"kein_feedback\"/\u003e\n    \u003csequenceFlow id=\"f_kein_end\" sourceRef=\"kein_feedback\" targetRef=\"end_frist\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane\" bpmnElement=\"bw-interview\"\u003e\n      \u003cbpmndi:BPMNShape id=\"di_start\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"160\" y=\"222\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"138\" y=\"262\" width=\"80\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_termin\" bpmnElement=\"termin\"\u003e\n        \u003cdc:Bounds x=\"250\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_feedback\" bpmnElement=\"feedback\"\u003e\n        \u003cdc:Bounds x=\"400\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_frist\" bpmnElement=\"frist\"\u003e\n        \u003cdc:Bounds x=\"432\" y=\"262\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"290\" y=\"300\" width=\"140\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_bewerten\" bpmnElement=\"bewerten\"\u003e\n        \u003cdc:Bounds x=\"550\" y=\"200\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_ok\" bpmnElement=\"end_ok\"\u003e\n        \u003cdc:Bounds x=\"700\" y=\"222\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"676\" y=\"262\" width=\"84\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_kein_feedback\" bpmnElement=\"kein_feedback\"\u003e\n        \u003cdc:Bounds x=\"550\" y=\"360\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_frist\" bpmnElement=\"end_frist\"\u003e\n        \u003cdc:Bounds x=\"700\" y=\"382\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"682\" y=\"422\" width=\"72\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"di_f_start_termin\" bpmnElement=\"f_start_termin\"\u003e\n        \u003cdi:waypoint x=\"196\" y=\"240\"/\u003e\u003cdi:waypoint x=\"250\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_termin_feedback\" bpmnElement=\"f_termin_feedback\"\u003e\n        \u003cdi:waypoint x=\"350\" y=\"240\"/\u003e\u003cdi:waypoint x=\"400\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_feedback_bewerten\" bpmnElement=\"f_feedback_bewerten\"\u003e\n        \u003cdi:waypoint x=\"500\" y=\"240\"/\u003e\u003cdi:waypoint x=\"550\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_bewerten_end\" bpmnElement=\"f_bewerten_end\"\u003e\n        \u003cdi:waypoint x=\"650\" y=\"240\"/\u003e\u003cdi:waypoint x=\"700\" y=\"240\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_frist_kein\" bpmnElement=\"f_frist_kein\"\u003e\n        \u003cdi:waypoint x=\"450\" y=\"298\"/\u003e\u003cdi:waypoint x=\"450\" y=\"400\"/\u003e\u003cdi:waypoint x=\"550\" y=\"400\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_kein_end\" bpmnElement=\"f_kein_end\"\u003e\n        \u003cdi:waypoint x=\"650\" y=\"400\"/\u003e\u003cdi:waypoint x=\"700\" y=\"400\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"}],"start":{"processId":"bw-bewerbung","variables":{"email":"ada@example.org","name":"Ada Lovelace","stelle":"Software Engineer"}}}</script>
+<script>
+// ---- workshop: install the "Bewerbermanagement" application into this instance —
+// the application, its three forms, its DMN decision and both processes — publish it
+// as one release, then start a case with the chosen data. Same-origin REST in the
+// order a process developer would follow by hand. The artifacts live in #bw-data and
+// are generated from examples/bewerbermanagement/ (guarded by `go test ./examples`).
+(function initWerkstatt(){
+  const $ = (id) => document.getElementById(id);
+  const btn = $("wk-install");
+  if (!btn) return;
+  const statusEl = $("wk-status"), doneEl = $("wk-done");
+  const L = () => (document.documentElement.dataset.lang === "en" ? "en" : "de");
+  const T = (de, en) => (L() === "en" ? en : de);
+  const setStatus = (m, k) => { statusEl.textContent = m; statusEl.className = "tour-status" + (k ? " " + k : ""); };
+  async function apiCall(method, path, body, isXml){
+    const opts = { method, headers: {} };
+    if (body !== undefined){
+      opts.headers["Content-Type"] = isXml ? "application/xml" : "application/json";
+      opts.body = isXml ? body : JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    if (!res.ok){
+      let msg = text;
+      try { const j = JSON.parse(text); msg = j.error || j.message || text; } catch (e) { /* keep text */ }
+      const err = new Error(msg || (res.status + " " + res.statusText));
+      err.status = res.status; throw err;
+    }
+    return text ? JSON.parse(text) : {};
+  }
+  // Reuse the application if it is already here, so installing twice does not leave a
+  // second, empty copy behind: the drafts and forms would move to the newer one.
+  async function applicationId(name, key){
+    const list = await apiCall("GET", "/api/v1/applications");
+    const found = (list || []).find((a) => a.key === key && !a.protected);
+    if (found) return found.id;
+    return (await apiCall("POST", "/api/v1/applications", { name })).id;
+  }
+  btn.addEventListener("click", async () => {
+    btn.disabled = true; doneEl.hidden = true;
+    try {
+      const data = JSON.parse($("bw-data").textContent);
+      setStatus(T("Applikation anlegen\u2026", "Creating the application\u2026"));
+      const appId = await applicationId(data.application.name, data.application.key);
+      setStatus(T("Entscheidung hochladen\u2026", "Uploading the decision\u2026"));
+      try {
+        await apiCall("POST", "/api/v1/dmn-models?handle=" + encodeURIComponent(data.decision.handle),
+                      data.decision.xml, true);
+        await apiCall("POST", "/api/v1/dmnrefs",
+                      { name: data.decision.name, modelRef: data.decision.handle, projectId: appId });
+      } catch (e) {
+        if (e.status === 409) {
+          throw new Error(T("Diese Instanz bezieht DMN-Modelle von einem entfernten temis-Dienst. Lege "
+                            + "\u201ebw-vorpruefung\u201c dort an \u2014 der Rest der Applikation l\u00e4uft unver\u00e4ndert.",
+                            "This instance takes its DMN models from a remote temis service. Create "
+                            + "\u201cbw-vorpruefung\u201d there \u2014 the rest of the application is unchanged."));
+        }
+        throw e;
+      }
+      setStatus(T("Formulare speichern\u2026", "Saving the forms\u2026"));
+      for (const f of data.forms){
+        await apiCall("POST", "/api/v1/forms", { id: f.id, name: f.name, projectId: appId, schema: f.schema });
+      }
+      setStatus(T("Prozesse speichern\u2026", "Saving the processes\u2026"));
+      for (const proc of data.processes){
+        await apiCall("POST", "/api/v1/drafts?projectId=" + encodeURIComponent(appId), proc.xml, true);
+      }
+      setStatus(T("Applikation publizieren\u2026", "Publishing the application\u2026"));
+      const pub = await apiCall("POST", "/api/v1/applications/" + appId + "/publish", { note: "Handbuch \u2013 Werkstatt" });
+      if (!pub.deployed) throw new Error(pub.reason || T("Publizieren abgelehnt.", "Publish refused."));
+      const main = (pub.definitions || []).find((d) => d.processId === data.start.processId);
+      if (!main) throw new Error(T("Publish lieferte keine Prozessdefinition.", "Publish returned no process definition."));
+      setStatus(T("Bewerbung starten\u2026", "Starting one application\u2026"));
+      const vars = Object.assign({}, data.start.variables, {
+        abschluss: $("wk-abschluss").value,
+        erfahrungJahre: Number($("wk-jahre").value || 0),
+      });
+      await apiCall("POST", "/api/v1/processes/" + main.key + "/instances", { variables: vars });
+      const runden = vars.abschluss === "master" && vars.erfahrungJahre >= 5 ? 2
+                   : (vars.abschluss === "master" || vars.abschluss === "bachelor") && vars.erfahrungJahre >= 2 ? 1
+                   : vars.abschluss === "lehre" && vars.erfahrungJahre >= 5 ? 1 : 0;
+      setStatus(runden > 0
+        ? T("\u2713 Release " + (pub.release ? pub.release.version : 1) + " publiziert \u2014 die Bewerbung l\u00e4uft, "
+            + runden + " Interviewrunde(n). Die erste Aufgabe wartet im Posteingang.",
+            "\u2713 Release " + (pub.release ? pub.release.version : 1) + " published \u2014 the application is running with "
+            + runden + " interview round(s). The first task is waiting in the inbox.")
+        : T("\u2713 Release " + (pub.release ? pub.release.version : 1) + " publiziert \u2014 diese Bewerbung wird "
+            + "abgesagt, ohne Interview. Der Lauf steht in Operations.",
+            "\u2713 Release " + (pub.release ? pub.release.version : 1) + " published \u2014 this application is "
+            + "rejected without an interview. The run is in Operations."), "ok");
+      doneEl.hidden = false;
+    } catch (e){
+      if (e.status === 401 || e.status === 403){
+        setStatus(T("Bitte melde dich zuerst in der App an, dann versuche es erneut.",
+                    "Please sign in to the app first, then try again."), "err");
+      } else {
+        setStatus(T("Fehler: ", "Error: ") + e.message, "err");
+      }
+    } finally { btn.disabled = false; }
+  });
+})();
+</script>
 <script>
 // ---- recipes: render each model as a diagram, and let the reader run it or open
 // it in the Modeler. The snippets ship without BPMN-DI, so the server's layout
@@ -2353,23 +3095,27 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
   const sandbox = document.createElement("div");
   sandbox.style.cssText = "position:absolute;left:-10000px;top:0;width:900px;height:420px";
   document.body.appendChild(sandbox);
-  async function renderDiagram(card){
-    const host = card.querySelector(".rz-diagram");
+  // needLayout is false for a model that ships its own BPMN-DI (the workshop's two):
+  // there is nothing to generate, and asking the server for a layout it would hand
+  // straight back is a round trip that can only fail.
+  async function renderInto(host, src, needLayout){
     if (!host || host.dataset.done) return;
     host.dataset.done = "1";
     try {
       const BpmnJS = await loadBpmn();
       const Viewer = (BpmnJS && (BpmnJS.NavigatedViewer || BpmnJS.Viewer)) || BpmnJS;
-      const src = xmlOf(card);
-      const laidOut = await call("POST", "/api/v1/layout", src, true, true);
-      // The generated layout does not yet cover every element type (a transaction's
-      // contents, for instance). Rendering a partial picture would misinform, so
-      // count what the layout placed against the model's flow nodes and bail out
-      // to an honest note when shapes are missing.
-      const NODES = /<(?:bpmn:)?(?:startEvent|endEvent|task|userTask|serviceTask|scriptTask|businessRuleTask|receiveTask|sendTask|manualTask|callActivity|subProcess|transaction|exclusiveGateway|parallelGateway|inclusiveGateway|eventBasedGateway|intermediateCatchEvent|intermediateThrowEvent|boundaryEvent)[\s>/]/g;
-      const nodes = (src.match(NODES) || []).length;
-      const shapes = (laidOut.match(/<bpmndi:BPMNShape/g) || []).length;
-      if (nodes && shapes < nodes) throw new Error("layout incomplete");
+      let laidOut = src;
+      if (needLayout){
+        laidOut = await call("POST", "/api/v1/layout", src, true, true);
+        // The generated layout does not yet cover every element type (a transaction's
+        // contents, for instance). Rendering a partial picture would misinform, so
+        // count what the layout placed against the model's flow nodes and bail out
+        // to an honest note when shapes are missing.
+        const NODES = /<(?:bpmn:)?(?:startEvent|endEvent|task|userTask|serviceTask|scriptTask|businessRuleTask|receiveTask|sendTask|manualTask|callActivity|subProcess|transaction|exclusiveGateway|parallelGateway|inclusiveGateway|eventBasedGateway|intermediateCatchEvent|intermediateThrowEvent|boundaryEvent)[\s>/]/g;
+        const nodes = (src.match(NODES) || []).length;
+        const shapes = (laidOut.match(/<bpmndi:BPMNShape/g) || []).length;
+        if (nodes && shapes < nodes) throw new Error("layout incomplete");
+      }
       const viewer = new Viewer({ container: sandbox });
       await viewer.importXML(laidOut);
       const out = await viewer.saveSVG();
@@ -2405,6 +3151,24 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
     }
   }
 
+  async function renderDiagram(card){
+    await renderInto(card.querySelector(".rz-diagram"), xmlOf(card), true);
+  }
+
+  // The workshop chapter renders the same way, from the models embedded in #bw-data:
+  // one host per process, keyed by data-wk-model.
+  async function renderWorkshop(){
+    const hosts = Array.from(document.querySelectorAll("#werkstatt [data-wk-model]"));
+    if (!hosts.length) return;
+    const el = document.getElementById("bw-data");
+    let data;
+    try { data = JSON.parse(el ? el.textContent : "{}"); } catch (e) { return; }
+    for (const host of hosts){
+      const proc = (data.processes || []).find((x) => x.processId === host.dataset.wkModel);
+      if (proc) await renderInto(host, proc.xml, false);
+    }
+  }
+
   // Render every card once the chapter comes into reach, sequentially: the
   // diagrams are cheap individually but each needs a round trip, and doing them
   // one at a time keeps the page responsive while guaranteeing that all of them
@@ -2416,13 +3180,23 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
     started = true;
     for (const c of cards) await renderDiagram(c);
   }
-  const section = document.getElementById("rezepte");
   const io = new IntersectionObserver((entries) => {
     if (entries.some((en) => en.isIntersecting)) { io.disconnect(); renderAll(); }
   }, { rootMargin: "600px 0px" });
-  io.observe(section);
+  io.observe(document.getElementById("rezepte"));
   // Deep link straight into a recipe (…#rz-xyz) — render immediately.
   if (location.hash.startsWith("#rz-")) renderAll();
+
+  // The workshop's diagrams are two, and they carry their own layout, so they render
+  // on their own observer rather than waiting behind 27 recipe round trips.
+  const wk = document.getElementById("werkstatt");
+  if (wk){
+    const wio = new IntersectionObserver((entries) => {
+      if (entries.some((en) => en.isIntersecting)) { wio.disconnect(); renderWorkshop(); }
+    }, { rootMargin: "600px 0px" });
+    wio.observe(wk);
+    if (location.hash === "#werkstatt") renderWorkshop();
+  }
 
   // --- actions ---
   async function runRecipe(card, btn){

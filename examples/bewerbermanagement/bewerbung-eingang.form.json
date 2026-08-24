@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "bw-bewerbung-eingang",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 📨 Bewerbung\n\nDie Felder dieses Formulars sind der **Datenvertrag** des Prozesses: `abschluss` und `erfahrungJahre` gehen in die DMN-Vorprüfung, `email` korreliert eine spätere Rückzugs-Nachricht."
+    },
+    {
+      "key": "name",
+      "type": "textfield",
+      "label": "Name",
+      "validate": { "required": true }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail",
+      "description": "Korrelationsschlüssel für die Nachricht bw-rueckzug.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "stelle",
+      "type": "textfield",
+      "label": "Beworben auf",
+      "validate": { "required": true }
+    },
+    {
+      "key": "abschluss",
+      "type": "select",
+      "label": "Höchster Abschluss",
+      "values": [
+        { "label": "Kein Abschluss", "value": "keiner" },
+        { "label": "Lehre / Berufsausbildung", "value": "lehre" },
+        { "label": "Bachelor", "value": "bachelor" },
+        { "label": "Master", "value": "master" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "erfahrungJahre",
+      "type": "number",
+      "label": "Berufserfahrung (Jahre)",
+      "validate": { "required": true, "min": 0 }
+    }
+  ]
+}
