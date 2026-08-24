@@ -8,7 +8,7 @@ import (
 
 // TestEffectiveRoleGroups checks that a shared project's group grant applies to a
 // user in that group, and that when a user matches more than one grant the highest
-// role wins (ADR-draft-groups-as-members).
+// role wins (ADR-0180).
 func TestEffectiveRoleGroups(t *testing.T) {
 	inGroup := &httpapi.Principal{UserID: "usr_a", Roles: []string{RoleUser}, GroupIDs: []string{"grp_1"}}
 	notInGroup := &httpapi.Principal{UserID: "usr_b", Roles: []string{RoleUser}, GroupIDs: []string{"grp_9"}}

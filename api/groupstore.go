@@ -8,7 +8,7 @@ import (
 
 // group is a named set of users. A project can be shared with a group as a scope
 // member, granting the group's role to every user in it, so a team is shared with
-// once instead of person by person (ADR-draft-groups-as-members). Like a user
+// once instead of person by person (ADR-0180). Like a user
 // (ADR-0044) it is operator/config data: a durable sidecar store, off the six
 // engine invariants, and managing it is admin-gated. Members holds the ids of the
 // users in the group.
@@ -78,7 +78,7 @@ func (s *groupStore) byName(name, excludeID string) (group, bool, error) {
 
 // idsForUser returns the ids of every group a user belongs to. A login snapshots
 // this into the session so effectiveRole can resolve a group grant as a pure
-// slice check, never a store read (ADR-draft-groups-as-members).
+// slice check, never a store read (ADR-0180).
 func (s *groupStore) idsForUser(userID string) ([]string, error) {
 	if userID == "" {
 		return nil, nil

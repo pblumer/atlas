@@ -41,7 +41,7 @@ const (
 )
 
 // Member reference types. A scope member is either a single user or a whole
-// group (ADR-draft-groups-as-members); a group grant applies its role to every
+// group (ADR-0180); a group grant applies its role to every
 // user in the group. The type field was reserved in ADR-0071 so groups slotted in
 // with no migration.
 const (
@@ -139,7 +139,7 @@ func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 	}
 	if p.Visibility == VisibilityShared {
 		// A user may match more than one grant — a direct grant and one or more
-		// group grants (ADR-draft-groups-as-members). The highest role wins.
+		// group grants (ADR-0180). The highest role wins.
 		best := ""
 		for _, m := range p.Members {
 			matches := false
@@ -229,7 +229,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// A member is a user by default, or a whole group
-	// (ADR-draft-groups-as-members). The {userId} path value is the referenced
+	// (ADR-0180). The {userId} path value is the referenced
 	// id in either case.
 	refType := payload.Type
 	if refType == "" {

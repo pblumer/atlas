@@ -103,7 +103,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	// Snapshot the user's group ids into the session (ADR-draft-groups-as-members),
+	// Snapshot the user's group ids into the session (ADR-0180),
 	// alongside roles, so scope group grants resolve without a store read.
 	var (
 		groupIDs []string

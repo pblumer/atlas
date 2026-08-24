@@ -60,7 +60,7 @@ type Principal struct {
 	Roles    []string
 	// GroupIDs are the ids of the groups the user belongs to, snapshotted at login
 	// like Roles, so a scope's group grant resolves as a pure check against this
-	// slice without a store read (ADR-draft-groups-as-members). A membership change
+	// slice without a store read (ADR-0180). A membership change
 	// takes effect on the user's next login.
 	GroupIDs []string
 }

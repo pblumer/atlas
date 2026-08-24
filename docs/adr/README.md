@@ -216,6 +216,7 @@ comment safe to write.
 | [0177](0177-reload-skips-the-deploy-gate.md) | Reload skips the deploy-time validation gate | Proposed |
 | [0178](0178-responsibility-metadata-raci.md) | Responsibility metadata — RACI on the element, with R derived from the assignment | Proposed |
 | [0179](0179-worker-job-history-in-clio.md) | A worker's job history lives in clio, not in Atlas | Accepted |
+| [0180](0180-groups-as-members.md) | Groups as scope members | Proposed |
 
 ## Status values
 

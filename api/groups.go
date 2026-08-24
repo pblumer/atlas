@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// This file is the HTTP surface for user groups (ADR-draft-groups-as-members).
+// This file is the HTTP surface for user groups (ADR-0180).
 // Managing a group is administration, so every handler is admin-gated exactly
 // like user management (ADR-0044); a non-admin owner reaches groups only through
 // the principals directory, to pick one to share with. Every store access runs on
@@ -200,7 +200,7 @@ func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 // PUT /api/v1/groups/{id}/members/{userId}. The user must exist. Adding an
 // already-present member is idempotent. A membership change takes effect for the
 // user on their next login, when their group ids are re-snapshotted
-// (ADR-draft-groups-as-members).
+// (ADR-0180).
 func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return

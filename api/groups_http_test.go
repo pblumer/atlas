@@ -22,7 +22,7 @@ func decodeGroup(t *testing.T, b []byte) groupJSON {
 }
 
 // TestGroupsCRUD covers the admin-gated group management surface
-// (ADR-draft-groups-as-members): non-admins are refused, names are unique, and
+// (ADR-0180): non-admins are refused, names are unique, and
 // members must be real users.
 func TestGroupsCRUD(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
@@ -154,7 +154,7 @@ func TestGroupsCRUDBranches(t *testing.T) {
 // TestGroupSharingGrantsAccess is the end-to-end flow: a project shared with a
 // group grants its role to a group member, resolved from the login snapshot, and
 // removing the user from the group revokes it on the member's next login
-// (ADR-draft-groups-as-members).
+// (ADR-0180).
 func TestGroupSharingGrantsAccess(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
 	admin := newClient(t)

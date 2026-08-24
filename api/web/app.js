@@ -1166,7 +1166,7 @@ async function deleteUser(u, reload) {
   reload();
 }
 
-// ---------- Groups (ADR-draft-groups-as-members) ----------
+// ---------- Groups (ADR-0180) ----------
 async function createGroup(reload) {
   const name = window.prompt("Group name");
   if (name == null) return;
@@ -1373,7 +1373,7 @@ async function viewConsoleOrg() {
         </table>
       </div>`;
 
-  // Groups (ADR-draft-groups-as-members): a named set of users a project can be
+  // Groups (ADR-0180): a named set of users a project can be
   // shared with at once. Admin-gated like users, so only load when not denied.
   let groups = [];
   if (!denied) {
@@ -1410,7 +1410,7 @@ async function viewConsoleOrg() {
         <h2>Groups</h2><button class="btn" id="new-group" title="Create a new group">New group</button>
       </div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">A named set of users. Share a project
-      with a group and every member gets that role (ADR-draft-groups-as-members). A membership change
+      with a group and every member gets that role (ADR-0180). A membership change
       takes effect on the member's next sign-in.</p>
       <table data-dt-key="groups">
         <thead><tr><th>Group</th><th></th></tr></thead>
@@ -2505,7 +2505,7 @@ function openShareModal(proj, users, degraded, reload) {
     api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
   // A member ref is a user by default, or a group; resolve the type from the
   // existing member (role change) or the directory entry (fresh add), so the PUT
-  // records the right kind (ADR-draft-groups-as-members).
+  // records the right kind (ADR-0180).
   const memberType = (id) => {
     const m = (p.members || []).find((x) => x.ref.id === id);
     if (m) return m.ref.type;

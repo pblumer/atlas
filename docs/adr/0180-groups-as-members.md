@@ -1,4 +1,4 @@
-# ADR-DRAFT: Groups as scope members
+# ADR-0180: Groups as scope members
 
 - **Status:** Proposed
 - **Date:** 2026-08-24

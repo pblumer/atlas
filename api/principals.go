@@ -47,7 +47,7 @@ func (s *Server) handleListPrincipals(w http.ResponseWriter, _ *http.Request) {
 			}
 			list = append(list, principalDirEntry{Type: PrincipalTypeUser, ID: u.ID, Name: name})
 		}
-		// Groups join the same directory (ADR-draft-groups-as-members) so a picker
+		// Groups join the same directory (ADR-0180) so a picker
 		// can offer a whole team, not only individuals.
 		var groups []group
 		if groups, loadErr = s.groups.LoadAll(); loadErr != nil {
