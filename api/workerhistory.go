@@ -35,7 +35,7 @@ import (
 // they describe — a hole in exactly the promise retention makes.
 //
 // clio is an event store, this is a stream of events, and Atlas already speaks it
-// (ADR-0036, and ADR-draft-worker-job-history-in-clio for the whole argument). So the history goes there: no new storage in Atlas, no new invariant
+// (ADR-0036, and ADR-0179 for the whole argument). So the history goes there: no new storage in Atlas, no new invariant
 // surface, no second backup path, and retention becomes the operator's own policy in
 // their own store rather than another flag here. It is opt-in by naming a clio
 // connector on the command line — an operator who names none keeps the ring and

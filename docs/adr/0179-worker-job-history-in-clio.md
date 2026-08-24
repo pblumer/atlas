@@ -1,4 +1,4 @@
-# ADR-DRAFT: A worker's job history lives in clio, not in Atlas
+# ADR-0179: A worker's job history lives in clio, not in Atlas
 
 - **Status:** Accepted
 - **Date:** 2026-08-21

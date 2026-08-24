@@ -215,6 +215,7 @@ comment safe to write.
 | [0176](0176-standards-boundary-and-runtime-contract.md) | Standards boundary and the Atlas runtime contract | Proposed |
 | [0177](0177-reload-skips-the-deploy-gate.md) | Reload skips the deploy-time validation gate | Proposed |
 | [0178](0178-responsibility-metadata-raci.md) | Responsibility metadata — RACI on the element, with R derived from the assignment | Proposed |
+| [0179](0179-worker-job-history-in-clio.md) | A worker's job history lives in clio, not in Atlas | Accepted |
 
 ## Status values
 
