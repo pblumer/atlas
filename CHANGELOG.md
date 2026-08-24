@@ -38,6 +38,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A loop's badge counts its rounds, not its activations**: the engine activates a
+  looping activity once as the loop's *body* and once more per round, so the replay's
+  execution-count badge read 6 for a loop that ran five times — arithmetic the reader had
+  to work out and then distrust. On a looping element the badge now says how often the
+  loop ran, carries the ↻ so it reads as a round count, and keeps the arithmetic in its
+  tooltip. A loop that ran no rounds at all badges **0** rather than nothing: an activity
+  reached and walked past is exactly the case worth seeing.
+
 - **Token markers on one element no longer overlap**: the replay fans them out along the
   shape's top edge, but at 16px apart for a 20px marker, so every pair was drawn partly on
   top of the one before it. That is not a corner case — a loop puts two on the shape at

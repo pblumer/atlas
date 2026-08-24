@@ -85,7 +85,9 @@
       const api = async (method, url) => {
         if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
         if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
-        if (url.includes("/runtime")) return { elements: [] };
+        // The engine counts a looping activity once as its body and once per round, so the
+        // raw visit count here is 4 for three rounds — the number the badge must not show.
+        if (url.includes("/runtime")) return { elements: [{ elementId: "Rechne_1", visits: 4, tokens: 0, incidents: 0 }] };
         if (/\/instances\/\d+\/decisions$/.test(url)) return [];
         return {};
       };
