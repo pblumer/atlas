@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -237,21 +238,67 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	return out, nil
 }
 
-// ParseNamed compiles the single process with the given BPMN process id. It is
-// the reload path: a stored deployment records which process (by id) within its
-// (possibly collaboration) XML it represents, so recovery recompiles exactly that
-// one under its original key.
+// ParseNamed compiles the single process with the given BPMN process id — a
+// stored deployment records which process (by id) within its (possibly
+// collaboration) XML it represents, so it can be recompiled under its original
+// key. It compiles gate and all: a model that fails graph-wide validation is
+// refused, as at any deploy. Bringing a definition back from a deployment store
+// is the one case that wants the same compile *without* the gate, and uses
+// [ReloadNamed] for it (ADR-draft-reload-skips-the-deploy-gate).
 func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, error) {
+	cp, _, err := parseNamed(key, version, r, processId, true)
+	return cp, err
+}
+
+// ReloadNamed is ParseNamed for a definition that is already deployed: it compiles
+// the named process *without* the deploy-time validation gate, and returns what
+// that gate would have said about it today alongside the process
+// (ADR-draft-reload-skips-the-deploy-gate).
+//
+// Validation is a gate on deploying a model, not a condition for running one (I5,
+// see validation.go): the compiled process is identical either way. A definition
+// in a deployment store passed the gate of the day it was deployed and has been
+// running under it since, so re-applying today's rules to it on every restart
+// means a rule added to help authors can take a server down instead — on a model
+// nobody touched, with every other definition and every running instance
+// unreachable behind it. The rule still does its job at deploy, where the author
+// is watching and can fix the model.
+//
+// The returned Problems are what the gate raised — the full list, warnings
+// included, exactly as [ValidationError] carries it — and are empty when today's
+// rules do not refuse the model at all, so a caller can report drift on len() > 0.
+// A model that cannot be compiled at all still returns an error: there is no
+// definition to bring back.
+func ReloadNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, []Problem, error) {
+	return parseNamed(key, version, r, processId, false)
+}
+
+// parseNamed is the shared body of ParseNamed and ReloadNamed. gated says whether
+// the deploy-time validation gate applies: it does on the deploy path, and it does
+// not on the reload path, where the definition was gated once already.
+func parseNamed(key uint64, version int32, r io.Reader, processId string, gated bool) (*CompiledProcess, []Problem, error) {
 	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, proc := range defs.Processes {
-		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+		if proc.Id != processId {
+			continue
 		}
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
+		if err == nil {
+			return cp, nil, nil
+		}
+		// Only the gate refused it: stage 5 runs on a process that is already built,
+		// so this is the same definition the deploy of its day produced. Everything
+		// else stopped before there was a process, and is an error on both paths.
+		var ve *ValidationError
+		if !gated && errors.As(err, &ve) && ve.Process != nil {
+			return ve.Process, ve.Problems, nil
+		}
+		return nil, nil, err
 	}
-	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
+	return nil, nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
 }
 
 // nsBPMN is the BPMN 2.0 semantic-model namespace. Only a <documentation> in it (or in
@@ -983,7 +1030,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Warnings (e.g. unreachable dead code) are non-fatal and surface through the
 	// future /validate dry-run (ADR-0026), not here.
 	if problems := Validate(cp); HasErrors(problems) {
-		return nil, &ValidationError{Problems: problems}
+		return nil, &ValidationError{Problems: problems, Process: cp}
 	}
 	return cp, nil
 }

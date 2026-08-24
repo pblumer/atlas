@@ -72,6 +72,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A new validation rule can no longer take down a running server**
+  ([ADR-draft-reload-skips-the-deploy-gate](docs/adr/draft-reload-skips-the-deploy-gate.md)):
+  deployed definitions are recompiled from their records at startup, and that reload ran
+  the deploy-time validation gate again — so a rule added to the compiler *after* a model
+  was deployed refused it on the next upgrade, and refusing it failed the startup load.
+  The server exited, the supervisor restarted it, and it exited again: a crash loop over
+  a model nobody had touched, with every other definition and every running instance
+  unreachable behind it, and no way in, because the API that could fix or replace the
+  definition only exists once the server is up. The way out was to clear the data
+  directory or hand-edit XML inside a JSON record.
+  Validation is a gate on *deploying* a model, not a condition for running one — the
+  compiled process is identical either way — so the reload no longer applies it. A
+  definition that passed the gate of the day it was deployed comes back and keeps
+  running, its instances advance unchanged, and Atlas warns once per record
+  (`event=deployment.reloaded_with_problems`) naming the deployment and the rules it
+  would fail today, so the drift is visible rather than silent. Deploying that model
+  still fails, with the rule named, where the author can act on it. A record that yields
+  no compiled process at all — it does not decode, names no such process, holds an
+  expression that will not compile — is still a hard startup error, since there is
+  nothing to bring back; it now names the record's path so it can be acted on.
+  The DMN models snapshotted with a deployment reload the same way, and were the same
+  outage arriving through a dependency bump: a decision that no longer compiles under a
+  newer temis failed the startup load and took the server with it. They are now
+  registered with their diagnostics reported, which is safe because temis leaves the
+  rest of a model compiled and the affected decision present but not executable — so a
+  broken decision fails when something evaluates it, as a job error the engine already
+  has an answer for, while every other decision in the model keeps answering. A DMN
+  model temis cannot parse at all stays a hard startup error, as before.
+
 - **A structure in the Variables tab no longer comes open by itself** — and the way out
   of one appears again. Every table in a view is handed to the shared sort/filter helper,
   which drove each row's `hidden` from what its filter matched. The rows that hold an
