@@ -7991,6 +7991,63 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </div>`;
   };
 
+  // loopBlock explains the loop a step belongs to (ADR-0077/0133). A looping activity's
+  // rounds are otherwise a column of identical rows, and the question they raise — why it
+  // went round again, or why it stopped where it did — is answered by three things the
+  // step carries: the condition as the author wrote it, the cap, and the values that
+  // condition's own variables held for this round. None of it is re-derived here; the
+  // server reads the model and the log and says what they say.
+  const loopBlock = (s) => {
+    const l = s && s.loop;
+    if (!l) return "";
+    const std = l.kind === "loop";
+    const mark = std ? "\u21BB" : "\u2261";
+    const head = l.round
+      ? `Round ${l.round}${l.maximum ? ` of at most ${l.maximum}` : ""}`
+      : `${l.rounds || 0} round${l.rounds === 1 ? "" : "s"} ran`;
+    const rows = [];
+    if (l.condition) {
+      rows.push(`<dt>${std ? "Repeat while" : "Complete when"}</dt><dd><code>${esc(l.condition)}</code></dd>`);
+      rows.push(`<dt>Checked</dt><dd>${l.testBefore
+        ? "before each run — the activity may be skipped entirely"
+        : "after each run — the activity always runs at least once"}</dd>`);
+    } else if (std) {
+      rows.push(`<dt>Repeat while</dt><dd class="hint">no condition — the maximum is this loop's only bound</dd>`);
+    }
+    if (l.maximum) rows.push(`<dt>Max iterations</dt><dd>${esc(String(l.maximum))}</dd>`);
+    if ((l.reads || []).length) {
+      rows.push(`<dt>It read</dt><dd>${l.reads.map((v) =>
+        `<code>${esc(v.name)}</code> = <span class="c-val">${esc(ioValueText(v))}</span>`).join(", ")}</dd>`);
+    }
+    if ((l.missing || []).length) {
+      rows.push(`<dt>Not in scope</dt><dd>${l.missing.map((n) => `<code>${esc(n)}</code>`).join(", ")}
+        <span class="hint">— nothing of that name is visible here, so the condition never holds</span></dd>`);
+    }
+    return `<div class="ops-loop">
+      <h4>${mark} ${esc(head)}</h4>
+      ${rows.length ? `<dl class="ops-props">${rows.join("")}</dl>` : ""}
+      ${l.outcome ? `<p class="ops-loop-out">${loopOutcomeText(l)}</p>` : ""}
+    </div>`;
+  };
+
+  // loopOutcomeText says what followed this round, in the operator's terms. "stopped"
+  // without a reason is a multi-instance: it ends when its collection runs out or its
+  // completion condition holds, and the log records neither as a fact of its own, so the
+  // sentence stops where the record does.
+  const loopOutcomeText = (l) => {
+    switch (l.outcome) {
+      case "repeated": return "The loop ran the activity again after this round.";
+      case "running": return "This round has not finished.";
+      case "terminated": return "This round was torn down before it finished — the instance was cancelled, or a boundary event interrupted it.";
+    }
+    switch (l.stopReason) {
+      case "maximum": return `The loop stopped here: <b>max iterations (${esc(String(l.maximum))})</b> was reached.`;
+      case "condition": return `The loop stopped here: <b>repeat while</b> no longer held.`;
+      case "ceiling": return "The loop stopped here: the engine's safety ceiling for a loop that states no maximum. Resolve the incident to grant it another 1000 runs.";
+    }
+    return "The loop ended with this round.";
+  };
+
   // migrationDetail is the Details tab for the one history row that is not an element:
   // the point at which an operator rebound this instance to another version of its
   // process (ADR-0162). It says what it says plainly, because the consequence is easy to
@@ -8068,13 +8125,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
       <dt>Element ID</dt><dd class="mono">${esc(s.elementId)}</dd>
-      ${s.iteration ? `<dt>Iteration</dt><dd>Round ${esc(String(s.iteration))} of this loop</dd>` : ""}
       <dt>Element Instance Key</dt><dd class="mono">${esc(String(s.elementInstanceKey || "—"))}</dd>
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
       ${from}${rel}${child}
-    </dl>${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
+    </dl>${loopBlock(s)}${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
   }
 
   // A JSON variable's stored value is a JSON string; these read its shape without
@@ -8351,17 +8407,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(s.elementId, "atlas-visited");
       marked.push([s.elementId, "atlas-visited"]);
     }
-    // Count tokens per element so several tokens on one node (both arrivals at a
-    // join) fan out instead of stacking into one dot.
-    const perEl = {};
+    // Several tokens on one node — both arrivals at a join, a loop's body and the round
+    // running under it — fan out along its top edge instead of stacking. They are grouped
+    // per element first, because how many there are decides how they are drawn: a shape is
+    // only so wide, so past what fits the rest collapse into a count rather than marching
+    // off the edge or piling up on each other.
+    const byEl = new Map();
     for (const token of tokens) {
-      const el = registry.get(token.elementId);
-      if (!el) continue;
+      if (!registry.get(token.elementId)) continue;
       const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
       canvas.addMarker(token.elementId, marker);
       marked.push([token.elementId, marker]);
-      const n = perEl[token.elementId] = (perEl[token.elementId] || 0) + 1;
-      drawTokenDot(el, tokenColor(token.tokenId), n - 1);
+      if (!byEl.has(token.elementId)) byEl.set(token.elementId, []);
+      byEl.get(token.elementId).push(token);
+    }
+    for (const [elId, list] of byEl) {
+      const el = registry.get(elId);
+      const room = Math.max(1, Math.floor(((el.width || 100) - 14) / TOKEN_DOT_STEP));
+      const dots = list.length <= room ? list.length : Math.max(1, room - 1);
+      list.slice(0, dots).forEach((token, i) => drawTokenDot(el, tokenColor(token.tokenId), i));
+      if (list.length > dots) drawTokenCount(el, list.length - dots, dots);
     }
     // An incident is a fact about *now*, not about the frame being replayed, so the
     // stuck element stays outlined wherever the playhead sits — drawn after the token
@@ -8438,6 +8503,32 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>`;
   };
 
+  // ioLoopLine is the loop's own section on the card: which round this is, what the loop
+  // repeats while (or completes when), the values that condition read, and what the loop
+  // decided (ADR-0077/0133). Laid out in the same name/value rows as the in and out
+  // sections, so a read reads like any other value — the Details tab carries the prose.
+  const ioLoopLine = (s) => {
+    const l = s && s.loop;
+    if (!l || !l.round) return "";
+    const rows = [];
+    if (l.condition) {
+      rows.push([l.kind === "loop" ? "repeat while" : "complete when", l.condition]);
+    } else {
+      rows.push(["no condition", l.maximum ? `max ${l.maximum}` : ""]);
+    }
+    for (const v of l.reads || []) rows.push([v.name, ioValueText(v)]);
+    for (const name of l.missing || []) rows.push([name, "not in scope"]);
+    const verdict = l.outcome === "repeated" ? "run again"
+      : l.outcome === "stopped" ? `stop${l.stopReason ? ` (${l.stopReason})` : ""}`
+      : l.outcome === "terminated" ? "torn down" : "";
+    if (verdict) rows.push(["then", verdict]);
+    return `<div class="io-sec loop">
+        <span class="io-lbl">\u21BB ${esc(String(l.round))}${l.maximum ? `/${esc(String(l.maximum))}` : ""}</span>
+        <div class="io-rows">${rows.map(([n, v]) => `<div class="io-row">
+          <span class="io-n">${esc(n)}</span><span class="io-v">${esc(v)}</span></div>`).join("")}</div>
+      </div>`;
+  };
+
   // ioOverlayHTML builds the card, or "" when there is nothing worth covering the
   // diagram with: no selection, or an element that neither took mapped inputs nor
   // wrote anything.
@@ -8447,11 +8538,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!s) return "";
     const ins = s.inputs || [];
     const outs = writtenBy(s);
-    if (!ins.length && !(outs && outs.length)) return "";
+    const loop = ioLoopLine(s);
+    if (!ins.length && !(outs && outs.length) && !loop) return "";
     return `<div class="io-ov">
         <div class="io-ov-h">${esc(stepLabel(s))}</div>
         ${ioSection("in", ins, "no input mapping")}
         ${outs ? ioSection("out", outs, "wrote nothing") : ioSection("out", null, "still running")}
+        ${loop}
       </div>`;
   }
 
@@ -8480,15 +8573,41 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // drawTokenDot places a filled token marker at the top-left of an element (index
   // offsets stacked tokens so concurrent ones on the same node stay distinct). The
   // dot lives on the replay layer, so it tracks pan/zoom like the moving dot.
+  // A token dot is 20px across (a 9px halo with a 2px stroke), so the step between two of
+  // them has to clear that — at the 16px it used to be, every pair on one element drew
+  // partly on top of the one before it, which is the normal case for a loop rather than a
+  // corner one.
+  const TOKEN_DOT_STEP = 21;
+
   function drawTokenDot(el, color, index) {
     const NS = "http://www.w3.org/2000/svg";
     const g = document.createElementNS(NS, "g");
-    g.setAttribute("transform", `translate(${el.x + 6 + index * 16} ${el.y + 6})`);
+    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
     const halo = document.createElementNS(NS, "circle");
     halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
     const dot = document.createElementNS(NS, "circle");
     dot.setAttribute("r", "6"); dot.setAttribute("fill", color);
     g.appendChild(halo); g.appendChild(dot);
+    dotLayer.appendChild(g);
+  }
+
+  // drawTokenCount stands in for the tokens that did not fit on the shape: "+3" in the
+  // next dot's place. The legend below the diagram lists every token by id either way, so
+  // nothing is lost by not drawing them all — what would be lost is the ability to read
+  // the ones that are drawn.
+  function drawTokenCount(el, count, index) {
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${el.x + 6 + index * TOKEN_DOT_STEP} ${el.y + 6})`);
+    const pill = document.createElementNS(NS, "rect");
+    pill.setAttribute("x", "-12"); pill.setAttribute("y", "-9");
+    pill.setAttribute("width", "26"); pill.setAttribute("height", "18"); pill.setAttribute("rx", "9");
+    pill.setAttribute("fill", "#fff"); pill.setAttribute("stroke", "#94a3b8"); pill.setAttribute("stroke-width", "2");
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", "1"); label.setAttribute("y", "4"); label.setAttribute("text-anchor", "middle");
+    label.setAttribute("font-size", "11"); label.setAttribute("font-weight", "600"); label.setAttribute("fill", "#334155");
+    label.textContent = `+${count}`;
+    g.appendChild(pill); g.appendChild(label);
     dotLayer.appendChild(g);
   }
 

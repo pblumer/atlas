@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A loop says what it was told to repeat while — and what it decided**
+  (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and
+  what that round read and wrote, but not the one thing an author asks when a loop does
+  not do what they meant: *what was it told, and why did it stop there?* Every round now
+  carries its loop's condition as the author wrote it, the values that condition's own
+  variables held for that round, the stated maximum, and what followed — another round,
+  or the end of the loop with the bound that ended it (the maximum, the condition no
+  longer holding, or the engine's safety ceiling). The loop's body carries the same
+  reading for the loop as a whole, including how many rounds ran. It shows up in the
+  replay's Details tab in prose and on the diagram card in one line, so a model that runs
+  nine times because it states no condition says exactly that, instead of leaving the
+  reader to guess between a cap, a condition and a bug.
+  Nothing is re-evaluated to produce it: the condition and the cap are model facts, read
+  through the definition in force at that step's own position (ADR-0162), and whether a
+  round led to another is a fact about the log. What the record cannot settle — which of
+  its two bounds ended a multi-instance — is left unsaid rather than guessed. Compiled
+  FEEL keeps its source text for this (`expr.Compiled.Source`), at deploy time only.
+
 - **A structured variable opens where it stands, and says what shape it is**: the
   Variables tab summarised an object or a list and previewed its raw text, both of which
   truncate — and `[{"Nachname":"Blumer",…` and `{"Nachname":"Blumer",…` differ only in the
@@ -26,6 +44,13 @@ _Changed_ / _Removed_ for each version.
   expansion survives the 1.5-second poll and the filter that rewrite the rows under it.
 
 ### Fixed
+
+- **Token markers on one element no longer overlap**: the replay fans them out along the
+  shape's top edge, but at 16px apart for a 20px marker, so every pair was drawn partly on
+  top of the one before it. That is not a corner case — a loop puts two on the shape at
+  all times, its body and the round running under it. They now clear each other, and past
+  what a shape has room for the rest collapse into a "+n" rather than marching off its
+  edge. The legend below the diagram still names every token.
 
 - **A looping activity that also has an I/O mapping no longer loops forever**
   (ADR-0068 with ADR-0077/ADR-0133). A `zeebe:ioMapping` gives an activity a local
