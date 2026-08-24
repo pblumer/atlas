@@ -2,62 +2,6 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
-      "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Structures in the Variables tab stay closed until you open them",
-        "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
-      },
-      "summary": {
-        "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
-        "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A file without a diagram no longer imports into an empty canvas",
-        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
-      },
-      "summary": {
-        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
-        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
-      },
-      "link": {
-        "label": "ADR-0124",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
       "version": "Unreleased",
       "date": null,
@@ -130,6 +74,62 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Structures in the Variables tab stay closed until you open them",
+        "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
+      },
+      "summary": {
+        "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
+        "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A file without a diagram no longer imports into an empty canvas",
+        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
+      },
+      "summary": {
+        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
+        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
+      },
+      "link": {
+        "label": "ADR-0124",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
       },
       "tags": [
         "Modeler"
@@ -318,34 +318,6 @@
       "tags": [
         "Operations",
         "Connectors"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "atlas-supervises-its-own-worker-processes",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Atlas starts and restarts its workers itself",
-        "de": "Atlas startet und überwacht seine Worker selbst"
-      },
-      "summary": {
-        "en": "Running work outside the engine does not mean running a second deployment. Started with --supervise, Atlas launches the worker as its own child process, restarts it if it stops, captures its output and shuts it down with the server — so the install stays one binary and one command. It is off unless you ask for it, because under systemd or Kubernetes the platform should own that.",
-        "de": "Arbeit außerhalb der Engine bedeutet nicht, ein zweites Deployment zu betreiben. Mit --supervise startet Atlas den Worker als eigenen Kindprozess, startet ihn nach einem Abbruch neu, fängt seine Ausgabe auf und beendet ihn zusammen mit dem Server — die Installation bleibt eine Datei und ein Befehl. Standardmäßig aus, denn unter systemd oder Kubernetes gehört der Prozess-Lebenszyklus der Plattform."
-      },
-      "link": {
-        "label": "ADR-0157",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0157-worker-processes-supervision-and-console.md"
-      },
-      "tags": [
-        "Operations"
       ],
       "try": {
         "label": {
