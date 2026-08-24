@@ -73,7 +73,7 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 
 - **A new validation rule can no longer take down a running server**
-  ([ADR-draft-reload-skips-the-deploy-gate](docs/adr/draft-reload-skips-the-deploy-gate.md)):
+  ([ADR-0177](docs/adr/0177-reload-skips-the-deploy-gate.md)):
   deployed definitions are recompiled from their records at startup, and that reload ran
   the deploy-time validation gate again — so a rule added to the compiler *after* a model
   was deployed refused it on the next upgrade, and refusing it failed the startup load.

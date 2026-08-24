@@ -213,6 +213,7 @@ comment safe to write.
 | [0174](0174-connector-payloads-are-the-input-mapping.md) | A connector task's input mappings are its outbound payload | Proposed |
 | [0175](0175-replicated-partition-cells.md) | Replicated partition cells for horizontal scale-out | Proposed |
 | [0176](0176-standards-boundary-and-runtime-contract.md) | Standards boundary and the Atlas runtime contract | Proposed |
+| [0177](0177-reload-skips-the-deploy-gate.md) | Reload skips the deploy-time validation gate | Proposed |
 
 ## Status values
 

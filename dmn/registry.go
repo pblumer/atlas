@@ -82,7 +82,7 @@ func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 
 // Reload is Deploy for a model that is *already* deployed — one snapshotted into a
 // deployment record, coming back at startup — and so it does not re-apply the
-// deploy-time gate above (ADR-draft-reload-skips-the-deploy-gate). Refusing the
+// deploy-time gate above (ADR-0177). Refusing the
 // model here would not undeploy anything; it would only keep the server from
 // starting, with every other definition and every running instance behind it,
 // because a diagnostic that did not exist when the model was deployed exists now.

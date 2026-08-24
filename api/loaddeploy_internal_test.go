@@ -15,7 +15,7 @@ import (
 // TestNewFailsOnUncompilableStoredDeployment covers loadDeployments' compile
 // error branch (ADR-0019): a persisted definition whose XML no longer compiles
 // makes New fail loudly rather than booting with a silently missing definition.
-// This is the line the reload path draws (ADR-draft-reload-skips-the-deploy-gate):
+// This is the line the reload path draws (ADR-0177):
 // a model today's *validation* would refuse still loads, because it compiled and
 // its instances run; one that yields no compiled process at all does not, because
 // there is nothing to bring back. The failure names the record it read, since

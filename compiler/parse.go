@@ -244,7 +244,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 // key. It compiles gate and all: a model that fails graph-wide validation is
 // refused, as at any deploy. Bringing a definition back from a deployment store
 // is the one case that wants the same compile *without* the gate, and uses
-// [ReloadNamed] for it (ADR-draft-reload-skips-the-deploy-gate).
+// [ReloadNamed] for it (ADR-0177).
 func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, error) {
 	cp, _, err := parseNamed(key, version, r, processId, true)
 	return cp, err
@@ -253,7 +253,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 // ReloadNamed is ParseNamed for a definition that is already deployed: it compiles
 // the named process *without* the deploy-time validation gate, and returns what
 // that gate would have said about it today alongside the process
-// (ADR-draft-reload-skips-the-deploy-gate).
+// (ADR-0177).
 //
 // Validation is a gate on deploying a model, not a condition for running one (I5,
 // see validation.go): the compiled process is identical either way. A definition

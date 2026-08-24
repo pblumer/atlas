@@ -198,7 +198,7 @@ under it since, so `api.loadDeployments` recompiles it through `compiler.ReloadN
 which skips the refusal and hands back the compiled process together with the findings
 today's rules would raise — logged once per record, so a rule added since the deploy
 surfaces as a warning naming the model to fix rather than as a server that will not
-start (ADR-draft-reload-skips-the-deploy-gate). A model that yields no compiled process
+start (ADR-0177). A model that yields no compiled process
 at all is still fatal on reload: there is nothing to run.
 
 ## Stage 6: linearization and the scope model

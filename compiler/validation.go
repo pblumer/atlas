@@ -239,7 +239,7 @@ type ValidationError struct {
 	// does not decide whether it can run (I5) — so the reload path, which re-reads a
 	// definition that passed the gate of its own day, can take the process from here
 	// instead of losing it to the gate a second time
-	// (ADR-draft-reload-skips-the-deploy-gate). compileProcess always sets it; it is
+	// (ADR-0177). compileProcess always sets it; it is
 	// still the zero value of the field, so a caller checks it before use.
 	Process *CompiledProcess
 }

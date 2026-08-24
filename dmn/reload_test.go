@@ -20,7 +20,7 @@ const mixedModel = `<?xml version="1.0" encoding="UTF-8"?>
 </definitions>`
 
 // TestReloadKeepsAModelWithErrorDiagnostics is the DMN half of
-// ADR-draft-reload-skips-the-deploy-gate: a model snapshotted into a deployment
+// ADR-0177: a model snapshotted into a deployment
 // record comes back even when today's temis reports errors on it, so one decision
 // that stopped compiling cannot keep the whole server from starting. The
 // diagnostics come back with it, for the caller to report.

@@ -1748,7 +1748,7 @@ func (s *Server) loadDeployments() error {
 		// Recompile exactly the process this record represents (a collaboration's
 		// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
 		// without the deploy-time validation gate
-		// (ADR-draft-reload-skips-the-deploy-gate). This definition passed the gate
+		// (ADR-0177). This definition passed the gate
 		// that existed when it was deployed and its instances have been running under
 		// it since; a rule added to the compiler afterwards is a reason to tell the
 		// operator, not to refuse to start. The model on disk did not change.
@@ -1786,7 +1786,7 @@ func (s *Server) loadDeployments() error {
 		// single model), so no temis reference has to be re-resolved here.
 		for _, dmnXML := range rec.dmnModels() {
 			// The same split as the BPMN model above
-			// (ADR-draft-reload-skips-the-deploy-gate), for the same reason: refusing a
+			// (ADR-0177), for the same reason: refusing a
 			// snapshotted DMN model here undeploys nothing, it only keeps the server from
 			// starting. A decision that stopped compiling since the deploy fails when it
 			// is evaluated — a job error on a worker, which the engine has an answer for
