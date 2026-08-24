@@ -1287,7 +1287,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-left: 3px solid transparent;
 }
 .ops-hrow:hover { background: var(--bg); }
-.ops-hrow.cur { background: var(--accent-soft); border-left-color: var(--accent); }
+/* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
+   a position on the timeline — and ".sel" is the element instance the inspector is
+   showing. They used to be filled in the same colour, differing only by a 3px bar, so
+   scrubbing to one element and then clicking another on the diagram read as the history
+   having selected two rows at once. The playhead now marks the gutter and tints its
+   time; only a selection is filled. */
+.ops-hrow.cur { border-left-color: var(--accent); }
+.ops-hrow.cur .ops-htime { color: var(--accent); font-weight: 600; }
 .ops-hrow.sel { background: var(--accent-soft); }
 .ops-hrow.root { font-size: 13px; }
 .ops-hrow .ops-hicon { width: 16px; text-align: center; color: var(--ok); }
@@ -1961,7 +1968,12 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* ---------- Dropdown menu (Create new ▾, row ⋯ actions) ---------- */
 .dropdown { position: relative; display: inline-block; }
 .dropdown-menu {
-  position: absolute; right: 0; top: calc(100% + 4px); min-width: 210px;
+  /* Fixed, not absolute. A card holding a table scrolls horizontally
+     (.card:has(> table)), and a box that is not "visible" on one axis clips the other
+     too — so a row's menu was cut off at the card's bottom edge whenever the card was
+     short, taking Delete with it. Fixed escapes every such ancestor, at the price of
+     needing its coordinates from placeMenu instead of from CSS. */
+  position: fixed; left: 0; top: 0; min-width: 210px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 10px 30px rgba(20, 22, 26, .14); padding: 6px; z-index: 60;
 }
@@ -1974,6 +1986,24 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .dropdown-menu button:hover, .dropdown-menu a:hover { background: var(--bg); }
 .dropdown-menu button.danger { color: var(--danger); }
 .dropdown-menu .sep { height: 1px; background: var(--border); margin: 6px 4px; }
+/* A nested list inside a menu. Twenty-odd projects listed inline pushed a row's real
+   actions off the bottom of the page, so the move targets live in a flyout instead. It
+   opens on hover and on keyboard focus — never on the hidden attribute, which is what
+   closeAllMenus drives for top-level menus. Opens to the left because these menus sit at
+   the right edge of a table row, and scrolls rather than growing past the viewport. */
+.submenu { position: relative; }
+.submenu-toggle { width: 100%; }
+.submenu-caret { margin-left: auto; padding-left: 10px; color: var(--muted); }
+.submenu-menu {
+  /* Placed by placeSubmenu beside its row rather than by placeMenu under a trigger. */
+  display: none; max-width: 340px;
+  max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
+}
+/* A project name can be long, and a menu row does not wrap by default; here it may,
+   rather than pushing the flyout wider than the space it has to open into. */
+.submenu-menu button { white-space: normal; }
+.submenu:hover > .submenu-menu, .submenu:focus-within > .submenu-menu { display: block; }
+.submenu:hover > .submenu-toggle, .submenu:focus-within > .submenu-toggle { background: var(--bg); }
 .dropdown-menu .mlabel {
   font-size: 11px; color: var(--muted); padding: 6px 10px 3px; text-transform: uppercase; letter-spacing: .04em;
 }
