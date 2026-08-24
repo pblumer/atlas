@@ -49,6 +49,10 @@ func (s *Server) handleValidateDmnRef(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
 		return
 	}
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleViewer); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())

@@ -4109,32 +4109,52 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
+
+	// Scope gate (ADR-0071): overwriting a draft needs editor on its current
+	// project, and filing into a project needs editor on that target.
+	var (
+		existing draft
+		existed  bool
+		getErr   error
+	)
+	s.do(func() { existing, existed, getErr = s.drafts.Get(pid) })
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+		return
+	}
+	if existed {
+		if code, msg := s.authorizeArtifact(r, existing.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	destProjectID := existing.ProjectID
+	if hasProjectParam {
+		destProjectID = projectID
+	}
+	if destProjectID != "" && (hasProjectParam || !existed) {
+		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+
 	stored, laidOut := layout.EnsureReport(body)
-	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(stored)}
+	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, SavedAt: time.Now().Unix(), XML: string(stored)}
 	var (
 		saveErr, projErr error
-		unknownProject   bool
 		protectedProject bool
 	)
 	s.do(func() {
-		if !hasProjectParam {
-			existing, ok, e := s.drafts.Get(pid)
-			if e == nil && ok {
-				rec.ProjectID = existing.ProjectID
-			}
-		} else if projectID != "" {
-			proj, ok, e := s.projects.Get(projectID)
+		// Backstop the scope check for protected system projects (ADR-0122), which
+		// effectiveRole grants admins/owners on: writing into one is refused for all.
+		if rec.ProjectID != "" {
+			proj, ok, e := s.projects.Get(rec.ProjectID)
 			if e != nil {
 				projErr = e
 				return
 			}
-			if !ok {
-				unknownProject = true
-				return
-			}
-			// A protected system project's content is platform-managed (ADR-0122):
-			// refuse authoring a draft into it, for any caller.
-			if proj.Protected {
+			if ok && proj.Protected {
 				protectedProject = true
 				return
 			}
@@ -4144,8 +4164,6 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case projErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case protectedProject:
 		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
@@ -4166,9 +4184,20 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []draft
-		recs, loadErr = s.drafts.LoadAll()
+		if recs, loadErr = s.drafts.LoadAll(); loadErr != nil {
+			return
+		}
+		var projs map[string]project
+		if projs, loadErr = s.projectsByID(); loadErr != nil {
+			return
+		}
 		for _, d := range recs {
 			if filter != "" && d.ProjectID != filter {
+				continue
+			}
+			// Membership inherits from the artifact's project (ADR-0071): hide a
+			// draft in a project the caller cannot view.
+			if !s.canViewArtifact(r, d.ProjectID, projs) {
 				continue
 			}
 			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt})
@@ -4198,61 +4227,62 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	// Load the draft (to learn its current scope and to carry it into the save).
 	var (
-		found, unknownProject    bool
-		protectedProject         bool
-		getErr, projErr, saveErr error
-		view                     draftResp
+		rec    draft
+		found  bool
+		getErr error
 	)
-	s.do(func() {
-		rec, ok, e := s.drafts.Get(id)
-		if e != nil {
-			getErr = e
-			return
-		}
-		if !ok {
-			return
-		}
-		found = true
-		if payload.ProjectID != "" {
-			proj, pok, pe := s.projects.Get(payload.ProjectID)
-			if pe != nil {
-				projErr = pe
-				return
-			}
-			if !pok {
-				unknownProject = true
-				return
-			}
-			// A protected system project's content is platform-managed (ADR-0122):
-			// refuse moving a draft into it, for any caller.
-			if proj.Protected {
-				protectedProject = true
-				return
-			}
-		}
-		rec.ProjectID = payload.ProjectID
-		if saveErr = s.drafts.Save(rec); saveErr != nil {
-			return
-		}
-		view = draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt}
-	})
-	switch {
-	case getErr != nil:
+	s.do(func() { rec, found, getErr = s.drafts.Get(id) })
+	if getErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
-	case protectedProject:
-		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
-	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, view)
+		return
 	}
+	if !found {
+		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
+		return
+	}
+	// Moving a draft needs editor on both ends (ADR-0071): the project it leaves
+	// and, when non-empty, the project it joins (which must exist).
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	var (
+		projErr          error
+		protectedProject bool
+	)
+	if payload.ProjectID != "" {
+		if code, msg := s.authorizeTargetProject(r, payload.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+		// A protected system project's content is platform-managed (ADR-0122):
+		// refuse moving into it, for any caller (backstops the scope check).
+		s.do(func() {
+			if proj, ok, e := s.projects.Get(payload.ProjectID); e != nil {
+				projErr = e
+			} else if ok && proj.Protected {
+				protectedProject = true
+			}
+		})
+		if projErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+			return
+		}
+		if protectedProject {
+			httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
+			return
+		}
+	}
+	rec.ProjectID = payload.ProjectID
+	var saveErr error
+	s.do(func() { saveErr = s.drafts.Save(rec) })
+	if saveErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
 }
 
 // handleDraftXML returns a draft's BPMN XML so the editor can reopen it, laying the
@@ -4274,6 +4304,12 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 	case !ok:
 		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
 	default:
+		// The XML is the draft's content: reading it needs viewer on its project
+		// scope (ADR-0071).
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleViewer); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 		_, _ = w.Write(layout.Ensure([]byte(rec.XML)))
 	}
@@ -4283,6 +4319,32 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 // the operation is idempotent.
 func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Deletion inherits the draft's project scope (ADR-0071): editor required, an
+	// invisible draft 404s, an absent one still succeeds (idempotent).
+	var (
+		projectID string
+		found     bool
+		getErr    error
+	)
+	s.do(func() {
+		rec, ok, e := s.drafts.Get(id)
+		if e != nil {
+			getErr = e
+			return
+		}
+		found = ok
+		projectID = rec.ProjectID
+	})
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+		return
+	}
+	if found {
+		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	var delErr error
 	s.do(func() { delErr = s.drafts.Delete(id) })
 	if delErr != nil {

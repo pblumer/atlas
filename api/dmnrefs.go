@@ -59,34 +59,21 @@ func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec := dmnRef{ID: id, Name: name, ModelRef: modelRef, ProjectID: payload.ProjectID, CreatedAt: time.Now().Unix()}
-	var (
-		saveErr, projErr error
-		unknownProject   bool
-	)
-	s.do(func() {
-		if rec.ProjectID != "" {
-			_, ok, e := s.projects.Get(rec.ProjectID)
-			if e != nil {
-				projErr = e
-				return
-			}
-			if !ok {
-				unknownProject = true
-				return
-			}
+	// Filing a reference into a project needs editor on that project (ADR-0071),
+	// which also enforces that it exists (400 otherwise).
+	if rec.ProjectID != "" {
+		if code, msg := s.authorizeTargetProject(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
 		}
-		saveErr = s.dmnrefs.Save(rec)
-	})
-	switch {
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
-	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "create dmn reference: "+saveErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, toDmnRefResp(rec))
 	}
+	var saveErr error
+	s.do(func() { saveErr = s.dmnrefs.Save(rec) })
+	if saveErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "create dmn reference: "+saveErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, toDmnRefResp(rec))
 }
 
 // handleListDmnRefs lists DMN references, oldest first. An optional ?projectId=
@@ -97,9 +84,20 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []dmnRef
-		recs, loadErr = s.dmnrefs.LoadAll()
+		if recs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
+			return
+		}
+		var projs map[string]project
+		if projs, loadErr = s.projectsByID(); loadErr != nil {
+			return
+		}
 		for _, rec := range recs {
 			if filter != "" && rec.ProjectID != filter {
+				continue
+			}
+			// Inherit the project's scope (ADR-0071): hide references the caller
+			// cannot view.
+			if !s.canViewArtifact(r, rec.ProjectID, projs) {
 				continue
 			}
 			list = append(list, toDmnRefResp(rec))
@@ -146,10 +144,58 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Load the reference (to learn its current scope and carry it into the save).
 	var (
-		found, unknownProject    bool
-		getErr, projErr, saveErr error
-		view                     dmnRefResp
+		rec    dmnRef
+		found  bool
+		getErr error
+	)
+	s.do(func() { rec, found, getErr = s.dmnrefs.Get(id) })
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		return
+	}
+	if !found {
+		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
+		return
+	}
+	// Editing (rename or move) needs editor on the reference's current scope; a
+	// move into a non-empty project also needs editor on that target (ADR-0071).
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	if payload.ProjectID != nil && *payload.ProjectID != "" {
+		if code, msg := s.authorizeTargetProject(r, *payload.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	if payload.ProjectID != nil {
+		rec.ProjectID = *payload.ProjectID
+	}
+	if payload.Name != nil {
+		rec.Name = newName
+	}
+	var saveErr error
+	s.do(func() { saveErr = s.dmnrefs.Save(rec) })
+	if saveErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "update dmn reference: "+saveErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, toDmnRefResp(rec))
+}
+
+// handleDeleteDmnRef removes a DMN reference. Deleting an absent reference
+// succeeds, so the operation is idempotent.
+func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	// Deletion inherits the reference's project scope (ADR-0071): editor required,
+	// an invisible reference 404s, an absent one still succeeds (idempotent).
+	var (
+		projectID string
+		found     bool
+		getErr    error
 	)
 	s.do(func() {
 		rec, ok, e := s.dmnrefs.Get(id)
@@ -157,52 +203,19 @@ func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 			getErr = e
 			return
 		}
-		if !ok {
-			return
-		}
-		found = true
-		if payload.ProjectID != nil {
-			if *payload.ProjectID != "" {
-				_, pok, pe := s.projects.Get(*payload.ProjectID)
-				if pe != nil {
-					projErr = pe
-					return
-				}
-				if !pok {
-					unknownProject = true
-					return
-				}
-			}
-			rec.ProjectID = *payload.ProjectID
-		}
-		if payload.Name != nil {
-			rec.Name = newName
-		}
-		if saveErr = s.dmnrefs.Save(rec); saveErr != nil {
-			return
-		}
-		view = toDmnRefResp(rec)
+		found = ok
+		projectID = rec.ProjectID
 	})
-	switch {
-	case getErr != nil:
+	if getErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
-	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "update dmn reference: "+saveErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, view)
+		return
 	}
-}
-
-// handleDeleteDmnRef removes a DMN reference. Deleting an absent reference
-// succeeds, so the operation is idempotent.
-func (s *Server) handleDeleteDmnRef(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	if found {
+		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	var delErr error
 	s.do(func() { delErr = s.dmnrefs.Delete(id) })
 	if delErr != nil {

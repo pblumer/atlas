@@ -77,6 +77,33 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		SavedAt:   time.Now().Unix(),
 		Schema:    string(payload.Schema),
 	}
+	// Authoring a form inherits project scope (ADR-0071): overwriting an existing
+	// form needs editor on its current scope, and filing into a project needs
+	// editor there. authorizeArtifact (not authorizeTargetProject) is used so a
+	// form filed under an unknown project id stays permitted, as it was before
+	// scopes — only real projects gate.
+	var (
+		existing form
+		existed  bool
+		getErr   error
+	)
+	s.do(func() { existing, existed, getErr = s.forms.Get(id) })
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
+		return
+	}
+	if existed {
+		if code, msg := s.authorizeArtifact(r, existing.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	if rec.ProjectID != "" {
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	var (
 		saveErr   error
 		protected bool
@@ -109,9 +136,21 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 	var loadErr error
 	s.do(func() {
 		var recs []form
-		recs, loadErr = s.forms.LoadAll()
+		if recs, loadErr = s.forms.LoadAll(); loadErr != nil {
+			return
+		}
+		var projs map[string]project
+		if projs, loadErr = s.projectsByID(); loadErr != nil {
+			return
+		}
 		for _, f := range recs {
 			if filter != "" && f.ProjectID != filter {
+				continue
+			}
+			// Inherit the project's scope (ADR-0071): hide forms the caller cannot
+			// view. Rendering a form to run a task is a separate, ungated runtime
+			// path (handleGetForm / the public form endpoints).
+			if !s.canViewArtifact(r, f.ProjectID, projs) {
 				continue
 			}
 			list = append(list, metaOf(f))
@@ -157,6 +196,32 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 // shows the task without a form — so this does not scan deployments.
 func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Deletion inherits the form's project scope (ADR-0071): editor required, an
+	// invisible form 404s, an absent one still succeeds (idempotent).
+	var (
+		projectID string
+		found     bool
+		getErr    error
+	)
+	s.do(func() {
+		rec, ok, e := s.forms.Get(id)
+		if e != nil {
+			getErr = e
+			return
+		}
+		found = ok
+		projectID = rec.ProjectID
+	})
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+getErr.Error())
+		return
+	}
+	if found {
+		if code, msg := s.authorizeArtifact(r, projectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
 	var (
 		delErr    error
 		protected bool
