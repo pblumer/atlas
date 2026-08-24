@@ -86,3 +86,12 @@ test("more tokens than the shape holds collapse into a count", async ({ page }) 
   // them all.
   await expect(page.locator("#token-legend .token-chip")).toHaveCount(7);
 });
+
+test("a loop's badge counts its rounds, not its activations", async ({ page }) => {
+  // The runtime endpoint reports 4 visits on the looping task — the loop's body plus its
+  // three rounds. What a reader of a loop wants is how often it ran.
+  const badge = page.locator("#canvas .ops-badge.loop");
+  await expect(badge).toHaveCount(1);
+  await expect(badge).toHaveText("↻ 3");
+  await expect(badge).toHaveAttribute("title", "3 runs of this loop");
+});

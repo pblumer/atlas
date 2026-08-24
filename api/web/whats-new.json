@@ -59,6 +59,34 @@
       }
     },
     {
+      "id": "a-loop-s-badge-counts-its-rounds-not-its-activations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop's badge says how often it ran",
+        "de": "Der Zähler an einer Schleife sagt, wie oft sie lief"
+      },
+      "summary": {
+        "en": "The number at the corner of a looping task counted one more than the rounds it ran: the engine enters the activity once as the loop itself and once per round, and the badge showed both. It now says the round count, marked with the loop symbol — and 0 for a loop that was reached but ran nothing, which is the case most worth noticing.",
+        "de": "Die Zahl an der Ecke eines Schleifen-Tasks zählte einen mehr als die tatsächlichen Durchläufe: Die Engine betritt die Aktivität einmal als Schleife selbst und einmal je Durchlauf, und der Zähler zeigte beides. Jetzt steht dort die Anzahl der Durchläufe, mit dem Schleifensymbol gekennzeichnet — und 0 bei einer Schleife, die erreicht wurde, aber nichts ausgeführt hat; genau der Fall, den man sehen will."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "token-markers-on-one-element-no-longer-overlap",
       "version": "Unreleased",
       "date": null,
@@ -298,35 +326,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "an-active-directory-connector-that-speaks-ad-not-ldap",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Active Directory as ready-made process steps",
-        "de": "Active Directory als fertige Prozessschritte"
-      },
-      "summary": {
-        "en": "A process can now create a user or a group in Active Directory, set a password, enable, disable, move or delete an account, and add or remove a group member — picked from a list instead of hand-built from LDAP rules that are easy to get subtly wrong. A sync step reads only what has changed since the last run, so a process can react to the directory instead of re-reading all of it.",
-        "de": "Ein Prozess kann jetzt in Active Directory Benutzer oder Gruppen anlegen, Passwörter setzen, Konten aktivieren, deaktivieren, verschieben oder löschen und Gruppenmitglieder hinzufügen oder entfernen — auswählbar aus einer Liste statt zusammengebaut aus LDAP-Regeln, bei denen sich leicht unbemerkt Fehler einschleichen. Ein Sync-Schritt liest nur, was sich seit dem letzten Lauf geändert hat, sodass ein Prozess auf das Verzeichnis reagieren kann, statt es jedes Mal komplett zu lesen."
-      },
-      "link": {
-        "label": "ADR-0166",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

@@ -1450,6 +1450,11 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
 }
 
+/* A looping activity's badge counts its rounds, not its activations, and carries the ↻ so
+   the number is read as "ran this often" rather than as the plain execution count every
+   other element's badge is. */
+.ops-badge.loop { gap: 2px; color: var(--accent); border-color: var(--accent); }
+
 /* The selected element's in/out card, hung under it on the replay canvas: what its
    input mappings were handed, and what it wrote (drawIOOverlay, ADR-0068/0159). It is
    a read-out, not a control — pointer-events stay off so a click always reaches the
