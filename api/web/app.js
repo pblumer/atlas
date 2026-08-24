@@ -206,7 +206,48 @@ function viewLogin() {
 // opens its menu (closing others); clicking anywhere else closes them all.
 function closeAllMenus() {
   for (const m of document.querySelectorAll(".dropdown-menu:not([hidden]):not(.submenu-menu)")) m.hidden = true;
+  openMenu = openTrigger = null;
 }
+// placeMenu puts an open menu under its trigger, or above it when there is no room
+// below. Menus are position:fixed so no ancestor's overflow can clip them, which means
+// CSS cannot place them — these are viewport coordinates. Right-aligned to the trigger,
+// as the absolute rule used to be, and held inside the viewport.
+function placeMenu(menu, trigger, preferAbove) {
+  menu.style.left = menu.style.top = "";
+  const t = trigger.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+  const fitsBelow = t.bottom + 4 + h <= window.innerHeight - 8, fitsAbove = t.top - 4 - h >= 8;
+  // A menu that opened above its trigger stays above while that side still has room, so
+  // scrolling moves it with the row rather than flipping it across the row.
+  const above = preferAbove ? fitsAbove || !fitsBelow : !fitsBelow && fitsAbove;
+  menu.style.left = `${Math.round(Math.max(8, Math.min(t.right - w, window.innerWidth - w - 8)))}px`;
+  menu.style.top = `${Math.round(above ? Math.max(8, t.top - h - 4) : Math.min(t.bottom + 4, window.innerHeight - h - 8))}px`;
+  return above;
+}
+
+// A fixed menu does not travel with the page, so it is re-placed when the page moves
+// under it — not dismissed. Dismissing looked reasonable until the obvious case: the
+// click that opens a row's menu near the bottom of a list first scrolls that row into
+// view, and that scroll then closed the menu the same click had just opened. The menu
+// is only given up once its trigger has left the viewport entirely. Scrolling *inside*
+// a menu — a long flyout — moves nothing and is ignored.
+let openMenu = null, openTrigger = null, openAbove = false;
+
+function repositionMenus() {
+  if (!openMenu || openMenu.hidden || !openTrigger || !openTrigger.isConnected) return;
+  const t = openTrigger.getBoundingClientRect();
+  if (t.bottom < 0 || t.top > window.innerHeight) { closeAllMenus(); return; }
+  openAbove = placeMenu(openMenu, openTrigger, openAbove);
+  for (const sm of openMenu.querySelectorAll(".submenu")) {
+    const fly = sm.querySelector(".submenu-menu");
+    if (fly && getComputedStyle(fly).display !== "none") placeSubmenu(sm);
+  }
+}
+window.addEventListener("scroll", (e) => {
+  if (e.target instanceof Element && e.target.closest(".dropdown-menu")) return;
+  repositionMenus();
+}, true);
+window.addEventListener("resize", () => repositionMenus());
+
 // placeSubmenu puts an open flyout beside its row. It is position:fixed so the card's
 // overflow cannot clip it, which means CSS cannot place it — these are viewport
 // coordinates. It goes to the left of the parent menu, where the room is (a row's action
@@ -241,7 +282,10 @@ document.addEventListener("click", (e) => {
     e.preventDefault(); e.stopPropagation();
     const menu = toggle.nextElementSibling, wasOpen = menu && !menu.hidden;
     closeAllMenus();
-    if (menu) menu.hidden = wasOpen;
+    if (menu) {
+      menu.hidden = wasOpen;
+      if (!menu.hidden) { openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false); }
+    }
     return;
   }
   closeAllMenus();

@@ -1968,7 +1968,12 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* ---------- Dropdown menu (Create new ▾, row ⋯ actions) ---------- */
 .dropdown { position: relative; display: inline-block; }
 .dropdown-menu {
-  position: absolute; right: 0; top: calc(100% + 4px); min-width: 210px;
+  /* Fixed, not absolute. A card holding a table scrolls horizontally
+     (.card:has(> table)), and a box that is not "visible" on one axis clips the other
+     too — so a row's menu was cut off at the card's bottom edge whenever the card was
+     short, taking Delete with it. Fixed escapes every such ancestor, at the price of
+     needing its coordinates from placeMenu instead of from CSS. */
+  position: fixed; left: 0; top: 0; min-width: 210px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 10px 30px rgba(20, 22, 26, .14); padding: 6px; z-index: 60;
 }
@@ -1990,14 +1995,8 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .submenu-toggle { width: 100%; }
 .submenu-caret { margin-left: auto; padding-left: 10px; color: var(--muted); }
 .submenu-menu {
-  /* Fixed, not absolute: a card holding a table scrolls horizontally
-     (.card:has(> table)), and a box that is not "visible" on one axis clips the other
-     too, so an absolutely positioned flyout is cut off at the card's edge. Fixed escapes
-     that, at the price of needing its coordinates from placeSubmenu. */
-  display: none; position: fixed; top: 0; left: 0;
-  /* .dropdown-menu pins itself to the right of its trigger; left+right together on a
-     fixed box would stretch it across the whole window, so that pin is released here. */
-  right: auto; max-width: 340px;
+  /* Placed by placeSubmenu beside its row rather than by placeMenu under a trigger. */
+  display: none; max-width: 340px;
   max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
 }
 /* A project name can be long, and a menu row does not wrap by default; here it may,
