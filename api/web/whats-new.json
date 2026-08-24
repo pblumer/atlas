@@ -2,6 +2,56 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A loop's replay says why it went round again — or stopped",
+        "de": "Der Replay einer Schleife sagt, warum sie erneut lief — oder aufhörte"
+      },
+      "summary": {
+        "en": "A looping task used to be a column of identical rows: it ran nine times, and nothing said whether that was the model or a mistake. Each round now shows the condition as you wrote it, the values that condition read for that round, the maximum, and what the loop did next — ran again, or stopped, with the bound that stopped it. The task itself carries the same reading for the whole loop. A model that runs to its maximum because it states no condition now says so.",
+        "de": "Ein Schleifen-Task war bisher eine Spalte gleich aussehender Zeilen: Er lief neun Mal, und nichts sagte, ob das so gemeint war oder ein Fehler. Jeder Durchlauf zeigt jetzt die Bedingung so, wie Sie sie geschrieben haben, die Werte, die diese Bedingung in diesem Durchlauf gelesen hat, das Maximum und was die Schleife danach tat — noch einmal laufen oder aufhören, mitsamt der Grenze, die sie gestoppt hat. Der Task selbst trägt dieselbe Lesart für die ganze Schleife. Ein Modell, das bis zum Maximum läuft, weil es gar keine Bedingung nennt, sagt das jetzt auch."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "token-markers-on-one-element-no-longer-overlap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Several tokens on one shape are readable again",
+        "de": "Mehrere Tokens auf einer Form sind wieder lesbar"
+      },
+      "summary": {
+        "en": "The replay draws a marker per token on an element, and they were spaced slightly closer than they are wide — so every pair sat partly on top of the one before it. A loop puts two on its task at all times, so this was the normal case rather than a rare one. They now stand clear of each other, and where a shape runs out of room the rest become a \"+n\".",
+        "de": "Der Replay zeichnet je Token einen Marker auf dem Element, und der Abstand war etwas kleiner als der Marker breit ist — jedes Paar lag also teilweise übereinander. Eine Schleife hat immer zwei davon auf ihrem Task, das war also der Normalfall, nicht die Ausnahme. Sie stehen jetzt frei nebeneinander, und wo die Form zu schmal wird, fasst ein „+n\" den Rest zusammen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "a-looping-activity-that-also-has-an-i-o-mapping-no-longer-lo",
       "version": "Unreleased",
       "date": null,
@@ -271,64 +321,6 @@
       "tags": [
         "Connectors",
         "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-generic-ldap-connector",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Any LDAP directory, from a process",
-        "de": "Jedes LDAP-Verzeichnis, direkt aus einem Prozess"
-      },
-      "summary": {
-        "en": "Search, add, modify and delete entries, or change a password, in any LDAP directory. Searches are paged and bounded, so a directory answering with fifty thousand entries neither overwhelms the worker nor quietly returns half an answer, and a modify can change a single value instead of replacing a whole attribute. Sign in anonymously, with a stored password, or with a client certificate.",
-        "de": "Einträge in beliebigen LDAP-Verzeichnissen suchen, anlegen, ändern und löschen oder ein Passwort setzen. Suchen laufen seitenweise und begrenzt, damit ein Verzeichnis mit fünfzigtausend Treffern den Worker weder überlastet noch stillschweigend nur die Hälfte liefert, und eine Änderung kann einen einzelnen Wert betreffen statt ein ganzes Attribut zu ersetzen. Die Anmeldung erfolgt anonym, mit hinterlegtem Passwort oder per Client-Zertifikat."
-      },
-      "link": {
-        "label": "ADR-0154",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0154-ldap-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "directory-files-ldif-and-dsml",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Read and write directory files (LDIF, DSML)",
-        "de": "Verzeichnisdateien lesen und schreiben (LDIF, DSML)"
-      },
-      "summary": {
-        "en": "Directory entries exported to a file can be read into a process, and written back out, in either LDIF or DSML. They arrive in exactly the shape a live directory search returns, so the same process steps handle a file export and a real directory without being written twice.",
-        "de": "In eine Datei exportierte Verzeichniseinträge lassen sich in einen Prozess einlesen und wieder herausschreiben — wahlweise als LDIF oder DSML. Sie kommen in genau der Form an, die auch eine Suche im laufenden Verzeichnis liefert; dieselben Prozessschritte verarbeiten damit einen Dateiexport und ein echtes Verzeichnis, ohne zweimal geschrieben werden zu müssen."
-      },
-      "link": {
-        "label": "ADR-0171",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0171-directory-file-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Import"
       ],
       "try": {
         "label": {

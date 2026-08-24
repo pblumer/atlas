@@ -317,6 +317,19 @@ textarea::placeholder {
 .ops-manual p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
 .ops-manual-reason { margin-top: 6px !important; font-style: italic; }
 
+/* The loop block on the Details tab (ADR-0077/0133): what the loop was told to repeat
+   while, what this round read, and what the loop then did. Neutral rather than warning-
+   coloured — a loop doing what it was told is the normal case, and the block is there to
+   be read, not to alarm. */
+.ops-loop {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2, var(--surface));
+}
+.ops-loop h4 { margin: 0 0 6px; font-size: 12px; color: var(--accent); }
+.ops-loop .ops-props { margin: 0; }
+.ops-loop code { font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ops-loop-out { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--text); }
+
 /* The repair form on an incident (ADR-0169): the modeler's own fields, in place of the
    raw JSON document. The form-js viewer brings its own field styling, so this only gives
    it room to breathe and a scroll of its own — a repair form may be long, and the modal
@@ -1457,6 +1470,10 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .io-none, .io-more { color: var(--muted); font-style: italic; }
+/* The loop's own row on the card: the round, its condition and what the loop decided. It
+   is neither an in nor an out, so its label reads in the muted tone rather than claiming
+   one of those two colours. */
+.io-sec.loop .io-lbl { background: color-mix(in srgb, var(--muted) 13%, var(--surface)); color: var(--muted); }
 
 /* Implementation-type marker the editor draws on a task in the Implement view (and the
    runtime views), so its executable nature reads at a glance — a script task's language

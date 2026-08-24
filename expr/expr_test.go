@@ -164,3 +164,26 @@ func TestFromStoredRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestSourceKeepsTheExpressionAsWritten: a compiled expression is otherwise opaque, so
+// anything that has to *explain* a decision the engine made — a loop's condition on the
+// replay, a message naming the expression that failed — would have to go back to the
+// model to quote it. Both compile paths keep the text, and keep it verbatim: the reader
+// is shown what the author wrote, not a re-rendering of it.
+func TestSourceKeepsTheExpressionAsWritten(t *testing.T) {
+	const src = `result >= 500`
+	declared, err := expr.Compile(src, "result")
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if declared.Source() != src {
+		t.Errorf("Compile(...).Source() = %q, want %q", declared.Source(), src)
+	}
+	auto, err := expr.CompileAuto(src)
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	if auto.Source() != src {
+		t.Errorf("CompileAuto(...).Source() = %q, want %q", auto.Source(), src)
+	}
+}
