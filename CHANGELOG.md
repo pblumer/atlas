@@ -22,7 +22,11 @@ _Changed_ / _Removed_ for each version.
   variables held for that round, the stated maximum, and what followed — another round,
   or the end of the loop with the bound that ended it (the maximum, the condition no
   longer holding, or the engine's safety ceiling). The loop's body carries the same
-  reading for the loop as a whole, including how many rounds ran. It shows up in the
+  reading for the loop as a whole, including how many rounds ran — and, for a
+  multi-instance, **what it was told to iterate over and what that name held**, which is
+  the one case where a loop does nothing at all and says nothing about it: a collection
+  expression that comes out as anything but a list seeds no rounds, so the activity is
+  walked past as if it had no work. It shows up in the
   replay's Details tab in prose and on the diagram card in one line, so a model that runs
   nine times because it states no condition says exactly that, instead of leaving the
   reader to guess between a cap, a condition and a bug.
