@@ -2908,3 +2908,9 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
   font-size: 12px; white-space: pre-wrap; word-break: break-word;
 }
+
+/* What the configured clio connector holds, under the in-memory tail. Separated by a
+   rule rather than a card, because they are the same rows from two places and the
+   distinction that matters is only "this run" versus "before it". */
+.wkjob-history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.wkjob-history-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }

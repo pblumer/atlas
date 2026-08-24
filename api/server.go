@@ -296,6 +296,10 @@ type Server struct {
 	// jobs on the run loop, so it needs no lock.
 	clioRegistry *clio.Registry
 
+	// history appends settled job runs to a clio connector, when an operator named
+	// one (see workerhistory.go). nil means they did not, and the console's ring is
+	// the whole of what this server remembers.
+	history *historyExporter
 	// mailRegistry resolves a connector name to a mail-provider client for outbound
 	// mail connector tasks (ADR-0079), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each provider's credential
@@ -1154,6 +1158,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.exporter = exp
 	}
 
+	// The job-history exporter, when an operator named a connector for it. It is a
+	// plain goroutine rather than one of the tracked three: nothing waits for it, and
+	// a shutdown that blocked on draining telemetry would be the tail wagging the dog.
+	//
+	// The registry holds it too, because the settle path is where a run becomes a
+	// history entry.
+	s.workers.history = s.history
+	if s.history != nil {
+		go s.history.run(quit)
+	}
+
 	s.wg.Add(3)
 	go s.loop()
 
@@ -1677,6 +1692,32 @@ func WithSupervisedWorkers(serverURL string, specs []SuperviseSpec, handles [][]
 		s.superviseURL = serverURL
 		s.SuperviseSpecs = specs
 		s.superviseHandles = handles
+	}
+}
+
+// WithWorkerHistory sends every settled job run to a clio connector, so a worker's
+// history outlives this process and its retention becomes the operator's own policy
+// in their own store (see workerhistory.go).
+//
+// Like the supervisor's configuration it is an Option, so the connector is named on
+// this server's command line and nowhere else. The name is resolved at write time
+// rather than at startup: an operator may create the connector after the server is
+// running, and the history should start flowing when they do rather than at the next
+// restart.
+//
+// scope is [HistoryScopeAll] or [HistoryScopeFailed]; anything else means all.
+func WithWorkerHistory(connector, scope string) Option {
+	return func(s *Server) {
+		s.history = newHistoryExporter(connector, scope, func() (clio.Client, bool) {
+			var (
+				c  clio.Client
+				ok bool
+			)
+			// On the loop: clientreg.Registry has no lock, and a connector rebuild
+			// swaps its map wholesale. The network write happens outside, in run.
+			s.do(func() { c, ok = s.clioRegistry.Client(connector) })
+			return c, ok
+		})
 	}
 }
 

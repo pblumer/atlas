@@ -55,8 +55,12 @@ const (
 
 // jobRun is one job a worker leased, as the console shows it.
 type jobRun struct {
-	JobKey             uint64 `json:"jobKey"`
-	Type               string `json:"type"`
+	JobKey uint64 `json:"jobKey"`
+	Type   string `json:"type"`
+	// Worker is which worker leased it. The console reads these per worker and so
+	// does not need it, but the history does: a clio event has to carry its own
+	// context, because out there nothing knows which list it came from.
+	Worker             string `json:"worker,omitempty"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey,omitempty"`
 	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
 	// ElementID is the task's own id in the diagram, which is what lets an operator
@@ -133,6 +137,7 @@ func (r *workerRegistry) recordLease(worker string, jobs []pulledJob) {
 		ring.add(&jobRun{
 			JobKey:             j.JobKey,
 			Type:               j.Type,
+			Worker:             worker,
 			ProcessInstanceKey: j.ProcessInstanceKey,
 			ProcessDefKey:      j.ProcessDefKey,
 			ElementID:          j.ElementID,
@@ -162,6 +167,9 @@ func (r *workerRegistry) recordOutcome(worker string, jobKey uint64, outcome, me
 	if len(out) > 0 {
 		run.Out = renderReturnedVars(out)
 	}
+	// And out to the history, if an operator asked for one. A non-blocking hand-off:
+	// this is the run loop, and a slow event store must cost a job nothing.
+	r.history.offer(*run)
 }
 
 // jobsOf returns one worker's recent jobs, newest first.

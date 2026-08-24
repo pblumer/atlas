@@ -93,6 +93,11 @@ var (
 	// worker process Atlas launched itself (ADR-0157 step 7).
 	WorkerSupervisorStarted = newEvent("worker.supervised_started")
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
+	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
+	// reach its clio connector, or that its buffer is dropping entries. Both are
+	// warnings rather than errors on purpose: the history is telemetry, and the engine
+	// deliberately does not wait for it, so a gap costs a run nothing.
+	WorkerHistoryFailed = newEvent("worker.history_failed")
 )
 
 // Recovery checkpoints and WAL compaction (ADR-0131).
