@@ -8102,9 +8102,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const complex = isComplexVar(v);
     let valCell;
     if (complex) {
-      valCell = `<button class="v-open" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)}">
-          <span class="more" aria-hidden="true">···</span>
-          <span class="v-sum">${esc(jsonSummary(v.value))}</span>
+      // A list and an object read almost alike once their text is truncated — the peek of
+      // [{"Nachname":…}] and of {"Nachname":…} differ by one character, off the left edge
+      // of what fits. So the summary carries the brackets, and the row expands in place:
+      // the shape of a structure is the thing an operator is looking at it for.
+      const arr = jsonTypeLabel(v.value) === "array";
+      valCell = `<button class="v-open" type="button" aria-expanded="false" data-vkey="${esc(varRef(v))}"
+          data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}"
+          title="Show ${esc(v.name)}">
+          <span class="v-chev" aria-hidden="true">▸</span>
+          <span class="v-sum">${arr ? "[" : "{"}${esc(jsonSummary(v.value))}${arr ? "]" : "}"}</span>
           <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
     } else {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
@@ -8134,13 +8141,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const actorChip = v.actor
       ? ` <span class="c-actor" title="Set by ${esc(v.actor)} — an operator correction, not a value the process computed">✎ ${esc(v.actor)}</span>`
       : "";
-    return `<tr>
+    const row = `<tr>
       <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}${changedChip}${actorChip}</td>
       <td class="c-valcell">${valCell}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
     </tr>`;
+    if (!complex) return row;
+    // Rendered with the row and hidden, rather than built on the click: the rows are
+    // rewritten on every poll and every frame, and an expansion that lived only in the
+    // click handler would collapse under the reader every 1.5 seconds.
+    return row + `<tr class="v-struct" data-vkey="${esc(varRef(v))}" hidden><td colspan="4">
+      <pre class="vj-body">${highlightJSON(v.value)}</pre>
+      <button class="v-big" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}"
+        data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)} in a window">⤢ Open in a window</button>
+    </td></tr>`;
   }
+
+  // Which structures the reader has opened, by variable ref. The rows are rewritten on
+  // every poll and every frame, so without this an expansion would close under them.
+  const expandedVars = new Set();
 
   // renderVarRows fills the table body from the current variable set, honoring the
   // name filter. Split out from renderVars so typing in the filter (or scrubbing a
@@ -8154,6 +8174,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
       : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+    for (const key of expandedVars) {
+      const struct = body.querySelector(`.v-struct[data-vkey="${CSS.escape(key)}"]`);
+      const open = body.querySelector(`.v-open[data-vkey="${CSS.escape(key)}"]`);
+      if (!struct || !open) continue; // that variable is not in this set (filtered, or gone)
+      struct.hidden = false;
+      open.setAttribute("aria-expanded", "true");
+      open.querySelector(".v-chev").textContent = "\u25BE";
+    }
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -8740,9 +8768,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   // A "···" button in the Variables table opens its object/array value in the modal.
   varsEl.addEventListener("click", (e) => {
+    // The value cell expands the structure in place — the common case is a glance at the
+    // shape, not a window. The window is one step further in, from inside the expansion.
+    const big = e.target.closest(".v-big");
+    if (big && varsEl.contains(big)) {
+      openVarModal(big.dataset.name, big.dataset.json, big.dataset.type);
+      return;
+    }
     const open = e.target.closest(".v-open");
     if (!open || !varsEl.contains(open)) return;
-    openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+    const key = open.dataset.vkey;
+    const struct = varsEl.querySelector(`.v-struct[data-vkey="${CSS.escape(key)}"]`);
+    if (!struct) { // no expansion rendered (shouldn't happen) — fall back to the window
+      openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+      return;
+    }
+    const show = struct.hidden;
+    struct.hidden = !show;
+    open.setAttribute("aria-expanded", String(show));
+    open.querySelector(".v-chev").textContent = show ? "\u25BE" : "\u25B8";
+    if (show) expandedVars.add(key); else expandedVars.delete(key);
   });
   modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
   modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
