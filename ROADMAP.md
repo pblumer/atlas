@@ -483,6 +483,17 @@ Making processes wait, react, and time out.
   carries the diagram context that needs (`processDefKey`, `processId`, the BPMN
   `elementId`, `type`) and is scopable with `?instance=` / `?process=`; nothing new is
   written into the durable record.
+- ✅ **Operator variable override**: an operator can set or overwrite a variable on a
+  running instance from outside the model — the correction path for a stuck or
+  mis-seeded instance — via `POST /api/v1/instances/{key}/variables`
+  ([ADR-0095](docs/adr/0095-external-variable-modification.md)), admin-gated under auth
+  and targeting the instance root or a named subprocess-local scope. The write is an
+  ordinary variable event (recovery-tested; gateways a token has already passed are
+  **not** re-evaluated). Every override is attributed in an append-only **audit trail**
+  — who set which variable, on which scope, to what value —
+  ([ADR-0098](docs/adr/0098-external-variable-modification-audit.md)), read via
+  `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
+  timeline so a corrected value carries its actor.
 
 ## Milestone 3 — Structure ✅
 
