@@ -129,8 +129,8 @@
         "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0177",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0177-reload-skips-the-deploy-gate.md"
       },
       "tags": [
         "Operations"
@@ -325,34 +325,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-model-that-maps-onto-loopcounter-is-refused-at-deploy",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Writing to the loop counter is caught before it runs",
-        "de": "Ein Schreiben auf den Schleifenzähler wird vor dem Lauf abgefangen"
-      },
-      "summary": {
-        "en": "Every round of a loop is handed its number as loopCounter, and a model may read it freely. A mapping that writes to that name overwrote the engine's own count, and the loop then ran until somebody cancelled it. The deploy now refuses such a model and names the element and the mapping, instead of leaving it to be discovered on a runaway instance.",
-        "de": "Jeder Durchlauf einer Schleife bekommt seine Nummer als loopCounter, und ein Modell darf sie frei lesen. Ein Mapping, das auf diesen Namen schreibt, überschrieb die Zählung der Engine, und die Schleife lief dann, bis jemand sie abbrach. Der Deploy weist ein solches Modell jetzt ab und benennt Element und Mapping, statt es an einer davonlaufenden Instanz sichtbar werden zu lassen."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
