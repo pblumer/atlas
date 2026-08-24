@@ -178,11 +178,16 @@ type entraOp struct {
 	needsUser       bool
 	needsGroup      bool
 	needsAttributes bool
+	// isList marks the one operation that returns a collection rather than an object
+	// or nothing. It is what makes filter/select/pageSize/maxUsers meaningful — and
+	// what makes them an error anywhere else.
+	isList bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true},
+	"list-users":          {isList: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
 	"delete-user":         {needsUser: true},
 	"enable":              {needsUser: true},
@@ -190,6 +195,24 @@ var entraOps = map[string]entraOp{
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
 }
+
+// The listing bounds a model inherits when it authors none.
+//
+// maxUsers defaults on for the reason the LDAP connector's entry cap does: an
+// unbounded directory listing into a process variable is the failure this hardens
+// against, and a truncated one would be a wrong answer rather than a partial one.
+// pageSize defaults *off* — absent means no $top, which leaves Graph its own page
+// size (100 for /users). Unlike LDAP there is nothing to work around: Graph pages a
+// collection whether asked to or not, and this connector follows every page.
+const (
+	defaultEntraPageSize = 0
+	defaultEntraMaxUsers = 1000
+)
+
+// maxEntraPageSize is Graph's own ceiling on $top for /users. Refusing a larger one
+// at deploy is better than the 400 it becomes at run time, which an operator has to
+// read out of a failed job to learn a number that was knowable all along.
+const maxEntraPageSize = 999
 
 // entraOpNames lists the operations, sorted, for the error messages.
 func entraOpNames() []string {
@@ -227,11 +250,29 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if spec.needsAttributes && strings.TrimSpace(cn.AttributesVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs an attributesVariable naming the directory properties", st.Id, op)
 	}
+	if spec.isList && strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation list-users needs a resultVariable (a listing that discards its result is a directory read nothing asked for)", st.Id)
+	}
+	if err := entraListOnly(st.Id, op, spec.isList, cn); err != nil {
+		return 0, err
+	}
+	pageSize, err := entraListBound(st.Id, op, spec.isList, "pageSize", cn.PageSize, defaultEntraPageSize, maxEntraPageSize)
+	if err != nil {
+		return 0, err
+	}
+	maxUsers, err := entraListBound(st.Id, op, spec.isList, "maxUsers", cn.MaxUsers, defaultEntraMaxUsers, 0)
+	if err != nil {
+		return 0, err
+	}
 	userID, err := connectorValue(st.Id, "entra connector", "userId", cn.UserID)
 	if err != nil {
 		return 0, err
 	}
 	groupID, err := connectorValue(st.Id, "entra connector", "groupId", cn.GroupID)
+	if err != nil {
+		return 0, err
+	}
+	filter, err := connectorValue(st.Id, "entra connector", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
@@ -242,8 +283,62 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		GroupID:       groupID,
 		AttributesVar: strings.TrimSpace(cn.AttributesVariable),
 		ResultVar:     strings.TrimSpace(cn.ResultVariable),
+		Filter:        filter,
+		Select:        strings.TrimSpace(cn.Select),
+		PageSize:      pageSize,
+		MaxUsers:      maxUsers,
 		Retries:       retries,
 	}), nil
+}
+
+// entraListOnly rejects a listing attribute on an operation that returns one object
+// or none. Ignoring it would be worse than failing: an author who wrote a filter
+// believes the task is filtered, and a get-user that quietly ignores one addresses
+// whatever userId happens to say instead.
+func entraListOnly(taskID, op string, isList bool, cn *xmlEntraConnector) error {
+	if isList {
+		return nil
+	}
+	for _, a := range []struct{ what, raw string }{
+		{"filter", cn.Filter},
+		{"select", cn.Select},
+	} {
+		if strings.TrimSpace(a.raw) != "" {
+			return fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which addresses one user directly (%s applies to list-users)", taskID, a.what, op, a.what)
+		}
+	}
+	return nil
+}
+
+// entraListBound reads one authored listing bound, returning the effective value the
+// compiled process carries: the default when the attribute is absent, and the
+// authored number otherwise — including 0, which is how a model says unbounded.
+// A max of 0 means the bound has no ceiling of its own.
+//
+// A bound on a non-listing operation is rejected rather than ignored, for
+// [entraListOnly]'s reason.
+func entraListBound(taskID, op string, isList bool, what, raw string, def, max int32) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if isList {
+			return def, nil
+		}
+		return 0, nil
+	}
+	if !isList {
+		return 0, fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which returns no collection (%s applies to list-users)", taskID, what, op, what)
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: entra connector task %q has a non-numeric %s %q", taskID, what, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: entra connector task %q has a negative %s %d", taskID, what, n)
+	}
+	if max > 0 && int32(n) > max {
+		return 0, fmt.Errorf("compiler: entra connector task %q has a %s of %d, above the %d Graph accepts for /users", taskID, what, n, max)
+	}
+	return int32(n), nil
 }
 
 // sqlProduct is one of the three SQL connector products: how a task of it is named

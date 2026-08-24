@@ -4637,7 +4637,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}
 		return &connectorPayload{Kind: "entra", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "userId": j.UserID,
-			"groupId": j.GroupID, "attributes": j.Attributes, "resultVariable": j.ResultVariable,
+			"groupId": j.GroupID, "attributes": j.Attributes, "filter": j.Filter,
+			"select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page
