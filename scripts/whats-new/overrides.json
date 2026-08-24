@@ -1,5 +1,83 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "a-looping-activity-that-also-has-an-i-o-mapping-no-longer-lo": {
+    "tags": [
+      "Modeler",
+      "Operations"
+    ],
+    "title": {
+      "en": "A loop stops at the maximum you set",
+      "de": "Eine Schleife hält bei dem Maximum, das Sie setzen"
+    },
+    "summary": {
+      "en": "An activity with the loop marker that also mapped a value in had lost count of its own rounds: a task set to run at most nine times ran until somebody cancelled the instance, a collection was worked through one element over and over, and what the rounds produced never reached the process. The rounds are counted again — the maximum holds, the collection advances, and the result of the last run is there when the loop ends.",
+      "de": "Eine Aktivität mit Schleifen-Marker, die zusätzlich einen Wert per Mapping hereinreichte, verlor die Zählung ihrer Durchläufe: Ein Task mit höchstens neun Läufen lief, bis jemand die Instanz abbrach, eine Sammlung wurde immer wieder mit demselben Element abgearbeitet, und was die Durchläufe erzeugt hatten, kam nie im Prozess an. Die Durchläufe werden wieder gezählt — das Maximum greift, die Sammlung läuft weiter, und das Ergebnis des letzten Laufs steht am Ende der Schleife bereit."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "a-loop-body-no-longer-writes-a-null-over-the-process": {
+    "tags": [
+      "Operations",
+      "Modeler"
+    ],
+    "title": {
+      "en": "A loop no longer empties a variable it never touched",
+      "de": "Eine Schleife leert keine Variable mehr, die sie nie angefasst hat"
+    },
+    "summary": {
+      "en": "A looping activity that reshapes its result on the way out applied that rule twice: once per round, correctly, and once more for the loop as a whole — where there was nothing to reshape, so it wrote an empty value into the process, over whatever the variable of that name already held. The rule now runs where the work is, in each round.",
+      "de": "Eine Schleifen-Aktivität, die ihr Ergebnis beim Verlassen umformt, wendete diese Regel zweimal an: einmal je Durchlauf, richtig, und noch einmal für die Schleife als Ganzes — dort gab es nichts umzuformen, also schrieb sie einen leeren Wert in den Prozess, über das, was die gleichnamige Variable schon enthielt. Die Regel läuft jetzt dort, wo die Arbeit passiert: in jedem Durchlauf."
+    }
+  },
+  "a-finished-loop-round-no-longer-leaves-a-token-behind-on-the": {
+    "tags": [
+      "Operations"
+    ],
+    "title": {
+      "en": "The replay of a loop shows one round, not a pile",
+      "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
+    },
+    "summary": {
+      "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
+      "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
+  },
+  "a-model-that-maps-onto-loopcounter-is-refused-at-deploy": {
+    "tags": [
+      "Modeler"
+    ],
+    "title": {
+      "en": "Writing to the loop counter is caught before it runs",
+      "de": "Ein Schreiben auf den Schleifenzähler wird vor dem Lauf abgefangen"
+    },
+    "summary": {
+      "en": "Every round of a loop is handed its number as loopCounter, and a model may read it freely. A mapping that writes to that name overwrote the engine's own count, and the loop then ran until somebody cancelled it. The deploy now refuses such a model and names the element and the mapping, instead of leaving it to be discovered on a runaway instance.",
+      "de": "Jeder Durchlauf einer Schleife bekommt seine Nummer als loopCounter, und ein Modell darf sie frei lesen. Ein Mapping, das auf diesen Namen schreibt, überschrieb die Zählung der Engine, und die Schleife lief dann, bis jemand sie abbrach. Der Deploy weist ein solches Modell jetzt ab und benennt Element und Mapping, statt es an einer davonlaufenden Instanz sichtbar werden zu lassen."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "the-modeler-stops-calling-every-script-task-a-feel-one": {
+    "hidden": true
+  },
   "atlas-worker-the-same-binary-working-jobs-outside-the-engine": {
     "tags": [
       "Operations",

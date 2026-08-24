@@ -2,6 +2,113 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "a-looping-activity-that-also-has-an-i-o-mapping-no-longer-lo",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop stops at the maximum you set",
+        "de": "Eine Schleife hält bei dem Maximum, das Sie setzen"
+      },
+      "summary": {
+        "en": "An activity with the loop marker that also mapped a value in had lost count of its own rounds: a task set to run at most nine times ran until somebody cancelled the instance, a collection was worked through one element over and over, and what the rounds produced never reached the process. The rounds are counted again — the maximum holds, the collection advances, and the result of the last run is there when the loop ends.",
+        "de": "Eine Aktivität mit Schleifen-Marker, die zusätzlich einen Wert per Mapping hereinreichte, verlor die Zählung ihrer Durchläufe: Ein Task mit höchstens neun Läufen lief, bis jemand die Instanz abbrach, eine Sammlung wurde immer wieder mit demselben Element abgearbeitet, und was die Durchläufe erzeugt hatten, kam nie im Prozess an. Die Durchläufe werden wieder gezählt — das Maximum greift, die Sammlung läuft weiter, und das Ergebnis des letzten Laufs steht am Ende der Schleife bereit."
+      },
+      "link": {
+        "label": "ADR-0068",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
+      },
+      "tags": [
+        "Modeler",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-body-no-longer-writes-a-null-over-the-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop no longer empties a variable it never touched",
+        "de": "Eine Schleife leert keine Variable mehr, die sie nie angefasst hat"
+      },
+      "summary": {
+        "en": "A looping activity that reshapes its result on the way out applied that rule twice: once per round, correctly, and once more for the loop as a whole — where there was nothing to reshape, so it wrote an empty value into the process, over whatever the variable of that name already held. The rule now runs where the work is, in each round.",
+        "de": "Eine Schleifen-Aktivität, die ihr Ergebnis beim Verlassen umformt, wendete diese Regel zweimal an: einmal je Durchlauf, richtig, und noch einmal für die Schleife als Ganzes — dort gab es nichts umzuformen, also schrieb sie einen leeren Wert in den Prozess, über das, was die gleichnamige Variable schon enthielt. Die Regel läuft jetzt dort, wo die Arbeit passiert: in jedem Durchlauf."
+      },
+      "link": {
+        "label": "ADR-0068",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ]
+    },
+    {
+      "id": "a-finished-loop-round-no-longer-leaves-a-token-behind-on-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The replay of a loop shows one round, not a pile",
+        "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
+      },
+      "summary": {
+        "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
+        "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-model-that-maps-onto-loopcounter-is-refused-at-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Writing to the loop counter is caught before it runs",
+        "de": "Ein Schreiben auf den Schleifenzähler wird vor dem Lauf abgefangen"
+      },
+      "summary": {
+        "en": "Every round of a loop is handed its number as loopCounter, and a model may read it freely. A mapping that writes to that name overwrote the engine's own count, and the loop then ran until somebody cancelled it. The deploy now refuses such a model and names the element and the mapping, instead of leaving it to be discovered on a runaway instance.",
+        "de": "Jeder Durchlauf einer Schleife bekommt seine Nummer als loopCounter, und ein Modell darf sie frei lesen. Ein Mapping, das auf diesen Namen schreibt, überschrieb die Zählung der Engine, und die Schleife lief dann, bis jemand sie abbrach. Der Deploy weist ein solches Modell jetzt ab und benennt Element und Mapping, statt es an einer davonlaufenden Instanz sichtbar werden zu lassen."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "atlas-worker-the-same-binary-working-jobs-outside-the-engine",
       "version": "0.3.0",
       "date": "2026-08-21",
@@ -222,122 +329,6 @@
       "tags": [
         "Connectors",
         "Import"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "three-sql-connectors-sql-server-mariadb-postgresql",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Query a database from a process",
-        "de": "Aus einem Prozess eine Datenbank abfragen"
-      },
-      "summary": {
-        "en": "Microsoft SQL Server, MariaDB and PostgreSQL each get their own connector: read rows into a variable, read a single row, or run a statement and get back how many rows it changed. Values are passed as parameters rather than pasted into the statement. The connection details live on the worker, so a database password never reaches the model or the engine.",
-        "de": "Microsoft SQL Server, MariaDB und PostgreSQL bekommen jeweils einen eigenen Konnektor: Zeilen in eine Variable lesen, eine einzelne Zeile lesen oder eine Anweisung ausführen und die Zahl der geänderten Zeilen zurückbekommen. Werte werden als Parameter übergeben und nicht in die Anweisung hineingeschrieben. Die Verbindungsdaten liegen auf dem Worker, ein Datenbankpasswort erreicht also weder das Modell noch die Engine."
-      },
-      "link": {
-        "label": "ADR-0173",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0173-generic-sql-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-scim-2-0-provisioning-connector",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Provision users over SCIM 2.0",
-        "de": "Benutzer über SCIM 2.0 bereitstellen"
-      },
-      "summary": {
-        "en": "A process can create, read, replace, patch, delete and search users or groups in any system that speaks SCIM 2.0 — the standard most cloud applications offer for user provisioning. When the far side refuses, its own explanation becomes the reason on the task instead of a bare error code.",
-        "de": "Ein Prozess kann Benutzer oder Gruppen in jedem System anlegen, lesen, ersetzen, ändern, löschen und suchen, das SCIM 2.0 spricht — den Standard, den die meisten Cloud-Anwendungen für die Benutzerbereitstellung anbieten. Lehnt die Gegenstelle ab, erscheint ihre eigene Begründung an der Aufgabe statt eines nackten Fehlercodes."
-      },
-      "link": {
-        "label": "ADR-0153",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0153-scim-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-soap-web-services-connector",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "Call a SOAP web service",
-        "de": "Einen SOAP-Webservice aufrufen"
-      },
-      "summary": {
-        "en": "Older systems that only offer SOAP can now be called directly from a process: you author the request, and the connector handles the envelope, the version-specific headers and the fault handling. A fault comes back as the task's failure reason, so it is visible where every other problem is.",
-        "de": "Ältere Systeme, die nur SOAP anbieten, lassen sich jetzt direkt aus einem Prozess aufrufen: Sie formulieren die Anfrage, um Envelope, versionsabhängige Header und Fehlerbehandlung kümmert sich der Konnektor. Ein Fault erscheint als Fehlergrund der Aufgabe — also dort, wo auch jedes andere Problem sichtbar wird."
-      },
-      "link": {
-        "label": "ADR-0165",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0165-soap-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "oauth2-client-credentials-for-the-rest-connector",
-      "version": "0.3.0",
-      "date": "2026-08-21",
-      "category": "Added",
-      "title": {
-        "en": "REST calls that sign in with OAuth2",
-        "de": "REST-Aufrufe, die sich per OAuth2 anmelden"
-      },
-      "summary": {
-        "en": "An API that expects an OAuth2 token no longer needs a token step modelled by hand. Give the REST connector the token URL, the client id and the stored client secret, and it fetches the token, reuses it until shortly before it expires, and refuses to call the API unauthenticated if the exchange fails.",
-        "de": "Für eine API, die ein OAuth2-Token erwartet, muss der Tokenschritt nicht mehr von Hand modelliert werden. Geben Sie dem REST-Konnektor Token-URL, Client-ID und das hinterlegte Client-Secret — er holt das Token, verwendet es bis kurz vor Ablauf weiter und ruft die API nicht ohne Anmeldung auf, wenn der Tausch fehlschlägt."
-      },
-      "link": {
-        "label": "ADR-0152",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0152-rest-connector-oauth2.md"
-      },
-      "tags": [
-        "Connectors",
-        "Secrets"
       ],
       "try": {
         "label": {
