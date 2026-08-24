@@ -8006,6 +8006,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       ? `Round ${l.round}${l.maximum ? ` of at most ${l.maximum}` : ""}`
       : `${l.rounds || 0} round${l.rounds === 1 ? "" : "s"} ran`;
     const rows = [];
+    if (l.collection) {
+      rows.push(`<dt>Iterate over</dt><dd><code>${esc(l.collection)}</code></dd>`);
+    }
     if (l.condition) {
       rows.push(`<dt>${std ? "Repeat while" : "Complete when"}</dt><dd><code>${esc(l.condition)}</code></dd>`);
       rows.push(`<dt>Checked</dt><dd>${l.testBefore
@@ -8027,6 +8030,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <h4>${mark} ${esc(head)}</h4>
       ${rows.length ? `<dl class="ops-props">${rows.join("")}</dl>` : ""}
       ${l.outcome ? `<p class="ops-loop-out">${loopOutcomeText(l)}</p>` : ""}
+      ${!l.round && !l.rounds && l.collection
+      ? `<p class="ops-loop-out">No round ran: <b>iterate over</b> did not come out as a list.
+           A FEEL expression that reads a name nothing holds — or one value where a list was meant —
+           yields no rounds at all, and the activity is walked past.</p>`
+      : ""}
     </div>`;
   };
 

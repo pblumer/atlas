@@ -42,6 +42,11 @@ type loopView struct {
 	// Maximum is the stated loopMaximum, 0 when the loop states none. With no maximum a
 	// standard loop is bounded only by its condition and the engine's safety ceiling.
 	Maximum int32 `json:"maximum,omitempty"`
+	// Collection is what a multi-instance iterates over, as the author wrote it: the FEEL
+	// input collection, or the cardinality when it counts rather than walks. Only on the
+	// body, where the loop decided how many rounds there would be. Empty for a standard
+	// loop, which has no collection.
+	Collection string `json:"collection,omitempty"`
 	// Round is which round this step is, 1-based; 0 on the loop's body.
 	Round int `json:"round,omitempty"`
 	// Rounds is how many rounds ran in total. Only on the body, where it is the summary
@@ -58,13 +63,15 @@ type loopView struct {
 	// ends when its collection runs out or its completion condition holds, and the two
 	// are not distinguishable after the fact.
 	StopReason string `json:"stopReason,omitempty"`
-	// Reads are the values the condition's own variables held for this round, nearest
-	// scope first — the round's locals over the loop body's over the process's, which is
-	// the chain the engine resolves them in. Absent for a loop with no condition.
+	// Reads are the values the expression's own variables held, nearest scope first — the
+	// round's locals over the loop body's over the process's, which is the chain the
+	// engine resolves them in. On a round that is the condition; on a multi-instance body
+	// it is the input collection, read when the loop decided how many rounds to run.
 	Reads []variableView `json:"reads,omitempty"`
-	// Missing names the condition's variables that nothing in scope had a value for.
-	// FEEL is null-propagating, so such a condition is simply never true — the loop then
-	// runs to its cap, which looks like the condition being ignored.
+	// Missing names the expression's variables that nothing in scope had a value for.
+	// FEEL is null-propagating, so a condition over one is never true and a collection
+	// over one is no collection at all — the loop then runs to its cap, or not at all,
+	// which reads as the loop ignoring what the model says.
 	Missing []string `json:"missing,omitempty"`
 }
 
@@ -113,8 +120,22 @@ func annotateLoops(steps []timelineStep, ver *versionAt, acts map[uint64]state.E
 			lv.Condition = cond.Source()
 		}
 		if _, isRound := bodyTokens[rv.ParentTokenID]; !isRound || rv.ParentTokenID == 0 {
-			// The body: the activity as a whole, summarised by how many rounds it ran.
+			// The body: the activity as a whole, summarised by how many rounds it ran. For a
+			// multi-instance that is decided here and once — by the collection, evaluated
+			// over what the body saw on entry. A collection expression that comes out as
+			// anything but a list yields no rounds at all (ADR-0077), and the activity is
+			// then walked past in silence; naming the expression and what it read is what
+			// tells that apart from a genuinely empty list.
 			lv.Rounds = len(roundsOf[rv.TokenID])
+			if !d.Standard {
+				if src := d.InputCollection; src != nil {
+					lv.Collection = src.Source()
+					lv.Reads, lv.Missing = expressionReads(src, s.Inputs, s.Variables, s.ElementID)
+				} else if src := d.Cardinality; src != nil {
+					lv.Collection = src.Source()
+					lv.Reads, lv.Missing = expressionReads(src, s.Inputs, s.Variables, s.ElementID)
+				}
+			}
 			s.Loop = &lv
 			continue
 		}
@@ -158,17 +179,25 @@ func stopReason(d *compiler.MultiInstanceDetail, round int) string {
 // condition over the finished round's scope chain, so the round's own locals come first,
 // then everything as it stood when the round completed.
 func conditionReads(cond *expr.Compiled, s *timelineStep) ([]variableView, []string) {
-	if cond == nil {
+	return expressionReads(cond, s.Inputs, s.VariablesAfter, s.ElementID)
+}
+
+// expressionReads resolves one FEEL expression's variables against a step's folded sets,
+// locals first, and names the ones nothing had a value for. Which set is "everything
+// else" depends on when the engine evaluates the expression: a round's condition after
+// the round wrote, a body's collection when the token arrived.
+func expressionReads(e *expr.Compiled, locals, scope []variableView, elementID string) ([]variableView, []string) {
+	if e == nil {
 		return nil, nil
 	}
 	var reads []variableView
 	var missing []string
-	for _, name := range cond.Inputs() {
-		if v, ok := lookupVar(s.Inputs, name, s.ElementID); ok {
+	for _, name := range e.Inputs() {
+		if v, ok := lookupVar(locals, name, elementID); ok {
 			reads = append(reads, v)
 			continue
 		}
-		if v, ok := lookupVar(s.VariablesAfter, name, s.ElementID); ok {
+		if v, ok := lookupVar(scope, name, elementID); ok {
 			reads = append(reads, v)
 			continue
 		}
