@@ -1373,12 +1373,28 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   padding: 2px 9px; border-radius: 6px;
 }
 .vt .v-open:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.vt .v-open .more { font-weight: 700; letter-spacing: 1px; color: var(--muted); flex: none; }
-.vt .v-open:hover .more { color: var(--accent); }
+.vt .v-open .v-chev { color: var(--muted); flex: none; font-size: 10px; }
+.vt .v-open:hover .v-chev { color: var(--accent); }
 .vt .v-open .v-sum { font: 600 11px/1.5 system-ui, sans-serif; white-space: nowrap; flex: none; }
 .vt .v-open .peek { color: var(--muted); font: 12px/1.4 ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .vt .v-open:hover .peek { color: var(--accent); }
 .vtag.obj { color: var(--accent); border-color: var(--accent-soft); }
+
+/* A structure opened in place. The table is where an operator already is, and the shape
+   of an object or a list is most of what they came for — the window (.v-big) stays one
+   step further in, for the values too big to read in a row's width. */
+.vt .v-struct > td { padding: 0 10px 10px; background: var(--bg); }
+.vt .v-struct .vj-body {
+  margin: 0; max-height: 320px; overflow: auto; padding: 8px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre;
+}
+.vt .v-big {
+  margin-top: 6px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font: 11px/1.6 system-ui, sans-serif;
+}
+.vt .v-big:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Deep-inspect modal: an object/array variable's full value as pretty, colored JSON. */
 .var-modal-ov {

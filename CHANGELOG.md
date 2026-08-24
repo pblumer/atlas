@@ -36,6 +36,17 @@ _Changed_ / _Removed_ for each version.
   its two bounds ended a multi-instance — is left unsaid rather than guessed. Compiled
   FEEL keeps its source text for this (`expr.Compiled.Source`), at deploy time only.
 
+- **A structured variable opens where it stands, and says what shape it is**: the
+  Variables tab summarised an object or a list and previewed its raw text, both of which
+  truncate — and `[{"Nachname":"Blumer",…` and `{"Nachname":"Blumer",…` differ only in the
+  bracket that falls off the left edge. An operator watching a loop hand one element of a
+  list to each round read the element as the whole list and concluded the loop was binding
+  the wrong thing. The summary now carries the brackets (`[3 items]` against
+  `{3 fields}`), so the shape is the first thing read rather than the last, and the row
+  expands in place into pretty-printed JSON — the structure, where the reader already is.
+  The window is still one step further in, for values too big to read in a row, and an
+  expansion survives the 1.5-second poll and the filter that rewrite the rows under it.
+
 ### Fixed
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a
