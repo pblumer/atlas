@@ -402,6 +402,75 @@ func TestMultiInstanceOutputCollection(t *testing.T) {
 	}
 }
 
+// miCollectAfterGatewayProcess is miCollectProcess with an exclusive gateway between the
+// setup task and the loop: start → setup(items) → XOR → work(MI, collecting results) → end.
+// The gateway's chosen flow is the only way the loop is entered, which is the case
+// miCollectProcess cannot cover — there the loop is entered straight from an activity.
+func miCollectAfterGatewayProcess(t *testing.T, collection string, sequential bool) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(1, "mi-collect-gw", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, collection), "items")
+	gw := b.AddExclusiveGateway()
+	work := b.AddScriptTask(mustCompile(t, "item * 10"), "result")
+	b.SetMultiInstance(work, sequential, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, "result"), nil)
+	skip := b.AddEndEvent()
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, gw)
+	loop := b.Connect(gw, work)
+	b.SetFlowCondition(loop, mustCompile(t, "count(items) > 0"))
+	b.SetFlowDefault(b.Connect(gw, skip))
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestMultiInstanceOutputCollectionAfterGateway is TestMultiInstanceOutputCollection for a
+// loop a gateway routes into. Every flow-taking behavior must activate a multi-instance
+// activity as its *body* (ADR-0077); an exclusive gateway that activated it as an ordinary
+// element instead still seeded and ran the iterations — the seeding gate does not look at
+// the role — but the body then completed as an ordinary activity: nothing promoted the
+// assembled output collection to the enclosing scope, and the scope holding it was dropped.
+// The loop's whole result vanished silently, and every downstream expression read null.
+func TestMultiInstanceOutputCollectionAfterGateway(t *testing.T) {
+	for _, seq := range []bool{false, true} {
+		name := "parallel"
+		if seq {
+			name = "sequential"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := miCollectAfterGatewayProcess(t, "[1, 2, 3]", seq)
+
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+			if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+				t.Fatalf("process=%d element=%d, want 0 and 0 (completed)", pi, ei)
+			}
+			got := readVar(t, h.store, model.NewKey(1, 1), "results")
+			if got == nil || got.Kind != model.VarJSON {
+				t.Fatalf("results = %v, want a JSON list promoted to the enclosing scope", got)
+			}
+			if got.Text != "[10,20,30]" {
+				t.Errorf("results = %s, want [10,20,30] (input order preserved)", got.Text)
+			}
+		})
+	}
+}
+
 // TestMultiInstanceSequentialRecovers parks a sequential loop mid-sequence (iteration 1
 // done, iteration 2 waiting on its job), crashes, and recovers: the body, the current
 // iteration, and the counter rebuild from the log so completing the remaining jobs still

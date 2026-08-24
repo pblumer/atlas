@@ -72,6 +72,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A loop a gateway routes into keeps its result** ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
+  Taking a sequence flow is one operation with one rule about multi-instance activities: the
+  flow activates the *body*, the scope that seeds the iterations and, when they have all
+  drained, promotes the assembled output collection to the enclosing scope. Every
+  flow-taking behaviour went through the shared primitive that knows this — except the
+  exclusive gateway, which built the element instance itself and left the role out. The loop
+  still ran: the seeding gate does not look at the role, so every iteration executed and
+  wrote its output element into the collection. Only the ending was wrong. The body completed
+  as an ordinary activity, nothing promoted the collection, and the scope holding it was
+  dropped — so a multi-instance whose only entrance was a gateway silently lost its entire
+  result, and every expression downstream read null. `= count(bewertungen)` returning 1 for
+  three rounds, with no incident and nothing in the log to point at, is the shape that bug
+  took. The gateway now takes its flow through the same primitive as everything else.
+
 - **A structure in the Variables tab no longer comes open by itself** — and the way out
   of one appears again. Every table in a view is handed to the shared sort/filter helper,
   which drove each row's `hidden` from what its filter matched. The rows that hold an
