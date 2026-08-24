@@ -1,4 +1,4 @@
-# ADR-DRAFT: Responsibility metadata — RACI on the element, with R derived from the assignment
+# ADR-0178: Responsibility metadata — RACI on the element, with R derived from the assignment
 
 - **Status:** Proposed
 - **Date:** 2026-08-24

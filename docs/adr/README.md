@@ -214,6 +214,7 @@ comment safe to write.
 | [0175](0175-replicated-partition-cells.md) | Replicated partition cells for horizontal scale-out | Proposed |
 | [0176](0176-standards-boundary-and-runtime-contract.md) | Standards boundary and the Atlas runtime contract | Proposed |
 | [0177](0177-reload-skips-the-deploy-gate.md) | Reload skips the deploy-time validation gate | Proposed |
+| [0178](0178-responsibility-metadata-raci.md) | Responsibility metadata — RACI on the element, with R derived from the assignment | Proposed |
 
 ## Status values
 
