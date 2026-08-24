@@ -319,6 +319,11 @@ type timelineStep struct {
 	// its own (ADR-0159) — who completed the parked job by hand, and why. Absent for
 	// every ordinary step, so its presence alone marks the intervention.
 	Manual *manualActionView `json:"manual,omitempty"`
+	// Loop explains a looping activity: what the model says it repeats while (or until),
+	// its cap, which round this step is, and — on a round — whether the loop went round
+	// again and what ended it (ADR-0077/0133). Absent for every element that does not
+	// loop. See timeline_loop.go.
+	Loop *loopView `json:"loop,omitempty"`
 	// Migration marks the one step that is not an element activation at all: the point
 	// at which an operator rebound this instance to another version of its process
 	// (ADR-0162). It sits in the ordered step list at the log position the migration
@@ -1659,6 +1664,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// successor would leave a ghost token parked on it forever, outliving the
 		// instance itself (ADR-0136).
 		active := map[uint64]timelineToken{}
+		torn := map[uint64]bool{}                 // element instances torn down rather than completed
 		pending := map[uint64]pendingCompletion{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
 		endAt := map[uint64]int64{}   // element instance key → completion timestamp (Action==2)
@@ -1709,6 +1715,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: ver.elementID(rr.pos, v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
 			case v.Action == state.ReplayTerminated, ver.isLeaf(rr.pos, v.ElementID), isLoopRound(v):
+				if v.Action == state.ReplayTerminated {
+					torn[v.ElementInstanceKey] = true
+				}
 				// Nothing will activate from here — a termination hands its token on to
 				// no one, a leaf has no successor to move into, and a finished loop round
 				// leaves its activity's outgoing flow to the body — so remove it at once.
@@ -1963,6 +1972,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			})
 			resp.Steps[r.idx].VariablesAfter = vars
 		}
+		// With both variable folds in place, explain the loops: the model's condition and
+		// cap, and what each round led to (ADR-0077/0133). It runs last because a round's
+		// condition is evaluated over what it left behind, which is what the sweep above
+		// just computed.
+		annotateLoops(resp.Steps, ver, activations, loopBodyTokens, torn)
 	})
 	switch {
 	case scanErr != nil:
