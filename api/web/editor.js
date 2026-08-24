@@ -7865,7 +7865,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         : `${count} ${count === 1 ? "execution" : "executions"}`;
       try {
         badges.push(overlays.add(elId, { position: { top: -12, right: 12 },
-          html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${isLoop ? "\u21BB " : ""}${count}</span>` }));
+          html: `<span class="ops-badge${isLoop ? " loop" : ""}" title="${esc(title)}">${
+            isLoop ? `<span class="ops-badge-m" aria-hidden="true">\u21BB</span>` : ""}<span>${count}</span></span>` }));
       } catch { /* element not in this diagram */ }
     }
   }
@@ -8246,8 +8247,27 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   }
 
   // Which structures the reader has opened, by variable ref. The rows are rewritten on
-  // every poll and every frame, so without this an expansion would close under them.
+  // every poll and every frame, so without this an expansion would close under them —
+  // but it belongs to the set it was opened in. Carried to the next element, or to the
+  // other side of the same one, it re-opens a structure nobody asked for, which reads as
+  // "these come open by default". varsContext is what the current rows are *of*; when it
+  // changes the openings go with it.
   const expandedVars = new Set();
+  let varsContext = "";
+
+  // syncCollapseAll shows the toolbar's collapse control exactly while something is open,
+  // so the way out of a wall of JSON is where the reader is looking, not only on the row
+  // they opened (which the JSON itself may have pushed off screen).
+  function syncCollapseAll() {
+    const btn = varsEl.querySelector("#v-collapse");
+    if (btn) btn.hidden = expandedVars.size === 0;
+  }
+
+  // collapseAllVars closes every open structure and redraws the rows.
+  function collapseAllVars() {
+    expandedVars.clear();
+    renderVarRows();
+  }
 
   // renderVarRows fills the table body from the current variable set, honoring the
   // name filter. Split out from renderVars so typing in the filter (or scrubbing a
@@ -8269,6 +8289,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       open.setAttribute("aria-expanded", "true");
       open.querySelector(".v-chev").textContent = "\u25BE";
     }
+    syncCollapseAll();
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -8287,6 +8308,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
           <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
         </span>
+        <button type="button" class="btn ghost small v-collapse" id="v-collapse" hidden
+                title="Close every structure opened in the table">&#9662; Collapse all</button>
         <span class="vp-actions" id="v-copyall"></span>
       </div>
       <div class="v-scroll">
@@ -8298,6 +8321,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const filterEl = varsEl.querySelector("#v-filter");
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
+    varsEl.querySelector("#v-collapse").addEventListener("click", collapseAllVars);
     varsEl.querySelector("#v-side").addEventListener("click", (e) => {
       const b = e.target.closest(".v-side-btn");
       if (!b) return;
@@ -8351,6 +8375,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scope = cur ? `As of step ${playhead} · <b>${esc(stepLabel(cur))}</b>` : "Variables";
     }
     curVarList = src || [];
+    // The rows are about to be of a different element (or the other side of one): what the
+    // reader opened in the previous set does not carry over to this one.
+    const ctx = `${selEik || 0}\u0000${varSide}\u0000${selEik ? "" : String(playhead)}`;
+    if (ctx !== varsContext) {
+      varsContext = ctx;
+      expandedVars.clear();
+    }
     varsEl.querySelector("#v-scope").innerHTML = scope;
     varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
     renderVarRows();
@@ -8938,6 +8969,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     open.setAttribute("aria-expanded", String(show));
     open.querySelector(".v-chev").textContent = show ? "\u25BE" : "\u25B8";
     if (show) expandedVars.add(key); else expandedVars.delete(key);
+    syncCollapseAll(); // the toolbar's way out appears with the first open structure
   });
   modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
   modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
