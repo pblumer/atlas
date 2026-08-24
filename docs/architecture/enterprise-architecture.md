@@ -29,7 +29,8 @@ the detailed reference behind the boxes.
 5. [Technology layer](#technology-layer)
 6. [Implementation and deployment](#implementation-and-deployment)
 7. [Cross-layer relationships](#cross-layer-relationships)
-8. [How to read and extend this model](#how-to-read-and-extend-this-model)
+8. [Model export (Open Exchange)](#model-export-open-exchange)
+9. [How to read and extend this model](#how-to-read-and-extend-this-model)
 
 ---
 
@@ -339,6 +340,27 @@ The seams between layers are where an ArchiMate model earns its keep.
 
 ---
 
+## Model export (Open Exchange)
+
+The same view is also published as a **formal, tool-loadable model**:
+[`model/atlas.xml`](model/atlas.xml), serialized in the ArchiMate 3.0
+[Model Exchange File Format](https://www.opengroup.org/xsd/archimate) (The Open
+Group's tool-neutral XML). Import it into [Archi](https://www.archimatetool.com/)
+(*File → Import → Other → Open Exchange File*) — or any conformant tool — to get the
+elements, relationships, a layer-organized folder tree, and the diagram views as a
+real model you can analyze and re-draw; Archi then saves it as a native `.archimate`
+file.
+
+It carries every element and relationship in this document, plus two properties —
+**ADR** (the deciding record for an element) and **Roadmap status** on the plateaus.
+Like the diagrams, it is **generated, not hand-edited**
+([`model/gen_open_exchange.py`](model/gen_open_exchange.py)) and stays subordinate to
+the code and the deep-dives. This realizes the Option-4 follow-up recorded in
+[ADR-0099](../adr/0099-archimate-enterprise-architecture-view.md). See the
+[model README](model/README.md) for details.
+
+---
+
 ## How to read and extend this model
 
 - **Start from motivation.** If a proposed change conflicts with a principle or an
@@ -356,5 +378,6 @@ The seams between layers are where an ArchiMate model earns its keep.
 ---
 
 *See also: [ADR-0099](../adr/0099-archimate-enterprise-architecture-view.md) (why this
-view exists) · [Architecture overview](../ARCHITECTURE.md) · [Invariants](invariants.md)
-· [ADRs](../adr/) · [Glossary](glossary.md) · [Roadmap](../../ROADMAP.md)*
+view exists) · [Model export](model/atlas.xml) (Open Exchange XML) ·
+[Architecture overview](../ARCHITECTURE.md) · [Invariants](invariants.md) ·
+[ADRs](../adr/) · [Glossary](glossary.md) · [Roadmap](../../ROADMAP.md)*

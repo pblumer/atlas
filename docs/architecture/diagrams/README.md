@@ -33,3 +33,9 @@ The layout (bands, boxes, labels, colours) is defined near the bottom of
 [`gen_diagrams.py`](gen_diagrams.py). If a target renderer needs raster images, the
 script header documents the headless-Chromium command that rasterizes each SVG to a
 2× PNG.
+
+## See also
+
+These SVGs illustrate the view; for the same model as a formal, tool-loadable file,
+see the ArchiMate Open Exchange export in [`../model/`](../model/) — importable into
+Archi and other conformant tools.
