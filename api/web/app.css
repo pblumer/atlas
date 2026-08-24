@@ -1380,12 +1380,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .vt .v-open:hover .peek { color: var(--accent); }
 .vtag.obj { color: var(--accent); border-color: var(--accent-soft); }
 
+/* The way out of a structure opened in place. Sits in the toolbar rather than only on the
+   row, because the JSON itself may have pushed that row off screen. */
+.v-toolbar .v-collapse { flex: none; }
+
 /* A structure opened in place. The table is where an operator already is, and the shape
    of an object or a list is most of what they came for — the window (.v-big) stays one
    step further in, for the values too big to read in a row's width. */
 .vt .v-struct > td { padding: 0 10px 10px; background: var(--bg); }
 .vt .v-struct .vj-body {
-  margin: 0; max-height: 320px; overflow: auto; padding: 8px 10px; border-radius: 6px;
+  /* Bounded against the viewport too: in the replay's side panel a fixed 320px is most of
+     the tab, so two open structures buried the table they belong to. */
+  margin: 0; max-height: min(320px, 34vh); overflow: auto; padding: 8px 10px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre;
 }
@@ -1445,7 +1451,8 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Execution-count badge Operate draws at a node's corner. */
 .ops-badge {
-  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+  display: inline-grid; grid-auto-flow: column; place-items: center; gap: 3px;
+  min-width: 20px; height: 20px; padding: 0 6px; white-space: nowrap;
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
   font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
 }
@@ -1453,7 +1460,10 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* A looping activity's badge counts its rounds, not its activations, and carries the ↻ so
    the number is read as "ran this often" rather than as the plain execution count every
    other element's badge is. */
-.ops-badge.loop { gap: 2px; color: var(--accent); border-color: var(--accent); }
+.ops-badge.loop { color: var(--accent); border-color: var(--accent); }
+/* The ↻ is a marker beside the number, not part of it: a hair smaller, and never the
+   thing that wraps — a badge is one line inside a pill, at any count. */
+.ops-badge .ops-badge-m { font-size: 11px; line-height: 1; }
 
 /* The selected element's in/out card, hung under it on the replay canvas: what its
    input mappings were handed, and what it wrote (drawIOOverlay, ADR-0068/0159). It is

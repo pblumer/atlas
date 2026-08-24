@@ -92,6 +92,15 @@ test("a loop's badge counts its rounds, not its activations", async ({ page }) =
   // three rounds. What a reader of a loop wants is how often it ran.
   const badge = page.locator("#canvas .ops-badge.loop");
   await expect(badge).toHaveCount(1);
-  await expect(badge).toHaveText("↻ 3");
+  await expect(badge).toContainText("3");
+  await expect(badge.locator(".ops-badge-m")).toHaveText("↻");
   await expect(badge).toHaveAttribute("title", "3 runs of this loop");
+});
+
+test("the badge stays one line inside its pill", async ({ page }) => {
+  // The marker and the count used to be one text node with a space between them, which
+  // wrapped inside a 20px pill: the ↻ on one line, the number spilling out under it.
+  const box = await page.locator("#canvas .ops-badge.loop").boundingBox();
+  expect(box.height, "badge height — a wrapped badge is twice this").toBeLessThanOrEqual(24);
+  expect(box.width, "badge width — the marker and the count sit side by side").toBeGreaterThan(box.height);
 });

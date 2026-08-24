@@ -71,3 +71,42 @@ test("an opened structure survives the view re-rendering under it", async ({ pag
   await page.locator("#tab-variables #v-filter").fill("");
   await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
 });
+
+test("a structure comes closed, and an expansion does not follow the reader to another element", async ({ page }) => {
+  // Everything starts closed: the table is the thing to read, and a wall of JSON in a
+  // panel this size hides the very rows it belongs to.
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+
+  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
+
+  // The end event holds a variable of the same name. What was opened on the script task
+  // belongs to *that* set — carried over, it would read as "these come open by default".
+  await page.locator('#history-list .ops-hrow[data-eik="1002"]').click();
+  await expect(page.locator("#tab-variables .v-open")).toHaveCount(1);
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+
+  // And back again: still closed, not remembered from before.
+  await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("collapse all closes what the table has open, from the toolbar", async ({ page }) => {
+  const collapse = page.locator("#tab-variables #v-collapse");
+  // It is not there while there is nothing to collapse.
+  await expect(collapse).toBeHidden();
+
+  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
+  await page.locator("#tab-variables .v-open", { hasText: "fields" }).click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(2);
+  await expect(collapse).toBeVisible();
+
+  // One click, both closed — the way out is in the toolbar because an open structure can
+  // push the row it belongs to off the screen.
+  await collapse.click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+  await expect(collapse).toBeHidden();
+  await expect(page.locator("#tab-variables .v-open").first()).toHaveAttribute("aria-expanded", "false");
+});

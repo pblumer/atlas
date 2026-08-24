@@ -58,7 +58,10 @@
           inputs: [{ name: "customer", value: customer, kind: "json" }],
           iteration: 1,
         },
-        { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1", variables: [] },
+        // The end event holds the same list, so a test can ask whether an expansion opened
+        // on one element follows the reader to another.
+        { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1",
+          variables: [{ name: "customers", value: customers, kind: "json" }] },
       ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
 
       const frames = steps.map((s, i) => ({

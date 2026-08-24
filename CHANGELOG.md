@@ -45,7 +45,12 @@ _Changed_ / _Removed_ for each version.
   `{3 fields}`), so the shape is the first thing read rather than the last, and the row
   expands in place into pretty-printed JSON — the structure, where the reader already is.
   The window is still one step further in, for values too big to read in a row, and an
-  expansion survives the 1.5-second poll and the filter that rewrite the rows under it.
+  expansion survives the 1.5-second poll and the filter that rewrite the rows under it —
+  but not a move to another element, whose variables are a different set: carried there,
+  an opening nobody asked for reads as "these come open by default". Everything starts
+  closed, an open structure is bounded against the viewport rather than a fixed height,
+  and the toolbar offers **Collapse all** while anything is open, because a structure can
+  push the row it belongs to off the screen.
 
 ### Fixed
 
