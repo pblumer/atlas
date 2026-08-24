@@ -187,6 +187,26 @@
         { "name": "userId", "type": "String", "isAttr": true },
         { "name": "groupId", "type": "String", "isAttr": true },
         { "name": "attributesVariable", "type": "String", "isAttr": true },
+        {
+          "name": "filter",
+          "type": "String",
+          "isAttr": true
+        },
+        {
+          "name": "select",
+          "type": "String",
+          "isAttr": true
+        },
+        {
+          "name": "pageSize",
+          "type": "String",
+          "isAttr": true
+        },
+        {
+          "name": "maxUsers",
+          "type": "String",
+          "isAttr": true
+        },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]

@@ -190,6 +190,9 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "get-user", job: Job{UserID: "arno@contoso.com"},
 			method: "GET", path: "/users/arno@contoso.com",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "list-users", job: Job{ResultVariable: "leute"},
+			method: "GET", path: "/users",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "update-user",
 			job:    Job{UserID: "u1", Attributes: map[string]any{"department": "IT"}},
 			method: "PATCH", path: "/users/u1",
@@ -214,7 +217,11 @@ func TestRunMapsEveryOperation(t *testing.T) {
 			wantBodyIs: func(b any) bool { return b == nil }},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
-			c := &recordingClient{res: map[string]any{"id": "x"}}
+			res := map[string]any{"id": "x"}
+			if Ops[tc.op].IsList {
+				res = map[string]any{"value": []any{map[string]any{"id": "x"}}}
+			}
+			c := &recordingClient{res: res}
 			j := tc.job
 			j.Connector, j.Operation = "contoso", tc.op
 			if _, err := Run(context.Background(), j, regWith("contoso", c)); err != nil {
@@ -229,7 +236,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 8 {
+	if len(Ops) != 9 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -539,6 +546,11 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 		if spec.NeedsAttributes && omit != "attributes" {
 			parts = append(parts, `attributesVariable="attrs"`)
 		}
+		// A listing has nowhere to put a collection without one, which both halves
+		// enforce — the compiler at deploy, checkRequired on the worker.
+		if spec.IsList && omit != "result" {
+			parts = append(parts, `resultVariable="leute"`)
+		}
 		return strings.Join(parts, " ")
 	}
 	compile := func(attrs string) error {
@@ -551,15 +563,28 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 			if err := compile(attrsFor(op, spec, "")); err != nil {
 				t.Fatalf("the compiler rejects a model that satisfies Ops[%q]: %v", op, err)
 			}
-			for _, omit := range []string{"user", "group", "attributes"} {
+			for _, omit := range []string{"user", "group", "attributes", "result"} {
 				required := (omit == "user" && spec.NeedsUser) ||
 					(omit == "group" && spec.NeedsGroup) ||
-					(omit == "attributes" && spec.NeedsAttributes)
+					(omit == "attributes" && spec.NeedsAttributes) ||
+					(omit == "result" && spec.IsList)
 				if !required {
 					continue
 				}
 				if err := compile(attrsFor(op, spec, omit)); err == nil {
 					t.Errorf("Ops[%q] requires %s but the compiler accepted a model without it", op, omit)
+				}
+			}
+			// IsList is the other half of the same agreement: the listing query is
+			// meaningful on exactly the operation that returns a collection, and the
+			// compiler must refuse it everywhere else rather than drop it silently.
+			for _, q := range []string{`filter="accountEnabled eq true"`, `select="id"`, `pageSize="10"`, `maxUsers="10"`} {
+				err := compile(attrsFor(op, spec, "") + " " + q)
+				if spec.IsList && err != nil {
+					t.Errorf("Ops[%q] is a listing but the compiler rejects %s: %v", op, q, err)
+				}
+				if !spec.IsList && err == nil {
+					t.Errorf("Ops[%q] returns no collection but the compiler accepted %s", op, q)
 				}
 			}
 		})
