@@ -89,6 +89,14 @@ const (
 	// first, the loop never reaches its maximum, and it repeats until someone cancels
 	// the instance. Map to a different name and read loopCounter as it is.
 	RuleLoopCounterMapping = "loop.counter-mapping"
+	// RuleDottedTarget marks a model that writes to a variable name containing a dot —
+	// a result variable, an I/O mapping target, a loop's input element or output
+	// collection. An error: Atlas writes a *variable of that name*, it does not write a
+	// field inside a structure, so `customers.gesamtumsatz` silently produces a variable
+	// literally called that beside the `customers` it was meant to extend. The author
+	// finds out by reading the variable list and wondering, which is exactly the kind of
+	// quiet wrong answer a deploy check exists to prevent.
+	RuleDottedTarget = "variable.dotted-target"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -137,6 +145,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkTimerStartSchedules(cp)...)
 	ps = append(ps, checkLoopBounds(cp)...)
 	ps = append(ps, checkLoopCounterMappings(cp)...)
+	ps = append(ps, checkDottedTargets(cp)...)
 	return ps
 }
 
@@ -630,6 +639,72 @@ func checkLoopCounterMappings(cp *CompiledProcess) []Problem {
 						"it would overwrite the count the loop keeps there and the loop would never end. "+
 						"Map to another name; %[3]q is readable as it is.",
 						describeNode(cp, elementID), dir.what, LoopCounterVariable)))
+			}
+		}
+	}
+	return ps
+}
+
+// checkDottedTargets refuses a model that writes to a variable name containing a dot.
+//
+// Every write in a model names a *variable*, not a path: a result variable, a
+// zeebe:ioMapping target, a loop's input element or output collection. Write to
+// `customers.gesamtumsatz` and Atlas creates a variable of exactly that name, sitting
+// beside the `customers` the author meant to extend — no error, no field added, and a
+// variable list that reads as if it had worked. A dot in a target is therefore almost
+// always a path someone expected the engine to walk, and saying so at deploy costs one
+// message where discovering it costs an afternoon.
+//
+// Data-object associations are untouched: their <assignment><to> *is* a member path
+// (ADR-0058), and a dot there means what it says.
+func checkDottedTargets(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	report := func(id int32, what, name string) {
+		if !strings.Contains(name, ".") {
+			return
+		}
+		root, _, _ := strings.Cut(name, ".")
+		ps = append(ps, problem(cp, id, SeverityError, RuleDottedTarget, fmt.Sprintf(
+			"%s writes %s to %q. A dot in a target is not a path: Atlas creates a variable of exactly "+
+				"that name rather than a field inside %q. Use a name without a dot — to add a field to a "+
+				"structure, build the structure in the expression and write that (FEEL: context put(…)).",
+			describeNode(cp, id), what, name, root)))
+	}
+	for id := range cp.nodes {
+		elementID, n := int32(id), &cp.nodes[id]
+		for _, m := range cp.IOInputs(elementID) {
+			report(elementID, "an input mapping", cp.Intern(m.Target))
+		}
+		for _, m := range cp.IOOutputs(elementID) {
+			report(elementID, "an output mapping", cp.Intern(m.Target))
+		}
+		if n.MultiInstance >= 0 {
+			d := cp.MultiInstance(n.MultiInstance)
+			report(elementID, "its loop's input element", cp.Intern(d.InputElement))
+			report(elementID, "its loop's output collection", cp.Intern(d.OutputCollection))
+		}
+		// The result of the work itself, wherever the node type keeps it.
+		switch n.Type {
+		case TypeScriptTask:
+			report(elementID, "its result", cp.ScriptTask(n.Detail).ResultVar)
+		case TypeScriptJobTask:
+			report(elementID, "its result", cp.Intern(cp.ScriptJobTask(n.Detail).ResultVar))
+		case TypeBusinessRuleTask:
+			report(elementID, "its decision result", cp.Intern(cp.BusinessRuleTask(n.Detail).ResultVar))
+		case TypeMockupTask:
+			report(elementID, "its result", cp.MockupTask(n.Detail).ResultVar)
+		case TypeConnectorTask:
+			// CsvResult and LdifResult are read only by the connector each belongs to,
+			// dispatched by job type — so every other connector leaves them at the zero
+			// value, which is a *valid* interned index (0 is the first reserved job type),
+			// not the -1 that means "none". Ask the job type first, as the offloads do.
+			d := cp.ConnectorTask(n.Detail)
+			report(elementID, "its result", cp.Intern(d.ResultVar))
+			switch cp.Intern(d.JobType) {
+			case CsvImportJobType:
+				report(elementID, "its parsed rows", cp.Intern(d.CsvResult))
+			case LdifJobType:
+				report(elementID, "its entries", cp.Intern(d.LdifResult))
 			}
 		}
 	}

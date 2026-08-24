@@ -66,6 +66,24 @@ _Changed_ / _Removed_ for each version.
   and the toolbar offers **Collapse all** while anything is open, because a structure can
   push the row it belongs to off the screen.
 
+### Changed
+
+- **A dot in a write target is refused at deploy** (new rule `variable.dotted-target`).
+  Every place a model names a variable to write — a script or decision result, a
+  `zeebe:ioMapping` target, a loop's input element or output collection — names a
+  *variable*, not a path. Writing `customers.gesamtumsatz` therefore did exactly what it
+  said and nothing the author meant: a new variable called `customers.gesamtumsatz`,
+  sitting beside the `customers` it was supposed to extend, with no error and a variable
+  list that reads as if the field had been added. Nothing downstream finds it either —
+  `customers.gesamtumsatz` as an *expression* reads the field inside `customers`, which
+  is still absent. A deploy now refuses the model and says so, naming the element, the
+  kind of write, and the way to do what was meant: build the structure in the expression
+  and write that (FEEL `context put(customers, "gesamtumsatz", …)`).
+  **This refuses models that deployed before.** A model with a dotted target must rename
+  the target, or move the dot into the expression; running instances are unaffected, as
+  the rule runs at deploy. Data-object associations keep their dots: an association's
+  `<assignment><to>` *is* a member path (ADR-0058), and a dot there means what it says.
+
 ### Fixed
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a
