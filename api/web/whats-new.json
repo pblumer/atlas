@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Find accounts in Entra ID, not just change them",
+        "de": "Konten in Entra ID finden, nicht nur ändern"
+      },
+      "summary": {
+        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them, and receives every match in a single process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert, und erhält alle Treffer in einer einzigen Prozessvariablen. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
       "version": "Unreleased",
       "date": null,

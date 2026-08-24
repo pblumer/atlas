@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -83,10 +83,10 @@ mostly be a way to build something that stops working when someone leaves.
 
 ### The operation set
 
-`create-user`, `get-user`, `update-user`, `delete-user`, `enable`, `disable`,
-`add-group-member`, `remove-group-member` — a full joiner/mover/leaver lifecycle,
-and deliberately more than the AD connector covers today (AD has no read, update, or
-delete; that is recorded as a gap in the MIM comparison).
+`create-user`, `get-user`, `list-users`, `update-user`, `delete-user`, `enable`,
+`disable`, `add-group-member`, `remove-group-member` — a full joiner/mover/leaver
+lifecycle, and deliberately more than the AD connector covers today (AD has no read,
+update, or delete; that is recorded as a gap in the MIM comparison).
 
 The rules live in a table — which operation needs a user, a group, an attributes
 object — because they are needed in two places. The compiler validates a model at
@@ -100,6 +100,47 @@ one missing any required field must not.
 A password is set through `create-user`/`update-user`'s attributes variable
 (Graph's `passwordProfile`), so it reaches Graph as a process value and never appears
 in the model — the same shape the AD connector uses for `newPassword`.
+
+### Amendment (2026-08-24): `list-users`, and who follows the pages
+
+The operation set above could address a user and change one. It could not *find*
+one. A joiner/mover/leaver process routinely starts from a question — who is in this
+department, which accounts are still enabled, does this UPN already exist — and the
+original set answered none of them: `get-user` needs the answer as its input.
+
+`list-users` is `GET /users`, with the model authoring an OData `$filter`
+(literal-or-FEEL, so a process can list the department it is actually about), a
+`$select` projection, a `$top` page size, and a `maxUsers` cap.
+
+**The connector follows `@odata.nextLink`, and a model never sees it.** This is the
+whole design question, and it is ADR-0166's argument once more: a collection in Graph
+is paged, and a process that had to loop over a continuation token would be carrying
+Graph's paging protocol in its diagram — the same encoding this record refused to
+make a modeler hand-author for a `$ref` URL. So the result variable receives *the
+listing*, as one JSON array, never one page of it.
+
+Three consequences follow, and each is a deliberate choice rather than an omission:
+
+- **The cap fails; it does not truncate.** `maxUsers` defaults to 1000 and a listing
+  that exceeds it fails the job, for the reason ADR-0154's entry cap does: a short
+  result set is a wrong answer rather than a partial one, and a process that decides
+  something from it decides it confidently. `0` is the authored way to say unbounded.
+- **An unbounded listing still terminates.** A server offering a next page forever —
+  broken, misconfigured, or a directory nobody expected to be this large — would
+  otherwise hold a worker until the job's lease expired, which surfaces as a task
+  that mysteriously retries rather than as a listing that was too big. A ceiling of
+  1000 requests ends it with a sentence saying so.
+- **A continuation may not leave the tenant's own endpoint.** A paged result is the
+  one place where a *response* names the next URL, and this client carries a bearer
+  that can read an entire directory. `GraphClient` therefore confines an absolute
+  continuation to its own scheme and host and refuses anything else, so a redirected
+  page cannot hand that token to whoever wrote the response.
+
+What is still not covered is Graph's *advanced* query support — `endsWith`,
+`$search`, `$count` — which needs a `ConsistencyLevel: eventual` header and would be
+a second knob with consistency semantics of its own. Graph refuses such a filter with
+a named error, which this connector surfaces verbatim, and the REST connector remains
+the answer for it. That is the same boundary the rest of this record draws.
 
 ### The OAuth2 token flow, lifted
 
@@ -128,8 +169,14 @@ move did not alter behaviour.
     this cost); the Workers view showing which names are served is what recovers it.
   - **The operation set is a subset of Graph and always will be.** Licences,
     administrative units, directory roles, and application role assignments are not
-    covered; a process needing one uses the REST connector. Growing the table is
-    cheap, growing it without a use case is not.
+    covered, and neither is an advanced query (`endsWith`, `$search`); a process
+    needing one uses the REST connector. Growing the table is cheap, growing it
+    without a use case is not.
+  - **A listing is materialized whole.** `list-users` holds every page in memory and
+    writes one array into a process variable, which is why it is capped by default.
+    A directory export belongs in a job that streams, not in a process variable —
+    the cap is where that line is drawn, and an operator raising it to a very large
+    number is choosing to cross it.
   - **The rules live in two tables.** The dependency direction forbids sharing them,
     so a drift test stands in for a compiler check. It is a real seam, and it is
     guarded rather than pretended away.

@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Entra ID can be asked a question, not only told what to do** (ADR-0172, amended).
+  The Entra connector could address a user and change one; it could not *find* one.
+  A joiner/mover/leaver process routinely starts from a question — who is in this
+  department, which accounts are still enabled, does this UPN already exist — and
+  `get-user` needs that answer as its input. **`list-users`** authors an OData
+  `$filter` (literal-or-FEEL, so a process can list the department it is actually
+  about), a `$select` projection, a page size and a cap, and writes every matched
+  user into one process variable.
+  **The connector follows Graph's paging itself.** A collection in Graph arrives one
+  page at a time behind an `@odata.nextLink`, and a model never sees it: the result
+  variable receives the whole listing as a JSON array, not a page of it — a process
+  looping over a continuation token would be carrying Graph's paging protocol in its
+  diagram, which is the encoding this connector exists to keep out of one.
+  Three bounds keep that safe. `maxUsers` defaults to 1000 and a listing that exceeds
+  it **fails rather than truncating**, for the reason the LDAP connector's entry cap
+  does — a short result set is a wrong answer, not a partial one. An unbounded
+  listing still terminates, at a ceiling of 1000 requests, so a server that offers a
+  next page forever fails visibly instead of holding a worker until its lease
+  expires. And a continuation may only stay on the connector's own endpoint: a paged
+  result is the one place a *response* names the next URL, and the token behind it
+  can read an entire directory, so a redirected page is refused rather than followed.
+  Advanced queries (`endsWith`, `$search`) need Graph's `ConsistencyLevel` header and
+  remain the REST connector's; Graph names that refusal and the connector surfaces it
+  verbatim.
+
 - **A loop says what it was told to repeat while — and what it decided**
   (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and
   what that round read and wrote, but not the one thing an author asks when a loop does
