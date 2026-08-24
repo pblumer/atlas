@@ -12,33 +12,6 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-### Fixed
-
-- **A structure in the Variables tab no longer comes open by itself** — and the way out
-  of one appears again. Every table in a view is handed to the shared sort/filter helper,
-  which drove each row's `hidden` from what its filter matched. The rows that hold an
-  expanded value are not data rows, but the helper owned their `hidden` too, so it forced
-  every structure open — on arrival, and again on every rewrite of the rows, which is
-  every 1.5 seconds. Clicking one closed it for an instant. And because the toolbar's
-  **Collapse all** watches the openings the *reader* made, and the reader had made none,
-  it never appeared: a tab that opened itself and offered no way to close. The helper now
-  leaves a row marked `data-dt-detail` alone — it never opens one, and only hides one
-  along with the row it belongs to when a filter removes that row; sorting moves it with
-  that row rather than stranding it under someone else's. The Workers view's per-worker
-  log, the same shape, stops springing open with it.
-
-- **A BPMN file with no layout renders when you import it, not only when you deploy it**
-  ([ADR-0124](docs/adr/0124-server-side-auto-layout.md)): BPMN-DI is optional in the
-  standard, so a model from a generator, an export from another tool, or a hand-written
-  file routinely carries none. Deployed, Atlas already lays such a model out as the
-  editor fetches it — imported as a draft it did not, so the *same file* opened onto an
-  empty canvas depending on which way it came in. A draft that arrives without diagram
-  interchange is now laid out on the way in, and the import says so, because the
-  arrangement the author is about to edit is Atlas's rather than the one their file
-  described. Reading a draft lays out too, for the ones stored before this. A model that
-  brings its own layout is stored byte for byte — generating over an author's
-  arrangement would throw it away.
-
 ### Added
 
 - **A loop says what it was told to repeat while — and what it decided**
@@ -98,6 +71,33 @@ _Changed_ / _Removed_ for each version.
   `<assignment><to>` *is* a member path (ADR-0058), and a dot there means what it says.
 
 ### Fixed
+
+- **A structure in the Variables tab no longer comes open by itself** — and the way out
+  of one appears again. Every table in a view is handed to the shared sort/filter helper,
+  which drove each row's `hidden` from what its filter matched. The rows that hold an
+  expanded value are not data rows, but the helper owned their `hidden` too, so it forced
+  every structure open — on arrival, and again on every rewrite of the rows, which is
+  every 1.5 seconds. Clicking one closed it for an instant. And because the toolbar's
+  **Collapse all** watches the openings the *reader* made, and the reader had made none,
+  it never appeared: a tab that opened itself and offered no way to close. The helper now
+  leaves a row marked `data-dt-detail` alone — it never opens one, and only hides one
+  along with the row it belongs to when a filter removes that row; sorting moves it with
+  that row rather than stranding it under someone else's. The Workers view's per-worker
+  log, the same shape, stops springing open with it.
+
+- **A BPMN file with no layout renders when you import it, not only when you deploy it**
+  ([ADR-0124](docs/adr/0124-server-side-auto-layout.md)): BPMN-DI is optional in the
+  standard, so a model from a generator, an export from another tool, or a hand-written
+  file routinely carries none. Deployed, Atlas already lays such a model out as the
+  editor fetches it — imported as a draft it did not, so the *same file* opened onto an
+  empty canvas depending on which way it came in. A draft that arrives without diagram
+  interchange is now laid out on the way in, and the import says so, because the
+  arrangement the author is about to edit is Atlas's rather than the one their file
+  described. Reading a draft lays out too, for the ones stored before this. A model that
+  brings its own layout is stored byte for byte — generating over an author's
+  arrangement would throw it away.
+
+
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a
   looping activity once as the loop's *body* and once more per round, so the replay's
