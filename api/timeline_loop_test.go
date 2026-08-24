@@ -119,6 +119,7 @@ type loopInfo struct {
 	Condition  string    `json:"condition"`
 	TestBefore bool      `json:"testBefore"`
 	Maximum    int32     `json:"maximum"`
+	Collection string    `json:"collection"`
 	Round      int       `json:"round"`
 	Rounds     int       `json:"rounds"`
 	Outcome    string    `json:"outcome"`
@@ -427,5 +428,76 @@ func TestMultiInstanceRoundsReadTheirOwnCondition(t *testing.T) {
 	}
 	if last.StopReason != "" {
 		t.Errorf("stopReason = %q, want none — the record cannot say which bound ended it", last.StopReason)
+	}
+}
+
+// emptyCollectionModel is the mistake that prompted this: the loop iterates over a name
+// nothing in scope holds (the singular of the variable that does exist). FEEL yields null,
+// null is not a list, and ADR-0077 seeds no rounds — so the activity is walked past
+// without running, and without saying anything.
+const emptyCollectionModel = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="miempty" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="setup" scriptFormat="feel">
+      <extensionElements><zeebe:script expression="=[10, 20, 30]" resultVariable="customers"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="rechne" name="rechne was" scriptFormat="feel">
+      <extensionElements><zeebe:script expression="=1" resultVariable="egal"/></extensionElements>
+      <multiInstanceLoopCharacteristics isSequential="true">
+        <extensionElements><zeebe:loopCharacteristics inputCollection="=customer" inputElement="customer"/></extensionElements>
+      </multiInstanceLoopCharacteristics>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f0" sourceRef="start" targetRef="setup"/>
+    <sequenceFlow id="f1" sourceRef="setup" targetRef="rechne"/>
+    <sequenceFlow id="f2" sourceRef="rechne" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestMultiInstanceBodyNamesWhatItIteratedOver covers the silent case: a multi-instance
+// whose collection expression does not come out as a list runs no rounds and completes
+// like an activity with nothing to do. The record cannot be made to say more than it does
+// — but it can say what the loop was told to iterate over and what that name held, which
+// is the difference between "the list was empty" and "the model reads the wrong name".
+func TestMultiInstanceBodyNamesWhatItIteratedOver(t *testing.T) {
+	var body *loopInfo
+	for _, s := range runLoopModel(t, emptyCollectionModel).Steps {
+		if s.ElementID == "rechne" {
+			body = s.Loop
+		}
+	}
+	if body == nil {
+		t.Fatal("the multi-instance body carries no loop explanation")
+	}
+	if body.Rounds != 0 {
+		t.Fatalf("rounds = %d, want 0 — customer is not a list", body.Rounds)
+	}
+	if body.Collection != "customer" {
+		t.Errorf("collection = %q, want the expression as written", body.Collection)
+	}
+	if len(body.Missing) != 1 || body.Missing[0] != "customer" {
+		t.Errorf("missing = %v, want the name nothing in scope holds", body.Missing)
+	}
+}
+
+// TestMultiInstanceBodyShowsTheCollectionItRead is the same surface where the model is
+// right: the collection names a variable that is there, and the body reports the value the
+// rounds were seeded from.
+func TestMultiInstanceBodyShowsTheCollectionItRead(t *testing.T) {
+	var body *loopInfo
+	for _, s := range runLoopModel(t, multiInstanceModel).Steps {
+		if s.ElementID == "rechne" && s.Iteration == 0 {
+			body = s.Loop
+		}
+	}
+	if body == nil || body.Collection != "items" {
+		t.Fatalf("body = %+v, want the collection it iterated over", body)
+	}
+	if len(body.Reads) != 1 || body.Reads[0].Name != "items" {
+		t.Errorf("reads = %+v, want the collection's own value", body.Reads)
+	}
+	if len(body.Missing) != 0 {
+		t.Errorf("missing = %v, want none — items is in scope", body.Missing)
 	}
 }
