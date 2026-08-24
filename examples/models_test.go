@@ -21,12 +21,14 @@
 package examples
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/pblumer/atlas/compiler"
 )
@@ -160,4 +162,125 @@ func TestShippedModelsCompile(t *testing.T) {
 			}
 		})
 	}
+}
+
+// atlasModdlePath is the Modeler's own descriptor for the atlas extensions. It is the
+// authority on which namespace an <atlas:*> element must live in, because it is what
+// bpmn-js resolves the prefix against.
+const atlasModdlePath = "../api/web/atlas-moddle.json"
+
+// atlasModdle reads the descriptor's namespace URI and the set of element names it
+// declares, in the spelling they are serialized with (moddle's "lowerCase" tagAlias
+// lowercases the first letter, so MockupConnector is written <atlas:mockupConnector>).
+func atlasModdle(t *testing.T) (uri string, elements map[string]bool) {
+	t.Helper()
+	raw, err := os.ReadFile(atlasModdlePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", atlasModdlePath, err)
+	}
+	var doc struct {
+		URI   string `json:"uri"`
+		Types []struct {
+			Name string `json:"name"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode %s: %v", atlasModdlePath, err)
+	}
+	if strings.TrimSpace(doc.URI) == "" {
+		t.Fatalf("%s declares no uri — the descriptor shape must have changed", atlasModdlePath)
+	}
+	elements = map[string]bool{}
+	for _, ty := range doc.Types {
+		if ty.Name == "" {
+			continue
+		}
+		r := []rune(ty.Name)
+		r[0] = unicode.ToLower(r[0])
+		elements[string(r)] = true
+	}
+	return doc.URI, elements
+}
+
+// TestAtlasExtensionsUseTheModdleNamespace is the third namespace guard, and it closes
+// the hole the first one leaves open.
+//
+// TestExtensionElementsAreNamespaced asks whether an extension is in the BPMN
+// namespace — i.e. not prefixed at all. It says nothing about an extension prefixed to
+// the *wrong* URI, and that is not a hypothetical: bonitaet-mockup.bpmn and both
+// bewerbermanagement models shipped bound to "http://atlas.dev/schema/1.0" while
+// atlas-moddle.json declares "http://atlas/schema/1.0".
+//
+// The consequence is worse than the silent drop the first test guards against.
+// bpmn-js is namespace-aware: it parses such an element into an unknown namespace it
+// has no prefix for, and *serializing* then throws outright —
+// "no namespace uri given for prefix <ns0>". Importing appears to work, and then
+// every Save, Deploy and Auto-layout of that model fails. Verified against the
+// vendored bpmn-js by round-tripping all three before and after the fix.
+//
+// encoding/xml gives us the same view bpmn-js has, because the decoder resolves
+// prefixes to URIs — which is precisely why the engine cannot see this:
+// compiler.Parse matches on local name and ignores the namespace, so a wrongly bound
+// model deploys and runs perfectly.
+func TestAtlasExtensionsUseTheModdleNamespace(t *testing.T) {
+	uri, elements := atlasModdle(t)
+	for _, path := range shippedModels(t) {
+		t.Run(path, func(t *testing.T) {
+			for _, m := range misboundAtlasExtensions(t, path, uri, elements) {
+				t.Errorf("<%s> is bound to %q, but the Modeler resolves atlas extensions against %q.\n"+
+					"bpmn-js imports it into an unknown namespace and then fails to serialize it, so every "+
+					"Save/Deploy/Auto-layout of this model errors. The engine cannot see this — it matches "+
+					"on local name and ignores the namespace. Fix the xmlns:atlas binding.",
+					m.local, m.space, uri)
+			}
+		})
+	}
+}
+
+// misbound is one extension element written in the wrong namespace.
+type misbound struct{ local, space string }
+
+// misboundAtlasExtensions returns the <extensionElements> children whose local name is
+// one the atlas moddle declares but whose namespace is not the moddle's.
+//
+// Keying on the moddle's own element names rather than on "anything not zeebe" is what
+// keeps this from firing on a legitimate third-party extension a model may carry.
+func misboundAtlasExtensions(t *testing.T, path, uri string, elements map[string]bool) []misbound {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+
+	var bad []misbound
+	seen := map[string]bool{}
+	depth := 0 // >0 while inside an <extensionElements> block
+	dec := xml.NewDecoder(f)
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		switch e := tok.(type) {
+		case xml.StartElement:
+			if depth > 0 {
+				if elements[e.Name.Local] && e.Name.Space != uri && !seen[e.Name.Local] {
+					seen[e.Name.Local] = true
+					bad = append(bad, misbound{local: e.Name.Local, space: e.Name.Space})
+				}
+				depth++
+			} else if e.Name.Local == "extensionElements" {
+				depth = 1
+			}
+		case xml.EndElement:
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return bad
 }
