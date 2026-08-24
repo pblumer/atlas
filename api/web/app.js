@@ -1800,6 +1800,7 @@ async function viewProjectDetail(id) {
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "DMN decision", icon: "▦", act: "newdmn" },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
@@ -1875,6 +1876,7 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "newdmn": createDmnDecision(ungrouped ? "" : id, render); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -2904,6 +2906,19 @@ function toggleSetSecret(row, name, connectors, put, reload) {
     }
   });
   form.querySelector('[name="value"]').focus();
+}
+
+// createDmnDecision authors a brand-new decision directly in Atlas via the embedded
+// DMN editor (ADR-0062) and files it into this project — the "New decision" entry in
+// the Project Explorer's Create-new menu, the counterpart to uploading a .dmn. The
+// editor seeds a starter DRG and, on save, uploads the model and creates the project
+// reference itself (passing projectId), so on success we just refresh the list. A
+// cancel — or a remote temis service with nothing local to write to — resolves to
+// null and leaves the list unchanged (the editor reports any failure).
+async function createDmnDecision(projectId, reload) {
+  const { openDmnEditor } = await import("./dmn-editor.js");
+  const result = await openDmnEditor({ api, toast, projectId: projectId || "" });
+  if (result) await reload();
 }
 
 // editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,

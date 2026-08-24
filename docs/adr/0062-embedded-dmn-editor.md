@@ -78,6 +78,11 @@ reverses ADR-0014's "no authoring surface" non-goal for the decision-table case.
   decision rename can leave the reference's display name stale, so the reference
   update endpoint (`PATCH /api/v1/dmnrefs/{id}`) gained an optional `name` — the
   Explorer mirrors the new decision name onto the reference on save.
+- The Explorer's Create-new menu also has a **"DMN decision"** entry that authors a
+  fresh decision in the editor (seed DRG, no `modelRef`) and files the resulting
+  reference into the project — the same new-decision flow the picker's
+  "＋ Neue Decision" uses, so authoring in Atlas no longer requires starting from a
+  business rule task. Uploading an existing `.dmn` stays available alongside it.
 - Invariants are untouched. This is an authoring/UI concern on the HTTP + web
   surface; nothing changes on the single-writer processor path (I1/I4), decisions
   still compile at deploy (I5), and the event log is still the only source of truth
