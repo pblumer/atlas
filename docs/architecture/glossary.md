@@ -2,6 +2,8 @@
 
 Terms used throughout Atlas's documentation and code.
 
+**Actor** — The identity credited with a variable override (ADR-0098): the authenticated principal's username, frozen into the audit event so it replays deterministically, or empty when auth is off (single-user). Surfaced by the variable-audit read and inline in the instance timeline.
+
 **Behavior** — The type-specific logic for a BPMN element (service task, gateway, timer event, subprocess). Implements `OnActivated`, `OnCompleting`, `OnTerminating`. Dispatched by `BpmnElementType`.
 
 **Boundary event** — An event attached to an activity that can interrupt (or run alongside) it: a timeout, an error, a message. Compiled as a `Span` on the enclosing scope.
@@ -59,5 +61,9 @@ Terms used throughout Atlas's documentation and code.
 **Token** — Conceptually, the thread of control moving through a BPMN model. In Atlas, represented by active element instances rather than allocated objects.
 
 **ValueType** — Part of the record discriminator. Which kind of entity a record concerns (ElementInstance, Job, Timer, Message, ...).
+
+**Variable audit trail** — The append-only, per-instance history of variable overrides (ADR-0098): who set which variable, on which scope, to what value. A `VTVariableAudit` history event, read via `GET /api/v1/instances/{key}/variable-audit`; its presence is what distinguishes an operator override from a variable the model wrote itself.
+
+**Variable override** — An operator setting or overwriting a variable on a running instance from outside the model (ADR-0095), via `POST /api/v1/instances/{key}/variables`. Admin-gated when auth is on; recorded as ordinary variable events plus an audit event, so it replays deterministically and — unlike a model write — does not re-evaluate gateways a token has already passed.
 
 **WAL (write-ahead log)** — The append-only, segmented log of events. The single source of truth; the state store is its materialization.
