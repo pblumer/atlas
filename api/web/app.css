@@ -2826,6 +2826,17 @@ tr.wk-stale > td { background: var(--warn-soft); }
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
+/* The job-type table folds away, closed by default: an installation runs a handful of
+   types and the table lists every one it has ever seen, so the page opens on the
+   question rather than on rows of answer. What must survive the fold is the alarm —
+   hence .wk-unserved in the summary. */
+summary.wk-head { cursor: pointer; list-style: none; user-select: none; }
+summary.wk-head::-webkit-details-marker { display: none; }
+summary.wk-head:hover { background: var(--bg); }
+.wk-caret { display: inline-block; font-size: 10px; color: var(--muted); transition: transform .12s ease; }
+.wk-fold[open] > summary .wk-caret { transform: rotate(90deg); }
+.wk-fold:not([open]) > summary.wk-head { padding-bottom: 15px; }
+.wk-unserved { color: var(--danger); font-weight: 600; }
 /* Which process a job type belongs to. Without it a table of fifty types is fifty
    names with no way back to the model that needs them. */
 .wk-used { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }

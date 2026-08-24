@@ -3887,6 +3887,16 @@ async function viewWorkers() {
   const STALE_MS = 5 * 60 * 1000;
   const isStale = (w) => w.lastSeen && Date.now() - w.lastSeen / 1e6 > STALE_MS;
 
+  // Whether the job-type table is unfolded. Default closed: the page's question is
+  // "is anything unserved?", which the summary answers, and the table is the detail
+  // behind it. try/catch because a locked-down browser can make storage throw.
+  const typesOpen = () => {
+    try { return localStorage.getItem("atlas.workers.types") === "1"; } catch { return false; }
+  };
+  const setTypesOpen = (open) => {
+    try { localStorage.setItem("atlas.workers.types", open ? "1" : "0"); } catch { /* not storable */ }
+  };
+
   const servedBy = (row, pullers) => {
     if (row.servedInProcess) {
       return `<span class="pill" title="Atlas works this type itself, so no external worker can lease it">in-process</span>`;
@@ -3927,12 +3937,15 @@ async function viewWorkers() {
       (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);
 
     types.innerHTML = `
-      <div class="wk-head">
-        <b>Job types</b>
-        <span class="muted small">${typeRows.length} shown${unserved.length ? ` &middot; ${unserved.length} unserved` : ""}${
+      <details class="wk-fold" id="wk-types-fold"${typesOpen() ? " open" : ""}>
+      <summary class="wk-head">
+        <b><span class="wk-caret" aria-hidden="true">&#9656;</span> Job types</b>
+        <span class="muted small">${typeRows.length} shown${unserved.length
+          ? ` &middot; <span class="wk-unserved" title="${esc(`${unserved.length} job type${unserved.length === 1
+            ? " has" : "s have"} work queued and nothing pulling it`)}">${unserved.length} unserved</span>` : ""}${
           idleBuiltIns.length ? ` &middot; <a href="#" id="wk-toggle-all">${showAllTypes
             ? "hide" : "show"} ${idleBuiltIns.length} idle built-in${idleBuiltIns.length === 1 ? "" : "s"}</a>` : ""}</span>
-      </div>
+      </summary>
       ${typeRows.length ? `<table data-dt-key="wk-types">
         <thead><tr>
           <th>Type</th><th>Served by</th>
@@ -3959,7 +3972,8 @@ async function viewWorkers() {
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
       <p class="wk-note">An <b>in-process</b> type is worked by Atlas itself and cannot be leased from
-        outside; relocating it to a worker means turning that handler off.</p>`;
+        outside; relocating it to a worker means turning that handler off.</p>
+      </details>`;
 
     workers.innerHTML = `
       <div class="wk-head">
@@ -4197,8 +4211,11 @@ async function viewWorkers() {
 
     const toggle = document.getElementById("wk-toggle-all");
     if (toggle) {
-      toggle.onclick = (e) => { e.preventDefault(); showAllTypes = !showAllTypes; load(); };
+      // The link sits inside the <summary>, where a click would also fold the card.
+      toggle.onclick = (e) => { e.preventDefault(); e.stopPropagation(); showAllTypes = !showAllTypes; load(); };
     }
+    const fold = document.getElementById("wk-types-fold");
+    if (fold) fold.addEventListener("toggle", () => setTypesOpen(fold.open));
     enhanceViewTables();
   };
 
