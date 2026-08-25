@@ -1356,7 +1356,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p class="rz-hint"><span data-l="de">Der aufgerufene Prozess <code>kyc-check</code> muss ebenfalls deployt sein — sonst pausiert die Instanz mit einem Incident (was du in Operations gut sehen kannst).</span><span data-l="en">The called process <code>kyc-check</code> must be deployed too — otherwise the instance pauses with an incident (which you can inspect nicely in Operations).</span></p>
+        <p class="rz-hint"><span data-l="de">Der aufgerufene Prozess <code>kyc-check</code> muss ebenfalls deployt sein — sonst wartet die Instanz still an der Call-Activity: kein Kind-Prozess, <b>kein Incident</b>, in Operations nur ein Token, das nicht weitergeht. Deploye <code>kyc-check</code> und starte neu.</span><span data-l="en">The called process <code>kyc-check</code> must be deployed too — otherwise the instance waits quietly at the call activity: no child instance, <b>no incident</b>, just a token in Operations that never moves on. Deploy <code>kyc-check</code> and start again.</span></p>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1582,7 +1582,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         &lt;zeebe:ioMapping&gt;
           &lt;zeebe:input source=&quot;=applicant.income&quot; target=&quot;income&quot;/&gt;
           &lt;zeebe:input source=&quot;=applicant.age&quot; target=&quot;age&quot;/&gt;
-          &lt;zeebe:output source=&quot;=result&quot; target=&quot;scoring.value&quot;/&gt;
+          &lt;zeebe:output source=&quot;={value: result}&quot; target=&quot;scoring&quot;/&gt;
         &lt;/zeebe:ioMapping&gt;
       &lt;/extensionElements&gt;
     &lt;/serviceTask&gt;
@@ -1592,7 +1592,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext, hier verschachtelt nach <code>scoring.value</code>. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope, here nested under <code>scoring.value</code>. This keeps tasks decoupled and reusable.</span></p>
+        <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext. Achtung: ein <code>target</code> ist ein <b>Variablenname, kein Pfad</b> – <code>scoring.value</code> legte eine Variable an, die wörtlich so heißt, statt ein Feld in <code>scoring</code> zu setzen, und der Deploy weist das darum ab (<code>variable.dotted-target</code>). Verschachtelt wird in der Expression: <code>{value: result}</code> nach <code>scoring</code> – das ergibt die Variable <code>scoring</code> mit dem Feld <code>value</code>, das <code>scoring.value</code> dann auch wirklich liest. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope. Careful: a <code>target</code> is a <b>variable name, not a path</b> – <code>scoring.value</code> would create a variable called literally that instead of setting a field inside <code>scoring</code>, which is why the deploy refuses it (<code>variable.dotted-target</code>). Nest in the expression instead: <code>{value: result}</code> into <code>scoring</code> – that yields a <code>scoring</code> variable with a <code>value</code> field, which <code>scoring.value</code> then really does read. This keeps tasks decoupled and reusable.</span></p>
       </div>
       <div class="recipe" id="rz-dataobject" data-proc="recipe-dataobject">
         <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>

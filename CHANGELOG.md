@@ -238,6 +238,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The handbook's recipes are compiled by a test now — and one of them did not deploy.**
+  The recipe chapter ships 28 models as XML inside the page, each with a button that
+  deploys and starts exactly that XML. They are the most-copied models Atlas has and the
+  only ones no test ever parsed: `go test ./examples` walks `.bpmn` files on disk, and a
+  recipe is not a file. `variable.dotted-target` above therefore turned the ioMapping
+  recipe into a model the deploy gate refuses, and the page went on teaching
+  `target="scoring.value"` while its own ▶ button failed for every reader who pressed it.
+  The recipe now nests where nesting belongs — `source="={value: result}"` into
+  `target="scoring"` — and explains why, since the dotted target is exactly what a reader
+  reaches for next. Two new tests give the recipes the floor every shipped model has: each
+  one compiles through the same `compiler.ParseAll` a deploy uses, gate included, and each
+  card's `data-proc` must name a process its own model declares — so the next compiler
+  rule catches the documentation with the code.
+- **The call-activity recipe no longer promises an incident that never comes.** Its hint
+  said that without a deployed `kyc-check` the instance "pauses with an incident (which
+  you can inspect nicely in Operations)". It does not: the call activity parks with the
+  token on it, no child instance and no incident — ADR-0076 leaves deploy-then-retry and
+  an incident as follow-up work — so a reader who took the hint at its word went to
+  Operations looking for the one thing that is not there. The hint now describes the
+  parking it really does, and says to deploy the called process and start again.
 - **A server that requires a login no longer calls itself single-user mode.** The account
   menu's label was written for the case where nobody *can* sign in — enforcement off, the
   API and UI open — but it was rendered whenever nobody *is* signed in, which on a server
