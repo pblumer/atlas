@@ -7,16 +7,27 @@ ausschließlich gegen klar benannte **Test-Objekte**.
 ## Der Ablauf
 
 ```
-Start (Formular onb-start: Vorname, Nachname, UPN, Abteilung)
+Start (onb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
   → [Script] Vorschlag              displayName + mailNickname aus den Namen
   → (X) Test-Objekt?    ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
         │ jml-test-*@blumer.net
   → 🔑 User-Task "Onboarding freigeben" (onb-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?    ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
-  → [entra create-user] Benutzer anlegen (connector="blumer_net")
-  → Ende "Konto angelegt"
+  → [entra create-user] Benutzer anlegen (connector="blumer_net" → konto)
+  → (X) Lizenz?         ── ohne ──▶┐  (übersprungen, wenn keine lizenzSku)
+        │ lizenzSku gesetzt        │
+  → [entra assign-license]         │
+  → (X) Gruppe?         ── ohne ──▶┤  (übersprungen, wenn keine gruppeId)
+        │ gruppeId gesetzt         │
+  → [entra add-group-member]       │
+  → Ende "Arbeitsplatz bereit" ◀───┘
 ```
+
+Lizenz und Gruppe sind **optionale, fail-closed** Schritte: das jeweilige Gateway
+nimmt den *Überspringen*-Pfad als Default, nur eine gesetzte `lizenzSku` bzw. `gruppeId`
+löst den echten Entra-Aufruf aus. Die id-Kette trägt sie: `create-user` schreibt das
+Konto nach `konto`, die Folgeschritte adressieren `=konto.id`.
 
 ## Zwei fail-closed Grenzen vor jedem Schreibzugriff
 
@@ -39,10 +50,11 @@ eingesetzt — es steht nie im Modell.
 ## Worker & Berechtigung
 
 Der Entra-Konnektor ist **worker-only** (ADR-0164/0172): das Tenant-Credential liegt
-nie in der Engine. Der `create-user`-Task parkt, bis ein Entra-Worker ihn abholt; auf
+nie in der Engine. Die Service-Tasks parken, bis ein Entra-Worker sie abholt; auf
 `atlas.blumer.cloud` beaufsichtigt die Engine den Worker standardmäßig, sobald der
-Connector `blumer_net` im Store steht. Benötigte Anwendungsberechtigung (mit
-Administratorzustimmung): **`User.ReadWrite.All`**.
+Connector `blumer_net` im Store steht. Benötigte Anwendungsberechtigungen (mit
+Administratorzustimmung): **`User.ReadWrite.All`**; für die optionalen Schritte
+zusätzlich **`Organization.Read.All`** (SKUs) und **`Group.ReadWrite.All`**.
 
 ## Deployen (über die Atlas-MCP-Tools)
 
@@ -56,11 +68,13 @@ atlas_publish_application  id=appId                              → Definition-
 
 ## Erfasste Prozessvariablen
 
-- **onb-start:** `vorname`, `nachname`, `upn`, `abteilung`
+- **onb-start:** `vorname`, `nachname`, `upn`, `abteilung`, `lizenzSku` (optional),
+  `gruppeId` (optional)
 - **Script:** `displayName`, `mailNick`
 - **onb-freigabe:** `displayName` (editierbar), `entscheidung`, `initialpasswort`,
   `ablehnungsgrund`
-- **create-user:** `konto` (das angelegte Konto samt `id`)
+- **create-user:** `konto` (das angelegte Konto samt `id`, trägt `=konto.id` in die
+  optionalen Folgeschritte)
 
 ## Artefakte
 

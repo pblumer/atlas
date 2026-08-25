@@ -29,6 +29,18 @@
       "key": "abteilung",
       "type": "textfield",
       "label": "Abteilung / Team"
+    },
+    {
+      "key": "lizenzSku",
+      "type": "textfield",
+      "label": "Lizenz-SKU (optional)",
+      "description": "Die skuId einer Microsoft-365-Lizenz. Leer lassen = keine Lizenz zuweisen."
+    },
+    {
+      "key": "gruppeId",
+      "type": "textfield",
+      "label": "Gruppe (optional)",
+      "description": "Die Objekt-id einer bestehenden Gruppe, in die der neue Benutzer aufgenommen wird. Leer lassen = keine Gruppe."
     }
   ]
 }

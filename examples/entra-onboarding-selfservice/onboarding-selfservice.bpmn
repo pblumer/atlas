@@ -6,36 +6,37 @@
 
   Der rote Faden ist die doppelte, fail-closed Absicherung vor jedem Schreibzugriff:
 
-    Start (Formular onb-start: Vorname, Nachname, UPN, Abteilung)
+    Start (Formular onb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
      -> [Script] "Vorschlag"      (displayName + mailNickname aus den Namen)
      -> (X) "Test-Objekt?"        Gate 1: nur ein UPN, der mit jml-test- beginnt UND
                                   auf @blumer.net endet, geht weiter. Default (alles
-                                  andere) -> Ende "Kein Test-Objekt". Es wird dann
-                                  KEIN Entra-Aufruf gemacht.
+                                  andere) -> Ende "Kein Test-Objekt". KEIN Entra-Aufruf.
      -> User-Task "Freigeben"     (Formular onb-freigabe; Admin setzt Initialpasswort)
      -> (X) "Freigegeben?"        Gate 2: nur die ausdrueckliche Entscheidung "anlegen"
                                   legt an. Default -> Ende "Abgelehnt".
-     -> Service "Benutzer anlegen"(entra create-user, connector="blumer_net")
-     -> Ende "Konto angelegt"
+     -> Service "Benutzer anlegen"(entra create-user, connector="blumer_net" -> konto)
+     -> (X) "Lizenz?"             optional: nur wenn lizenzSku gesetzt -> assign-license
+     -> (X) "Gruppe?"             optional: nur wenn gruppeId gesetzt -> add-group-member
+     -> Ende "Arbeitsplatz bereit"
 
-  Warum fail-closed: beide Gateways nehmen den ABLEHNENDEN Pfad als Default. Nur eine
-  ausdrueckliche, positive Bedingung (Test-UPN bzw. entscheidung="anlegen") fuehrt zum
-  Schreiben. Ein fehlender oder unerwarteter Wert landet nie beim create-user.
+  Warum fail-closed: die zwei Schutz-Gateways nehmen den ABLEHNENDEN Pfad als Default,
+  die zwei optionalen Gateways den UEBERSPRINGEN-Pfad. Nur eine ausdrueckliche, positive
+  Bedingung fuehrt zu einem Schreibzugriff; ein fehlender Wert ueberspringt bzw. lehnt ab.
 
   Das Gate im Prozess ist die massgebliche Grenze — die pattern-Validierung im
   Start-Formular ist nur Komfort und laesst sich (etwa bei per MCP gestarteten
   Instanzen ohne Formular) umgehen; das BPMN-Gateway nicht.
 
-  Das Anfangspasswort ist ein Laufzeitwert: es wird erst im Freigabe-Formular gesetzt
-  und pro Feld als FEEL in den create-user-Body eingesetzt (passwordProfile), steht
-  also nie im Modell.
+  Die id-Kette: create-user gibt das Konto als `konto` zurueck; assign-license und
+  add-group-member adressieren es ueber `=konto.id`. Das Anfangspasswort ist ein
+  Laufzeitwert (im Freigabe-Formular gesetzt, pro Feld als FEEL in den Body), nie Modelltext.
 
   Laeuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
-  Tenant-Credential liegt nie in der Engine. Der create-user-Task parkt, bis ein
-  Entra-Worker ihn abholt; auf atlas.blumer.cloud beaufsichtigt die Engine den Worker
+  Tenant-Credential liegt nie in der Engine. Die Service-Tasks parken, bis ein
+  Entra-Worker sie abholt; auf atlas.blumer.cloud beaufsichtigt die Engine den Worker
   standardmaessig (ADR-0172), sobald der Connector "blumer_net" im Store steht.
 
-  Startvariablen (Formular onb-start): vorname, nachname, upn, abteilung
+  Startvariablen (Formular onb-start): vorname, nachname, upn, abteilung, lizenzSku?, gruppeId?
 -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
@@ -49,19 +50,24 @@
   <bpmn:process id="proc_entra_onboarding_selfservice" name="Onboarding-Self-Service (Entra ID)" isExecutable="true">
     <bpmn:documentation>Self-Service-Onboarding fuer den Tenant blumer.net: ein Antragsteller erfasst das
 neue Mitglied, ein Administrator gibt frei und setzt das Initialpasswort, danach legt
-der Entra-Konnektor das Konto an (create-user).
+der Entra-Konnektor das Konto an (create-user) und richtet optional Lizenz und
+Gruppenmitgliedschaft ein.
 
-Scharf, aber nur gegen Test-Objekte: zwei fail-closed Gateways sichern jeden
+Scharf, aber nur gegen Test-Objekte: zwei fail-closed Schutz-Gateways sichern jeden
 Schreibzugriff ab. Gate 1 laesst nur einen UPN durch, der mit "jml-test-" beginnt und
 auf "@blumer.net" endet; alles andere endet vor jedem Entra-Aufruf bei "Kein
-Test-Objekt". Gate 2 legt nur bei der ausdruecklichen Entscheidung "anlegen" an.
+Test-Objekt". Gate 2 legt nur bei der ausdruecklichen Entscheidung "anlegen" an. Lizenz
+und Gruppe sind zusaetzlich je ueber ein optionales Gateway abgesichert: fehlt die
+Angabe, wird der Schritt uebersprungen.
 
-Der create-user-Task ist ein Entra-Konnektor-Task (ADR-0172): das Modell waehlt die
-benannte Operation statt eine Graph-URL zu schreiben. Er parkt, bis ein Entra-Worker
-ihn abholt — der Konnektor ist worker-only, damit das Tenant-Credential nie in die
+Jeder Service-Task ist ein Entra-Konnektor-Task (ADR-0172): das Modell waehlt die
+benannte Operation statt eine Graph-URL zu schreiben. Sie parken, bis ein Entra-Worker
+sie abholt — der Konnektor ist worker-only, damit das Tenant-Credential nie in die
 Engine gelangt (ADR-0164/0172).
 
-Benoetigte Anwendungsberechtigung (mit Administratorzustimmung): User.ReadWrite.All.</bpmn:documentation>
+Benoetigte Anwendungsberechtigungen (mit Administratorzustimmung): User.ReadWrite.All;
+fuer die optionalen Schritte zusaetzlich Organization.Read.All (SKUs) und
+Group.ReadWrite.All.</bpmn:documentation>
 
     <bpmn:startEvent id="start" name="Onboarding beantragt">
       <bpmn:extensionElements>
@@ -120,11 +126,62 @@ nie im Modell. Die Antwort (Konto samt id) landet in "konto".</bpmn:documentatio
                               attributes="{ &quot;accountEnabled&quot;: true, &quot;displayName&quot;: &quot;=displayName&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=initialpasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_frei_anlegen</bpmn:incoming>
-      <bpmn:outgoing>f_anlegen_ende</bpmn:outgoing>
+      <bpmn:outgoing>f_anlegen_lizenz</bpmn:outgoing>
     </bpmn:serviceTask>
 
-    <bpmn:endEvent id="end_bereit" name="Konto angelegt">
-      <bpmn:incoming>f_anlegen_ende</bpmn:incoming>
+    <bpmn:exclusiveGateway id="gw_lizenz" name="Lizenz?" default="f_lizenz_skip">
+      <bpmn:documentation>Optional, fail-closed: nur wenn eine lizenzSku gesetzt ist, wird eine Lizenz
+zugewiesen. Ohne Angabe ueberspringt der Default-Pfad den Schritt.</bpmn:documentation>
+      <bpmn:incoming>f_anlegen_lizenz</bpmn:incoming>
+      <bpmn:outgoing>f_lizenz_do</bpmn:outgoing>
+      <bpmn:outgoing>f_lizenz_skip</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="lizenz" name="Lizenz zuweisen">
+      <bpmn:documentation>assign-license: ein POST /users/{id}/assignLicense. Der Body wird inline gebaut —
+addLicenses mit der skuId aus der Startvariablen, removeLicenses leer. Die id adressiert
+das eben angelegte Konto ueber "=konto.id".</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="blumer_net" operation="assign-license" userId="=konto.id"
+                              attributes="{ &quot;addLicenses&quot;: [ { &quot;skuId&quot;: &quot;=lizenzSku&quot; } ], &quot;removeLicenses&quot;: [] }"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_lizenz_do</bpmn:incoming>
+      <bpmn:outgoing>f_lizenz_done</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_lizenz_m">
+      <bpmn:incoming>f_lizenz_done</bpmn:incoming>
+      <bpmn:incoming>f_lizenz_skip</bpmn:incoming>
+      <bpmn:outgoing>f_lm_gruppe</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:exclusiveGateway id="gw_gruppe" name="Gruppe?" default="f_gruppe_skip">
+      <bpmn:documentation>Optional, fail-closed: nur wenn eine gruppeId gesetzt ist, wird der Benutzer in die
+Gruppe aufgenommen. Ohne Angabe ueberspringt der Default-Pfad den Schritt.</bpmn:documentation>
+      <bpmn:incoming>f_lm_gruppe</bpmn:incoming>
+      <bpmn:outgoing>f_gruppe_do</bpmn:outgoing>
+      <bpmn:outgoing>f_gruppe_skip</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="mitglied" name="In die Gruppe aufnehmen">
+      <bpmn:documentation>add-group-member: ein POST auf die $ref-Sammlung der Gruppe. userId="=konto.id",
+groupId="=gruppeId" — der Konnektor baut die absolute @odata.id des Kontos selbst.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="blumer_net" operation="add-group-member"
+                              userId="=konto.id" groupId="=gruppeId"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gruppe_do</bpmn:incoming>
+      <bpmn:outgoing>f_gruppe_done</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_gruppe_m">
+      <bpmn:incoming>f_gruppe_done</bpmn:incoming>
+      <bpmn:incoming>f_gruppe_skip</bpmn:incoming>
+      <bpmn:outgoing>f_gm_ende</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="end_bereit" name="Arbeitsplatz bereit">
+      <bpmn:incoming>f_gm_ende</bpmn:incoming>
     </bpmn:endEvent>
 
     <bpmn:endEvent id="end_kein_test" name="Kein Test-Objekt">
@@ -148,13 +205,25 @@ in Entra angelegt.</bpmn:documentation>
       <bpmn:conditionExpression>= entscheidung = "anlegen"</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f_frei_ablehnen" name="ablehnen" sourceRef="gw_frei" targetRef="end_abgelehnt"/>
-    <bpmn:sequenceFlow id="f_anlegen_ende" sourceRef="anlegen" targetRef="end_bereit"/>
+    <bpmn:sequenceFlow id="f_anlegen_lizenz" sourceRef="anlegen" targetRef="gw_lizenz"/>
+    <bpmn:sequenceFlow id="f_lizenz_do" name="lizenzSku gesetzt" sourceRef="gw_lizenz" targetRef="lizenz">
+      <bpmn:conditionExpression>= lizenzSku != null and lizenzSku != ""</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_lizenz_skip" name="ohne" sourceRef="gw_lizenz" targetRef="gw_lizenz_m"/>
+    <bpmn:sequenceFlow id="f_lizenz_done" sourceRef="lizenz" targetRef="gw_lizenz_m"/>
+    <bpmn:sequenceFlow id="f_lm_gruppe" sourceRef="gw_lizenz_m" targetRef="gw_gruppe"/>
+    <bpmn:sequenceFlow id="f_gruppe_do" name="gruppeId gesetzt" sourceRef="gw_gruppe" targetRef="mitglied">
+      <bpmn:conditionExpression>= gruppeId != null and gruppeId != ""</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_gruppe_skip" name="ohne" sourceRef="gw_gruppe" targetRef="gw_gruppe_m"/>
+    <bpmn:sequenceFlow id="f_gruppe_done" sourceRef="mitglied" targetRef="gw_gruppe_m"/>
+    <bpmn:sequenceFlow id="f_gm_ende" sourceRef="gw_gruppe_m" targetRef="end_bereit"/>
   </bpmn:process>
 
   <!--
-    Hand-authored BPMN-DI (AGENTS.md): gerade Hauptachse auf y=200, 150px-Raster.
-    Die beiden Ablehnungs-Enden haengen senkrecht unter ihrem Gateway (y=320), damit
-    keine Kante durch einen Knoten laeuft.
+    Hand-authored BPMN-DI (AGENTS.md): gerade Hauptachse auf y=200, 150px-Raster. Die
+    Ablehnungs-Enden haengen senkrecht unter ihrem Gateway (y=320); die zwei
+    Ueberspringen-Pfade der optionalen Schritte tauchen knapp darunter auf y=270 ab.
   -->
   <bpmndi:BPMNDiagram id="diagram">
     <bpmndi:BPMNPlane id="plane" bpmnElement="proc_entra_onboarding_selfservice">
@@ -179,9 +248,29 @@ in Entra angelegt.</bpmn:documentation>
       <bpmndi:BPMNShape id="di_anlegen" bpmnElement="anlegen">
         <dc:Bounds x="790" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_lizenz" bpmnElement="gw_lizenz" isMarkerVisible="true">
+        <dc:Bounds x="950" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="940" y="145" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lizenz" bpmnElement="lizenz">
+        <dc:Bounds x="1070" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_lizenz_m" bpmnElement="gw_lizenz_m" isMarkerVisible="true">
+        <dc:Bounds x="1240" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_gruppe" bpmnElement="gw_gruppe" isMarkerVisible="true">
+        <dc:Bounds x="1360" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1348" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_mitglied" bpmnElement="mitglied">
+        <dc:Bounds x="1480" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_gruppe_m" bpmnElement="gw_gruppe_m" isMarkerVisible="true">
+        <dc:Bounds x="1650" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_bereit" bpmnElement="end_bereit">
-        <dc:Bounds x="952" y="182" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="930" y="222" width="82" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1770" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1746" y="222" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_kein_test" bpmnElement="end_kein_test">
         <dc:Bounds x="407" y="320" width="36" height="36"/>
@@ -217,8 +306,36 @@ in Entra angelegt.</bpmn:documentation>
         <di:waypoint x="705" y="225"/><di:waypoint x="705" y="320"/>
         <bpmndi:BPMNLabel><dc:Bounds x="711" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_f_anlegen_ende" bpmnElement="f_anlegen_ende">
-        <di:waypoint x="890" y="200"/><di:waypoint x="952" y="200"/>
+      <bpmndi:BPMNEdge id="di_f_anlegen_lizenz" bpmnElement="f_anlegen_lizenz">
+        <di:waypoint x="890" y="200"/><di:waypoint x="950" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lizenz_do" bpmnElement="f_lizenz_do">
+        <di:waypoint x="1000" y="200"/><di:waypoint x="1070" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1002" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lizenz_skip" bpmnElement="f_lizenz_skip">
+        <di:waypoint x="975" y="225"/><di:waypoint x="975" y="270"/><di:waypoint x="1265" y="270"/><di:waypoint x="1265" y="225"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1100" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lizenz_done" bpmnElement="f_lizenz_done">
+        <di:waypoint x="1170" y="200"/><di:waypoint x="1240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lm_gruppe" bpmnElement="f_lm_gruppe">
+        <di:waypoint x="1290" y="200"/><di:waypoint x="1360" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_do" bpmnElement="f_gruppe_do">
+        <di:waypoint x="1410" y="200"/><di:waypoint x="1480" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1412" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_skip" bpmnElement="f_gruppe_skip">
+        <di:waypoint x="1385" y="225"/><di:waypoint x="1385" y="270"/><di:waypoint x="1675" y="270"/><di:waypoint x="1675" y="225"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1510" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_done" bpmnElement="f_gruppe_done">
+        <di:waypoint x="1580" y="200"/><di:waypoint x="1650" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gm_ende" bpmnElement="f_gm_ende">
+        <di:waypoint x="1700" y="200"/><di:waypoint x="1770" y="200"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
