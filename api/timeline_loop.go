@@ -86,13 +86,51 @@ func annotateLoops(steps []timelineStep, ver *versionAt, acts map[uint64]state.E
 	}
 	// The rounds of each body, in log order, so a round can ask whether another followed
 	// it — the log's own answer to "did the loop go round again".
-	roundsOf := map[uint64][]uint64{}
+	//
+	// Keyed by the body's *activation*, not by its token. A token is not consumed by an
+	// activity: the same one flows on to the next, so every looping activity along a
+	// sequence carries the same token id, and grouping by it merged their rounds. Three
+	// loops of five, three and three reported eleven rounds each, and a loop's last round
+	// saw the next loop's rounds as its own and read as "repeated" rather than as the one
+	// that stopped. The element narrows it to one activity, and the position window to one
+	// activation of it — an activity a flow loops back onto is a body more than once.
+	type loopKey struct {
+		token uint64
+		el    int32
+	}
+	bodies := map[loopKey][]uint64{} // body activation positions, per looping activity
+	for pos, rv := range acts {
+		if _, isRound := bodyTokens[rv.ParentTokenID]; isRound && rv.ParentTokenID != 0 {
+			continue // a round, not a body
+		}
+		if _, ok := bodyTokens[rv.TokenID]; ok {
+			k := loopKey{rv.TokenID, rv.ElementID}
+			bodies[k] = append(bodies[k], pos)
+		}
+	}
+	for _, list := range bodies {
+		sort.Slice(list, func(i, j int) bool { return list[i] < list[j] })
+	}
+	// bodyOf finds the activation a round belongs to: the last one of that activity before
+	// the round, on the round's own token.
+	bodyOf := func(k loopKey, roundPos uint64) (uint64, bool) {
+		list := bodies[k]
+		i := sort.Search(len(list), func(i int) bool { return list[i] >= roundPos })
+		if i == 0 {
+			return 0, false
+		}
+		return list[i-1], true
+	}
+	roundsOf := map[uint64][]uint64{} // body activation position → its rounds, in log order
 	for pos, rv := range acts {
 		if rv.ParentTokenID == 0 {
 			continue
 		}
-		if _, ok := bodyTokens[rv.ParentTokenID]; ok {
-			roundsOf[rv.ParentTokenID] = append(roundsOf[rv.ParentTokenID], pos)
+		if _, ok := bodyTokens[rv.ParentTokenID]; !ok {
+			continue
+		}
+		if bp, ok := bodyOf(loopKey{rv.ParentTokenID, rv.ElementID}, pos); ok {
+			roundsOf[bp] = append(roundsOf[bp], pos)
 		}
 	}
 	for _, list := range roundsOf {
@@ -126,7 +164,7 @@ func annotateLoops(steps []timelineStep, ver *versionAt, acts map[uint64]state.E
 			// anything but a list yields no rounds at all (ADR-0077), and the activity is
 			// then walked past in silence; naming the expression and what it read is what
 			// tells that apart from a genuinely empty list.
-			lv.Rounds = len(roundsOf[rv.TokenID])
+			lv.Rounds = len(roundsOf[s.Position])
 			if !d.Standard {
 				if src := d.InputCollection; src != nil {
 					lv.Collection = src.Source()
@@ -141,7 +179,10 @@ func annotateLoops(steps []timelineStep, ver *versionAt, acts map[uint64]state.E
 		}
 		lv.Round = s.Iteration
 		lv.Reads, lv.Missing = conditionReads(cond, s)
-		siblings := roundsOf[rv.ParentTokenID]
+		var siblings []uint64
+		if bp, ok := bodyOf(loopKey{rv.ParentTokenID, rv.ElementID}, s.Position); ok {
+			siblings = roundsOf[bp]
+		}
 		switch {
 		case torn[s.ElementInstanceKey]:
 			lv.Outcome = "terminated"
