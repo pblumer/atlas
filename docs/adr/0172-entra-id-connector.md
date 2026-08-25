@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change)
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -216,6 +216,36 @@ the intent.
 
 What is still not covered is `$orderby` and the `$count` *value* as a result in its
 own right; a process needing either uses the REST connector.
+
+### Amendment (2026-08-25): the connector name may itself be a FEEL expression
+
+Every addressing field on the task — `userId`, `groupId`, `newPassword`, the inline
+attributes — is already a literal-or-FEEL value evaluated per instance. The one field
+that was still deploy-fixed was the `connector` name itself, and a real process wanted
+it dynamic: a single Joiner/Mover/Leaver model that serves more than one tenant,
+choosing the tenant from a start variable rather than being copied once per tenant.
+
+So `connector` now takes the same fx treatment. A plain name (`connector="contoso"`)
+is unchanged; a leading `=` (`connector="=tenant"`) is a FEEL expression the engine
+evaluates against the instance's variables at call time, the resolved string naming
+the tenant the worker holds. An expression that evaluates to an empty name is refused
+at resolve, so the incident points at the task rather than at a worker later failing
+to find a connector called `""`.
+
+This is deliberately **entra-only**, and the reason is the kind's worker-only shape.
+For a managed kind whose endpoint and secret live in the Console store (mail, REST,
+SharePoint…), the *engine* resolves the named connector's client at deploy/activation;
+a name known only at runtime would have nothing to resolve against and the deploy-time
+preflight warning ("this connector is not configured") could not fire. Entra holds no
+client in the engine at all — the name only ever travels to the worker, which looks it
+up in its own `ATLAS_ENTRA_<NAME>_*` environment (itself provisioned from *every*
+store tenant, not from what any one model names). So a runtime name costs nothing that
+was being relied on: routing is by job type, not by name; no credential lookup keys off
+it; and the supervised worker already serves every configured tenant. The compiler
+keeps the authored `=…` text on the task's interned `Connector` for introspection (an
+incident or a placement badge still has something to show), and the deploy-time
+connector-preflight skips any reference whose name begins with `=`, because there is no
+fixed name to check and the runtime unresolved-connector incident stands in for it.
 
 ### The OAuth2 token flow, lifted
 

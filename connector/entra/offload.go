@@ -158,8 +158,20 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 	if err != nil {
 		return Job{}, fmt.Errorf("entra: read variables: %w", err)
 	}
+	// The connector is normally a static name interned at deploy; a task that authored
+	// it as a FEEL expression resolves the tenant name here, from the instance's own
+	// variables, the same way every other authored value is read (ADR-0172). An
+	// expression that evaluates to nothing is refused rather than sent, so the incident
+	// names the task instead of the worker later failing to find a connector called "".
+	connector := cp.Intern(detail.Connector)
+	if detail.EntraConnector.Expr != nil {
+		connector = resolveValue(detail.EntraConnector, elementInstanceKey, vars)
+		if strings.TrimSpace(connector) == "" {
+			return Job{}, fmt.Errorf("entra: the connector expression evaluated to an empty tenant name; set the variable it reads before this task")
+		}
+	}
 	j := Job{
-		Connector:      cp.Intern(detail.Connector),
+		Connector:      connector,
 		Operation:      op,
 		UserID:         resolveValue(detail.EntraUserID, elementInstanceKey, vars),
 		GroupID:        resolveValue(detail.EntraGroupID, elementInstanceKey, vars),

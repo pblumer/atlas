@@ -2238,8 +2238,8 @@ const SERVICE_TASK_KINDS = [
     fields: [
       { group: "Tenant" },
       {
-        key: "connector", label: "Connector", placeholder: "contoso",
-        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0172).",
+        key: "connector", label: "Connector", placeholder: "contoso", fx: true,
+        hint: "Names an Entra tenant a *worker* is configured for. Unlike other kinds this is not configured in the Console: the tenant id, client id and client secret live in the worker's own environment (ATLAS_ENTRA_<NAME>_*), so the engine never holds a credential that can create or disable accounts (ADR-0172). May be a FEEL expression (fx) — e.g. =tenant — so one process can serve several tenants, the name resolved from its own variables at call time.",
       },
       { group: "Operation" },
       {

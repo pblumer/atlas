@@ -32,6 +32,29 @@ func entraDetail(t *testing.T, attrs string) (*CompiledProcess, *ConnectorTaskDe
 	return cp, cp.ConnectorTask(node.Detail)
 }
 
+// The connector may be a static name (the common case) or a FEEL expression, so one
+// process can serve several tenants and resolve the name from its own variables at
+// call time (ADR-0172). A literal leaves EntraConnector's Expr nil and Connector
+// holds the name; an expression compiles into EntraConnector and Connector keeps the
+// authored "=..." text for introspection.
+func TestEntraConnectorIsLiteralOrExpression(t *testing.T) {
+	// Literal: the static path is unchanged — no connector expression is compiled.
+	_, lit := entraDetail(t, `connector="contoso" operation="disable" userId="=person.upn" resultVariable="k"`)
+	if lit.EntraConnector.Expr != nil {
+		t.Errorf("a literal connector should compile no expression, got %+v", lit.EntraConnector)
+	}
+
+	// Expression: the '=' compiles into EntraConnector; Connector keeps the text so an
+	// incident or a placement badge can still name the (dynamic) reference.
+	cp, dyn := entraDetail(t, `connector="=tenant" operation="disable" userId="=person.upn" resultVariable="k"`)
+	if dyn.EntraConnector.Expr == nil {
+		t.Errorf("a FEEL connector should compile an expression, got literal %q", dyn.EntraConnector.Literal)
+	}
+	if got := cp.Intern(dyn.Connector); got != "=tenant" {
+		t.Errorf("Connector introspection text = %q, want =tenant", got)
+	}
+}
+
 // A service task bearing <atlas:entraConnector> is an Entra ID connector task
 // (ADR-0172): it names a tenant connector and a lifecycle operation, never an
 // address or a credential.
