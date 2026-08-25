@@ -1913,11 +1913,6 @@ function withRetries(kind) {
 const SERVICE_TASK_KINDS = [
   {
     id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
-    // outOfProcess marks the kinds Atlas does NOT execute itself. The polarity is
-    // deliberate: every other kind today runs inside the engine, and a kind that
-    // later gains a worker sets this rather than being remembered as an exception
-    // in a list somewhere else (ADR-0164).
-    outOfProcess: true,
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
@@ -2692,6 +2687,16 @@ function fillConnectorDatalist(api, dl, kind) {
   }).catch(() => { /* no suggestions; the field stays free text */ });
 }
 
+// placementBadgeHTML is the where-does-this-run badge: beside a kind's name in the
+// connector picker, and beside the field that picks one in the script and decision
+// panels. A kind the server said nothing about gets none: silence beats a badge that
+// might be wrong, which is what the compiled-in one turned out to be.
+function placementBadgeHTML(id) {
+  const b = PLACEMENT_BADGE[placementOf(id)];
+  if (!b) return "";
+  return `<span class="stkind-where ${b.cls}" title="${esc(b.title)}">${b.label}</span>`;
+}
+
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
@@ -2700,8 +2705,7 @@ function stKindRowsHTML(kinds, curId) {
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span style="line-height:1.25"><b>${esc(k.name)}</b>${runsInEngine(k)
-        ? `<span class="stkind-inengine" title="Atlas runs this kind itself. Work that can fail slowly belongs on a worker (ADR-0164).">in&#8209;engine</span>` : ""}<br>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b>${placementBadgeHTML(k.id)}<br>
         <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
 }
@@ -2763,6 +2767,124 @@ function stKindFieldsHTML(cur, ext) {
   return fields;
 }
 
+// Where a connector kind's work runs is a property of the *server*, not of the
+// catalog: --offload-connectors and --in-process-connectors are its command line, and
+// some kinds were born on a worker with no in-engine form at all (ADR-0168/0173). This
+// used to be a constant here — true the day it was written, false a day later — so the
+// picker now asks (ADR-0183). KIND_PLACEMENT holds
+// the answer, keyed by catalog id; null until it arrives, which renders no badge rather
+// than a guess.
+let KIND_PLACEMENT = null;
+let kindPlacementLoad = null;
+
+// loadKindPlacement fetches the placements once per page and shares the request. It
+// returns the in-flight promise so the first panel can re-render when the answer lands,
+// and null when there is nothing to wait for (already loaded, or no API to ask —
+// a Modeler with no server says nothing about placement instead of inventing it).
+function loadKindPlacement(api) {
+  if (!api || KIND_PLACEMENT) return null;
+  if (!kindPlacementLoad) {
+    kindPlacementLoad = api("GET", "/api/v1/connector-kinds").then((r) => {
+      const by = {};
+      for (const k of (r && r.kinds) || []) if (k && k.id) by[k.id] = k.placement;
+      KIND_PLACEMENT = by;
+    }).catch(() => { KIND_PLACEMENT = {}; }); // unreachable server: no badges, no fiction
+  }
+  return kindPlacementLoad;
+}
+
+// placementOf returns an authored kind's placement, or "" when the server has not
+// answered or says nothing about it (the plain job worker, whose name is already the
+// statement, and the mockup and a FEEL script, which create no job at all). The id is
+// the server's word for what the author picked: a catalog kind for a connector, a
+// language for a script task, "dmn" or "temis" for a decision binding.
+function placementOf(id) { return (KIND_PLACEMENT && KIND_PLACEMENT[id]) || ""; }
+
+// PLACEMENT_BADGE is what each placement says in the picker. The two "-only" rows read
+// like their plain counterparts on purpose — where the work runs is the same fact —
+// and differ in the advice, because a kind with no other form cannot take it.
+const PLACEMENT_BADGE = {
+  "engine": { label: "in&#8209;engine", cls: "stkind-where-engine",
+    title: "This server runs this kind in its own process, so the call's latency and failures are the engine's. It can be moved onto a worker (ADR-0164)." },
+  "engine-only": { label: "in&#8209;engine", cls: "stkind-where-engine",
+    title: "This server runs this kind in its own process. It has no out-of-process form, so there is no worker to move it to." },
+  "worker": { label: "on a worker", cls: "stkind-where-worker",
+    title: "This server does not run this kind itself: its jobs are leased by a worker process, so a slow call cannot stall the engine (ADR-0168)." },
+  "worker-only": { label: "worker only", cls: "stkind-where-worker",
+    title: "This kind has no in-engine form — its work always runs on a worker (ADR-0173)." },
+};
+
+// PLACEMENT_LEAD says where the work runs. It is the same sentence wherever it appears,
+// because it is the same fact — a connector call, a script and a decision are all a job
+// this server either runs itself or leaves for a worker.
+const PLACEMENT_LEAD = {
+  "engine": `Atlas runs this <b>in its own process</b> on this server, so its latency and its
+    failures are the engine&rsquo;s.`,
+  "engine-only": `Atlas runs this <b>in its own process</b>, and it has no out-of-process form.`,
+  "worker": `This server does <b>not</b> run this itself: its jobs are leased by a <b>worker</b>,
+    so a slow call cannot stall the engine.`,
+  "worker-only": `This has <b>no in-engine form</b>: its jobs always run on a worker.`,
+};
+
+// PLACEMENT_TAIL is what follows from that, which is *not* the same in the three panels.
+// A worker holds a connector's credential, a script's interpreter and a decision
+// service's endpoint; only some of those are the author's problem, and the advice for an
+// in-engine connector ("prefer a job worker") is not advice a script task can take.
+// A missing entry means the lead says it all — the notice never disappears for want of a
+// tail.
+const PLACEMENT_TAIL = {
+  connector: {
+    "engine": `New models should prefer a <b>Job worker</b> and an <code>atlas worker</code> serving
+      that job type; these kinds keep working and are being moved out of the engine.`,
+    "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
+      so there is nothing to move onto a worker.`,
+    "worker": `Its jobs wait for a worker serving this job type — Atlas supervises one for the kinds
+      it offloads by default. That worker holds the connector&rsquo;s configuration, so the credential
+      lives where it is used; <b>Workers</b> in the Console shows which names are served and which
+      are configured nowhere (ADR-0168).`,
+    "worker-only": `The worker holds the connection and its credential &mdash; the model names the
+      connector and nothing else (ADR-0168).`,
+  },
+  script: {
+    "engine": `A script that hangs holds the loop with it. Atlas normally runs script tasks on a
+      worker it starts and supervises itself; <code>--in-process-connectors</code> is what turns
+      that off (ADR-0047).`,
+    "worker": `Atlas supervises a script worker of its own by default. The language&rsquo;s
+      interpreter has to be installed where that worker runs, which need not be this server
+      (ADR-0047).`,
+  },
+  dmn: {
+    "engine": `The engine&rsquo;s embedded DMN library evaluates it here. A decision table is
+      computation rather than a network call, so what moving it out buys is CPU time, not
+      protection from a slow endpoint.`,
+    "worker": `Its jobs wait for a worker serving the decision job type. <b>Workers</b> in the
+      Console shows whether one is running (ADR-0157).`,
+  },
+  temis: {
+    "engine": `A temis evaluation is a network call this server makes itself, so its latency is the
+      engine&rsquo;s — the case ADR-0164 is about. Moving it onto a worker also moves the
+      service&rsquo;s endpoint and credential there (ADR-0168).`,
+    "worker": `Its jobs wait for a worker serving this job type, and that worker holds the temis
+      endpoint and its credential. <b>Workers</b> in the Console shows whether one is running
+      (ADR-0157/0168).`,
+  },
+};
+
+// placementNoticeHTML says, on the implementation that has been chosen, what its
+// placement means for the model being authored. It belongs in these panels rather than
+// only in the Workers view because this is where the choice is made; the Workers view
+// can only report the consequence afterwards. `context` picks the wording: the
+// connector catalog, a script language, or one of the two decision bindings.
+function placementNoticeHTML(id, context) {
+  const placement = placementOf(id);
+  const lead = PLACEMENT_LEAD[placement];
+  if (!lead) return "";
+  const tail = (PLACEMENT_TAIL[context] || {})[placement] || "";
+  // An in-engine kind is being warned about; one already on a worker is being described.
+  const cls = placement === "worker" || placement === "worker-only" ? " stkind-notice-worker" : "";
+  return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
+}
+
 // stKindHeadingHTML renders the heading above the chosen kind's fields.
 //
 // When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
@@ -2772,23 +2894,6 @@ function stKindFieldsHTML(cur, ext) {
 // (data-standalone-group keeps it a sibling instead of being folded into the Type group),
 // and keep a real <h3> only for a kind whose fields live directly under it (Job worker),
 // where the heading does have content to collapse.
-// runsInEngine reports whether Atlas executes a catalog kind itself. Everything
-// except the plain job worker does, today (ADR-0164): the engine's own process
-// makes the call, so its latency and its failures are the engine's.
-function runsInEngine(k) { return !k.outOfProcess; }
-
-// inEngineNoticeHTML is the deprecation notice for a kind Atlas runs itself
-// (ADR-0164). It says it where the choice is actually made — the Workers view can
-// only report the consequence afterwards — and it says what to do instead rather
-// than only that something is discouraged.
-function inEngineNoticeHTML(cur) {
-  if (!runsInEngine(cur)) return "";
-  return `<p class="stkind-notice">Atlas runs this kind <b>in its own process</b>, so this call&rsquo;s
-    latency and failures are the engine&rsquo;s. New models should prefer a <b>Job worker</b> and an
-    <code>atlas worker</code> serving that job type; these kinds keep working and are being moved out
-    of the engine.</p>`;
-}
-
 function stKindHeadingHTML(cur) {
   const fields = cur.fields || [];
   // Fields listed before the kind's first group have no group of their own (the Job
@@ -2813,7 +2918,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${inEngineNoticeHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "connector")}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -2855,7 +2960,7 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "connector") + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -4573,9 +4678,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>`]
             .concat(Object.entries(JOB_LANGS).map(([k, v]) =>
               `<option value="${k}" ${lang === k ? "selected" : ""}>${v.label}</option>`));
+          // FEEL is evaluated inline by the engine and creates no job, so it has no
+          // placement to report; every other language is a job the server either runs
+          // itself or leaves for a worker — and it is offloaded by default, which this
+          // panel never said (ADR-0183).
           html += `<h3>Script</h3>
-            <label class="field"><span>Language</span>
-              <select id="f-scriptlang">${opts.join("")}</select></label>`;
+            <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
+              <select id="f-scriptlang">${opts.join("")}</select></label>
+            ${placementNoticeHTML(lang, "script")}`;
           if (lang === "feel") {
             const s = findExt(bo, "zeebe:Script") || {};
             const exprText = (s.expression || "").replace(/^=\s*/, "");
@@ -4620,12 +4730,18 @@ function wireProperties(root, modeler, api, projectId, toast) {
             .map((v) => `<option value="${esc(v.name)}">${esc(v.source || v.origin || "")}</option>`).join("");
           const inNameOpts = [...new Set(inputs.map((p) => (p.target || "").trim()).filter(Boolean))]
             .map((n) => `<option value="${esc(n)}"></option>`).join("");
+          // The option labels name the *decision* — which engine evaluates it — and no
+          // longer where that runs: "In-engine (embedded DMN)" was a placement claim the
+          // select could not keep, since --offload-connectors moves either binding onto a
+          // worker. The badge and notice below answer that from the server instead.
+          const brtKind = mode === "connector" ? "temis" : "dmn";
           html += `<h3>Called decision (DMN)</h3>
-            <label class="field"><span>Evaluation</span>
+            <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
-                <option value="local" ${mode === "local" ? "selected" : ""}>In-engine (embedded DMN)</option>
+                <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
                 <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis connector)</option>
-              </select></label>`;
+              </select></label>
+            ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
             html += `<label class="field"><span>Connector</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
@@ -5052,6 +5168,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
         assocTo ? assocTo.value.trim() : "");
       if (assocFrom) assocFrom.addEventListener("change", applyAssoc);
       if (assocTo) assocTo.addEventListener("change", applyAssoc);
+    }
+
+    // The badges describe THIS server, which only the server knows, and the panel is
+    // already on screen by the time it answers. So render without them and come back
+    // once — every later panel finds the answer cached and is right the first time.
+    // Keyed off the three fields that pick an implementation: the connector picker, a
+    // script task's language, a business rule task's decision binding.
+    if (body.querySelector("#f-stkind-list, #f-scriptlang, #f-brt-mode")) {
+      const placements = loadKindPlacement(api);
+      if (placements) placements.then(() => { try { show(element); } catch { /* the panel moved on */ } });
     }
 
     const tasktype = body.querySelector("#f-tasktype");
