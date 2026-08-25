@@ -2289,9 +2289,17 @@ const SERVICE_TASK_KINDS = [
         hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The connector wraps it in a passwordProfile and forces a change at next sign-in.",
       },
       {
+        key: "attributes", label: "Attributes (JSON)", type: "json", rows: 8,
+        // The two ways to supply the body are mutually exclusive (the compiler refuses
+        // both): the inline editor shows until a variable is named, and vice versa.
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributesVariable,
+        placeholder: '{\n  "accountEnabled": true,\n  "displayName": "=vorname + \\" \\" + nachname",\n  "userPrincipalName": "=upn",\n  "passwordProfile": { "password": "=tempPasswort", "forceChangePasswordNextSignIn": true }\n}',
+        hint: "The request body, authored here as JSON. A string value beginning with '=' is a FEEL expression over the instance's variables, evaluated per field at runtime (e.g. \"displayName\": \"=vorname + \\\" \\\" + nachname\"); everything else is literal. Shapes: user (displayName, mailNickname, userPrincipalName, passwordProfile); group (displayName, mailNickname, mailEnabled, securityEnabled, groupTypes); channel {displayName, description}; licence {addLicenses, removeLicenses}; role {roleDefinitionId}. A password is a FEEL value, never a literal in the model.",
+      },
+      {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
-        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation),
-        hint: "A process variable holding a JSON object sent as the request body: user properties (displayName, mailNickname, userPrincipalName, passwordProfile) for a user; group properties (displayName, mailNickname, mailEnabled, securityEnabled, groupTypes) for a group; {displayName, description} for a channel; {addLicenses, removeLicenses} for a licence; {roleDefinitionId} for a role (the connector adds the user as principal). A password never appears in the model.",
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributes,
+        hint: "Alternative to the inline JSON above: a process variable holding the JSON object to send as the request body. Use one or the other, not both.",
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
@@ -2810,6 +2818,12 @@ function stKindFieldsHTML(cur, ext) {
       // code editor below (and F2-able into the Developer View, ADR-0145).
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+    } else if (f.type === "json") {
+      // A JSON field: the same textarea the save wiring reads, upgraded to the JSON
+      // editor below (highlighting, validation, auto-format). String values with a
+      // leading '=' are FEEL, evaluated per field at runtime (compiled to one context).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
@@ -5411,6 +5425,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
       // template. The Developer View is where it gets a gutter and the full width.
       attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
       markDevField(el, "html", { title: f.label });
+    }
+    // JSON fields (the Entra attributes template) get the shared JSON editor:
+    // highlighting, live validation and auto-format. A '=' inside a string value is
+    // FEEL, evaluated per field at runtime — the compiler turns the whole template into
+    // one FEEL context. onChange saves, since the editor consumes the native change.
+    for (const f of stKind.fields) {
+      if (f.type !== "json") continue;
+      const el = body.querySelector("#f-st-" + f.key);
+      if (!el) continue;
+      attachJSONEditor(el, { rows: f.rows || 8, onChange: saveKindFields });
     }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;

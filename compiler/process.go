@@ -719,6 +719,7 @@ type ConnectorTaskDetail struct {
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraNewPassword   RestExpr // reset-password's new secret (literal-or-FEEL), zero otherwise
+	EntraAttributes    RestExpr // inline attributes JSON compiled to a FEEL context, zero when a variable is named instead
 	EntraAttributesVar int32
 	EntraFilter        RestExpr
 	EntraSelect        int32

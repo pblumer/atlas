@@ -465,6 +465,48 @@ func TestResolveEvaluatesFEELIds(t *testing.T) {
 	}
 }
 
+// Inline attributes (the modeler's JSON template) are evaluated at resolve time: the
+// FEEL leaves resolve against the instance's variables, and the nested passwordProfile
+// survives, so a create-user body is built from the joiner's own data with no separate
+// variable.
+func TestResolveEvaluatesInlineAttributes(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements>
+      <atlas:entraConnector connector="contoso" operation="create-user" resultVariable="konto"
+        attributes="{&quot;displayName&quot;:&quot;=vorname&quot;,&quot;accountEnabled&quot;:true,&quot;passwordProfile&quot;:{&quot;password&quot;:&quot;=pw&quot;,&quot;forceChangePasswordNextSignIn&quot;:true}}"/>
+    </bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := compiler.Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+	store := fakeVarStore{vars: map[uint64][]model.VariableValue{
+		1: {
+			{Name: "vorname", Kind: model.VarString, Text: "Arno"},
+			{Name: "pw", Kind: model.VarString, Text: "Temp1!"},
+		},
+	}}
+	j, err := Resolve(store, cp, cp.ConnectorTask(node.Detail), 1)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if j.Attributes["displayName"] != "Arno" || j.Attributes["accountEnabled"] != true {
+		t.Errorf("attributes = %#v", j.Attributes)
+	}
+	pp, ok := j.Attributes["passwordProfile"].(map[string]any)
+	if !ok || pp["password"] != "Temp1!" || pp["forceChangePasswordNextSignIn"] != true {
+		t.Errorf("passwordProfile = %#v", j.Attributes["passwordProfile"])
+	}
+}
+
 func TestResolveErrors(t *testing.T) {
 	cp, d := buildTask(t, compiler.EntraConfig{Connector: "c", Op: "create-user", AttributesVar: "attrs"})
 	if _, err := Resolve(fakeVarStore{}, cp, nil, 1); err == nil {
