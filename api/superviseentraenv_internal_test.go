@@ -158,3 +158,101 @@ func TestSupervisedEntraEnvUsesTheWorkersOwnNames(t *testing.T) {
 		t.Error("a worker holding no client secret was configured anyway; the name assertion proves nothing")
 	}
 }
+
+// A tenant an operator added in the Console: the vault holds the whole OAuth bundle
+// under the credentialsRef, and the engine renders the three variables the worker reads
+// — the engine itself keeps none of them (ADR-0172, amended).
+func TestASupervisedEntraWorkerGetsATenantFromTheConsole(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("entra-blumer", `{"tenantId":"tid-1","clientId":"cid-1","clientSecret":"sec-1"}`); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	if err := srv.connectors.Save(connector{ID: "1", Name: "blumer", Kind: "entra", CredentialsRef: "entra-blumer", Enabled: true, CreatedAt: 1}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	env := envOf(t, srv.entraWorkerEnv())
+	if env["ATLAS_ENTRA_BLUMER_TENANT_ID"] != "tid-1" || env["ATLAS_ENTRA_BLUMER_CLIENT_ID"] != "cid-1" || env["ATLAS_ENTRA_BLUMER_CLIENT_SECRET"] != "sec-1" {
+		t.Errorf("environment = %v, want the three variables from the vault bundle", env)
+	}
+	if env["ATLAS_ENTRA_CONNECTORS"] != "blumer" {
+		t.Errorf("ATLAS_ENTRA_CONNECTORS = %q, want the store tenant's name", env["ATLAS_ENTRA_CONNECTORS"])
+	}
+}
+
+// A disabled tenant is kept in the store but not handed to the worker.
+func TestADisabledEntraConnectorIsNotHandedOver(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("entra-blumer", `{"tenantId":"t","clientId":"c","clientSecret":"s"}`); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	if err := srv.connectors.Save(connector{ID: "1", Name: "blumer", Kind: "entra", CredentialsRef: "entra-blumer", Enabled: false, CreatedAt: 1}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	if env := srv.entraWorkerEnv(); len(env) != 0 {
+		t.Errorf("environment = %v, want nothing for a disabled connector", env)
+	}
+}
+
+// A bundle that does not resolve — no secret set yet, or malformed, or missing a field —
+// leaves the tenant out rather than handing over a half-filled credential.
+func TestAnEntraBundleThatDoesNotResolveIsLeftOut(t *testing.T) {
+	for _, tc := range []struct{ name, bundle string }{
+		{"no secret in the vault", ""},
+		{"not json", "not-json"},
+		{"missing clientSecret", `{"tenantId":"t","clientId":"c"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newValidateServer(t)
+			if tc.bundle != "" {
+				if _, err := srv.vault.Set("entra-blumer", tc.bundle); err != nil {
+					t.Fatalf("vault.Set: %v", err)
+				}
+			}
+			if err := srv.connectors.Save(connector{ID: "1", Name: "blumer", Kind: "entra", CredentialsRef: "entra-blumer", Enabled: true, CreatedAt: 1}); err != nil {
+				t.Fatalf("connectors.Save: %v", err)
+			}
+			if env := srv.entraWorkerEnv(); len(env) != 0 {
+				t.Errorf("environment = %v, want nothing when the bundle does not resolve", env)
+			}
+		})
+	}
+}
+
+// An endpoint on the record overrides the Graph base for a national cloud.
+func TestAnEntraEndpointOverridesTheGraphBase(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if _, err := srv.vault.Set("entra-usgov", `{"tenantId":"t","clientId":"c","clientSecret":"s"}`); err != nil {
+		t.Fatalf("vault.Set: %v", err)
+	}
+	if err := srv.connectors.Save(connector{ID: "1", Name: "usgov", Kind: "entra", Endpoint: "https://graph.microsoft.us/v1.0", CredentialsRef: "entra-usgov", Enabled: true, CreatedAt: 1}); err != nil {
+		t.Fatalf("connectors.Save: %v", err)
+	}
+	if got := envOf(t, srv.entraWorkerEnv())["ATLAS_ENTRA_USGOV_BASE_URL"]; got != "https://graph.microsoft.us/v1.0" {
+		t.Errorf("ATLAS_ENTRA_USGOV_BASE_URL = %q, want the national-cloud base", got)
+	}
+}
+
+// Entra is supervised by default: the worker exists and parks until a tenant is added,
+// which is what makes a tenant a Console entry rather than a deployment change.
+func TestEntraIsSupervisedByDefault(t *testing.T) {
+	found := false
+	for _, k := range DefaultSupervisedWorkerOnlyKinds() {
+		if k == connectorKindEntra {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("DefaultSupervisedWorkerOnlyKinds() = %v, want it to include entra", DefaultSupervisedWorkerOnlyKinds())
+	}
+}
+
+func TestEntraBundleParse(t *testing.T) {
+	if _, ok := entraBundleParse(`{"tenantId":"t","clientId":"c","clientSecret":"s"}`); !ok {
+		t.Error("a complete bundle should parse")
+	}
+	for _, bad := range []string{"", "  ", "not-json", `{"tenantId":"t"}`, `{"tenantId":"t","clientId":"c"}`, `{}`} {
+		if _, ok := entraBundleParse(bad); ok {
+			t.Errorf("entraBundleParse(%q) parsed, want it refused", bad)
+		}
+	}
+}

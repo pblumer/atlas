@@ -33,9 +33,10 @@ export function connectorShape(kind, provider) {
   const native = mail && provider !== "smtp" && !preview;
   const sharepoint = kind === "sharepoint";
   const remedy = kind === "remedy";
+  const entra = kind === "entra";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint;
+  const bundle = native || sharepoint || entra;
   return {
     mail,
     provider: mail,
@@ -50,10 +51,12 @@ export function connectorShape(kind, provider) {
       : (remedy ? "https://helix.example.com:8008" : "https://temis.internal"),
     credRefLabel: remedy
       ? "Credential reference (vault {username,password})"
-      : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"),
+      : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
+        : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)")),
     credRefPlaceholder: remedy
       ? "remedy_creds (vault {username,password})"
-      : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")),
+      : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
+        : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"))),
     hint: !mail
       ? ""
       : (preview

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log/slog"
 	"os"
 	"sort"
@@ -190,31 +191,119 @@ const (
 // It reads the vault, so it runs on the run-loop goroutine (invariant I3), its owner.
 func (s *Server) entraWorkerEnv() []string {
 	var env []string
+	var names []string
+	var fromStore bool // a store tenant contributed a name; only then must CONNECTORS be rendered
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
 	s.do(func() {
+		// Tenants an operator set directly on the host (env): inherited by the child, so
+		// only the #565 vault-reference bridge is done here — but they still belong in the
+		// rendered CONNECTORS list so a store-based render below does not drop them.
 		for _, name := range splitConnectorList(os.Getenv(entraConnectorsEnv)) {
+			addName(name)
 			envKey := connectorEnvKey(name)
 			if envKey == "" {
 				continue
 			}
 			key := entraEnvPrefix + envKey + "_"
-			// The operator set the secret directly: the child inherits it, nothing to do.
 			if strings.TrimSpace(os.Getenv(key+"CLIENT_SECRET")) != "" {
-				continue
+				continue // the operator set the secret directly; nothing to resolve
 			}
-			ref := strings.TrimSpace(os.Getenv(key + "CLIENT_SECRET_REF"))
-			if ref == "" {
-				continue
-			}
-			// A reference nothing answers to is left out rather than handed over empty:
-			// an empty variable reads as a configured blank secret, and the worker's own
-			// error — which names the tenant and the missing variable — is the better
-			// failure.
-			if secret := s.resolveConnectorSecret(ref); secret != "" {
-				env = append(env, key+"CLIENT_SECRET="+secret)
+			if ref := strings.TrimSpace(os.Getenv(key + "CLIENT_SECRET_REF")); ref != "" {
+				if secret := s.resolveConnectorSecret(ref); secret != "" {
+					env = append(env, key+"CLIENT_SECRET="+secret)
+				}
 			}
 		}
+		// Tenants an operator added in the Console (ADR-0172, amended): the tenant id,
+		// client id and client secret live together in the vault bundle credentialsRef
+		// names. Render the three variables the worker reads — the engine holds none of
+		// them, it only hands them to its own supervised child at spawn.
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised entra worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindEntra || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// credential — the mail/AD collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two entra connectors share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			// A bundle that does not resolve (no secret set yet, or malformed) is left out
+			// rather than handed over half-filled: the worker then simply does not build
+			// that tenant, and the Console shows the connector as configured-not-working
+			// instead of a token failing mid-run.
+			b, ok := entraBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
+			if !ok {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := entraEnvPrefix + envKey + "_"
+			env = append(env,
+				key+"TENANT_ID="+b.TenantID,
+				key+"CLIENT_ID="+b.ClientID,
+				key+"CLIENT_SECRET="+b.ClientSecret)
+			if base := strings.TrimSpace(c.Endpoint); base != "" {
+				env = append(env, key+"BASE_URL="+base) // a national cloud overrides the Graph base
+			}
+			addName(c.Name)
+			fromStore = true
+		}
 	})
-	return env
+	// Only a store tenant needs CONNECTORS rendered: an operator who set it on the host
+	// has it inherited by the child already, so rendering it there would be redundant.
+	// When the store does contribute, render the union so an env-named tenant is not lost
+	// to the override.
+	if !fromStore {
+		return env
+	}
+	return append(env, entraConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// entraBundle is the OAuth bundle an operator stores in the vault under an entra
+// connector's credentialsRef: the tenant id, client id and client secret together, so
+// the record itself holds no credential (ADR-0172). ok is false when the bundle is
+// absent or missing a field — the tenant is then left unconfigured rather than handed
+// over half-filled.
+type entraBundle struct {
+	TenantID     string `json:"tenantId"`
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+}
+
+// entraBundle parses a vault bundle value. An empty value, invalid JSON, or a missing
+// field yields ok=false.
+func entraBundleParse(raw string) (entraBundle, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return entraBundle{}, false
+	}
+	var b entraBundle
+	if err := json.Unmarshal([]byte(raw), &b); err != nil {
+		return entraBundle{}, false
+	}
+	if strings.TrimSpace(b.TenantID) == "" || strings.TrimSpace(b.ClientID) == "" || strings.TrimSpace(b.ClientSecret) == "" {
+		return entraBundle{}, false
+	}
+	return b, true
 }
 
 // splitConnectorList splits a comma-separated connector-names value, trimming spaces

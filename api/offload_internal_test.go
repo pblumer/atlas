@@ -169,6 +169,32 @@ func TestEveryDefaultOffloadedKindCanBeServedByItsWorker(t *testing.T) {
 	}
 }
 
+// TestEveryDefaultSupervisedWorkerOnlyKindCanBeServed is the same safety property for
+// the worker-only defaults (ADR-0172): a kind Atlas always supervises must be a managed
+// kind marked worker-only and provisioned by the engine, or the default would run a
+// worker with nothing to serve, forever.
+func TestEveryDefaultSupervisedWorkerOnlyKindCanBeServed(t *testing.T) {
+	byName := map[string]managedConnectorKind{}
+	for _, k := range managedConnectorKinds {
+		byName[k.name] = k
+	}
+	provisioned := (&Server{}).provisionedConnectorKinds()
+	for _, kind := range DefaultSupervisedWorkerOnlyKinds() {
+		k, ok := byName[kind]
+		if !ok {
+			t.Errorf("worker-only default %q is not a managed connector kind", kind)
+			continue
+		}
+		if !k.workerOnly {
+			t.Errorf("worker-only default %q is not marked workerOnly", kind)
+		}
+		if _, handed := provisioned[kind]; !handed {
+			t.Errorf("worker-only default %q is supervised but not provisioned: the worker would "+
+				"start with nothing to serve and park forever", kind)
+		}
+	}
+}
+
 // Active Directory is offloaded by default, and the reason it can be is that the
 // engine hands its bind passwords over (ADR-0182).
 //
