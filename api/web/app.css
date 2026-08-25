@@ -2896,10 +2896,22 @@ summary.wk-head:hover { background: var(--bg); }
 tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* A catalog kind Atlas executes itself (ADR-0164). Said in the picker, so an author
    sees it while choosing, and again on the chosen kind, where they have committed. */
-.stkind-inengine {
+/* Marks a kind Atlas does NOT run itself — the exception among the connector kinds, and
+   so the one worth a badge. It used to mark the rule instead, on 17 of 19 rows. */
+.stkind-onworker {
   margin-left: 6px; padding: 1px 6px; border-radius: 999px; vertical-align: 1px;
-  background: var(--warn-soft); color: #b26b00; font-size: 10.5px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .03em;
+  background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .03em; white-space: nowrap;
+}
+/* The picker's group titles. They ride along the top of the panel's scroll so the answer
+   to "where am I in this list" is always on screen — nineteen kinds is past what a flat
+   run of rows can carry. */
+.stkind-group + .stkind-group { margin-top: 10px; }
+.stkind-group-h {
+  position: sticky; top: 0; z-index: 1; padding: 5px 2px 4px; margin-bottom: 5px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  font: 600 10.5px/1.4 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
 }
 .stkind-notice {
   margin: 8px 0 10px; padding: 8px 10px; border-radius: 6px;
