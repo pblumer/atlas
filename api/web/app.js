@@ -115,9 +115,15 @@ function updateAccount() {
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<button type="button" data-act="logout" title="Sign out of Atlas">Log out</button>`;
   } else {
+    // Nobody is signed in — which is two different things. With enforcement off the
+    // server is open and there is nothing to sign in to; with it on, this is the
+    // login screen, and calling that "single-user mode" tells an operator their
+    // server has no login when it is refusing them one. The title told them apart
+    // already; the menu did not.
+    const label = AUTH.enabled ? "Not signed in" : "Single-user mode";
     btn.textContent = "A";
     btn.title = AUTH.enabled ? "Account" : "Single-user mode";
-    if (menu) menu.innerHTML = `<div class="mlabel">Single-user mode</div>`;
+    if (menu) menu.innerHTML = `<div class="mlabel">${label}</div>`;
   }
 }
 
