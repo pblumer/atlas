@@ -94,8 +94,13 @@ type Job struct {
 	// query support (ConsistencyLevel: eventual plus $count=true), which a search
 	// requires and which endsWith, ne and not need too. A search implies it; the
 	// compiler has already set both.
-	Search         string `json:"search,omitempty"`
-	Advanced       bool   `json:"advanced,omitempty"`
+	Search string `json:"search,omitempty"`
+	// The tag is advancedQuery, not advanced: every other field here is named after
+	// the attribute a model authors, and the resolved detail the engine hands the
+	// worker is keyed the same way. A tag that disagreed with that key decoded to
+	// false in silence — the listing then ran as a plain query and Graph refused the
+	// filter that needed the header, which is how this was found.
+	Advanced       bool   `json:"advancedQuery,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
