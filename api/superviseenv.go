@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/logging"
 )
@@ -144,7 +145,15 @@ func mailProviderOf(c connector) string {
 // the default would move its tasks to a worker holding nothing to serve them with —
 // TestEveryDefaultOffloadedKindCanBeServedByItsWorker checks exactly that.
 func (s *Server) provisionedConnectorKinds() map[string]func() []string {
-	return map[string]func() []string{connectorKindMail: s.mailWorkerEnv}
+	return map[string]func() []string{
+		connectorKindMail: s.mailWorkerEnv,
+		// AD is not a managed kind — no connector record, no store entry — but its
+		// bind-password *reference* can resolve out of the vault, which a supervised
+		// worker cannot read either. So it is provisioned for the same reason mail
+		// is, and defaulting it without this would have moved every vault-backed AD
+		// task to a worker holding nothing to bind with.
+		"ad": s.adWorkerEnv,
+	}
 }
 
 // workerTokenEnv is the credential a supervised worker authenticates to this server
@@ -213,4 +222,98 @@ func (s *Server) refreshSupervisedWorkers() {
 func (s *Server) doAndRefresh(fn func()) {
 	s.do(fn)
 	s.refreshSupervisedWorkers()
+}
+
+// adWorkerEnv renders the Active Directory bind passwords a supervised AD worker
+// needs: one variable per secret reference the deployed models actually name,
+// resolved through this server's vault or environment.
+//
+// AD is the kind that made this necessary. Every other provisioned kind is named by
+// a *connector record* an operator created, so the engine knows what to hand over by
+// reading its own store. An AD task names its own server and its own bind-password
+// reference (ADR-0166), so what has to travel is not a configuration but whichever
+// references the deployed models happen to make — which the engine knows because it
+// compiled them, and a worker cannot know because it has neither the models nor the
+// vault.
+//
+// Only what is deployed is handed over. That is the narrowest set that still works:
+// a worker gets the passwords for the directories the running models actually use,
+// and not the rest of the vault.
+//
+// Re-rendered on every spawn and on every refresh, like the mail configuration, so a
+// secret an operator adds — or a model that starts naming a new one — reaches the
+// worker without Atlas being restarted.
+//
+// It reads the deployment map and the vault, so it runs on the run-loop goroutine
+// (invariant I3), their owner.
+func (s *Server) adWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		keys := make([]uint64, 0, len(s.deployments))
+		for key := range s.deployments {
+			keys = append(keys, key)
+		}
+		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+		taken := map[string]string{}
+		for _, key := range keys {
+			d := s.deployments[key]
+			if d == nil || d.cp == nil {
+				continue
+			}
+			for _, ref := range adBindSecretRefs(d.cp) {
+				envKey := connectorEnvKey(ref)
+				if envKey == "" {
+					continue
+				}
+				// Two references that fold to one variable would silently give one of
+				// them the other's password — the same collision two mail connectors
+				// can have, and left out for the same reason. The worker then fails
+				// that job naming the reference, which is the honest outcome.
+				if first, dup := taken[envKey]; dup {
+					if first != ref {
+						logging.Warn(logging.WorkerSupervisorFailed,
+							"two AD bind-secret references share one environment name; the second is not handed to the supervised worker",
+							slog.String("reference", ref), slog.String("collidesWith", first))
+					}
+					continue
+				}
+				taken[envKey] = ref
+				// A reference nothing answers to is left out rather than handed over
+				// empty: an empty variable reads as a configured blank password, and
+				// the worker's own error names the variable an operator must set.
+				if secret := s.resolveConnectorSecret(ref); secret != "" {
+					env = append(env, adSecretEnv(envKey, secret))
+				}
+			}
+		}
+	})
+	return env
+}
+
+// adSecretEnv is one bind password under the name the worker reads it by. It is the
+// same ATLAS_CONNECTOR_<REF>_TOKEN an operator sets by hand for an external worker —
+// there is no private channel between a supervised worker and its parent.
+func adSecretEnv(envKey, secret string) string {
+	return "ATLAS_CONNECTOR_" + envKey + "_TOKEN=" + secret
+}
+
+// adBindSecretRefs returns the bind-password references a compiled process's AD
+// connector tasks name, in node order. A task that binds anonymously names none.
+func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
+	var out []string
+	for id := int32(0); int(id) < cp.NodeCount(); id++ {
+		n := cp.Node(id)
+		if n.Type != compiler.TypeConnectorTask {
+			continue
+		}
+		d := cp.ConnectorTask(n.Detail)
+		if d == nil || d.JobType != compiler.AdJobTypeIndex {
+			continue
+		}
+		if ref := strings.TrimSpace(cp.Intern(d.AdBindSecret)); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
