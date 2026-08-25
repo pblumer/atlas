@@ -204,6 +204,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/projects/{id}/members/{userId}":    "access control is an admin/UI concern",
 	"DELETE /api/v1/projects/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/projects/{id}/validate":           "modeler-time validation is a UI concern",
+	"GET /api/v1/projects/{id}/audit":               "access-control history is an admin/UI concern",
 
 	// Process application edit/membership (ADR-0128): the canonical /applications
 	// surface. Create/list/delete/deploy are exposed as atlas_*_application tools
@@ -213,6 +214,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/applications/{id}/members/{userId}":    "access control is an admin/UI concern",
 	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
+	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each connector kind: the Modeler's picker reads it to

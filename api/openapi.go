@@ -481,6 +481,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Publish result with the minted release", tObject())}},
 		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
 			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
+			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", resp: jsonBody("Grant audit events", tArray())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
 
@@ -553,6 +555,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Validate a project's artifacts (deprecated: use POST /api/v1/applications/{id}/validate)", tag: "Projects", deprecated: true, resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/projects/{id}/deploy", s.handleDeployProject, apiOp{
 			summary: "Deploy a project's artifacts (deprecated: use POST /api/v1/applications/{id}/deploy)", tag: "Projects", deprecated: true, resp: jsonBody("Deploy result", tObject())}},
+		{"GET", "/api/v1/projects/{id}/audit", s.handleListProjectAudit, apiOp{
+			summary: "A project's access-control history (deprecated: use GET /api/v1/applications/{id}/audit)", tag: "Projects", deprecated: true, resp: jsonBody("Grant audit events", tArray())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
 			summary: "Create a DMN reference artifact", tag: "DMN References", req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},

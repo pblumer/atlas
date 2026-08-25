@@ -212,6 +212,7 @@ type Server struct {
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
+	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-draft-grant-audit-log)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
@@ -804,6 +805,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	grantAudit, err := newGrantAuditStore(filepath.Join(dataDir, "grant-audit"))
+	if err != nil {
+		return nil, err
+	}
 	deployTokenStore, err := newDeployTokenStore(filepath.Join(dataDir, "deploy-tokens"))
 	if err != nil {
 		return nil, err
@@ -883,6 +888,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicRate:        newRateLimiter(20, 1),
 		projects:          projects,
 		releases:          releases,
+		grantAudit:        grantAudit,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		targets:           targets,
