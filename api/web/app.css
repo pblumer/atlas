@@ -2873,6 +2873,12 @@ tr.wk-stale > td { background: var(--warn-soft); }
   margin: 0; padding: 10px 16px; border-top: 1px solid var(--border);
   background: var(--bg); color: var(--muted); font-size: 12px;
 }
+/* The version a linked definition is, rendered inside the link: the row can point at
+   a superseded version, and which one it is has to travel with the name. Muted so the
+   name still reads as the link, and non-breaking so it never wraps away from it. */
+.wk-card .ver-of {
+  color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap;
+}
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }

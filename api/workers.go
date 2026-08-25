@@ -221,6 +221,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		list     = []workerStat{}
 		unserved = []unservedConnector{}
 		scanErr  error
+		reachErr error
 	)
 	s.do(func() {
 		incidents := s.incidentsByJobType()
@@ -253,10 +254,19 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			types = append(types, st)
 		}
 		list = s.workers.list()
-		unserved = s.unservedConnectors()
+		reachable, err := s.reachableDeployments()
+		if err != nil {
+			reachErr = err
+			return
+		}
+		unserved = s.unservedConnectors(reachable)
 	})
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read job queues: "+scanErr.Error())
+		return
+	}
+	if reachErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read which definitions are still live: "+reachErr.Error())
 		return
 	}
 	// Supervised workers are reported separately from the ones seen pulling: an
@@ -280,6 +290,61 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		"workers": list, "types": types, "supervised": supervised,
 		"unservedConnectors": unserved, "jobTypeCollisions": collisions,
 	})
+}
+
+// reachableDeployments returns the definition keys whose tasks can still put a job on
+// a queue: the newest version of each process id, every version an instance is still
+// running on, and any version an operator has pinned a call activity to (ADR-0105).
+//
+// It exists because a deploy supersedes its predecessor without removing it — the
+// registry is the deploy history, not the current state of the models. Reading
+// connector coverage over all of it means a name an author corrected two versions ago
+// is reported forever, under the process's *current* name, which reads as an
+// accusation against a model that is fine. A superseded version creates no jobs on its
+// own: an instance starts on the newest version, and a call activity resolves the
+// newest unless it is pinned. The two exceptions are exactly the two listed above.
+//
+// Deliberately not a static audit of every deployed artifact: an operator can still
+// start an old version by key, and the moment they do it has a live instance and is
+// reachable again. The card answers "what cannot be served right now", which is the
+// question an operator staring at a queue is asking.
+//
+// Runs on the run-loop goroutine: the deployment registry, one scan of the live
+// instances, and the override sidecar.
+func (s *Server) reachableDeployments() (map[uint64]bool, error) {
+	newest := map[string]uint64{}
+	best := map[string]int32{}
+	for key, d := range s.deployments {
+		if v, seen := best[d.ProcessID]; !seen || d.Version > v {
+			best[d.ProcessID], newest[d.ProcessID] = d.Version, key
+		}
+	}
+	out := make(map[uint64]bool, len(newest))
+	for _, key := range newest {
+		out[key] = true
+	}
+	if err := s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+		out[v.ProcessDefKey] = true
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	// A pin makes one exact version the target of every call to that process id, so it
+	// is current in the only sense this question cares about. A redirect or a disable
+	// does not name a version, and neither can revive a superseded one.
+	recs, err := s.callOverrides.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, rec := range recs {
+		if rec.Action != overridePin {
+			continue
+		}
+		if d := s.deploymentByProcessIDVersion(rec.CalledProcessID, rec.TargetVersion); d != nil {
+			out[d.Key] = true
+		}
+	}
+	return out, nil
 }
 
 // unservedConnector is a connector name a deployed model references that nothing on
@@ -309,8 +374,12 @@ type unservedConnector struct {
 // at a queue that is not moving wants to know that nothing has claimed it — and it
 // resolves itself on the first poll.
 //
+// Only the definitions in `reachable` are read (see reachableDeployments): the
+// registry is the whole deploy history, and a superseded version nothing runs on
+// creates no jobs, so it has no connector left to serve.
+//
 // Runs on the run-loop goroutine, over the in-memory deployment registry.
-func (s *Server) unservedConnectors() []unservedConnector {
+func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnector {
 	held := map[string]bool{}
 	for _, st := range s.workers.byName {
 		for _, name := range st.Connectors {
@@ -324,7 +393,7 @@ func (s *Server) unservedConnectors() []unservedConnector {
 	}
 	users := map[key]map[string]typeUser{}
 	for defKey, d := range s.deployments {
-		if d.cp == nil {
+		if d.cp == nil || !reachable[defKey] {
 			continue
 		}
 		for _, ref := range d.cp.ConnectorRefs() {
