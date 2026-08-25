@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -62,6 +63,92 @@ func (s *Server) handleListProjectAudit(w http.ResponseWriter, r *http.Request) 
 	s.do(func() { out, loadErr = s.grantAudit.forApplication(id) })
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list grant audit: "+loadErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// globalAuditView is one event in the cross-application admin view. It carries the
+// raw event plus the owning application's current name, so the admin table reads
+// without a second lookup per row. ApplicationName is empty only for an event whose
+// application was deleted between load steps — the delete-on-project-delete cleanup
+// (grantAuditStore.deleteForApplication) means that is a race, not a steady state.
+type globalAuditView struct {
+	grantAudit
+	ApplicationName string `json:"applicationName,omitempty"`
+}
+
+// defaultAuditLimit and maxAuditLimit bound the global audit response: an admin view
+// wants the most recent activity, not the entire history in one payload. The window
+// is newest-first, so the default already shows what matters; a caller wanting more
+// raises limit up to the cap.
+const (
+	defaultAuditLimit = 200
+	maxAuditLimit     = 1000
+)
+
+// handleListAudit returns the access-control history across every application,
+// newest first — the global admin audit view (ADR-0184). It is admin-only: unlike
+// the per-application endpoint, which an owner may read for their own application,
+// this spans applications the caller may not own, so it is gated like user and group
+// administration. Optional query filters narrow it: applicationId to one application,
+// action to one kind (share/unshare/visibility/transfer); limit caps the window
+// (default 200, max 1000). GET /api/v1/audit.
+func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	q := r.URL.Query()
+	appFilter := q.Get("applicationId")
+	actionFilter := q.Get("action")
+	limit := defaultAuditLimit
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			httpapi.Error(w, http.StatusBadRequest, "limit must be a positive integer")
+			return
+		}
+		if n > maxAuditLimit {
+			n = maxAuditLimit
+		}
+		limit = n
+	}
+
+	var (
+		out     []globalAuditView
+		loadErr error
+	)
+	s.do(func() {
+		events, e := s.grantAudit.LoadAll()
+		if e != nil {
+			loadErr = e
+			return
+		}
+		projs, e := s.projects.LoadAll()
+		if e != nil {
+			loadErr = e
+			return
+		}
+		names := make(map[string]string, len(projs))
+		for _, p := range projs {
+			names[p.ID] = p.Name
+		}
+		out = []globalAuditView{}
+		for _, ev := range events {
+			if appFilter != "" && ev.ApplicationID != appFilter {
+				continue
+			}
+			if actionFilter != "" && ev.Action != actionFilter {
+				continue
+			}
+			out = append(out, globalAuditView{grantAudit: ev, ApplicationName: names[ev.ApplicationID]})
+			if len(out) >= limit {
+				break
+			}
+		}
+	})
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list audit: "+loadErr.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)

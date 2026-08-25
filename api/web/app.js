@@ -380,6 +380,7 @@ const TOPNAV = {
     { name: "Logs", route: "#/console/logs" },
     { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
+    { name: "Audit log", route: "#/console/audit" },
   ],
   modeler: [
     { name: "Home", route: "#/modeler" },
@@ -1007,6 +1008,99 @@ async function viewConsoleLogs() {
   });
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
+}
+
+// viewConsoleAudit is the global admin audit view (ADR-0184): the access-control
+// history across every application in one place — who shared, revoked, changed
+// visibility, or transferred ownership, and when. Admin-only on the server; a
+// signed-in non-admin gets a notice rather than an error card. Subject and owner ids
+// are resolved to names via the principals directory when it loads.
+async function viewConsoleAudit() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="card">
+      <div class="between">
+        <h1>Audit log</h1>
+        <div class="row" style="gap:12px; align-items:center">
+          <label class="field inline" style="margin:0">Action
+            <select id="audit-action">
+              <option value="">All</option>
+              <option value="share">Share</option>
+              <option value="unshare">Revoke</option>
+              <option value="visibility">Visibility</option>
+              <option value="transfer">Transfer</option>
+            </select>
+          </label>
+          <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
+        </div>
+      </div>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first. The 200 most recent are shown.</p>
+      <div id="audit-out">loading…</div>
+    </div>`;
+
+  // Resolve subject/owner ids to names when the directory is available; degrade to
+  // the raw id otherwise. Admins can always read the principals directory (ADR-0073).
+  let byId = new Map();
+  try {
+    const dir = await api("GET", "/api/v1/principals");
+    byId = new Map((dir || []).map((p) => [p.id, p]));
+  } catch { /* leave empty — ids show raw */ }
+  const nameOf = (id) => { const p = byId.get(id); return p ? p.name : id; };
+  const isGroup = (id) => { const p = byId.get(id); return p ? p.type === "group" : false; };
+
+  const detail = (e) => {
+    switch (e.action) {
+      case "share": return `shared with ${esc(nameOf(e.subjectId))}${isGroup(e.subjectId) ? " (group)" : ""} as ${esc(e.role)}`;
+      case "unshare": return `removed ${esc(nameOf(e.subjectId))}${isGroup(e.subjectId) ? " (group)" : ""}`;
+      case "visibility": return `visibility ${esc(e.from)} → ${esc(e.to)}`;
+      case "transfer": return `ownership ${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}`;
+      default: return esc(e.action);
+    }
+  };
+  const actionPill = (a) => {
+    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn" }[a] || "";
+    return `<span class="pill ${cls}">${esc(a)}</span>`;
+  };
+
+  const out = document.getElementById("audit-out");
+  const load = async (action) => {
+    let events;
+    try {
+      events = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
+    } catch (e) {
+      if (superseded(gen)) return;
+      if (/admin/i.test(e.message)) {
+        out.innerHTML = `<p class="muted">The global audit log is available to administrators only.</p>`;
+      } else {
+        out.innerHTML = `<p class="muted">Failed to load the audit log: ${esc(e.message || String(e))}</p>`;
+      }
+      return;
+    }
+    if (superseded(gen)) return;
+    if (!events || !events.length) {
+      out.innerHTML = `<p class="muted">No access-control changes recorded yet.</p>`;
+      return;
+    }
+    const rows = events.map((e) => `
+      <tr>
+        <td class="muted small" style="white-space:nowrap">${esc(fmtTime(e.at))}</td>
+        <td>${actionPill(e.action)}</td>
+        <td>${esc(e.applicationName || e.applicationId)}</td>
+        <td>${detail(e)}</td>
+        <td>${esc(e.actorName || e.actorId || "—")}</td>
+      </tr>`).join("");
+    out.innerHTML = `
+      <table class="table" data-dt-key="audit">
+        <thead><tr><th>When</th><th>Action</th><th>Application</th><th>Change</th><th>By</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  };
+
+  await load("");
+  if (superseded(gen)) return;
+  const sel = document.getElementById("audit-action");
+  document.getElementById("audit-refresh").addEventListener("click", () => load(sel.value));
+  sel.addEventListener("change", () => load(sel.value));
 }
 
 // viewConsoleBackup is the one-file backup/restore of design-time data (ADR-0107):
@@ -6089,6 +6183,7 @@ async function route() {
     if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
+    if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
