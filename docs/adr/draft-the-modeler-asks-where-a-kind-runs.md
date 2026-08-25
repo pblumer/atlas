@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Modeler asks the server where a connector kind runs
+# ADR-DRAFT: The Modeler asks the server where an authored kind runs
 
 - **Status:** Accepted
 - **Date:** 2026-08-25
@@ -31,7 +31,17 @@ connectors run in the engine directly beside their own description, "…against 
 Server database **on a worker**". A badge that cannot be wrong in the direction that
 matters is worse than no badge: it is read as a fact about *this* server.
 
-The question this record answers is where that fact should come from.
+**And the connector picker is only one of three panels that pick an implementation.** A
+script task picks a language ([ADR-0047](0047-polyglot-script-tasks-via-job-workers.md))
+and a business rule task picks a decision binding ([ADR-0050](0050-temis-decision-connector.md)).
+Both author work `--offload-connectors` moves, and scripts are among the four kinds
+offloaded *by default* — the one whose in-engine failure mode is worst, since a hanging
+interpreter holds the loop. Neither panel said anything at all, and the decision panel
+said something worse: its Evaluation select offered "In-engine (embedded DMN)", a
+placement claim in an option label, which stops being true the moment an operator names
+`dmn` in the flag.
+
+The question this record answers is where that fact should come from, for all three.
 
 ## Decision drivers
 
@@ -58,8 +68,9 @@ The question this record answers is where that fact should come from.
 
 ## Decision outcome
 
-Chosen: **option 2 — the picker asks the server**, over a new
-`GET /api/v1/connector-kinds`.
+Chosen: **option 2 — the Modeler asks the server**, over a new
+`GET /api/v1/connector-kinds`. The route keeps the operator's word: its vocabulary is
+`--offload-connectors`', which already spans scripts and decisions.
 
 The answer is derived, not declared. Two facts the server already holds decide it:
 `jobRunner.Handles(jobType)` says whether this server runs the kind itself — that is
@@ -77,6 +88,25 @@ sentence to an author:
 The two `-only` values are not pedantry. Each is exactly the case where the plain
 value's *advice* would be wrong, and giving unusable advice is how a badge loses the
 reader's trust a second time.
+
+**The placement is one fact; what follows from it is three.** All three panels render the
+same badge and the same opening sentence, because "this runs on a worker" means the same
+thing everywhere. The sentence after it does not: a worker holds a connector's credential,
+a script's *interpreter*, and a decision service's endpoint. So an in-engine script task is
+not told to "prefer a Job worker" — it cannot become one — but that a hanging script holds
+the loop and that Atlas normally runs scripts on a supervised worker; and an offloaded one
+is told the interpreter must exist where that worker runs. The decision panel's option
+labels stop claiming a placement at all: "In-engine (embedded DMN)" becomes "Embedded DMN —
+a decision deployed here", which names the decision and leaves where it runs to the badge.
+
+**Ids are the author's word, not always the operator's.** They coincide for connectors and
+the decision bindings, and deliberately do not for scripts: `--offload-connectors script`
+is one word over three languages, while the panel offers one language at a time and each
+can be turned off on its own. Keying the languages separately is what lets the panel say
+"Python waits for a worker" on a server where PowerShell does not — a per-kind answer
+would have called both in-engine, which is the class of statement this record exists to
+remove. Because of that the offloadability check is made per *job type* rather than per
+name.
 
 **Option 1 was the cheap fix and is the one that just failed.** It leaves the same
 class of bug in place — a second list, in another language, that a connector author
@@ -97,29 +127,32 @@ creates no job that could run anywhere.
 ### Consequences
 
 - **Positive:** the badge describes the install the author is deploying to, including
-  the default four kinds on a supervised worker and the kinds born on one. The advice
-  attached to it is takeable in every case. A kind that moves later — by default, by
-  flag, or by being written worker-first — needs no browser-side edit.
-- **Negative / trade-offs accepted:** the picker now depends on a request, so it renders
+  the default four kinds on a supervised worker and the kinds born on one, and it now
+  appears in all three panels that pick an implementation rather than only the connector
+  picker. The advice attached to it is takeable in every case. A kind that moves later —
+  by default, by flag, or by being written worker-first — needs no browser-side edit.
+- **Negative / trade-offs accepted:** the panels now depend on a request, so one renders
   once without badges and re-renders when the answer lands (once per page, shared across
   panels); a Modeler with no server reachable shows no placement at all, which is a loss
   against a constant that was at least sometimes right. The catalog id → job type table
   is a second place a *new* connector must be named — held to the picker by
-  `TestEveryCatalogKindHasAPlacement` and to `--offload-connectors` by
-  `TestPlacementJobTypesAgreeWithOffloadableKinds`, so the omission fails a test rather
-  than shipping.
+  `TestEveryCatalogKindHasAPlacement`, to `--offload-connectors` by
+  `TestEveryOffloadableJobTypeHasAPlacement`, and, for the script languages, to
+  `script.Langs` by `TestScriptLanguageIDsMatchTheLanguageRegistry`, so the omission
+  fails a test rather than shipping.
 - **Follow-ups / risks to watch:** the placement answers about the kind, not about
   whether a feature is switched on — a server built without user provisioning still
   reports that kind `engine-only`, because "worker" would be a worse answer for work
   that has no worker form. If a second feature-gated kind appears, that reading is worth
   revisiting. The Workers view's "configured nowhere" list and this badge now answer
   neighbouring questions from the same two authorities; they should stay consistent.
-  And two panels outside the connector picker author work that is equally offloadable
-  and still say nothing about where it runs — a script task's language and a business
-  rule task's decision binding, both of which `--offload-connectors` accepts and the
-  first of which is offloaded by default. The derivation extends to them unchanged —
-  they are already named in `offloadableKinds` — but they are not in the catalog table,
-  so the endpoint does not report them and neither panel shows a badge yet.
+  And the badge says a kind's jobs wait for *a* worker, not that one exists serving that
+  type: `atlas worker` serves ten of the offloadable kinds and not, for instance, SCIM,
+  LDAP, SOAP or either decision binding, so offloading one of those parks its jobs until
+  the operator supplies a worker of their own. The notices point at the Workers view,
+  which does know; folding "and something is serving it" into the placement itself would
+  make it live runtime state rather than configuration, and is a larger change than this
+  one.
 
 ## Pros and cons of the options
 
@@ -147,3 +180,4 @@ creates no job that could run anywhere.
 - the kinds born on a worker: [ADR-0173](0173-generic-sql-connector.md)
 - the view that reports the same fact after deployment: [ADR-0157](0157-worker-processes-supervision-and-console.md)
 - the catalog the badge is rendered from: [ADR-0067](0067-service-task-connector-catalog.md)
+- the other two panels it now appears in: [ADR-0047](0047-polyglot-script-tasks-via-job-workers.md) (a script task's language) and [ADR-0050](0050-temis-decision-connector.md) (a business rule task's decision binding)

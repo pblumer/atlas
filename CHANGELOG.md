@@ -129,7 +129,8 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
-- **The connector picker stops calling every connector in-engine**
+- **The Modeler stops guessing where a task's work runs — and starts saying it in all
+  three panels that choose an implementation**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
   [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
   [ADR-0173](docs/adr/0173-generic-sql-connector.md)). Every kind but the plain job
@@ -150,6 +151,19 @@ _Changed_ / _Removed_ for each version.
   lives at the worker says so. A kind the server reports nothing for — the plain job
   worker, the Mockup — shows no badge, and so does a Modeler that cannot reach a server:
   silence rather than a confident wrong answer.
+
+  The same badge now appears in the two panels that never said anything at all, while
+  authoring work the same flag moves. A **script task** says where its language runs, *per
+  language*: scripts are among the kinds offloaded by default, and since each language can
+  also be turned off on its own, Python can be waiting for a worker on a server where
+  PowerShell is not. What it is told differs from a connector's advice, because it has to:
+  an in-engine script is not told to "prefer a job worker" — it cannot become one — but
+  that a hanging script holds the engine's loop with it, and an offloaded one that the
+  interpreter has to exist where that worker runs. A **business rule task** says it per
+  binding, embedded DMN and temis moving separately; its Evaluation select stops claiming
+  a placement in an option label ("In-engine (embedded DMN)" → "Embedded DMN — a decision
+  deployed here"), since `--offload-connectors dmn` made that label false too. A FEEL
+  script still says nothing: it is evaluated inline and creates no job to place.
 
 - **A loop a gateway routes into keeps its result** ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
   Taking a sequence flow is one operation with one rule about multi-instance activities: the

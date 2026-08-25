@@ -8,8 +8,12 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
-// This file answers one question for the Modeler's connector picker: for a given
-// catalog kind, which process runs the call on THIS server?
+// This file answers one question for the Modeler: for the implementation an author is
+// about to choose, which process runs the work on THIS server?
+//
+// Three panels choose one — the service-task connector picker (ADR-0067), a script
+// task's language (ADR-0047), and a business rule task's decision binding (ADR-0050) —
+// and all three author work that `--offload-connectors` can move.
 //
 // The picker used to answer it from a constant in the browser, written when the
 // answer was the same everywhere — every kind but the plain job worker ran inside the
@@ -44,22 +48,25 @@ const (
 	placementWorkerOnly = "worker-only"
 )
 
-// catalogKindJobTypes maps a Modeler catalog id — the `id:` of a SERVICE_TASK_KINDS
-// entry in api/web/editor.js — to the reserved job types a task of that kind compiles
-// to. Those indices are stable identifiers baked into compiled processes; this table
-// names them and moves none of them.
+// authoredKindJobTypes maps an id the Modeler authors by to the reserved job types a
+// task of that kind compiles to. Those indices are stable identifiers baked into
+// compiled processes; this table names them and moves none of them.
 //
-// The ids are the same words --offload-connectors takes, wherever both know a kind,
-// and TestPlacementJobTypesAgreeWithOffloadableKinds holds them to the same job types.
-// They are separate tables because their memberships genuinely differ: a kind can be
-// offloadable without being a service-task kind (a script task's language, a business
-// rule task's decision binding), and a kind can be in the picker with nothing to
-// offload (born on a worker, or engine-only).
+// The ids are what the *author* picks, which is not always what the *operator* moves.
+// For connectors and the decision bindings the two words coincide, and
+// TestPlacementJobTypesAgreeWithOffloadableKinds holds them to the same job types. For
+// scripts they deliberately do not: `--offload-connectors script` is one word over three
+// languages, while the panel offers a language at a time and each can also be turned off
+// on its own. Keying the languages separately is what lets the panel say "Python waits
+// for a worker" on a server where PowerShell does not — a per-kind answer would have
+// called both in-engine. TestScriptLanguageIDsMatchTheLanguageRegistry ties those ids to
+// script.Langs, whose names the Modeler's own select is built from.
 //
-// TestEveryCatalogKindHasAPlacement fails when the picker gains a kind this table does
-// not name, because such a kind renders with no badge — silence being the exact thing
-// this replaced.
-var catalogKindJobTypes = map[string][]int32{
+// TestEveryCatalogKindHasAPlacement fails when the connector picker gains a kind this
+// table does not name, and TestEveryOffloadableJobTypeHasAPlacement fails when an
+// operator can move work nothing here reports — silence being the exact thing this
+// replaced.
+var authoredKindJobTypes = map[string][]int32{
 	"rest":                  {compiler.RestJobTypeIndex},
 	"scim":                  {compiler.ScimJobTypeIndex},
 	"ldap":                  {compiler.LdapJobTypeIndex},
@@ -77,6 +84,17 @@ var catalogKindJobTypes = map[string][]int32{
 	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
 	"webscrape":             {compiler.WebScrapeJobTypeIndex},
 	"userconnector":         {compiler.UserConnectorJobTypeIndex},
+
+	// A script task's language (ADR-0047). One entry per language, not one for
+	// "script": see above.
+	"powershell": {compiler.PwshJobTypeIndex},
+	"python":     {compiler.PythonJobTypeIndex},
+	"javascript": {compiler.JsJobTypeIndex},
+
+	// A business rule task's decision binding (ADR-0050): the embedded DMN engine, or
+	// a central temis service. Two kinds to the operator, so they move separately.
+	"dmn":              {compiler.DMNJobTypeIndex},
+	connectorKindTemis: {compiler.TemisDecisionJobTypeIndex},
 }
 
 // catalogKindsWithoutJobType are the picker entries that compile to no job at all,
@@ -99,7 +117,24 @@ var engineOnlyJobTypes = map[int32]string{
 	compiler.UserConnectorJobTypeIndex: "mutates the run-loop-owned user store (ADR-0123), so it has no out-of-process form",
 }
 
-// connectorPlacement is one catalog kind and where this server runs it.
+// offloadableJobTypes is offloadableKinds inverted: the job types an operator can move
+// onto a worker, whatever the word they name them by. The placement asks per job type
+// rather than per id because the vocabularies do not line up — three script languages
+// share the single flag word "script" — so an id lookup would report the languages as
+// having no out-of-process form at all.
+// Derived once at startup rather than per request: it is a pure function of a table
+// that never changes, and the placement query reads it once per job type.
+var offloadableJobTypes = func() map[int32]bool {
+	set := make(map[int32]bool, len(offloadableKinds))
+	for _, types := range offloadableKinds {
+		for _, jt := range types {
+			set[jt] = true
+		}
+	}
+	return set
+}()
+
+// connectorPlacement is one authored kind and where this server runs it.
 type connectorPlacement struct {
 	ID        string `json:"id"`
 	Placement string `json:"placement"`
@@ -108,8 +143,8 @@ type connectorPlacement struct {
 // connectorPlacements reports every catalog kind's placement, ordered by id so the
 // reply is stable across calls.
 func (s *Server) connectorPlacements() []connectorPlacement {
-	ids := make([]string, 0, len(catalogKindJobTypes))
-	for id := range catalogKindJobTypes {
+	ids := make([]string, 0, len(authoredKindJobTypes))
+	for id := range authoredKindJobTypes {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
@@ -136,7 +171,7 @@ func (s *Server) connectorPlacements() []connectorPlacement {
 // Runs on the run-loop goroutine (invariant I3): s.jobRunner is owned there, and
 // applyOffloadedKinds mutates it at startup.
 func (s *Server) placementOfCatalogKind(id string) string {
-	types := catalogKindJobTypes[id]
+	types := authoredKindJobTypes[id]
 	for _, jt := range types {
 		if _, only := engineOnlyJobTypes[jt]; only {
 			return placementEngineOnly
@@ -149,7 +184,13 @@ func (s *Server) placementOfCatalogKind(id string) string {
 			break
 		}
 	}
-	_, hasWorkerForm := offloadableKinds[id]
+	hasWorkerForm := false
+	for _, jt := range types {
+		if offloadableJobTypes[jt] {
+			hasWorkerForm = true
+			break
+		}
+	}
 	switch {
 	case inProcess && hasWorkerForm:
 		return placementEngine
