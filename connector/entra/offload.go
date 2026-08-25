@@ -173,6 +173,16 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		ResultVariable: cp.Intern(detail.ResultVar),
 	}
 	if spec.NeedsAttributes {
+		// Inline attributes (a FEEL context compiled from the modeler's JSON template)
+		// win when authored; otherwise the task names a variable holding the object.
+		if detail.EntraAttributes.Expr != nil {
+			attrs, err := evalAttributes(detail.EntraAttributes, elementInstanceKey, vars)
+			if err != nil {
+				return Job{}, err
+			}
+			j.Attributes = attrs
+			return j, nil
+		}
 		name := cp.Intern(detail.EntraAttributesVar)
 		v, ok := vars[name]
 		if !ok {
@@ -185,6 +195,34 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		j.Attributes = attrs
 	}
 	return j, nil
+}
+
+// evalAttributes evaluates the inline attributes expression (a FEEL context compiled
+// from the modeler's JSON template) against the instance's variables and returns the
+// object to send as the request body. FEEL leaves — the =expressions the template
+// carried — are resolved here, so a create-user's displayName can come from the joiner's
+// own variables. A result that is not a JSON object is refused rather than sent, for the
+// reason attributesOf refuses one: Graph takes an object, and anything else is a 400 an
+// operator has to decode from the far side.
+func evalAttributes(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.VariableValue) (map[string]any, error) {
+	v, err := rv.Expr.Eval(bindVars(scope, scopeVars, rv.Expr.Inputs()))
+	if err != nil {
+		return nil, fmt.Errorf("entra: evaluate inline attributes: %w", err)
+	}
+	kind, _, text := expr.Classify(v)
+	if kind != expr.KindJSON {
+		return nil, fmt.Errorf("entra: inline attributes evaluated to a %v, not a JSON object of directory properties", kind)
+	}
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var out map[string]any
+	if err := dec.Decode(&out); err != nil {
+		return nil, fmt.Errorf("entra: inline attributes are not a JSON object: %w", err)
+	}
+	if out == nil {
+		return nil, fmt.Errorf("entra: inline attributes evaluated to null")
+	}
+	return out, nil
 }
 
 // attributesOf reads the attributes variable as a JSON object. A list or a scalar is

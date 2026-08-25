@@ -2098,6 +2098,7 @@ type xmlEntraConnector struct {
 	UserID             string `xml:"userId,attr"`
 	GroupID            string `xml:"groupId,attr"`
 	NewPassword        string `xml:"newPassword,attr"`
+	Attributes         string `xml:"attributes,attr"`
 	AttributesVariable string `xml:"attributesVariable,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
 	Filter             string `xml:"filter,attr"`
