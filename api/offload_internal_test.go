@@ -170,7 +170,7 @@ func TestEveryDefaultOffloadedKindCanBeServedByItsWorker(t *testing.T) {
 }
 
 // Active Directory is offloaded by default, and the reason it can be is that the
-// engine hands its bind passwords over (ADR-draft-ad-default-offload).
+// engine hands its bind passwords over (ADR-0182).
 //
 // AD is not a managed kind, so the property above does not cover it: it holds no
 // connector record, and its secret is a per-task *reference* the model authors. That

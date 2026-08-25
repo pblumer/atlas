@@ -298,7 +298,7 @@ var offloadableKinds = map[string][]int32{
 // TestEveryDefaultOffloadedKindCanBeServedByItsWorker holds that.
 //
 // Active Directory is the third way in, and the one that made the set worth
-// re-deciding (ADR-draft-ad-default-offload). It is not managed — it holds no
+// re-deciding (ADR-0182). It is not managed — it holds no
 // connector record, and an AD task authors its own server — but its bind password is
 // a per-task *reference* that resolves out of the vault, which a supervised worker
 // can read no more than it can read the connector store. So it is defaulted on the

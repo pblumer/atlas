@@ -193,7 +193,7 @@ _Changed_ / _Removed_ for each version.
   environment, `ATLAS_AD_MOCK=1` on `atlas serve` puts its AD worker into mock mode
   ([ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)) — one variable, no flags, and a
   joiner runs end to end against a directory that does not exist. See
-  ADR-draft-ad-default-offload.
+  ADR-0182.
 
 - **A dot in a write target is refused at deploy** (new rule `variable.dotted-target`).
   Every place a model names a variable to write — a script or decision result, a

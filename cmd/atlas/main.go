@@ -446,7 +446,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// whose configuration the server hands to the child at spawn out of its own
 	// connector store — the SMTP handshake being the stall an operator actually
 	// notices — and Active Directory, whose per-task bind-password references are
-	// handed over the same way (ADR-draft-ad-default-offload). --in-process-connectors
+	// handed over the same way (ADR-0182). --in-process-connectors
 	// returns to the old arrangement wholesale; --offload-connectors adds the remaining
 	// credential-bearing kinds on top, once their secrets have been moved to a worker
 	// by hand.

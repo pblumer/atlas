@@ -1,4 +1,4 @@
-# ADR-DRAFT: Active Directory runs on a worker by default
+# ADR-0182: Active Directory runs on a worker by default
 
 - **Status:** Proposed
 - **Date:** 2026-08-25
