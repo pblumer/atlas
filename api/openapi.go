@@ -582,6 +582,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance; refused with 409 and the referencing processes when deployed models still reference it, unless ?force=true (ADR-0163)", tag: "Connectors", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/connector-kinds", s.handleConnectorKinds, apiOp{
+			summary: "Where this server runs each service-task connector kind — in its own process, or on a worker (ADR-0164/0168/0173). The Modeler's connector picker reads this so its badge describes this install rather than a compiled-in assumption", tag: "Connectors",
+			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
+
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
 			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors",
 			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
