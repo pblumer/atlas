@@ -71,6 +71,22 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
 - **`api/whatsnew_test.go` guards the committed JSON**: valid, non-empty, required
   fields present, newest-first, and no summary that starts with punctuation (the
   signature of a generator parse artifact rather than real prose).
+- **Git will not merge the feed for you** (`.gitattributes`: `-merge`). Two branches
+  that each add a changelog entry each regenerate the feed, and a textual merge of the
+  two results is not a function of the merged CHANGELOG — it lands clean, silently
+  wrong (an entry duplicated, or one past `MAX_ENTRIES` left in), and main goes red on
+  its own push rather than on either branch. So the merge conflicts instead.
+
+  **If you hit that conflict, do not pick a side.** Take the merged `CHANGELOG.md`, then:
+
+  ```
+  git checkout --ours api/web/whats-new.json   # any side; it is about to be overwritten
+  make whats-new
+  git add api/web/whats-new.json
+  ```
+
+  The conflict is the only thing standing between a concurrent merge and a red main —
+  CI checks the merge result, but only the one that existed when that run started.
 
 Neither check can tell that an entry *reads* well, or that a user-facing change has
 an override at all. That part stays a human step — step 3 above.
