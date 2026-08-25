@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can run the worker a connector needs",
+        "de": "Atlas startet den Worker, den ein Konnektor braucht"
+      },
+      "summary": {
+        "en": "Some connectors do their work in a separate worker process rather than in the engine — Active Directory's mock directory, for instance, or Entra, which only ever runs that way. Atlas started such a worker for four kinds and no others, so using any of the rest meant running one yourself; on a server that requires a login there was no credential such a worker could hold, and its tasks simply waited forever. Naming a kind with the new --supervise-connector option now gets it a worker Atlas starts, watches and restarts like the others, with the login it needs handed over at start. Trying Active Directory against a directory that does not exist is one option and one environment variable.",
+        "de": "Manche Konnektoren arbeiten in einem eigenen Worker-Prozess statt in der Engine — etwa das Mock-Verzeichnis von Active Directory oder Entra, das ausschließlich so läuft. Atlas startete einen solchen Worker bisher für vier Sorten und sonst keine; für alle übrigen musste man selbst einen betreiben, und auf einem Server mit Anmeldepflicht gab es kein Zugangstoken, das dieser Worker hätte haben können — die Aufgaben warteten schlicht ewig. Mit der neuen Option --supervise-connector bekommt eine genannte Sorte jetzt einen Worker, den Atlas startet, überwacht und neu startet wie die anderen, samt Anmeldung beim Start. Active Directory gegen ein Verzeichnis auszuprobieren, das es gar nicht gibt, ist damit eine Option und eine Variable."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-active-directory-connector-gets-a-mock-mode-so-an-identi",
       "version": "Unreleased",
       "date": null,
@@ -345,34 +373,6 @@
       "link": {
         "label": "ADR-0177",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0177-reload-skips-the-deploy-gate.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Structures in the Variables tab stay closed until you open them",
-        "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
-      },
-      "summary": {
-        "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
-        "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
         "Operations"

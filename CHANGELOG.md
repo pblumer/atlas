@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
+  ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)). Offloading a kind and running a
+  worker for it were only ever paired for the four Atlas offloads by default:
+  `--offload-connectors` takes a kind off the engine and leaves its jobs parked for a
+  worker somebody else runs, and `--supervise` names a *job type* with an external
+  command, so neither can ask for a built-in connector. Every other kind was therefore
+  reachable only by running `atlas worker --connector <kind>` yourself — and on a server
+  with `--auth` that is not friction but a wall: the job pull is authenticated, and the
+  only bearer credentials are the server's own internal token (minted per boot, handed
+  to its children, never published) and a deploy token allowlisted to two endpoints.
+  There is nothing an outside worker could hold, so the kind's jobs park forever. That
+  hit the AD connector's mock mode, whose follow-up in ADR-0181 anticipated exactly this,
+  and every worker-only kind alike — `entra` above all, which has no in-process handler at
+  all. Naming a kind here now gets it the same pairing the defaults get: its own
+  supervised worker, handed this server's token and environment at spawn, and the kind
+  taken off the engine so that worker is what leases its jobs. A worker-only kind is
+  supervised without being offloaded, since it has no in-process handlers to remove and
+  the offload list refuses it. Asking for a kind that is already supervised is a no-op
+  rather than a second worker racing the first, and an unknown kind is refused at startup.
+  So `atlas serve --auth --supervise-connector ad` with `ATLAS_AD_MOCK=1` in the server's
+  environment is a full mockup directory on an authenticated server, configured with one
+  flag and one variable.
+
 - **The Active Directory connector gets a mock mode, so an identity process can be run
   before anybody goes near a real forest.** The connector could do the whole lifecycle
   (ADR-0166) and could run on a worker (ADR-0168), and neither made it *testable*: the

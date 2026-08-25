@@ -341,6 +341,17 @@ func (s *Server) applyOffloadedKinds() error {
 }
 
 // offloadableKindNames lists every kind that can be named, for the error above.
+// IsOffloadableKind reports whether a connector kind has in-process handlers at all,
+// which is what makes it nameable in --offload-connectors: offloading is the removal
+// of those handlers, so a kind that has none (entra, which only ever runs on a
+// worker) is refused there rather than silently accepted. A caller that wants a
+// worker for a kind asks this first, so it can supervise a worker-only kind without
+// walking into that refusal (ADR-0164/0168).
+func IsOffloadableKind(name string) bool {
+	_, ok := offloadableKinds[name]
+	return ok
+}
+
 func offloadableKindNames() []string {
 	names := make([]string, 0, len(offloadableKinds))
 	for name := range offloadableKinds {
