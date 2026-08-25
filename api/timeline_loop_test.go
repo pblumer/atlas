@@ -37,6 +37,13 @@ func loopTimeline(t *testing.T) loopReplay {
 // returns that instance's replay.
 func runLoopModel(t *testing.T, model string) loopReplay {
 	t.Helper()
+	return runLoopModelWith(t, model, `{}`)
+}
+
+// runLoopModelWith is runLoopModel for a definition whose loop needs something to iterate
+// over, or to count from.
+func runLoopModelWith(t *testing.T, model, start string) loopReplay {
+	t.Helper()
 	ts := newTestServer(t)
 	c := newClient(t)
 
@@ -50,7 +57,7 @@ func runLoopModel(t *testing.T, model string) loopReplay {
 	if err := json.Unmarshal(dep, &deploy); err != nil {
 		t.Fatalf("decode deploy: %v", err)
 	}
-	code, raw := cReq(t, c, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), `{}`)
+	code, raw := cReq(t, c, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), start)
 	if code != http.StatusOK {
 		t.Fatalf("start: %d (%s)", code, raw)
 	}
@@ -105,6 +112,7 @@ type loopVar struct {
 
 type loopStep struct {
 	ElementID      string    `json:"elementId"`
+	TokenID        uint64    `json:"tokenId"`
 	Iteration      int       `json:"iteration"`
 	Inputs         []loopVar `json:"inputs"`
 	Variables      []loopVar `json:"variables"`

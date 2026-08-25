@@ -1912,12 +1912,12 @@ function withRetries(kind) {
 // generically from this data, so no bespoke panel code is needed per kind.
 const SERVICE_TASK_KINDS = [
   {
-    id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
+    id: "worker", name: "Job worker", group: "No connector", desc: "Handled by an external job worker", icon: "⚙",
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
   {
-    id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    id: "rest", name: "REST Outbound Connector", group: "Web & API", desc: "Invoke a REST API", icon: "R",
     // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
     // the connector's counterpart to a script task's language icon. The plain job worker
     // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
@@ -1947,7 +1947,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "scim", name: "SCIM Provisioning Connector", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
+    id: "scim", name: "SCIM Provisioning Connector", group: "Directory & identity", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
     // A person mark with an outbound arrow reads "push this identity to another
     // system", which is what SCIM is for — distinct from the user-provisioning
     // connector's plain person, which acts on Atlas's own login store.
@@ -2000,7 +2000,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ldap", name: "LDAP Directory Connector", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
+    id: "ldap", name: "LDAP Directory Connector", group: "Directory & identity", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
     // A root node branching into three children reads "directory tree" at a glance —
     // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
@@ -2069,7 +2069,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "soap", name: "SOAP / Web Services Connector", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
+    id: "soap", name: "SOAP / Web Services Connector", group: "Web & API", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
     // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
     // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
     // connectors.
@@ -2106,7 +2106,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ad", name: "Active Directory Connector", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
+    id: "ad", name: "Active Directory Connector", group: "Directory & identity", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
     // A person mark on an azure tile reads "directory account" at a glance — AD's
     // people-and-groups focus, distinct from the generic LDAP tree.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fb0"/><circle cx="8" cy="6" r="2.1" fill="#fff"/><path d="M3.9 12.4c0-2.3 1.9-3.6 4.1-3.6s4.1 1.3 4.1 3.6z" fill="#fff"/></svg>`,
@@ -2202,7 +2202,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ldif", name: "Directory File Connector", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    id: "ldif", name: "Directory File Connector", group: "Files", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
     // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
     // page — a file of entries rather than a live directory.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
@@ -2230,7 +2230,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find or search, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Create, read, find or search, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2313,7 +2313,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    id: "mssql", name: "Microsoft SQL Server Connector", group: "Database", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
     ext: "atlas:MssqlConnector",
     fields: [
@@ -2351,7 +2351,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mariadb", name: "MariaDB Connector", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    id: "mariadb", name: "MariaDB Connector", group: "Database", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
     ext: "atlas:MariadbConnector",
     fields: [
@@ -2389,7 +2389,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "postgres", name: "PostgreSQL Connector", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    id: "postgres", name: "PostgreSQL Connector", group: "Database", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
     ext: "atlas:PostgresConnector",
     fields: [
@@ -2427,7 +2427,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
+    id: "clio", name: "clio Event Store Connector", group: "Messaging & events", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading
     // dot suggest a growing stream of events; the drawImplBadges/stkind-icon CSS adds
@@ -2453,7 +2453,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound Connector", desc: "Send an e-mail via a mail provider", icon: "M",
+    id: "mail", name: "E-Mail Outbound Connector", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
     // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
     // connector's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2474,7 +2474,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "csv", name: "Text File Connector", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    id: "csv", name: "Text File Connector", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
     // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
     // file connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2527,7 +2527,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    id: "sharepoint", name: "SharePoint Connector", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2547,7 +2547,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    id: "remedy", name: "BMC Remedy Connector", group: "Applications", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
     // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
     // Remedy connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2565,7 +2565,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "webscrape", name: "Web Scraping Connector", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
+    id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
     // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
     // connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2583,7 +2583,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "userconnector", name: "User Provisioning Connector", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning Connector", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -2619,7 +2619,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    id: "mockup", name: "Mockup (Simulation)", group: "No connector", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
     // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
     // task's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2700,14 +2700,55 @@ function placementBadgeHTML(id) {
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
-function stKindRowsHTML(kinds, curId) {
-  return kinds.map((k) => `
+const ST_KIND_GROUPS = ["Directory & identity", "Database", "Web & API", "Files",
+  "Applications", "Messaging & events", "No connector"];
+
+// stKindRow renders one picker row, with the placement badge that says where this kind's
+// work runs on this server (ADR-0164/0168/0173).
+function stKindRow(k, curId) {
+  return `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b>${placementBadgeHTML(k.id)}<br>
         <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+    </div>`;
+}
+
+// stKindRowsHTML renders the picker as titled groups rather than one flat run of
+// nineteen. It leads with the kinds this installation actually has a connector
+// configured for: on a server with two of them, the author is almost always reaching for
+// one of those and not for the nineteenth entry of a catalog. Those kinds are *moved*
+// there rather than repeated, so no kind appears twice.
+function stKindRowsHTML(kinds, curId) {
+  const configured = kinds.filter((k) => configuredKinds.has(k.id));
+  const rest = kinds.filter((k) => !configuredKinds.has(k.id));
+  const groups = configured.length ? [["Configured on this server", configured]] : [];
+  for (const name of ST_KIND_GROUPS) {
+    const list = rest.filter((k) => k.group === name);
+    if (list.length) groups.push([name, list]);
+  }
+  const other = rest.filter((k) => !ST_KIND_GROUPS.includes(k.group));
+  if (other.length) groups.push(["Other", other]);
+  return groups.map(([name, list]) => `<div class="stkind-group">
+      <div class="stkind-group-h">${esc(name)}</div>
+      ${list.map((k) => stKindRow(k, curId)).join("")}
     </div>`).join("");
+}
+
+// Which connector kinds this server has a configured, enabled connector for. Cached at
+// module scope because the properties panel is rebuilt on every selection; empty until
+// the first fetch lands, which just means the picker shows the plain catalog.
+let configuredKinds = new Set();
+
+function loadConfiguredKinds(api, onChange) {
+  if (!api) return;
+  api("GET", "/api/v1/connectors").then((list) => {
+    const next = new Set((list || []).filter((c) => c && c.enabled && c.kind).map((c) => c.kind));
+    const same = next.size === configuredKinds.size && [...next].every((k) => configuredKinds.has(k));
+    configuredKinds = next;
+    if (!same && onChange) onChange();
+  }).catch(() => { /* no configured section; the catalog stands on its own */ });
 }
 
 // stKindFieldsHTML renders the typed field form for one catalog kind over its stored
@@ -2926,7 +2967,7 @@ function serviceTaskKindHTML(bo) {
 // picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
 // to the send task's picker.
 const SEND_MESSAGE_KIND = {
-  id: "message", name: "Message", icon: "✉",
+  id: "message", name: "Message", icon: "✉", group: "Messaging & events",
   desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
 };
@@ -5258,9 +5299,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
         stlist.querySelectorAll(".stkind-row").forEach((row) => {
           row.hidden = q !== "" && !row.dataset.match.includes(q);
         });
+        // A group whose rows are all filtered away would otherwise leave its header
+        // standing over nothing.
+        stlist.querySelectorAll(".stkind-group").forEach((g) => {
+          g.hidden = !g.querySelector(".stkind-row:not([hidden])");
+        });
       });
     }
     if (stlist) {
+      const sendPicker = bo.$type === "bpmn:SendTask";
+      const curKindId = (sendPicker ? sendTaskKind(bo) : serviceTaskKind(bo)).id;
+      loadConfiguredKinds(api, () => {
+        if (!stlist.isConnected) return; // the panel moved on while the request was out
+        stlist.innerHTML = stKindRowsHTML(
+          sendPicker ? [SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS] : SERVICE_TASK_KINDS, curKindId);
+      });
       stlist.addEventListener("click", (e) => {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
