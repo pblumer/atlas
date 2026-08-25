@@ -102,8 +102,8 @@ func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
 	}}, reg)
 
 	// maxUsers arrived: 51 users against a cap of 50 is refused, by that number.
-	if err == nil || !strings.Contains(err.Error(), "50-user") {
-		t.Fatalf("err = %v, want the 50-user cap to have refused the listing", err)
+	if err == nil || !strings.Contains(err.Error(), "50-item") {
+		t.Fatalf("err = %v, want the 50-item cap to have refused the listing", err)
 	}
 	// filter, select, pageSize and search arrived: each is in the query it built.
 	for _, want := range []string{"$filter=department", "$select=id", "$top=200", "$search=%22displayName"} {

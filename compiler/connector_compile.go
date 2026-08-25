@@ -199,9 +199,19 @@ var entraOps = map[string]entraOp{
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
 	"create-group":        {needsAttributes: true},
+	"get-group":           {needsGroup: true},
+	"list-groups":         {isList: true},
+	"update-group":        {needsGroup: true, needsAttributes: true},
 	"delete-group":        {needsGroup: true},
+	"add-group-owner":     {needsUser: true, needsGroup: true},
+	"remove-group-owner":  {needsUser: true, needsGroup: true},
 	"create-team":         {needsGroup: true},
 	"add-team-member":     {needsUser: true, needsGroup: true},
+	"add-team-owner":      {needsUser: true, needsGroup: true},
+	"create-channel":      {needsGroup: true, needsAttributes: true},
+	"archive-team":        {needsGroup: true},
+	"assign-license":      {needsUser: true, needsAttributes: true},
+	"assign-role":         {needsUser: true, needsAttributes: true},
 }
 
 // The listing bounds a model inherits when it authors none.

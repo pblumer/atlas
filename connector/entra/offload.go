@@ -38,23 +38,26 @@ type Op struct {
 	NeedsGroup      bool
 	NeedsAttributes bool
 	NeedsPassword   bool
-	// IsList marks the operation that returns a collection instead of one object or
-	// nothing. It is the one operation [Run] does not perform with a single call:
-	// a collection is paged, and following those pages is this connector's work
-	// rather than something a process has to model with a loop.
-	IsList bool
+	// IsList marks an operation that returns a collection instead of one object or
+	// nothing. It is the class [Run] does not perform with a single call: a collection
+	// is paged, and following those pages is this connector's work rather than
+	// something a process has to model with a loop. ListPath is the collection such an
+	// operation reads ("/users", "/groups"); it is empty on every non-listing op.
+	IsList   bool
+	ListPath string
 	// Describes the operation for an error message.
 	Label string
 }
 
-// Ops is the operation table. The set covers a joiner/mover/leaver lifecycle: create
-// and read an account, find accounts, change one, enable and disable it, delete it,
-// reset its password, move it in and out of groups, create and delete a group, and
-// stand up a Team on a group and add a member to it.
+// Ops is the operation table. The set covers a joiner/mover/leaver lifecycle across the
+// three objects an identity process manages: the account (create, read, list, update,
+// enable, disable, reset-password, delete), the group (create, read, list, update,
+// delete, and members and owners), and the Team a group backs (create, add members and
+// owners, create a channel, archive) — plus licence and directory-role assignment.
 var Ops = map[string]Op{
 	"create-user":         {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":            {Method: "GET", NeedsUser: true, Label: "read a user"},
-	"list-users":          {Method: "GET", IsList: true, Label: "list users"},
+	"list-users":          {Method: "GET", IsList: true, ListPath: "/users", Label: "list users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
 	"delete-user":         {Method: "DELETE", NeedsUser: true, Label: "delete a user"},
 	"reset-password":      {Method: "PATCH", NeedsUser: true, NeedsPassword: true, Label: "reset a password"},
@@ -63,12 +66,28 @@ var Ops = map[string]Op{
 	"add-group-member":    {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group member"},
 	"remove-group-member": {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group member"},
 	"create-group":        {Method: "POST", NeedsAttributes: true, Label: "create a group"},
+	"get-group":           {Method: "GET", NeedsGroup: true, Label: "read a group"},
+	"list-groups":         {Method: "GET", IsList: true, ListPath: "/groups", Label: "list groups"},
+	"update-group":        {Method: "PATCH", NeedsGroup: true, NeedsAttributes: true, Label: "update a group"},
 	"delete-group":        {Method: "DELETE", NeedsGroup: true, Label: "delete a group"},
+	"add-group-owner":     {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group owner"},
+	"remove-group-owner":  {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group owner"},
 	// A Team's id is its group's id: create-team teamifies an existing (Microsoft
-	// 365) group, and add-team-member addresses /teams/{groupId}. GroupID therefore
-	// carries the team throughout, so no separate team-id field is authored.
+	// 365) group, and the team operations address /teams/{groupId}. GroupID therefore
+	// carries the team throughout, so no separate team-id field is authored. Removing a
+	// team member is remove-group-member — a team member is a member of its group — so
+	// there is deliberately no remove-team-member that would need a membership id.
 	"create-team":     {Method: "PUT", NeedsGroup: true, Label: "create a team"},
 	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member"},
+	"add-team-owner":  {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team owner"},
+	"create-channel":  {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel"},
+	"archive-team":    {Method: "POST", NeedsGroup: true, Label: "archive a team"},
+	// assign-license and assign-role author their body through the attributes variable:
+	// {addLicenses,removeLicenses} for a licence, and the role assignment's
+	// {roleDefinitionId,directoryScopeId} for a role — into which the connector merges
+	// the authored user as the principal, so a model never repeats the id it already gave.
+	"assign-license": {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a licence"},
+	"assign-role":    {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a directory role"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -206,11 +225,11 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		return nil, err
 	}
 	if spec.IsList {
-		users, err := listUsers(ctx, j, client)
+		items, err := listCollection(ctx, j, spec, client)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{j.ResultVariable: users}, nil
+		return map[string]any{j.ResultVariable: items}, nil
 	}
 	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
 	if err != nil {
@@ -237,78 +256,80 @@ const nextLinkKey = "@odata.nextLink"
 // means something is wrong and saying so is the useful outcome.
 const maxListPages = 1000
 
-// listUsers performs the whole listing: the first request this connector builds, and
-// then every continuation Graph hands back, until there is no next page.
+// listCollection performs the whole listing: the first request this connector builds,
+// and then every continuation Graph hands back, until there is no next page. It serves
+// every listing operation (users, groups); the collection it reads is spec.ListPath.
 //
 // Following the pages here rather than exposing them is the point of the operation.
 // A model that had to loop over @odata.nextLink itself would be carrying Graph's
 // paging protocol in its diagram — the same thing ADR-0172 refused to make a modeler
 // hand-author for a $ref URL.
-func listUsers(ctx context.Context, j Job, client Client) ([]any, error) {
-	req := request(j, Ops[j.Operation], client.BaseURL())
-	users := []any{}
+func listCollection(ctx context.Context, j Job, spec Op, client Client) ([]any, error) {
+	req := request(j, spec, client.BaseURL())
+	items := []any{}
 	for pages := 0; pages < maxListPages; pages++ {
 		res, err := client.Call(ctx, req)
 		if err != nil {
 			return nil, err
 		}
-		batch, next, err := usersPage(res)
+		batch, next, err := collectionPage(res, j.Operation)
 		if err != nil {
 			return nil, err
 		}
-		users = append(users, batch...)
+		items = append(items, batch...)
 		// The cap fails the job rather than truncating, for the reason the LDAP
 		// connector's does: a short result set is a wrong answer, not a partial one,
 		// and a process deciding something from it decides it confidently.
-		if j.MaxUsers > 0 && len(users) > int(j.MaxUsers) {
-			return nil, fmt.Errorf("entra: the listing returned more than the %d-user maxUsers cap; narrow the filter or raise maxUsers (truncating would be a wrong answer, not a partial one)", j.MaxUsers)
+		if j.MaxUsers > 0 && len(items) > int(j.MaxUsers) {
+			return nil, fmt.Errorf("entra: %s returned more than the %d-item maxUsers cap; narrow the filter or raise maxUsers (truncating would be a wrong answer, not a partial one)", j.Operation, j.MaxUsers)
 		}
 		if next == "" {
-			return users, nil
+			return items, nil
 		}
 		// The continuation replaces the path but keeps everything else — above all
 		// Eventual, because Graph rejects a page of an advanced query fetched
 		// without the header that made the query legal in the first place.
 		req.Path = next
 	}
-	return nil, fmt.Errorf("entra: the listing still offered another page after %d requests; narrow the filter, or set maxUsers so an oversized listing fails by its own bound", maxListPages)
+	return nil, fmt.Errorf("entra: %s still offered another page after %d requests; narrow the filter, or set maxUsers so an oversized listing fails by its own bound", j.Operation, maxListPages)
 }
 
-// usersPage reads one Graph collection response: the users it carries and the link to
-// the next page, empty on the last one.
+// collectionPage reads one Graph collection response: the items it carries and the link
+// to the next page, empty on the last one. op names the operation for its errors.
 //
 // A response that is not a collection is an error rather than an empty page, because
-// an empty page is indistinguishable from "no such users" — and a process that reads
+// an empty page is indistinguishable from "no such items" — and a process that reads
 // a listing as empty acts on it.
-func usersPage(res any) ([]any, string, error) {
+func collectionPage(res any, op string) ([]any, string, error) {
 	obj, ok := res.(map[string]any)
 	if !ok {
-		return nil, "", fmt.Errorf("entra: list-users expected a user collection, got %T", res)
+		return nil, "", fmt.Errorf("entra: %s expected a collection, got %T", op, res)
 	}
 	raw, ok := obj["value"]
 	if !ok {
-		return nil, "", fmt.Errorf("entra: list-users response carries no %q collection", "value")
+		return nil, "", fmt.Errorf("entra: %s response carries no %q collection", op, "value")
 	}
 	list, ok := raw.([]any)
 	if !ok {
-		return nil, "", fmt.Errorf("entra: list-users response has a %q that is a %T, not a list of users", "value", raw)
+		return nil, "", fmt.Errorf("entra: %s response has a %q that is a %T, not a list", op, "value", raw)
 	}
 	next := ""
 	if nl, present := obj[nextLinkKey]; present {
 		s, ok := nl.(string)
 		if !ok {
-			return nil, "", fmt.Errorf("entra: list-users response has an %s that is a %T, not a URL", nextLinkKey, nl)
+			return nil, "", fmt.Errorf("entra: %s response has an %s that is a %T, not a URL", op, nextLinkKey, nl)
 		}
 		next = s
 	}
 	return list, next, nil
 }
 
-// listPath builds the first request of a listing. The parameter names are written
-// literally rather than through url.Values, which would percent-encode the leading
-// $ into %24: legal, decoded identically by Graph, and unreadable in a log or a
-// replay next to the documentation an operator is holding.
-func listPath(j Job) string {
+// listPath builds the first request of a listing over the given collection ("/users",
+// "/groups"). The parameter names are written literally rather than through url.Values,
+// which would percent-encode the leading $ into %24: legal, decoded identically by
+// Graph, and unreadable in a log or a replay next to the documentation an operator is
+// holding.
+func listPath(j Job, collection string) string {
 	var q []string
 	if f := strings.TrimSpace(j.Filter); f != "" {
 		q = append(q, "$filter="+url.QueryEscape(f))
@@ -332,9 +353,9 @@ func listPath(j Job) string {
 		q = append(q, "$count=true")
 	}
 	if len(q) == 0 {
-		return "/users"
+		return collection
 	}
-	return "/users?" + strings.Join(q, "&")
+	return collection + "?" + strings.Join(q, "&")
 }
 
 // checkRequired repeats the compiler's shape rules on the worker. The compiler
@@ -371,8 +392,9 @@ func (j Job) advanced() bool {
 	return j.Advanced || strings.TrimSpace(j.Search) != ""
 }
 
-// request builds the Graph request for one operation. baseURL is needed only by
-// add-group-member, whose body carries an absolute @odata.id.
+// request builds the Graph request for one operation. baseURL is needed by the
+// operations whose *body* carries an absolute URL — the $ref adds and the Team member
+// binds.
 //
 // Only a listing can ask for eventual consistency: every other operation addresses
 // one object by id, where an advanced query has nothing to mean.
@@ -381,13 +403,15 @@ func request(j Job, spec Op, baseURL string) Request {
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
 	base := strings.TrimRight(baseURL, "/")
 	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced()}
+	if spec.IsList {
+		r.Path = listPath(j, spec.ListPath)
+		return r
+	}
 	switch j.Operation {
 	case "create-user":
 		r.Path, r.Body = "/users", j.Attributes
 	case "get-user", "delete-user":
 		r.Path = "/users/" + user
-	case "list-users":
-		r.Path = listPath(j)
 	case "update-user":
 		r.Path, r.Body = "/users/"+user, j.Attributes
 	case "reset-password":
@@ -408,8 +432,17 @@ func request(j Job, spec Op, baseURL string) Request {
 		r.Body = map[string]any{"@odata.id": base + "/directoryObjects/" + user}
 	case "remove-group-member":
 		r.Path = "/groups/" + group + "/members/" + user + "/$ref"
+	case "add-group-owner":
+		r.Path = "/groups/" + group + "/owners/$ref"
+		r.Body = map[string]any{"@odata.id": base + "/directoryObjects/" + user}
+	case "remove-group-owner":
+		r.Path = "/groups/" + group + "/owners/" + user + "/$ref"
 	case "create-group":
 		r.Path, r.Body = "/groups", j.Attributes
+	case "get-group":
+		r.Path = "/groups/" + group
+	case "update-group":
+		r.Path, r.Body = "/groups/"+group, j.Attributes
 	case "delete-group":
 		r.Path = "/groups/" + group
 	case "create-team":
@@ -418,15 +451,54 @@ func request(j Job, spec Op, baseURL string) Request {
 		// on whatever Graph would infer from an empty body.
 		r.Path = "/groups/" + group + "/team"
 		r.Body = defaultTeam()
-	default: // add-team-member — the only one left, guarded by the Ops lookup
-		r.Path = "/teams/" + group + "/members"
-		r.Body = map[string]any{
-			"@odata.type":     "#microsoft.graph.aadUserConversationMember",
-			"roles":           []any{},
-			"user@odata.bind": base + "/users('" + user + "')",
-		}
+	case "add-team-member":
+		r.Path, r.Body = "/teams/"+group+"/members", teamMember(base, user, nil)
+	case "add-team-owner":
+		r.Path, r.Body = "/teams/"+group+"/members", teamMember(base, user, []any{"owner"})
+	case "create-channel":
+		r.Path, r.Body = "/teams/"+group+"/channels", j.Attributes
+	case "archive-team":
+		// A 202 with no body: the client's 2xx-no-content path returns nil, so the job
+		// completes. Re-archiving an archived team is a benign no-op on Graph's side.
+		r.Path = "/teams/" + group + "/archive"
+	case "assign-license":
+		r.Path, r.Body = "/users/"+user+"/assignLicense", j.Attributes
+	default: // assign-role — the only one left, guarded by the Ops lookup
+		// roleAssignments takes the principal as a field; the model authored it as the
+		// user, so it is merged in rather than repeated in the attributes object.
+		r.Path = "/roleManagement/directory/roleAssignments"
+		r.Body = withPrincipal(j.Attributes, strings.TrimSpace(j.UserID))
 	}
 	return r
+}
+
+// teamMember is the aadUserConversationMember body a Team add sends: the user bound by
+// an absolute URL, with the roles that make them a member (nil/empty) or an owner.
+func teamMember(base, user string, roles []any) map[string]any {
+	if roles == nil {
+		roles = []any{}
+	}
+	return map[string]any{
+		"@odata.type":     "#microsoft.graph.aadUserConversationMember",
+		"roles":           roles,
+		"user@odata.bind": base + "/users('" + user + "')",
+	}
+}
+
+// withPrincipal copies the role-assignment attributes and sets principalId to the
+// authored user, so assign-role's body carries the user the model already named without
+// the model repeating it. directoryScopeId defaults to the whole directory ("/") when
+// the attributes leave it unset.
+func withPrincipal(attrs map[string]any, principal string) map[string]any {
+	out := make(map[string]any, len(attrs)+2)
+	for k, v := range attrs {
+		out[k] = v
+	}
+	out["principalId"] = principal
+	if _, ok := out["directoryScopeId"]; !ok {
+		out["directoryScopeId"] = "/"
+	}
+	return out
 }
 
 // defaultTeam is the body create-team sends to PUT /groups/{id}/team: a standard team

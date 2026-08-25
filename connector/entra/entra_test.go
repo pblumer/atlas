@@ -241,8 +241,53 @@ func TestRunMapsEveryOperation(t *testing.T) {
 			method: "POST", path: "/teams/g1/members",
 			wantBodyIs: func(b any) bool {
 				m, ok := b.(map[string]any)
+				roles, _ := m["roles"].([]any)
 				return ok && m["@odata.type"] == "#microsoft.graph.aadUserConversationMember" &&
-					m["user@odata.bind"] == "https://graph.microsoft.com/v1.0/users('u1')"
+					len(roles) == 0 && m["user@odata.bind"] == "https://graph.microsoft.com/v1.0/users('u1')"
+			}},
+		{op: "add-team-owner", job: Job{UserID: "u1", GroupID: "g1"},
+			method: "POST", path: "/teams/g1/members",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				roles, _ := m["roles"].([]any)
+				return ok && len(roles) == 1 && roles[0] == "owner"
+			}},
+		{op: "create-channel",
+			job:    Job{GroupID: "g1", Attributes: map[string]any{"displayName": "General"}},
+			method: "POST", path: "/teams/g1/channels",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); return ok && m["displayName"] == "General" }},
+		{op: "archive-team", job: Job{GroupID: "g1"},
+			method: "POST", path: "/teams/g1/archive",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "get-group", job: Job{GroupID: "g1"},
+			method: "GET", path: "/groups/g1",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "list-groups", job: Job{ResultVariable: "gruppen"},
+			method: "GET", path: "/groups",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "update-group",
+			job:    Job{GroupID: "g1", Attributes: map[string]any{"displayName": "Vertrieb"}},
+			method: "PATCH", path: "/groups/g1",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); return ok && m["displayName"] == "Vertrieb" }},
+		{op: "add-group-owner", job: Job{UserID: "u1", GroupID: "g1"},
+			method: "POST", path: "/groups/g1/owners/$ref",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				return ok && m["@odata.id"] == "https://graph.microsoft.com/v1.0/directoryObjects/u1"
+			}},
+		{op: "remove-group-owner", job: Job{UserID: "u1", GroupID: "g1"},
+			method: "DELETE", path: "/groups/g1/owners/u1/$ref",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "assign-license",
+			job:    Job{UserID: "u1", Attributes: map[string]any{"addLicenses": []any{}, "removeLicenses": []any{}}},
+			method: "POST", path: "/users/u1/assignLicense",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); _, has := m["addLicenses"]; return ok && has }},
+		{op: "assign-role",
+			job:    Job{UserID: "u1", Attributes: map[string]any{"roleDefinitionId": "62e90394-…"}},
+			method: "POST", path: "/roleManagement/directory/roleAssignments",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				return ok && m["principalId"] == "u1" && m["directoryScopeId"] == "/" && m["roleDefinitionId"] == "62e90394-…"
 			}},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
@@ -265,7 +310,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 14 {
+	if len(Ops) != 24 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -630,6 +675,25 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 	// compile either.
 	if err := compile(`connector="contoso" operation="rename-user" userId="u"`); err == nil {
 		t.Error("the compiler accepted an operation Ops does not carry")
+	}
+}
+
+// assign-role merges the authored user in as principalId and defaults the scope to the
+// whole directory — but an authored directoryScopeId is kept, so a scoped assignment is
+// expressible.
+func TestEntraAssignRoleKeepsAnAuthoredScope(t *testing.T) {
+	c := &recordingClient{res: map[string]any{"id": "ra1"}}
+	j := Job{Connector: "contoso", Operation: "assign-role", UserID: "u1",
+		Attributes: map[string]any{"roleDefinitionId": "r1", "directoryScopeId": "/administrativeUnits/au1"}}
+	if _, err := Run(context.Background(), j, regWith("contoso", c)); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	m, _ := c.body.(map[string]any)
+	if m["principalId"] != "u1" {
+		t.Errorf("principalId = %v, want the authored user", m["principalId"])
+	}
+	if m["directoryScopeId"] != "/administrativeUnits/au1" {
+		t.Errorf("directoryScopeId = %v, want the authored scope kept, not defaulted", m["directoryScopeId"])
 	}
 }
 

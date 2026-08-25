@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `delete-group`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; and Teams (`create-team` on a group, `add-team-member`), a Team being addressed by its group's id)
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -89,8 +89,11 @@ lifecycle, and deliberately more than the AD connector covers today (AD has no r
 update, or delete; that is recorded as a gap in the MIM comparison).
 
 The 2026-08-25 amendment extends the set past the account and its group membership to
-the two objects an identity process most often manages beside them — groups and Teams
-— and to a first-class password reset:
+the three objects an identity process manages — the account, the group, and the Team a
+group backs — plus licence and role assignment. No new authored field is needed but
+one (`newPassword`); every other operation reuses the existing `userId`, `groupId`,
+attributes variable, or listing query, so the additions are rows in the operation
+table, not new model surface:
 
 - `reset-password` sets a new secret. It is not folded into `update-user` because the
   secret is not a directory attribute a model should hand-author inside a
@@ -98,20 +101,33 @@ the two objects an identity process most often manages beside them — groups an
   `newPassword` value (literal-or-FEEL, almost always a variable), and the connector
   wraps it in a `passwordProfile` with `forceChangePasswordNextSignIn`. The encoding
   is the connector's, the way ADR-0172 argues an operation's URL is.
-- `create-group` and `delete-group` sit beside the existing membership operations, so
-  a process can stand up the group it then fills. `create-group` authors its
-  properties through the same attributes variable `create-user` uses (`displayName`,
+- The **group** gains the same shape the user already had: `create-group`, `get-group`,
+  `list-groups`, `update-group`, `delete-group`, and ownership beside membership
+  (`add-group-owner`, `remove-group-owner`). `list-groups` reuses the same paging and
+  advanced-query machinery as `list-users` — the listing became collection-agnostic
+  (its path is a property of the operation) rather than being copied. `create-group`
+  and `update-group` author properties through the attributes variable (`displayName`,
   `mailNickname`, `mailEnabled`, `securityEnabled`, `groupTypes`).
-- `create-team` and `add-team-member` reach Microsoft Teams. A Team's id *is* its
-  Microsoft 365 group's id, so `create-team` teamifies an existing group
-  (`PUT /groups/{id}/team`) and `add-team-member` addresses `/teams/{groupId}/members`
-  — both authored through the same `groupId`, with no separate team identifier. The
-  team is created with settings spelled out by the connector rather than left to the
+- **Teams**: `create-team` teamifies an existing group (`PUT /groups/{id}/team`) and
+  the rest address `/teams/{groupId}/...` — `add-team-member`, `add-team-owner` (the
+  same member call with `roles: ["owner"]`), `create-channel` (authoring
+  `{displayName, description}` through the attributes variable), and `archive-team`. A
+  Team's id *is* its Microsoft 365 group's id, so all of them are authored through the
+  same `groupId`, with no separate team identifier. Removing a team member is
+  `remove-group-member` — a team member is a member of its group — so there is
+  deliberately no `remove-team-member` that would force a model to hold a membership
+  id. `create-team` sends settings spelled out by the connector rather than left to the
   tenant's defaults, so the same model yields the same team everywhere. `POST /teams`
   from scratch is deliberately not used: it is asynchronous (a `202` with a polling
   location), which this connector's single synchronous `Call` does not model; the
   teamify-a-group path is synchronous and is the documented way to create a
   group-backed Team.
+- `assign-license` (`POST /users/{id}/assignLicense`) and `assign-role`
+  (`POST /roleManagement/directory/roleAssignments`) both author their body through the
+  attributes variable — `{addLicenses, removeLicenses}` and `{roleDefinitionId}`. For a
+  role, the connector merges the authored user in as `principalId` and defaults
+  `directoryScopeId` to the whole directory (`/`), so a model names the user once and
+  can still narrow the scope when it needs to.
 
 The rules live in a table — which operation needs a user, a group, an attributes
 object — because they are needed in two places. The compiler validates a model at
