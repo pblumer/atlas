@@ -58,7 +58,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Plus a **DirSync delta read** for reconciliation. Runs on a worker (`--offload-connectors ad`). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no incremental-values flag. |
+| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Plus a **DirSync delta read** for reconciliation. Runs on a worker (`--supervise-connector ad` for one Atlas starts itself, or `--offload-connectors ad` plus a worker you run). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no incremental-values flag. |
 | *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0172) | **Implemented** — the same lifecycle against Entra ID over Graph. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
 | Active Directory Global Address List (GAL) | a **process**, not a connector — [`examples/galsync.bpmn`](../../examples/galsync.bpmn) | **Implemented as a model.** GALSync is a policy ("show forest A's mailboxes in forest B's address book"), not a protocol: the DirSync delta, the contact create/update/delete and the loop are all connectors already. `ad create-contact` was the one piece missing. |

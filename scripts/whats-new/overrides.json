@@ -997,5 +997,25 @@
       },
       "route": "#/operations"
     }
+  },
+  "supervise-connector-a-connector-kind-served-by-a-worker-atla": {
+    "tags": [
+      "Connectors"
+    ],
+    "title": {
+      "en": "Atlas can run the worker a connector needs",
+      "de": "Atlas startet den Worker, den ein Konnektor braucht"
+    },
+    "summary": {
+      "en": "Some connectors do their work in a separate worker process rather than in the engine — Active Directory's mock directory, for instance, or Entra, which only ever runs that way. Atlas started such a worker for four kinds and no others, so using any of the rest meant running one yourself; on a server that requires a login there was no credential such a worker could hold, and its tasks simply waited forever. Naming a kind with the new --supervise-connector option now gets it a worker Atlas starts, watches and restarts like the others, with the login it needs handed over at start. Trying Active Directory against a directory that does not exist is one option and one environment variable.",
+      "de": "Manche Konnektoren arbeiten in einem eigenen Worker-Prozess statt in der Engine — etwa das Mock-Verzeichnis von Active Directory oder Entra, das ausschließlich so läuft. Atlas startete einen solchen Worker bisher für vier Sorten und sonst keine; für alle übrigen musste man selbst einen betreiben, und auf einem Server mit Anmeldepflicht gab es kein Zugangstoken, das dieser Worker hätte haben können — die Aufgaben warteten schlicht ewig. Mit der neuen Option --supervise-connector bekommt eine genannte Sorte jetzt einen Worker, den Atlas startet, überwacht und neu startet wie die anderen, samt Anmeldung beim Start. Active Directory gegen ein Verzeichnis auszuprobieren, das es gar nicht gibt, ist damit eine Option und eine Variable."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
   }
 }
