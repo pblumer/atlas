@@ -32,6 +32,7 @@ const (
 	connectorKindMail       = "mail"
 	connectorKindSharePoint = "sharepoint"
 	connectorKindRemedy     = "remedy"
+	connectorKindEntra      = "entra"
 )
 
 // connector is a managed connector instance: an operator-configured, durable

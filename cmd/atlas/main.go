@@ -471,6 +471,16 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 			handles = append(handles, nil)
 		}
 	}
+	// Worker-only kinds Atlas supervises by default (ADR-0172): a kind with no in-engine
+	// form at all, so --in-process-connectors cannot apply and there is nothing to
+	// offload. The worker parks until an operator configures a tenant in the Console,
+	// then refresh brings it up — the tenant a Console entry, not a deployment change.
+	for _, kind := range api.DefaultSupervisedWorkerOnlyKinds() {
+		specs = append(specs, api.SuperviseSpec{
+			ID: kind, Kinds: []string{kind}, Connectors: []string{kind},
+		})
+		handles = append(handles, nil)
+	}
 	// Kinds the operator asked this server to run a worker for. After the defaults, so
 	// asking for one of them is the no-op it should be rather than a second worker
 	// racing the first for the same jobs.
