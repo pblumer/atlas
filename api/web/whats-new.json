@@ -2,6 +2,47 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "the-active-directory-connector-gets-a-mock-mode-so-an-identi",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Try an Active Directory process without an Active Directory",
+        "de": "Einen Active-Directory-Prozess ohne Active Directory ausprobieren"
+      },
+      "summary": {
+        "en": "An identity process is the one kind nobody can safely try out: the directory it creates accounts in is the real one, and a test joiner leaves a real account behind. A worker can now be told to serve Active Directory tasks against a directory that exists only in its own memory — the model stays exactly as it is, no domain controller is touched, and every operation appears in the worker's log. It refuses what Active Directory refuses, so the mistakes you would otherwise meet in production you meet while drafting: a password set over an unencrypted connection, an account created twice by a repeated delivery, a group member added twice, a change read from the wrong place in the tree. An LDIF or DSML file fills it with the accounts your process expects to find, because a leaver has nothing to disable in an empty directory.",
+        "de": "Ein Identity-Prozess ist die eine Sorte, die niemand gefahrlos ausprobieren kann: Das Verzeichnis, in dem er Konten anlegt, ist das echte, und ein Test-Joiner hinterlässt ein echtes Konto. Ein Worker kann jetzt angewiesen werden, Active-Directory-Aufgaben gegen ein Verzeichnis zu bedienen, das nur in seinem eigenen Arbeitsspeicher existiert — das Modell bleibt exakt, wie es ist, kein Domain Controller wird angefasst, und jede Operation steht im Log des Workers. Es lehnt ab, was auch Active Directory ablehnt: Die Fehler, die Sie sonst erst in der Produktion treffen, treffen Sie damit schon beim Entwerfen — ein Passwort über eine unverschlüsselte Verbindung, ein durch wiederholte Zustellung zweimal angelegtes Konto, ein zweimal hinzugefügtes Gruppenmitglied, ein Änderungsabgleich an der falschen Stelle im Verzeichnisbaum. Eine LDIF- oder DSML-Datei füllt es mit den Konten, die Ihr Prozess vorzufinden erwartet — ein Leaver hat in einem leeren Verzeichnis nichts zu deaktivieren."
+      },
+      "link": {
+        "label": "ADR-0166",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Start Atlas with --offload-connectors ad, so Active Directory tasks wait for a worker instead of running in the engine.",
+          "Start a worker beside it: ATLAS_AD_MOCK=1 atlas worker --connector ad — add ATLAS_AD_MOCK_SEED=forest.ldif for the accounts that should already be there.",
+          "Run your process. Operations › Workers shows the worker, and its log lists every directory operation it simulated."
+        ],
+        "de": [
+          "Starten Sie Atlas mit --offload-connectors ad, damit Active-Directory-Aufgaben auf einen Worker warten statt in der Engine zu laufen.",
+          "Starten Sie daneben einen Worker: ATLAS_AD_MOCK=1 atlas worker --connector ad — mit ATLAS_AD_MOCK_SEED=forest.ldif für die Konten, die es schon geben soll.",
+          "Lassen Sie Ihren Prozess laufen. Unter Betrieb › Workers sehen Sie den Worker, und sein Log zeigt jede simulierte Verzeichnis-Operation."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "the-handbook-takes-on-the-process-developer-s-role-and-build",
       "version": "Unreleased",
       "date": null,
@@ -44,8 +85,8 @@
         "de": "Konten in Entra ID finden, nicht nur ändern"
       },
       "summary": {
-        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them, and receives every match in a single process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
-        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert, und erhält alle Treffer in einer einzigen Prozessvariablen. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them — including the forms Entra normally refuses, such as \"every mailbox on this domain\", which a single switch unlocks in exchange for answers that may be a moment out of date. Every match arrives in one process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert — auch in den Formen, die Entra sonst ablehnt, etwa „jedes Postfach auf dieser Domäne\", die ein einzelner Schalter freischaltet, dafür aber Antworten liefert, die einen Moment veraltet sein dürfen. Alle Treffer kommen in einer einzigen Prozessvariablen an. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
       },
       "link": {
         "label": "ADR-0172",
@@ -121,6 +162,47 @@
       }
     },
     {
+      "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Active Directory tasks run beside the engine now",
+        "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
+      },
+      "summary": {
+        "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
+        "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
+          "Its log lists every directory operation it performed — and says so when it is in mock mode.",
+          "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
+        ],
+        "de": [
+          "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
+          "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
+          "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "a-dot-in-a-write-target-is-refused-at-deploy",
       "version": "Unreleased",
       "date": null,
@@ -146,6 +228,77 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Every task now says where its work will run",
+        "de": "Jede Aufgabe sagt jetzt, wo ihre Arbeit läuft"
+      },
+      "summary": {
+        "en": "The type list on a service task marked every connector as running inside the engine, and that had quietly stopped being true: e-mail, text files, scripts and web scraping are handed to a worker Atlas starts for you, and the database and Entra ID connectors never ran in the engine at all. The mark now comes from the server you are connected to, so it also follows however that server was started. It has also appeared in the two places that said nothing at all — the language of a script task, and a business rule task's choice between the built-in decision engine and an external service. What each one tells you differs, because what a worker holds differs: a connector's credentials, a script's interpreter, a decision service's address.",
+        "de": "Die Typ-Liste einer Service-Aufgabe wies jeden Konnektor als „in der Engine laufend“ aus — und das stimmte längst nicht mehr: E-Mail, Textdateien, Skripte und Web-Scraping übergibt Atlas an einen Worker, den es selbst für Sie startet, und die Datenbank- und Entra-ID-Konnektoren liefen nie in der Engine. Die Kennzeichnung kommt jetzt von dem Server, mit dem Sie verbunden sind, und folgt damit auch dem, womit dieser Server gestartet wurde. Und sie ist an den beiden Stellen aufgetaucht, die bisher gar nichts sagten: bei der Sprache einer Skript-Aufgabe und bei der Wahl einer Business-Rule-Aufgabe zwischen der eingebauten Entscheidungs-Engine und einem externen Dienst. Was dort jeweils steht, unterscheidet sich — weil sich unterscheidet, was ein Worker hält: die Zugangsdaten eines Konnektors, den Interpreter eines Skripts, die Adresse eines Entscheidungsdienstes."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and drop a service task on the canvas.",
+          "In the properties panel, open Type: every connector now carries a mark — in-engine, on a worker, or worker only.",
+          "Pick the E-Mail connector: on a standard install it reads on a worker, and the note underneath says where that connector is configured.",
+          "Change the task into a script task and choose PowerShell: the same mark sits beside the language, and says something a connector would not."
+        ],
+        "de": [
+          "Modeler öffnen und eine Service-Aufgabe auf die Fläche ziehen.",
+          "Im Eigenschaften-Panel „Type“ aufklappen: Jeder Konnektor trägt jetzt eine Kennzeichnung — in-engine, on a worker oder worker only.",
+          "Den E-Mail-Konnektor wählen: Bei einer Standardinstallation steht dort „on a worker“, und der Hinweis darunter sagt, wo dieser Konnektor konfiguriert wird.",
+          "Die Aufgabe in eine Skript-Aufgabe umwandeln und PowerShell wählen: Dieselbe Kennzeichnung steht neben der Sprache — mit einem Hinweis, den ein Konnektor so nicht bekommt."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-loop-contained-in-an-ad-hoc-subprocess-keeps-its-result-to",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A repeated step inside an ad-hoc subprocess keeps its collected results",
+        "de": "Ein wiederholter Schritt in einem Ad-hoc-Subprozess behält seine gesammelten Ergebnisse"
+      },
+      "summary": {
+        "en": "The companion to the gateway fix in this release. An activity that repeats once per list entry collects what each round produced into a list. Inside an ad-hoc subprocess — where the steps are not wired in a sequence and all start at once — every round still ran and produced its result, but the collected list was dropped as the activity finished, so anything reading it afterwards found nothing. It is kept now, including after a restart mid-run.",
+        "de": "Das Gegenstück zur Gateway-Korrektur in dieser Version. Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe in einer Liste. In einem Ad-hoc-Subprozess — dessen Schritte nicht in einer Reihenfolge verdrahtet sind, sondern gemeinsam starten — liefen zwar alle Durchläufe und lieferten ihr Ergebnis, die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen; wer sie danach las, fand nichts vor. Sie bleibt jetzt erhalten, auch nach einem Neustart mitten im Lauf."
+      },
+      "link": {
+        "label": "ADR-0077",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -230,112 +383,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A file without a diagram no longer imports into an empty canvas",
-        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
-      },
-      "summary": {
-        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
-        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
-      },
-      "link": {
-        "label": "ADR-0124",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-s-badge-counts-its-rounds-not-its-activations",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A loop's badge says how often it ran",
-        "de": "Der Zähler an einer Schleife sagt, wie oft sie lief"
-      },
-      "summary": {
-        "en": "The number at the corner of a looping task counted one more than the rounds it ran: the engine enters the activity once as the loop itself and once per round, and the badge showed both. It now says the round count, marked with the loop symbol — and 0 for a loop that was reached but ran nothing, which is the case most worth noticing.",
-        "de": "Die Zahl an der Ecke eines Schleifen-Tasks zählte einen mehr als die tatsächlichen Durchläufe: Die Engine betritt die Aktivität einmal als Schleife selbst und einmal je Durchlauf, und der Zähler zeigte beides. Jetzt steht dort die Anzahl der Durchläufe, mit dem Schleifensymbol gekennzeichnet — und 0 bei einer Schleife, die erreicht wurde, aber nichts ausgeführt hat; genau der Fall, den man sehen will."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "token-markers-on-one-element-no-longer-overlap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Several tokens on one shape are readable again",
-        "de": "Mehrere Tokens auf einer Form sind wieder lesbar"
-      },
-      "summary": {
-        "en": "The replay draws a marker per token on an element, and they were spaced slightly closer than they are wide — so every pair sat partly on top of the one before it. A loop puts two on its task at all times, so this was the normal case rather than a rare one. They now stand clear of each other, and where a shape runs out of room the rest become a \"+n\".",
-        "de": "Der Replay zeichnet je Token einen Marker auf dem Element, und der Abstand war etwas kleiner als der Marker breit ist — jedes Paar lag also teilweise übereinander. Eine Schleife hat immer zwei davon auf ihrem Task, das war also der Normalfall, nicht die Ausnahme. Sie stehen jetzt frei nebeneinander, und wo die Form zu schmal wird, fasst ein „+n\" den Rest zusammen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-looping-activity-that-also-has-an-i-o-mapping-no-longer-lo",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A loop stops at the maximum you set",
-        "de": "Eine Schleife hält bei dem Maximum, das Sie setzen"
-      },
-      "summary": {
-        "en": "An activity with the loop marker that also mapped a value in had lost count of its own rounds: a task set to run at most nine times ran until somebody cancelled the instance, a collection was worked through one element over and over, and what the rounds produced never reached the process. The rounds are counted again — the maximum holds, the collection advances, and the result of the last run is there when the loop ends.",
-        "de": "Eine Aktivität mit Schleifen-Marker, die zusätzlich einen Wert per Mapping hereinreichte, verlor die Zählung ihrer Durchläufe: Ein Task mit höchstens neun Läufen lief, bis jemand die Instanz abbrach, eine Sammlung wurde immer wieder mit demselben Element abgearbeitet, und was die Durchläufe erzeugt hatten, kam nie im Prozess an. Die Durchläufe werden wieder gezählt — das Maximum greift, die Sammlung läuft weiter, und das Ergebnis des letzten Laufs steht am Ende der Schleife bereit."
-      },
-      "link": {
-        "label": "ADR-0068",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

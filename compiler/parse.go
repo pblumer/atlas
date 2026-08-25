@@ -2085,10 +2085,13 @@ type xmlLdifConnector struct {
 // directory properties for create-user and update-user; resultVariable receives what
 // Graph returned.
 //
-// filter, select, pageSize and maxUsers belong to list-users (ADR-0172, amended):
-// filter is the OData $filter (literal-or-FEEL), select the $select projection,
-// pageSize the $top per request, and maxUsers the cap on what may land in the result
-// variable. They are refused on the operations that return one object or none.
+// filter, select, pageSize, maxUsers, search and advancedQuery belong to list-users
+// (ADR-0172, amended): filter is the OData $filter (literal-or-FEEL), select the
+// $select projection, pageSize the $top per request, and maxUsers the cap on what may
+// land in the result variable. search is the $search term (literal-or-FEEL) and
+// advancedQuery asks for Graph's advanced query support — which a search requires and
+// which endsWith, ne and not need too. All are refused on the operations that return
+// one object or none.
 type xmlEntraConnector struct {
 	Connector          string `xml:"connector,attr"`
 	Operation          string `xml:"operation,attr"`
@@ -2100,6 +2103,8 @@ type xmlEntraConnector struct {
 	Select             string `xml:"select,attr"`
 	PageSize           string `xml:"pageSize,attr"`
 	MaxUsers           string `xml:"maxUsers,attr"`
+	Search             string `xml:"search,attr"`
+	AdvancedQuery      string `xml:"advancedQuery,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

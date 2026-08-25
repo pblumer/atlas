@@ -1,0 +1,18 @@
+# api/web/whats-new.json is generated from CHANGELOG.md by scripts/whats-new/gen.mjs
+# and committed, because ADR-0012 keeps the web UI buildless — nothing regenerates it
+# at build or run time. CI regenerates it and fails on any diff.
+#
+# That combination has one sharp edge, and it has drawn blood three times: two branches
+# that both add a changelog entry each regenerate the feed, and git then merges the two
+# JSON files the way it merges any text — hunk by hunk, with no idea that the result has
+# to be a *function* of the merged CHANGELOG. Nothing conflicts. The merge lands, the
+# feed is silently wrong (an entry duplicated, or one past the generator's cap left in),
+# and main goes red on its own push rather than on either branch — where the failure
+# reads as unrelated to whatever merged last.
+#
+# `-merge` takes git out of that business: a generated file is not mergeable, so when
+# both sides changed it git raises a conflict instead of inventing an answer. The
+# resolution is never to pick a side — it is to take the merged CHANGELOG.md and run
+# `make whats-new` (or `node scripts/whats-new/gen.mjs`), which is what CI checks anyway.
+# The breakage becomes loud at the moment it is created instead of quiet two pushes later.
+api/web/whats-new.json -merge

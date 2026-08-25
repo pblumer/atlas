@@ -801,6 +801,9 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // home can group deployed definitions the way it groups design-time artifacts
 // (ADR-0034). Empty for a deploy made outside a project.
 func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID string) (deployed []deployedProcess, compErr, persistErr error) {
+	// Set while registering: whether any process in this model binds to a directory,
+	// which is what a supervised AD worker may need a fresh credential for.
+	var namesADBindSecret bool
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -874,6 +877,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		if key >= s.nextKey {
 			s.nextKey = key + 1
 		}
+		// A model that binds to a directory names a bind-password reference, and this
+		// server's supervised AD worker may not be holding that one yet — it is handed
+		// exactly the references the deployed models make (adWorkerEnv).
+		namesADBindSecret = namesADBindSecret || len(adBindSecretRefs(cp)) > 0
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
@@ -883,6 +890,15 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	// nothing has to leave the loop.
 	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
+	}
+	// Let a supervised AD worker pick up a bind password it is not holding yet. Off
+	// the loop, because rendering a child's environment needs the loop this deploy is
+	// running on; and only when a new model actually binds to a directory, so the
+	// common deploy queues nothing. The refresh restarts a child only when its
+	// environment really changed, so a redeploy that names the same reference — or
+	// one whose reference resolves to nothing — costs no restart.
+	if namesADBindSecret && s.supervisor != nil {
+		go s.refreshSupervisedWorkers()
 	}
 	return deployed, nil, nil
 }
@@ -4709,6 +4725,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "operation": j.Operation, "userId": j.UserID,
 			"groupId": j.GroupID, "attributes": j.Attributes, "filter": j.Filter,
 			"select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
+			"search": j.Search, "advancedQuery": j.Advanced,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.WebScrapeJobTypeIndex:

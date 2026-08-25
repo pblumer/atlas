@@ -93,6 +93,16 @@ var (
 	// worker process Atlas launched itself (ADR-0157 step 7).
 	WorkerSupervisorStarted = newEvent("worker.supervised_started")
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
+	// ADMockEnabled is an AD worker announcing that it serves the Active Directory
+	// connector against a directory in its own memory rather than a real one
+	// (ADR-0181). It is a warning rather than an info because
+	// a mock worker is indistinguishable from a working one everywhere else: it
+	// completes every job it leases.
+	ADMockEnabled = newEvent("ad_mock.enabled")
+	// ADMockPerformed is one operation that mock directory simulated. It is what a
+	// mockup run leaves behind for the person who ran it, in the worker's log where
+	// the Workers console shows it.
+	ADMockPerformed = newEvent("ad_mock.performed")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio connector, or that its buffer is dropping entries. Both are
 	// warnings rather than errors on purpose: the history is telemetry, and the engine

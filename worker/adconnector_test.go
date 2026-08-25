@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -274,5 +276,176 @@ func TestRunLdifJobErrors(t *testing.T) {
 		Kind: "ldif", Fields: map[string]any{"format": "ldif", "source": "kaputt", "resultVariable": "r"},
 	}}); err == nil {
 		t.Error("an unparseable file must fail the job")
+	}
+}
+
+// Mock mode (ADR-0181). A worker told to serve AD without a
+// domain controller serves it against a directory in its own memory, so an identity
+// process can be run end to end before anybody is allowed near the real forest.
+
+// Without the switch nothing changes: the worker dials a real directory, which is the
+// only default a connector may have.
+func TestADWithoutMockModeDialsARealDirectory(t *testing.T) {
+	dialer, mock, err := adDialerFromEnv(envMap(nil))
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+	if mock != nil {
+		t.Fatal("mock mode is on without ATLAS_AD_MOCK; it must be asked for")
+	}
+	if _, ok := dialer.(ad.GoDialer); !ok {
+		t.Errorf("dialer = %T, want the production one", dialer)
+	}
+}
+
+// With the switch the worker performs the operation against its own memory: no
+// dial, no directory, and the entry is there afterwards to prove the job really ran.
+func TestADMockModeServesAJobWithoutADirectory(t *testing.T) {
+	dialer, mock, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK": "1"}))
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+	if mock == nil {
+		t.Fatal("ATLAS_AD_MOCK=1 did not put the connector into mock mode")
+	}
+	if _, err := RunADJob(context.Background(), adJob(map[string]any{
+		"url": "ldaps://dc.example.com:636", "operation": "create-user",
+		"dn":         "cn=Arno,ou=users,dc=example,dc=com",
+		"attributes": map[string]any{"sAMAccountName": []any{"arno"}},
+	}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+		t.Fatalf("RunADJob in mock mode: %v", err)
+	}
+	entries := mock.Entries()
+	if len(entries) != 1 || !strings.EqualFold(entries[0].DN, "cn=Arno,ou=users,dc=example,dc=com") {
+		t.Fatalf("entries = %v, want the created account", entries)
+	}
+	if len(mock.Operations()) == 0 {
+		t.Error("the operation journal is empty; a mockup run must leave what it did behind")
+	}
+}
+
+// A seed file is how a mock directory holds the accounts a process expects to find:
+// a leaver has nothing to disable in an empty forest. It is read with the same
+// parser the directory-file connector uses, so LDIF means one thing in Atlas.
+func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "forest.ldif")
+	if err := os.WriteFile(path, []byte("dn: cn=Arno,ou=users,dc=example,dc=com\ncn: Arno\nuserAccountControl: 512\n"), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	dialer, mock, err := adDialerFromEnv(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "true", "ATLAS_AD_MOCK_SEED": path,
+	}))
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+	if len(mock.Entries()) != 1 {
+		t.Fatalf("entries = %v, want the seeded account", mock.Entries())
+	}
+	// The seeded account can be disabled, which is what a leaver process does first.
+	if _, err := RunADJob(context.Background(), adJob(map[string]any{
+		"url": "ldaps://dc", "operation": "disable", "dn": "cn=Arno,ou=users,dc=example,dc=com",
+	}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+		t.Fatalf("disable against the seeded directory: %v", err)
+	}
+	if got := mock.Entries()[0].Attributes["userAccountControl"]; got[0] != "514" {
+		t.Errorf("userAccountControl = %v, want the disabled account", got)
+	}
+}
+
+// A seed the worker cannot read or parse is refused at startup, where the operator is
+// still watching, rather than discovered a retry budget later.
+func TestADMockSeedFailuresAreRefusedAtStartup(t *testing.T) {
+	_, _, err := adDialerFromEnv(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": filepath.Join(t.TempDir(), "nope.ldif"),
+	}))
+	if err == nil || !strings.Contains(err.Error(), "nope.ldif") {
+		t.Errorf("error = %v, want it to name the seed file that is not there", err)
+	}
+	path := filepath.Join(t.TempDir(), "broken.ldif")
+	if err := os.WriteFile(path, []byte("kaputt\n"), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	if _, _, err := adDialerFromEnv(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": path,
+	})); err == nil {
+		t.Error("a seed file that does not parse was accepted")
+	}
+	// A seed named without mock mode is a mistake worth reporting: the file would be
+	// read into a directory nothing ever reaches.
+	if _, _, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK_SEED": path})); err == nil {
+		t.Error("a seed without ATLAS_AD_MOCK was accepted")
+	}
+}
+
+// The switch is a yes/no, and a value that is neither is refused rather than read as
+// "no" — "ATLAS_AD_MOCK=maybe" silently dialling the real directory is the outcome
+// this exists to prevent.
+func TestADMockSwitchIsRefusedWhenItIsNotAYesOrNo(t *testing.T) {
+	_, _, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK": "vielleicht"}))
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_AD_MOCK") {
+		t.Errorf("error = %v, want it to name the variable it cannot read", err)
+	}
+	for _, off := range []string{"0", "false", "no", "off", ""} {
+		_, mock, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK": off}))
+		if err != nil || mock != nil {
+			t.Errorf("ATLAS_AD_MOCK=%q: mock = %v, err = %v; want mock mode off", off, mock != nil, err)
+		}
+	}
+}
+
+// A DSML seed works too, because the directory-file connector reads both and a mock
+// directory should not be the one place in Atlas where LDIF is the only file format.
+func TestADMockModeSeedsFromDSML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "forest.dsml")
+	const doc = `<dsml><directory-entries><entry dn="cn=Ada,ou=users,dc=example,dc=com">` +
+		`<attr name="cn"><value>Ada</value></attr></entry></directory-entries></dsml>`
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	_, mock, err := adDialerFromEnv(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "yes", "ATLAS_AD_MOCK_SEED": path,
+	}))
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+	if len(mock.Entries()) != 1 || !strings.EqualFold(mock.Entries()[0].DN, "cn=Ada,ou=users,dc=example,dc=com") {
+		t.Errorf("entries = %v, want the seeded contact", mock.Entries())
+	}
+}
+
+// The kind still registers its handler in mock mode — and a misconfigured seed stops
+// the worker instead, because a mock worker that leased AD jobs it cannot serve would
+// park a test process on an incident with no explanation.
+func TestBuiltinConnectorsInADMockMode(t *testing.T) {
+	got, err := BuiltinConnectors(envMap(map[string]string{"ATLAS_AD_MOCK": "1"}), "ad")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if _, ok := got.Handlers[compiler.AdJobType]; !ok {
+		t.Errorf("no handler for %s; have %v", compiler.AdJobType, got.Handlers)
+	}
+	if _, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": filepath.Join(t.TempDir(), "nope.ldif"),
+	}), "ad"); err == nil {
+		t.Error("a worker with an unreadable seed started anyway")
+	}
+
+	// A seeded worker serves what the seed put there — the handler the worker leases
+	// jobs into is the one holding that directory, which is the whole configuration a
+	// mock AD worker has.
+	path := filepath.Join(t.TempDir(), "forest.ldif")
+	if err := os.WriteFile(path, []byte("dn: cn=Arno,ou=users,dc=example,dc=com\ncn: Arno\n"), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	seeded, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": path,
+	}), "ad")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors with a seed: %v", err)
+	}
+	if _, err := seeded.Handlers[compiler.AdJobType].Run(context.Background(), adJob(map[string]any{
+		"url": "ldaps://dc", "operation": "disable", "dn": "cn=Arno,ou=users,dc=example,dc=com",
+	})); err != nil {
+		t.Errorf("disable against the seeded worker: %v", err)
 	}
 }

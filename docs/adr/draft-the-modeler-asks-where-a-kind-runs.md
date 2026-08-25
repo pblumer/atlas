@@ -17,9 +17,9 @@ omission.
 That was true the day it was written and false a day later, twice over.
 
 - **A kind's placement is per install.** [ADR-0168](0168-connector-work-on-a-worker.md)
-  moved connector work onto workers, and the following change made four kinds —
-  CSV, mail, script, web scraping — offloaded *by default*, onto a worker the server
-  supervises itself. `--offload-connectors` moves more; `--in-process-connectors`
+  moved connector work onto workers, and the changes after it made five kinds —
+  Active Directory, CSV, mail, script, web scraping — offloaded *by default*, onto a
+  worker the server supervises itself. `--offload-connectors` moves more; `--in-process-connectors`
   moves none. All three are the server's command line, which a browser cannot read.
 - **A kind's placement can be fixed the other way.** [ADR-0173](0173-generic-sql-connector.md)
   built the three SQL connectors worker-first, with no in-process handler at all, and
@@ -34,7 +34,7 @@ matters is worse than no badge: it is read as a fact about *this* server.
 **And the connector picker is only one of three panels that pick an implementation.** A
 script task picks a language ([ADR-0047](0047-polyglot-script-tasks-via-job-workers.md))
 and a business rule task picks a decision binding ([ADR-0050](0050-temis-decision-connector.md)).
-Both author work `--offload-connectors` moves, and scripts are among the four kinds
+Both author work `--offload-connectors` moves, and scripts are among the kinds
 offloaded *by default* — the one whose in-engine failure mode is worst, since a hanging
 interpreter holds the loop. Neither panel said anything at all, and the decision panel
 said something worse: its Evaluation select offered "In-engine (embedded DMN)", a
@@ -127,7 +127,8 @@ creates no job that could run anywhere.
 ### Consequences
 
 - **Positive:** the badge describes the install the author is deploying to, including
-  the default four kinds on a supervised worker and the kinds born on one, and it now
+  the kinds offloaded by default onto a supervised worker and the kinds born on one,
+  and it now
   appears in all three panels that pick an implementation rather than only the connector
   picker. The advice attached to it is takeable in every case. A kind that moves later —
   by default, by flag, or by being written worker-first — needs no browser-side edit.

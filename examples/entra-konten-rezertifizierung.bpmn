@@ -9,7 +9,7 @@
 
     Start "Review angefordert"
      → Service-Task "Konten des Bereichs auflisten"   (atlas:entraConnector, list-users)
-     → Script-Task  "Mit dem Personalsystem abgleichen" (FEEL-Filter über die Liste)
+     → Script-Task  "Mit dem Personalsystem abgleichen" (ein FEEL-Ausdruck über die Liste)
      → Exklusiv-Gateway "Verwaiste Konten?"
           keine  → Ende "Alles rezertifiziert"
           welche → Service-Task "Konto deaktivieren"  (Multi-Instance, entra disable)
@@ -84,6 +84,11 @@ dieser Prozess den Bereich auflisten, um den es gerade geht, statt einen fest
 verdrahteten. `select` holt nur die vier Eigenschaften, die die folgenden
 Schritte lesen; das hält eine große Auflistung aus dem State-Store heraus.
 
+Dieser Filter kommt mit Graphs Standardabfrage aus. Formen wie endsWith, ne oder
+not — und jedes $search — brauchen zusätzlich `advancedQuery="true"`, was
+ConsistencyLevel: eventual und $count=true schickt; dafür darf die Antwort dann
+leicht veraltet sein.
+
 `pageSize` bestimmt nur, wie viele Konten pro Anfrage geholt werden — *jede*
 Seite wird gefolgt, `konten` erhält immer die vollständige Trefferliste. Und
 `maxUsers` deckelt, was in der Prozessvariablen landen darf: Wird die Grenze
@@ -107,16 +112,26 @@ Error-Boundary würde hier also nicht auslösen.</bpmn:documentation>
 vorhandenen Daten ist: kein Umsystem, keine Entscheidung, die jemand fachlich
 pflegen müsste (sonst wäre es ein Business-Rule-Task mit DMN).
 
-Der Filter behält jedes Konto, dessen UPN das Personalsystem nicht mehr führt:
+Der Ausdruck behält jedes Konto, dessen UPN das Personalsystem nicht mehr führt:
 
-    konten[not(list contains(aktiveMitarbeitende, userPrincipalName))]
+    (for k in konten return
+       if list contains(aktiveMitarbeitende, k.userPrincipalName) then null else k)[item != null]
 
-Dass das ein einzelner Ausdruck sein kann, ist der eigentliche Gewinn von
-`list-users`: `konten` ist eine Liste, kein Seitenzeiger. Käme das Ergebnis
-seitenweise, stünde hier eine Schleife über einen Continuation-Token — also
-Graphs Paging-Protokoll im Diagramm.</bpmn:documentation>
+Warum ein `for` und kein Filter `konten[...]`: In einem Filter-Prädikat löst FEEL
+jeden Namen zuerst gegen das Listenelement auf. `aktiveMitarbeitende` ist dort
+also keine unbekannte Variable, sondern eine fehlende Eigenschaft des Kontos —
+das ergibt null, und der Filter liefert stillschweigend eine leere Liste. Weil
+das kein Kompilierfehler ist, erkennt die Engine den Namen auch nicht als Eingabe
+und bindet ihn nie. Das `for` nennt den Namen außerhalb eines Prädikats und wird
+deshalb korrekt gebunden. (Dieser Prozess ist genau daran einmal aufgefallen: Er
+lief durch, sperrte niemanden, und beschwerte sich nicht.)
+
+Dass der Abgleich überhaupt ein einzelner Ausdruck sein kann, ist der eigentliche
+Gewinn von `list-users`: `konten` ist eine Liste, kein Seitenzeiger. Käme das
+Ergebnis seitenweise, stünde hier eine Schleife über einen Continuation-Token —
+also Graphs Paging-Protokoll im Diagramm.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:script expression="=konten[not(list contains(aktiveMitarbeitende, userPrincipalName))]"
+        <zeebe:script expression="=(for k in konten return if list contains(aktiveMitarbeitende, k.userPrincipalName) then null else k)[item != null]"
                       resultVariable="zuSperren"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f2</bpmn:incoming>

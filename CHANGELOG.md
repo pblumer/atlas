@@ -14,6 +14,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Active Directory connector gets a mock mode, so an identity process can be run
+  before anybody goes near a real forest.** The connector could do the whole lifecycle
+  (ADR-0166) and could run on a worker (ADR-0168), and neither made it *testable*: the
+  directory a joiner/mover/leaver touches is production by definition, so the only ways to
+  try a draft were to swap the task for an ADR-0120 mockup — which throws the AD
+  configuration away and proves nothing about the task — or to find a test forest. Now
+  `atlas worker --connector ad` with `ATLAS_AD_MOCK=1` serves AD jobs against a directory in
+  its own memory. Every line of the connector but the transport is the production one: the
+  mock implements the same `Dialer`/`Conn` the go-ldap adapter does, so `Resolve`, `Run`,
+  `dispatch` and the DirSync pass are the code that runs against a domain controller.
+
+  **The model does not change**, and that is the point of putting the switch on the worker
+  rather than on the task: a mockup flag in the model is a flag that eventually gets deployed
+  still set, and a task reporting success while touching nothing is the worst failure
+  available. Promoting a mockup run to a real one is an environment variable on a worker, not
+  an edit and a redeploy.
+
+  **It refuses what Active Directory refuses**, because a mock that accepts more teaches a
+  model to be wrong and the lesson arrives in production: a replayed create fails with "entry
+  already exists" (delivery is at-least-once), `unicodePwd` may only be written over an
+  encrypted channel and must carry AD's quoted UTF-16LE encoding, a group member cannot be
+  added or removed twice, a container with children cannot be deleted, a simple bind naming a
+  DN with no password behind it is refused — what an unset `ATLAS_CONNECTOR_<REF>_TOKEN` looks
+  like on the wire — and DirSync is answered only at a naming context root. The delta is real:
+  every write stamps a change counter, a delete leaves a tombstone carrying `isDeleted`, and
+  the cookie *is* that counter, so a reconciliation loop converges against the mock exactly as
+  it does against a real domain controller, `more` signal and `maxEntries` cap included.
+  A set-password is checked and then dropped — the entry records `pwdLastSet`, never the
+  value, and the operation journal redacts it.
+
+  `ATLAS_AD_MOCK_SEED` fills the directory from an LDIF or DSML file, read with the
+  directory-file connector's own parser (ADR-0171), because a leaver has nothing to disable in
+  an empty forest. And the worker says what it is doing: a warning at startup that no
+  directory is being written, then one line per simulated operation in the log the Workers
+  console shows (ADR-0157) — that log being the only place a mock worker is distinguishable
+  from a working one. See ADR-0181.
+
 - **The handbook takes on the process developer's role, and builds a whole application in
   front of you.** Everything the handbook taught so far was a *piece*: a recipe per BPMN
   pattern, a tutorial per process. The question it left unanswered is the one an author
@@ -67,9 +104,18 @@ _Changed_ / _Removed_ for each version.
   expires. And a continuation may only stay on the connector's own endpoint: a paged
   result is the one place a *response* names the next URL, and the token behind it
   can read an entire directory, so a redirected page is refused rather than followed.
-  Advanced queries (`endsWith`, `$search`) need Graph's `ConsistencyLevel` header and
-  remain the REST connector's; Graph names that refusal and the connector surfaces it
-  verbatim.
+  **A listing can also run as an advanced query.** Graph gates `endsWith`, `ne`, `not`
+  and `$search` behind advanced query support, and refuses them otherwise — "which
+  mailboxes are on this domain" is an `endsWith`, so this was not an exotic corner.
+  `advancedQuery="true"` sends the two halves Graph only accepts together, the
+  `ConsistencyLevel: eventual` header and `$count=true`, so there is no way to author
+  half of it. A `search` term carries Graph's own quoting (a compound `"a" AND "b"`
+  has quotes inside it, so the connector encodes the term but does not invent quotes
+  around it) and implies the advanced query, because Graph runs a `$search` no other
+  way. It is never inferred from the filter text: a FEEL filter has no text at deploy,
+  and eventual consistency means a listing may be slightly stale — the author's call,
+  not a substring match's. The header rides on every page, since Graph rejects a
+  continuation fetched without it. `$orderby` stays the REST connector's.
 
 - **A loop says what it was told to repeat while — and what it decided**
   (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and
@@ -106,10 +152,48 @@ _Changed_ / _Removed_ for each version.
   but not a move to another element, whose variables are a different set: carried there,
   an opening nobody asked for reads as "these come open by default". Everything starts
   closed, an open structure is bounded against the viewport rather than a fixed height,
-  and the toolbar offers **Collapse all** while anything is open, because a structure can
-  push the row it belongs to off the screen.
+  and the toolbar carries one control — **Expand all**, becoming **Collapse all** once
+  anything is open — whenever the table holds a structure at all. A chevron per row is
+  enough for one value, but an opened structure's JSON can push the rows either side of it
+  off the screen, and a way out that only appears after the fact is not there when it is
+  first looked for. Expanding follows the name filter: what is not on screen is not what
+  "all" means to the reader looking at it.
 
 ### Changed
+
+- **Active Directory now runs on a worker by default, and the engine hands that worker the
+  bind passwords it needs.** [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) made
+  out-of-process the default for every connector kind a supervised worker could actually
+  serve — and Active Directory, of all kinds, was not one of them. Not for want of a worker:
+  [ADR-0166](docs/adr/0166-active-directory-connector.md) had built that half. The obstacle
+  was the credential. An AD task names its bind password as a *reference* the model authors,
+  and that reference resolves out of the engine's encrypted vault, which a worker cannot
+  read. Defaulting the kind would have moved every vault-backed directory task to a worker
+  holding nothing to bind with, so it stayed opt-in — which meant that in practice, a dial,
+  a bind and a modify against somebody else's domain controller kept running on the engine's
+  single-writer loop.
+
+  The engine now renders exactly the references its **deployed models** name into the
+  supervised AD worker's environment, resolved through the same vault-or-environment
+  resolver it used itself. That is the narrowest set that works: the worker holds the
+  passwords for the directories the deployed models actually bind to, and nothing else in
+  the vault. It is re-rendered whenever a secret changes and whenever a model is deployed
+  that names one, and the worker is restarted only when what it holds actually changed — so
+  a first AD deploy cycles it once and an ordinary redeploy costs nothing. A reference
+  nothing answers to is left out rather than handed over empty, because a blank variable
+  reads as a configured blank password; the worker's own error names the variable to set
+  instead. Two references that fold to one environment name cannot both be handed over, so
+  the second is skipped and said out loud.
+
+  **Nothing needs to be done to upgrade**, and nothing changes in any model: the same
+  reference, resolved in a different process. Only the AD worker is given these — a script
+  worker, which runs model-authored code and inherits its whole environment, is never handed
+  a directory service account, and a test holds that. `--in-process-connectors` still returns
+  the old arrangement wholesale. And because a supervised worker inherits the server's
+  environment, `ATLAS_AD_MOCK=1` on `atlas serve` puts its AD worker into mock mode
+  ([ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)) — one variable, no flags, and a
+  joiner runs end to end against a directory that does not exist. See
+  ADR-0182.
 
 - **A dot in a write target is refused at deploy** (new rule `variable.dotted-target`).
   Every place a model names a variable to write — a script or decision result, a
@@ -136,8 +220,8 @@ _Changed_ / _Removed_ for each version.
   [ADR-0173](docs/adr/0173-generic-sql-connector.md)). Every kind but the plain job
   worker carried an **in-engine** badge, decided by a constant compiled into the
   browser — written when that was true of all of them, and left behind twice over.
-  Four kinds (Text File, E-Mail, script, Web Scraping) now run on a worker the server
-  starts and supervises *by default*, and the SQL and Entra ID connectors were born on
+  Five kinds (Active Directory, Text File, E-Mail, script, Web Scraping) now run on a
+  worker the server starts and supervises *by default*, and the SQL and Entra ID connectors were born on
   a worker with no in-engine form at all — so the badge contradicted the E-Mail
   connector's own runtime, and sat directly beside "…against a SQL Server database **on
   a worker**". It could also never reflect `--offload-connectors` or
@@ -164,6 +248,21 @@ _Changed_ / _Removed_ for each version.
   a placement in an option label ("In-engine (embedded DMN)" → "Embedded DMN — a decision
   deployed here"), since `--offload-connectors dmn` made that label false too. A FEEL
   script still says nothing: it is evaluated inline and creates no job to place.
+
+- **A loop contained in an ad-hoc subprocess keeps its result too**
+  ([ADR-0077](docs/adr/0077-multi-instance-activities.md) with [ADR-0138](docs/adr/0138-adhoc-subprocesses.md)).
+  The sibling of the gateway fix in this release, and the last of them. Activating a node
+  says, among other things, whether what is being activated is a multi-instance activity's
+  *body* — the scope that seeds the iterations and, once they have drained, promotes the
+  assembled output collection into the enclosing scope. An ad-hoc subprocess activates its
+  contained activities itself rather than over a sequence flow, and that activation left the
+  role out: a loop inside an ad-hoc ran every iteration and collected every result, then
+  dropped the lot on the way out, so the ad-hoc's own output mapping had a null to hand on.
+  The rule now lives in one function (`miRoleOf`) that every activation site shares — taking
+  a flow, entering an ad-hoc, running a compensation handler — because this is the second
+  time it was decided in a copy and the second time a copy forgot it. Covered by a replay
+  test as well as a live one: the role is a fact in the log, so a loop parked mid-sequence
+  in an ad-hoc still promotes its collection after a crash.
 
 - **A loop a gateway routes into keeps its result** ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
   Taking a sequence flow is one operation with one rule about multi-instance activities: the

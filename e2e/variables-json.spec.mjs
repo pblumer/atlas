@@ -93,34 +93,64 @@ test("a structure comes closed, and an expansion does not follow the reader to a
   expect(page.__errors, "page errors").toEqual([]);
 });
 
-test("collapse all closes what the table has open, from the toolbar", async ({ page }) => {
-  const collapse = page.locator("#tab-variables #v-collapse");
-  // It is not there while there is nothing to collapse.
-  await expect(collapse).toBeHidden();
+// The toolbar's one structure control. A control that only appears once something is
+// open is not there when it is first looked for — which is how it was reported: "Collapse
+// all is not visible", from a tab where everything was correctly closed.
+test("one toolbar control opens every structure and closes them again", async ({ page }) => {
+  const toggle = page.locator("#tab-variables #v-struct-toggle");
+  // Visible with nothing open, because opening is what a reader wants first.
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText("▸ Expand all");
 
-  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
-  await page.locator("#tab-variables .v-open", { hasText: "fields" }).click();
+  await toggle.click();
   await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(2);
-  await expect(collapse).toBeVisible();
+  await expect(toggle).toHaveText("▾ Collapse all");
+  for (const a of await page.locator("#tab-variables .v-open").all()) {
+    await expect(a).toHaveAttribute("aria-expanded", "true");
+  }
 
-  // One click, both closed — the way out is in the toolbar because an open structure can
-  // push the row it belongs to off the screen.
-  await collapse.click();
+  // And back: one click closes both, because an open structure can push the row it
+  // belongs to off the screen.
+  await toggle.click();
   await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
-  await expect(collapse).toBeHidden();
+  await expect(toggle).toHaveText("▸ Expand all");
   await expect(page.locator("#tab-variables .v-open").first()).toHaveAttribute("aria-expanded", "false");
+});
+
+// Opening one row by hand is enough to make the control the way back out.
+test("the control flips to Collapse all as soon as a row is opened by hand", async ({ page }) => {
+  const toggle = page.locator("#tab-variables #v-struct-toggle");
+  await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
+  await expect(toggle).toHaveText("▾ Collapse all");
+
+  await toggle.click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
+  await expect(toggle).toHaveText("▸ Expand all");
+});
+
+// "All" means what the table is showing. A filter that leaves one structure on screen must
+// not open the ones it hid — they would be waiting, open, when the filter is cleared.
+test("expand all follows the name filter", async ({ page }) => {
+  await page.locator("#tab-variables #v-filter").fill("customers");
+  await expect(page.locator("#tab-variables .vt tbody tr.v-struct")).toHaveCount(1);
+  await page.locator("#tab-variables #v-struct-toggle").click();
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
+
+  await page.locator("#tab-variables #v-filter").fill("");
+  await expect(page.locator("#tab-variables .vt tbody tr.v-struct")).toHaveCount(2);
+  await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
 });
 
 // The Variables table is enhanced by the shared sort/filter helper (table.js), like every
 // table in a view. The helper drove each row's `hidden` to say what its filter matched —
 // including the expansion rows, which are not data — so every structure was forced open on
-// arrival and again on every rewrite, and the collapse control, which watches the set of
-// openings the *reader* made, never appeared. It reproduced only with both modules
+// arrival and again on every rewrite, and the toolbar control, which reports the set of
+// openings the *reader* made, could not say the truth about it. It reproduced only with both modules
 // present, which is why the harness now composes them the way app.js does.
 test("the sort/filter helper does not force the expansions open", async ({ page }) => {
   await expect(page.locator("#tab-variables .vt tbody tr.v-struct")).toHaveCount(2);
   await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(0);
-  await expect(page.locator("#tab-variables #v-collapse")).toBeHidden();
+  await expect(page.locator("#tab-variables #v-struct-toggle")).toHaveText("▸ Expand all");
 
   // An opening the reader made survives the helper re-running over the rows.
   await page.locator("#tab-variables .v-open", { hasText: "items" }).click();
@@ -128,7 +158,7 @@ test("the sort/filter helper does not force the expansions open", async ({ page 
   await page.locator("#tab-variables .vt tbody").evaluate((b) => b.appendChild(document.createComment("x")));
   await page.waitForTimeout(50);
   await expect(page.locator("#tab-variables .v-struct:not([hidden])")).toHaveCount(1);
-  await expect(page.locator("#tab-variables #v-collapse")).toBeVisible();
+  await expect(page.locator("#tab-variables #v-struct-toggle")).toHaveText("▾ Collapse all");
 });
 
 // Sorting reorders the data rows; an expansion belongs to the row above it and has to go
