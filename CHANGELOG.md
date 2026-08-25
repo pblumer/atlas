@@ -238,6 +238,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A server that requires a login no longer calls itself single-user mode.** The account
+  menu's label was written for the case where nobody *can* sign in — enforcement off, the
+  API and UI open — but it was rendered whenever nobody *is* signed in, which on a server
+  with `--auth` is the login screen itself. So an instance that was refusing an operator
+  entry told them, in the menu right beside that refusal, that it had no login at all. The
+  tooltip on the same button had told the two apart all along; only the menu did not. It
+  now reads "Not signed in" where a login is enforced and keeps "Single-user mode" where
+  it is the truth. Found while diagnosing an instance whose operator concluded from that
+  label that a deploy had turned their authentication off.
 - **The Modeler stops guessing where a task's work runs — and starts saying it in all
   three panels that choose an implementation**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
