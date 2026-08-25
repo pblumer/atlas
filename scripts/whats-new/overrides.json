@@ -1,5 +1,38 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "active-directory-now-runs-on-a-worker-by-default-and-the-eng": {
+    "tags": [
+      "Connectors",
+      "Operations"
+    ],
+    "title": {
+      "en": "Active Directory tasks run beside the engine now",
+      "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
+    },
+    "summary": {
+      "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
+      "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
+    },
+    "tutorial": {
+      "en": [
+        "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
+        "Its log lists every directory operation it performed — and says so when it is in mock mode.",
+        "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
+      ],
+      "de": [
+        "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
+        "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
+        "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
+      ]
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
   "the-active-directory-connector-gets-a-mock-mode-so-an-identi": {
     "tags": [
       "Connectors",
@@ -956,6 +989,26 @@
     "summary": {
       "en": "The companion to the gateway fix in this release. An activity that repeats once per list entry collects what each round produced into a list. Inside an ad-hoc subprocess — where the steps are not wired in a sequence and all start at once — every round still ran and produced its result, but the collected list was dropped as the activity finished, so anything reading it afterwards found nothing. It is kept now, including after a restart mid-run.",
       "de": "Das Gegenstück zur Gateway-Korrektur in dieser Version. Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe in einer Liste. In einem Ad-hoc-Subprozess — dessen Schritte nicht in einer Reihenfolge verdrahtet sind, sondern gemeinsam starten — liefen zwar alle Durchläufe und lieferten ihr Ergebnis, die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen; wer sie danach las, fand nichts vor. Sie bleibt jetzt erhalten, auch nach einem Neustart mitten im Lauf."
+    },
+    "try": {
+      "label": {
+        "en": "Open Operations",
+        "de": "Operations öffnen"
+      },
+      "route": "#/operations"
+    }
+  },
+  "supervise-connector-a-connector-kind-served-by-a-worker-atla": {
+    "tags": [
+      "Connectors"
+    ],
+    "title": {
+      "en": "Atlas can run the worker a connector needs",
+      "de": "Atlas startet den Worker, den ein Konnektor braucht"
+    },
+    "summary": {
+      "en": "Some connectors do their work in a separate worker process rather than in the engine — Active Directory's mock directory, for instance, or Entra, which only ever runs that way. Atlas started such a worker for four kinds and no others, so using any of the rest meant running one yourself; on a server that requires a login there was no credential such a worker could hold, and its tasks simply waited forever. Naming a kind with the new --supervise-connector option now gets it a worker Atlas starts, watches and restarts like the others, with the login it needs handed over at start. Trying Active Directory against a directory that does not exist is one option and one environment variable.",
+      "de": "Manche Konnektoren arbeiten in einem eigenen Worker-Prozess statt in der Engine — etwa das Mock-Verzeichnis von Active Directory oder Entra, das ausschließlich so läuft. Atlas startete einen solchen Worker bisher für vier Sorten und sonst keine; für alle übrigen musste man selbst einen betreiben, und auf einem Server mit Anmeldepflicht gab es kein Zugangstoken, das dieser Worker hätte haben können — die Aufgaben warteten schlicht ewig. Mit der neuen Option --supervise-connector bekommt eine genannte Sorte jetzt einen Worker, den Atlas startet, überwacht und neu startet wie die anderen, samt Anmeldung beim Start. Active Directory gegen ein Verzeichnis auszuprobieren, das es gar nicht gibt, ist damit eine Option und eine Variable."
     },
     "try": {
       "label": {

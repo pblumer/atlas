@@ -297,10 +297,22 @@ var offloadableKinds = map[string][]int32{
 // SMTP handshake. Every managed kind here must be one superviseEnv provisions;
 // TestEveryDefaultOffloadedKindCanBeServedByItsWorker holds that.
 //
+// Active Directory is the third way in, and the one that made the set worth
+// re-deciding (ADR-0182). It is not managed — it holds no
+// connector record, and an AD task authors its own server — but its bind password is
+// a per-task *reference* that resolves out of the vault, which a supervised worker
+// can read no more than it can read the connector store. So it is defaulted on the
+// same condition mail is: superviseEnv hands the child exactly the references the
+// deployed models name (adWorkerEnv). It belongs here because a directory write is
+// the plainest case of work that should never sit on the engine's loop — a bind, a
+// modify and a close against a domain controller somebody else operates — and
+// because the credential is worth less to an attacker in a worker than in the engine
+// (ADR-0166's own argument for offloading it at all).
+//
 // The credential-bearing kinds the engine cannot yet hand over stay in the engine
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
-	return []string{"csv", connectorKindMail, "script", "webscrape"}
+	return []string{"ad", "csv", connectorKindMail, "script", "webscrape"}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -329,6 +341,17 @@ func (s *Server) applyOffloadedKinds() error {
 }
 
 // offloadableKindNames lists every kind that can be named, for the error above.
+// IsOffloadableKind reports whether a connector kind has in-process handlers at all,
+// which is what makes it nameable in --offload-connectors: offloading is the removal
+// of those handlers, so a kind that has none (entra, which only ever runs on a
+// worker) is refused there rather than silently accepted. A caller that wants a
+// worker for a kind asks this first, so it can supervise a worker-only kind without
+// walking into that refusal (ADR-0164/0168).
+func IsOffloadableKind(name string) bool {
+	_, ok := offloadableKinds[name]
+	return ok
+}
+
 func offloadableKindNames() []string {
 	names := make([]string, 0, len(offloadableKinds))
 	for name := range offloadableKinds {
