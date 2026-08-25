@@ -7,6 +7,7 @@ import { copyText } from "./clipboard.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { hasMask, attachEntraAttributeMask, entraResultShape } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
@@ -2310,12 +2311,17 @@ const SERVICE_TASK_KINDS = [
         hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The connector wraps it in a passwordProfile and forces a change at next sign-in.",
       },
       {
-        key: "attributes", label: "Attributes (JSON)", type: "json", rows: 8,
+        key: "attributes", label: "Attribute", type: "json", rows: 8,
         // The two ways to supply the body are mutually exclusive (the compiler refuses
         // both): the inline editor shows until a variable is named, and vice versa.
         showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributesVariable,
         placeholder: '{\n  "accountEnabled": true,\n  "displayName": "=vorname + \\" \\" + nachname",\n  "userPrincipalName": "=upn",\n  "passwordProfile": { "password": "=tempPasswort", "forceChangePasswordNextSignIn": true }\n}',
-        hint: "The request body, authored here as JSON. A string value beginning with '=' is a FEEL expression over the instance's variables, evaluated per field at runtime (e.g. \"displayName\": \"=vorname + \\\" \\\" + nachname\"); everything else is literal. Shapes: user (displayName, mailNickname, userPrincipalName, passwordProfile); group (displayName, mailNickname, mailEnabled, securityEnabled, groupTypes); channel {displayName, description}; licence {addLicenses, removeLicenses}; role {roleDefinitionId}. A password is a FEEL value, never a literal in the model.",
+        // The operations that carry a capture mask (create/update user & group, channel,
+        // role) get a short note — the mask renders the fields; the rest keep the full
+        // raw-JSON shapes reference, which is what they author by hand.
+        hint: (v) => hasMask(v.operation)
+          ? "Die wichtigsten Attribute als Maske. Ein Wert mit führendem = ist eine FEEL-Expression (pro Feld zur Laufzeit ausgewertet); alles andere ist ein Literal. Was die Maske nicht abdeckt, kommt in das Feld Weitere Attribute (JSON) darunter."
+          : "The request body, authored here as JSON. A string value beginning with = is a FEEL expression over the instance's variables, evaluated per field at runtime; everything else is literal. Shapes: licence {addLicenses, removeLicenses}. A password is a FEEL value, never a literal in the model.",
       },
       {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
@@ -2359,7 +2365,12 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", placeholder: "konto",
-        hint: "Receives what Graph returned — the created or read user for those operations, every matched user as a JSON array for List users (required there), and nothing for the ones Graph answers with no content. Leave empty to discard it.",
+        // Operation-aware: the shape a result variable receives differs per operation,
+        // so the note names it — e.g. create-user returns the user object you then
+        // address as =konto.id, list-users returns an array, add-member returns nothing.
+        hint: (v) => "Nimmt auf, was Graph zurückgibt. " + entraResultShape(v.operation) +
+          " Der Wert ist zur Laufzeit unter Operations → Instanz → Variablen sichtbar und im Modell als =" +
+          (v.resultVariable ? v.resultVariable : "konto") + ".<feld> referenzierbar. Leer lassen, um ihn zu verwerfen.",
       },
     ],
   },
@@ -2872,7 +2883,11 @@ function stKindFieldsHTML(cur, ext) {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
-    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+    // A hint is usually a static string; an operation-aware field (the Entra result
+    // variable, whose shape differs per operation) may give a function of the current
+    // extension values instead, so the note can describe what THIS operation returns.
+    const hintText = typeof f.hint === "function" ? f.hint(ext) : f.hint;
+    if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(hintText)}</p>`;
   }
   return fields;
 }
@@ -5467,6 +5482,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
       if (f.type !== "json") continue;
       const el = body.querySelector("#f-st-" + f.key);
       if (!el) continue;
+      // The Entra attributes body gets a per-operation capture mask instead of the
+      // raw JSON editor when the operation has one (ADR-0172 amended): structured
+      // fields for the important attributes plus a "Weitere Attribute" escape hatch,
+      // all assembled into this same textarea's JSON — the value the save path reads.
+      // The operation drives it; changing it re-renders the panel (operation.reRender),
+      // so the mask is rebuilt for the new operation. Operations without a mask
+      // (assign-license's arrays, say) keep the raw JSON editor.
+      if (stKind.id === "entra" && f.key === "attributes") {
+        const operation = (body.querySelector("#f-st-operation") || {}).value || "";
+        if (hasMask(operation)) {
+          el.style.display = "none";
+          attachEntraAttributeMask(el.parentNode, el, () => operation, saveKindFields, esc);
+          continue;
+        }
+      }
       attachJSONEditor(el, { rows: f.rows || 8, onChange: saveKindFields });
     }
 

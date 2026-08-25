@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Entra attribute mask e2e harness</title>
+    <!-- Drives the real api/web/entra-attrmask.js the way the Modeler properties panel
+         does: a per-operation mask writes the connector's single `attributes` JSON
+         string (the value the save path reads). The panel scaffolding is the test's own
+         (editor.js boots the whole modeler on import and cannot be loaded here), so this
+         proves the module and the interaction, not editor.js's wiring of it. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="props" style="padding: 18px; max-width: 640px">
+      <div id="host"></div>
+      <textarea id="ta" hidden></textarea>
+    </div>
+    <script type="module">
+      import { attachEntraAttributeMask } from "/entra-attrmask.js";
+
+      const host = document.getElementById("host");
+      const ta = document.getElementById("ta");
+      window.__ta = ta;
+      window.__onChangeCount = 0;
+      let handle = null;
+
+      // Mount (or remount) the mask for one operation, seeded with an initial attributes
+      // JSON string — the same two inputs the panel gives it (the live operation and the
+      // current ext.attributes value).
+      window.__mount = (operation, initial) => {
+        if (handle) handle.destroy();
+        host.innerHTML = "";
+        ta.value = initial || "";
+        window.__onChangeCount = 0;
+        handle = attachEntraAttributeMask(
+          host,
+          ta,
+          () => operation,
+          () => {
+            window.__onChangeCount++;
+          },
+        );
+      };
+
+      window.__val = () => ta.value;
+      window.__parsed = () => {
+        try {
+          return JSON.parse(ta.value);
+        } catch (_) {
+          return null;
+        }
+      };
+
+      window.__mount("create-user", "");
+      window.__ready = true;
+    </script>
+  </body>
+</html>
