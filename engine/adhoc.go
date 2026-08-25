@@ -41,12 +41,15 @@ func (adHocSubProcessBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	for _, entryID := range entries {
 		node := cp.Node(entryID)
 		k := c.NewKey()
+		// Entering the ad-hoc activates a contained multi-instance activity as its body,
+		// exactly as taking a flow into one does — miRoleOf is where that rule lives.
 		c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ProcessDefKey:      ei.ProcessDefKey,
 			ElementId:          entryID,
 			FlowScopeKey:       key, // contained activities are scoped by this ad-hoc instance
 			BpmnElementType:    uint8(node.Type),
+			MultiInstance:      miRoleOf(node),
 			TokenID:            k,
 			SourceFlowId:       -1, // activated on entry, not by a sequence flow
 		})

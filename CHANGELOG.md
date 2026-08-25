@@ -175,6 +175,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A loop contained in an ad-hoc subprocess keeps its result too**
+  ([ADR-0077](docs/adr/0077-multi-instance-activities.md) with [ADR-0138](docs/adr/0138-adhoc-subprocesses.md)).
+  The sibling of the gateway fix in this release, and the last of them. Activating a node
+  says, among other things, whether what is being activated is a multi-instance activity's
+  *body* — the scope that seeds the iterations and, once they have drained, promotes the
+  assembled output collection into the enclosing scope. An ad-hoc subprocess activates its
+  contained activities itself rather than over a sequence flow, and that activation left the
+  role out: a loop inside an ad-hoc ran every iteration and collected every result, then
+  dropped the lot on the way out, so the ad-hoc's own output mapping had a null to hand on.
+  The rule now lives in one function (`miRoleOf`) that every activation site shares — taking
+  a flow, entering an ad-hoc, running a compensation handler — because this is the second
+  time it was decided in a copy and the second time a copy forgot it. Covered by a replay
+  test as well as a live one: the role is a fact in the log, so a loop parked mid-sequence
+  in an ad-hoc still promotes its collection after a crash.
+
 - **A loop a gateway routes into keeps its result** ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
   Taking a sequence flow is one operation with one rule about multi-instance activities: the
   flow activates the *body*, the scope that seeds the iterations and, when they have all

@@ -363,6 +363,26 @@ const (
 	miInner uint8 = 2 // one iteration: runs the node's real behavior, scoped under the body
 )
 
+// miRoleOf is the role a *fresh* activation of node carries: a multi-instance activity
+// is activated as its body — the scope that seeds the iterations and, once they have
+// drained, promotes the assembled output collection into the enclosing scope — and
+// everything else as an ordinary element instance (ADR-0077).
+//
+// Every site that activates a node other than a loop's own iteration goes through this
+// one function: taking a sequence flow, entering an ad-hoc subprocess, running a
+// compensation handler. Two of them once built the activation themselves and left the
+// role out — an exclusive gateway taking its flow, and an ad-hoc entering its contained
+// activities — and the symptom was not the one you would guess: the loop still ran,
+// because the seeding gate does not look at the role. It was the *ending* that broke,
+// with nothing promoting the collection and the scope holding it dropped. Keep the
+// decision here so there is one place to be right.
+func miRoleOf(node *compiler.CompiledNode) uint8 {
+	if node.MultiInstance >= 0 {
+		return miBody
+	}
+	return miNone
+}
+
 // applyDataInputAssociations evaluates an activating activity's data-input
 // associations (ADR-0059): for each, it reads the source data object and writes a
 // value into the target process variable the activity reads. With an <assignment>
@@ -1305,19 +1325,13 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
 	}
-	// A flow into a multi-instance activity activates its body — the scope that seeds
-	// the iterations (ADR-0077); an ordinary node activates with no role.
-	miRole := miNone
-	if target.MultiInstance >= 0 {
-		miRole = miBody
-	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
-		MultiInstance:      miRole,
+		MultiInstance:      miRoleOf(target),
 		TokenID:            tokenID,
 		ParentTokenID:      parentID,
 		SourceFlowId:       flowID,
@@ -2802,17 +2816,13 @@ func compensate(c *ProcessingContext, ei *model.ElementInstanceValue, activityRe
 func activateCompensationHandler(c *ProcessingContext, v *model.CompensableValue) {
 	target := c.process(v.ProcessDefKey).Node(v.HandlerNode)
 	key := c.NewKey()
-	miRole := miNone
-	if target.MultiInstance >= 0 {
-		miRole = miBody
-	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: v.ProcessInstanceKey,
 		ProcessDefKey:      v.ProcessDefKey,
 		ElementId:          v.HandlerNode,
 		FlowScopeKey:       v.ScopeKey,
 		BpmnElementType:    uint8(target.Type),
-		MultiInstance:      miRole,
+		MultiInstance:      miRoleOf(target),
 		TokenID:            key,
 		SourceFlowId:       -1, // reached by a compensation throw, not over a flow
 	})
