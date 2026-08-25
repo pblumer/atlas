@@ -16,7 +16,7 @@ func hasGroup(ids []string, g string) bool {
 }
 
 // TestSessionGroupMembershipLive covers the in-memory session pushes that back
-// ADR-draft-live-group-membership: adding and removing a group id across a user's
+// ADR-0185: adding and removing a group id across a user's
 // live sessions, idempotency, isolation between users, and dropping a group from
 // everyone on delete.
 func TestSessionGroupMembershipLive(t *testing.T) {

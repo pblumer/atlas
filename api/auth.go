@@ -86,7 +86,7 @@ const defaultSessionTTL = 12 * time.Hour
 // session is one logged-in identity. Roles and group ids are snapshotted here so a
 // request can be authorized from the session alone (see Principal). Group ids are
 // then kept live: a membership change pushes into the snapshot
-// (ADR-draft-live-group-membership), so it takes effect without a re-login. Roles
+// (ADR-0185), so it takes effect without a re-login. Roles
 // remain a login-time snapshot.
 type session struct {
 	userID   string
@@ -115,7 +115,7 @@ func newSessionStore(ttl time.Duration) *sessionStore {
 // ids are snapshotted here so a request can be authorized from the session alone
 // (see Principal). A role change takes effect on the user's next login; a group
 // membership change takes effect live, pushed into the snapshot by the group
-// handlers (ADR-draft-live-group-membership).
+// handlers (ADR-0185).
 func (s *sessionStore) create(u User, groupIDs []string) (string, error) {
 	token, err := randomHex(32)
 	if err != nil {
@@ -173,7 +173,7 @@ func (s *sessionStore) destroyUser(userID string) {
 
 // setUserGroupMembership reflects a group-membership change into every live session
 // of a user, so adding or removing them from a group takes effect on their next
-// request without a re-login (ADR-draft-live-group-membership). Sessions are the only
+// request without a re-login (ADR-0185). Sessions are the only
 // place group ids live on the access path — principalFor never reads the group store
 // — so keeping the snapshot current here is what makes membership live while
 // effectiveRole stays pure. A user with no live session is a no-op: their next login
@@ -194,7 +194,7 @@ func (s *sessionStore) setUserGroupMembership(userID, groupID string, member boo
 
 // dropGroupFromSessions removes a group id from every live session, whoever it
 // belongs to — used when the group is deleted, so its grants stop applying for
-// everyone at once (ADR-draft-live-group-membership).
+// everyone at once (ADR-0185).
 func (s *sessionStore) dropGroupFromSessions(groupID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

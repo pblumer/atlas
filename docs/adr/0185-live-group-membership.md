@@ -1,4 +1,4 @@
-# ADR-DRAFT: Live group membership
+# ADR-0185: Live group membership
 
 - **Status:** Proposed
 - **Date:** 2026-08-25

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestGroupMembershipLive proves ADR-draft-live-group-membership end to end: a
+// TestGroupMembershipLive proves ADR-0185 end to end: a
 // membership change reaches an already-logged-in user on their next request, with no
 // re-login. The same alice client (one session cookie) is used throughout — never a
 // fresh login — so any access change observed is the live push, not a re-snapshot.
