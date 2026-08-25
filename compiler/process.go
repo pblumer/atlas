@@ -696,6 +696,12 @@ type ConnectorTaskDetail struct {
 	// Microsoft Entra ID connector fields (JobType == EntraJobType, ADR-0172).
 	// Connector (above) names the tenant the *worker* is configured for; a task
 	// carries no tenant id and no client secret, because they never enter the engine.
+	// EntraConnector, when its Expr is non-nil, resolves that tenant name at runtime
+	// instead — a literal-or-FEEL value (e.g. "=tenant") for a process that serves
+	// more than one tenant. It overrides Connector at resolve time; Connector then
+	// still holds the authored text ("=tenant") for introspection. Only entra offers
+	// this, because it is worker-only and no deploy-time credential lookup keys off a
+	// fixed connector name (ADR-0172).
 	// EntraOp is the interned lifecycle operation ("create-user"|"get-user"|
 	// "update-user"|"delete-user"|"enable"|"disable"|"add-group-member"|
 	// "remove-group-member"). EntraUserID and EntraGroupID are literal-or-FEEL values
@@ -716,6 +722,7 @@ type ConnectorTaskDetail struct {
 	// Each is the zero value for a non-Entra task. No in-process worker reads these:
 	// they are resolved onto the job and read by a worker (ADR-0164/0168).
 	EntraOp            int32
+	EntraConnector     RestExpr // literal-or-FEEL tenant name; when Expr != nil it overrides Connector at resolve time
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
 	EntraNewPassword   RestExpr // reset-password's new secret (literal-or-FEEL), zero otherwise

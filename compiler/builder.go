@@ -1365,7 +1365,13 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 // applied their defaults, set Advanced for a search, and refused all of them on the
 // operations that return one object or none.
 type EntraConfig struct {
-	Connector     string
+	Connector string
+	// ConnectorExpr carries the connector name as a literal-or-FEEL value when the
+	// author wants the tenant chosen at runtime (e.g. "=tenant" on a multi-tenant
+	// joiner). It is the zero RestExpr for the ordinary static case, where Connector
+	// alone names the tenant. Only entra takes this: the kind is worker-only, so no
+	// deploy-time credential lookup keys off a fixed name (ADR-0172).
+	ConnectorExpr RestExpr
 	Op            string
 	UserID        RestExpr
 	GroupID       RestExpr
@@ -1392,6 +1398,7 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:            b.intern(EntraJobType),
 		Connector:          b.intern(cfg.Connector),
+		EntraConnector:     cfg.ConnectorExpr,
 		Subject:            -1, // not a clio task
 		EventType:          -1,
 		ClioQuery:          -1,

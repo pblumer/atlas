@@ -962,6 +962,14 @@ func (s *Server) connectorWarnings(cp *compiler.CompiledProcess) []string {
 		if kind == "" || seen[kind+"/"+ref.Connector] {
 			continue // a job type no managed kind claims (a local decision, say)
 		}
+		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
+			// A connector authored as a FEEL expression (entra, ADR-0172) names no
+			// fixed tenant to check against the store — the name is only known at call
+			// time. Warning about a connector called "=tenant" would be noise, so the
+			// runtime check (an incident if the resolved name is not configured) stands
+			// in for the deploy-time one here.
+			continue
+		}
 		seen[kind+"/"+ref.Connector] = true
 		rec, exists := byName[ref.Connector]
 		switch {

@@ -251,6 +251,14 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q needs a connector (the name the worker holds the tenant credential under)", st.Id)
 	}
+	// The connector is normally a static name, but may be a FEEL expression (a leading
+	// '=') so one process can serve more than one tenant, resolving the name from its
+	// own variables at call time. This is entra-only: the kind is worker-only, so no
+	// deploy-time credential lookup keys off a fixed name (ADR-0172).
+	connectorExpr, err := connectorValue(st.Id, "entra connector", "connector", cn.Connector)
+	if err != nil {
+		return 0, err
+	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q needs an operation (%s)", st.Id, strings.Join(entraOpNames(), ", "))
@@ -326,6 +334,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	}
 	return b.AddEntraConnectorTask(EntraConfig{
 		Connector:     strings.TrimSpace(cn.Connector),
+		ConnectorExpr: connectorExpr,
 		Op:            op,
 		UserID:        userID,
 		GroupID:       groupID,

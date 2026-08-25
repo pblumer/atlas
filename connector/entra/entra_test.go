@@ -465,6 +465,64 @@ func TestResolveEvaluatesFEELIds(t *testing.T) {
 	}
 }
 
+// A connector authored as a FEEL expression resolves the tenant name from the
+// instance's variables at call time, so one process can serve several tenants
+// (ADR-0172). An expression that evaluates to nothing is refused at resolve, so the
+// incident names this task rather than the worker later failing to find a connector
+// called "".
+func TestResolveEvaluatesTheConnectorExpression(t *testing.T) {
+	bpmn := func(connector string) string {
+		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements>
+      <atlas:entraConnector connector="` + connector + `" operation="disable" userId="=upn"/>
+    </bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	}
+	taskOf := func(t *testing.T, xml string) (*compiler.CompiledProcess, *compiler.ConnectorTaskDetail) {
+		cp, err := compiler.Parse(1, 1, strings.NewReader(xml))
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		node := cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)
+		return cp, cp.ConnectorTask(node.Detail)
+	}
+
+	// The expression reads a variable and picks the tenant.
+	cp, d := taskOf(t, bpmn("=tenant"))
+	store := fakeVarStore{vars: map[uint64][]model.VariableValue{
+		1: {{Name: "tenant", Kind: model.VarString, Text: "blumer_net"}, {Name: "upn", Kind: model.VarString, Text: "arno@blumer.net"}},
+	}}
+	j, err := Resolve(store, cp, d, 1)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if j.Connector != "blumer_net" {
+		t.Errorf("connector = %q, want the resolved tenant blumer_net", j.Connector)
+	}
+
+	// A resolved-empty tenant name is refused rather than sent.
+	cp, d = taskOf(t, bpmn("=tenant"))
+	empty := fakeVarStore{vars: map[uint64][]model.VariableValue{
+		1: {{Name: "upn", Kind: model.VarString, Text: "arno@blumer.net"}},
+	}}
+	if _, err := Resolve(empty, cp, d, 1); err == nil {
+		t.Error("a connector expression that evaluates to nothing should be an error")
+	}
+
+	// A static connector name still resolves verbatim — the common path is unchanged.
+	cp, d = taskOf(t, bpmn("contoso"))
+	if j, err := Resolve(store, cp, d, 1); err != nil || j.Connector != "contoso" {
+		t.Errorf("static connector: j.Connector=%q err=%v, want contoso/nil", j.Connector, err)
+	}
+}
+
 // Inline attributes (the modeler's JSON template) are evaluated at resolve time: the
 // FEEL leaves resolve against the instance's variables, and the nested passwordProfile
 // survives, so a create-user body is built from the joiner's own data with no separate
