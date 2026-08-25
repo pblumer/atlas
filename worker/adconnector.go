@@ -67,7 +67,7 @@ func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretReso
 // account created in it is a real account. So a worker can be told to serve the AD
 // kind against [ad.MockDirectory] instead: the same resolved job, the same
 // [ad.Run], entries that live in this process's memory and are gone when it stops
-// (ADR-draft-ad-connector-mock-mode).
+// (ADR-0181).
 //
 // The switch is the *worker's*, not the model's, and that is the whole point. A
 // mockup flag on the task would be a model that behaves differently in test and in

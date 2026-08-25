@@ -95,7 +95,7 @@ var (
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
 	// ADMockEnabled is an AD worker announcing that it serves the Active Directory
 	// connector against a directory in its own memory rather than a real one
-	// (ADR-draft-ad-connector-mock-mode). It is a warning rather than an info because
+	// (ADR-0181). It is a warning rather than an info because
 	// a mock worker is indistinguishable from a working one everywhere else: it
 	// completes every job it leases.
 	ADMockEnabled = newEvent("ad_mock.enabled")

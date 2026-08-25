@@ -279,7 +279,7 @@ func TestRunLdifJobErrors(t *testing.T) {
 	}
 }
 
-// Mock mode (ADR-draft-ad-connector-mock-mode). A worker told to serve AD without a
+// Mock mode (ADR-0181). A worker told to serve AD without a
 // domain controller serves it against a directory in its own memory, so an identity
 // process can be run end to end before anybody is allowed near the real forest.
 

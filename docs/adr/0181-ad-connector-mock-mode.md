@@ -1,4 +1,4 @@
-# ADR-DRAFT: Mock mode for the Active Directory connector
+# ADR-0181: Mock mode for the Active Directory connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-25
