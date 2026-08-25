@@ -2235,7 +2235,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find or search, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2279,7 +2279,21 @@ const SERVICE_TASK_KINDS = [
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
         showIf: (v) => v.operation === "list-users",
-        hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Advanced queries (endsWith, $search) additionally need Graph's ConsistencyLevel header, which this connector does not send — use the REST connector for those.",
+        hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
+      },
+      {
+        key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
+        showIf: (v) => v.operation === "list-users",
+        hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Konnektor kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
+      },
+      {
+        key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
+        showIf: (v) => v.operation === "list-users",
+        options: [
+          { v: "", l: "Aus (streng konsistent)" },
+          { v: "true", l: "Ein (ConsistencyLevel: eventual)" },
+        ],
+        hint: "Schickt ConsistencyLevel: eventual und $count=true — die beiden Hälften von Graphs Advanced Query Support, die nur zusammen funktionieren. Nötig für endsWith, ne, not und $search; ohne sie weist Graph solche Filter mit Request_UnsupportedQuery ab. Kostet dafür strenge Konsistenz: Die Antwort darf leicht veraltet sein. Wird deshalb nicht aus dem Filtertext erraten — der Filter kann eine FEEL-Expression sein, und die Entscheidung gehört dem Autor.",
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",

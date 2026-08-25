@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself)
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -136,11 +136,44 @@ Three consequences follow, and each is a deliberate choice rather than an omissi
   continuation to its own scheme and host and refuses anything else, so a redirected
   page cannot hand that token to whoever wrote the response.
 
-What is still not covered is Graph's *advanced* query support — `endsWith`,
-`$search`, `$count` — which needs a `ConsistencyLevel: eventual` header and would be
-a second knob with consistency semantics of its own. Graph refuses such a filter with
-a named error, which this connector surfaces verbatim, and the REST connector remains
-the answer for it. That is the same boundary the rest of this record draws.
+### Amendment (2026-08-24): advanced queries, opted into rather than guessed
+
+The listing above could not express a large part of what a directory is asked. Graph
+gates `endsWith`, `ne`, `not`, `$search` and `$count` behind *advanced query support*,
+and refuses them otherwise with `Request_UnsupportedQuery`. "Which mailboxes are on
+this domain" is an `endsWith`, so this was not an exotic corner.
+
+Advanced support is two things that only work together: the request header
+`ConsistencyLevel: eventual` and `$count=true` in the query. Sending one without the
+other is a 400, so `advancedQuery="true"` sends both and there is no way to author
+half of it. A `search` attribute carries the term as Graph takes it — quotes included,
+because `$search` has its own quoting and a compound term (`"a" AND "b"`) has quotes
+inside it; inventing them here would make that case unwritable.
+
+Three decisions carry the weight:
+
+- **It is opted into, never inferred from the filter.** Reading the filter text for
+  `endsWith` would work for a literal and not at all for a FEEL expression, which has
+  no text at deploy. More importantly, eventual consistency changes what the process
+  is *told* about the directory — a listing may be slightly stale. That is the
+  author's decision, not a substring match's.
+- **A `search` implies it.** Graph runs a `$search` only as an advanced query, so
+  making an author tick a second box would be a trap whose only outcome is a 400.
+  `advancedQuery="false"` next to a search is refused at deploy rather than honoured
+  into a request that cannot work.
+- **The header rides on every page.** Graph rejects a continuation fetched without it,
+  which would turn a working listing into one that dies halfway through. The paging
+  loop therefore replaces only the path and keeps the rest of the request.
+
+`Client.Call` now takes a `Request` struct rather than a parameter list. The header
+could have been derived inside `GraphClient` from the path carrying `$count=true` —
+Graph does pair them, so it would work today. It is explicit instead because a
+behavioural header inferred by sniffing a URL is the kind of coupling that breaks
+quietly, and a fake client in a test could then only observe the string rather than
+the intent.
+
+What is still not covered is `$orderby` and the `$count` *value* as a result in its
+own right; a process needing either uses the REST connector.
 
 ### The OAuth2 token flow, lifted
 
@@ -169,9 +202,12 @@ move did not alter behaviour.
     this cost); the Workers view showing which names are served is what recovers it.
   - **The operation set is a subset of Graph and always will be.** Licences,
     administrative units, directory roles, and application role assignments are not
-    covered, and neither is an advanced query (`endsWith`, `$search`); a process
-    needing one uses the REST connector. Growing the table is cheap, growing it
-    without a use case is not.
+    covered, and neither is `$orderby`; a process needing one uses the REST
+    connector. Growing the table is cheap, growing it without a use case is not.
+  - **An advanced query trades consistency for reach.** `ConsistencyLevel: eventual`
+    is what the name says: a listing may be slightly stale. That is why it is opt-in
+    and why the Modeler names the trade rather than hiding it behind a checkbox
+    labelled "advanced".
   - **A listing is materialized whole.** `list-users` holds every page in memory and
     writes one array into a process variable, which is why it is capped by default.
     A directory export belongs in a job that streams, not in a process variable —

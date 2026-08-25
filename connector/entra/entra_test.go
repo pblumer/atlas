@@ -60,7 +60,7 @@ func (g *graphServer) client() *GraphClient {
 func TestGraphClientSendsABearerToken(t *testing.T) {
 	g := newGraphServer(t)
 	g.response = `{"id":"abc"}`
-	got, err := g.client().Call(context.Background(), "GET", "/users/arno@contoso.com", nil)
+	got, err := g.client().Call(context.Background(), Request{Method: "GET", Path: "/users/arno@contoso.com"})
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestGraphClientSendsABearerToken(t *testing.T) {
 func TestGraphClientEmptyBodyIsSuccess(t *testing.T) {
 	g := newGraphServer(t)
 	g.status = 204
-	got, err := g.client().Call(context.Background(), "DELETE", "/users/x", nil)
+	got, err := g.client().Call(context.Background(), Request{Method: "DELETE", Path: "/users/x"})
 	if err != nil || got != nil {
 		t.Errorf("Call = %#v, %v; want nil, nil", got, err)
 	}
@@ -93,7 +93,7 @@ func TestGraphClientSurfacesTheErrorCode(t *testing.T) {
 	g := newGraphServer(t)
 	g.status = 400
 	g.response = `{"error":{"code":"Request_BadRequest","message":"Property netId is invalid."}}`
-	_, err := g.client().Call(context.Background(), "POST", "/users", map[string]any{"x": 1})
+	_, err := g.client().Call(context.Background(), Request{Method: "POST", Path: "/users", Body: map[string]any{"x": 1}})
 	if err == nil {
 		t.Fatal("a 400 must be an error")
 	}
@@ -107,7 +107,7 @@ func TestGraphClientNonEnvelopeError(t *testing.T) {
 	g := newGraphServer(t)
 	g.status = 502
 	g.response = "upstream boom"
-	_, err := g.client().Call(context.Background(), "GET", "/users/x", nil)
+	_, err := g.client().Call(context.Background(), Request{Method: "GET", Path: "/users/x"})
 	if err == nil || !strings.Contains(err.Error(), "upstream boom") {
 		t.Errorf("err = %v, want the raw body", err)
 	}
@@ -117,26 +117,26 @@ func TestGraphClientErrors(t *testing.T) {
 	g := newGraphServer(t)
 	// A token that cannot be acquired fails before any request is made.
 	bad := NewGraphClient(staticToken{err: errors.New("no token")}, g.srv.URL, http.DefaultClient)
-	if _, err := bad.Call(context.Background(), "GET", "/users/x", nil); err == nil {
+	if _, err := bad.Call(context.Background(), Request{Method: "GET", Path: "/users/x"}); err == nil {
 		t.Error("a token failure must fail the call")
 	}
 	// A body that cannot be encoded.
-	if _, err := g.client().Call(context.Background(), "POST", "/users", map[string]any{"bad": make(chan int)}); err == nil {
+	if _, err := g.client().Call(context.Background(), Request{Method: "POST", Path: "/users", Body: map[string]any{"bad": make(chan int)}}); err == nil {
 		t.Error("an unencodable body must fail")
 	}
 	// An unbuildable request.
-	if _, err := g.client().Call(context.Background(), "\n", "/users", nil); err == nil {
+	if _, err := g.client().Call(context.Background(), Request{Method: "\n", Path: "/users"}); err == nil {
 		t.Error("an invalid method must fail")
 	}
 	// An unreachable host.
 	down := NewGraphClient(staticToken{tok: "t"}, "http://127.0.0.1:1", http.DefaultClient)
-	if _, err := down.Call(context.Background(), "GET", "/users/x", nil); err == nil {
+	if _, err := down.Call(context.Background(), Request{Method: "GET", Path: "/users/x"}); err == nil {
 		t.Error("an unreachable host must fail")
 	}
 	// A 2xx body that is not JSON.
 	g2 := newGraphServer(t)
 	g2.response = "not json"
-	if _, err := g2.client().Call(context.Background(), "GET", "/users/x", nil); err == nil {
+	if _, err := g2.client().Call(context.Background(), Request{Method: "GET", Path: "/users/x"}); err == nil {
 		t.Error("a non-JSON 2xx body must fail")
 	}
 }
@@ -162,8 +162,8 @@ type recordingClient struct {
 }
 
 func (c *recordingClient) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
-func (c *recordingClient) Call(_ context.Context, method, path string, body any) (any, error) {
-	c.method, c.path, c.body = method, path, body
+func (c *recordingClient) Call(_ context.Context, r Request) (any, error) {
+	c.method, c.path, c.body = r.Method, r.Path, r.Body
 	return c.res, c.err
 }
 
@@ -520,7 +520,7 @@ func TestGraphClientUnreadableBody(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	c := NewGraphClient(staticToken{tok: "t"}, srv.URL, http.DefaultClient)
-	if _, err := c.Call(context.Background(), "GET", "/users/x", nil); err == nil {
+	if _, err := c.Call(context.Background(), Request{Method: "GET", Path: "/users/x"}); err == nil {
 		t.Error("a truncated body must fail the call")
 	}
 }
@@ -578,7 +578,10 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 			// IsList is the other half of the same agreement: the listing query is
 			// meaningful on exactly the operation that returns a collection, and the
 			// compiler must refuse it everywhere else rather than drop it silently.
-			for _, q := range []string{`filter="accountEnabled eq true"`, `select="id"`, `pageSize="10"`, `maxUsers="10"`} {
+			for _, q := range []string{
+				`filter="accountEnabled eq true"`, `select="id"`, `pageSize="10"`, `maxUsers="10"`,
+				`search="&#34;displayName:Arno&#34;"`, `advancedQuery="true"`,
+			} {
 				err := compile(attrsFor(op, spec, "") + " " + q)
 				if spec.IsList && err != nil {
 					t.Errorf("Ops[%q] is a listing but the compiler rejects %s: %v", op, q, err)
