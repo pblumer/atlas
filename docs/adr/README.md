@@ -220,6 +220,7 @@ comment safe to write.
 | [0181](0181-ad-connector-mock-mode.md) | Mock mode for the Active Directory connector | Proposed |
 | [0182](0182-ad-default-offload.md) | Active Directory runs on a worker by default | Proposed |
 | [0183](0183-the-modeler-asks-where-a-kind-runs.md) | The Modeler asks the server where an authored kind runs | Accepted |
+| [0184](0184-grant-audit-log.md) | Grant audit log | Proposed |
 
 ## Status values
 

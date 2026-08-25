@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// This file is the HTTP-side of ADR-draft-grant-audit-log: the helper the sharing
+// This file is the HTTP-side of ADR-0184: the helper the sharing
 // handlers call to record an access-control change, and the owner-only endpoint that
 // reads a project's history back. Recording happens on the mutation path, never on
 // the access path, so effectiveRole stays pure. Every store access runs on the run
@@ -46,7 +46,7 @@ func (s *Server) recordGrantAudit(r *http.Request, rec grantAudit) error {
 }
 
 // handleListProjectAudit returns a project's access-control history, newest first
-// (ADR-draft-grant-audit-log). The history names every member and every actor, so it
+// (ADR-0184). The history names every member and every actor, so it
 // is more sensitive than the member list itself: only the owner (and an admin, who
 // resolves as owner) may read it. GET /api/v1/applications/{id}/audit.
 func (s *Server) handleListProjectAudit(w http.ResponseWriter, r *http.Request) {

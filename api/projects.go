@@ -242,7 +242,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Old values, captured before mutation, so the audit entries below record the
-		// actual transition and only when something changed (ADR-draft-grant-audit-log).
+		// actual transition and only when something changed (ADR-0184).
 		oldVisibility := rec.Visibility
 		if oldVisibility == "" {
 			oldVisibility = VisibilityPrivate
@@ -270,7 +270,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Audit the access-control changes — visibility flips and ownership transfers,
-		// each only when the value actually changed (ADR-draft-grant-audit-log). A
+		// each only when the value actually changed (ADR-0184). A
 		// rename is not an access change and is not recorded.
 		if payload.Visibility != nil && *payload.Visibility != oldVisibility {
 			if saveErr = s.recordGrantAudit(r, grantAudit{
@@ -363,7 +363,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 		// The access-control history is metadata about this application, reachable only
 		// through its id, so it is cleaned up with the application like its releases
-		// (ADR-draft-grant-audit-log). Same ordering rationale: audit before the
+		// (ADR-0184). Same ordering rationale: audit before the
 		// application, so a failed cleanup self-heals on retry.
 		if delErr = s.grantAudit.deleteForApplication(id); delErr != nil {
 			return

@@ -2527,7 +2527,7 @@ function openShareModal(proj, users, degraded, reload) {
     refreshActivity();
   };
 
-  // The Activity section is the grant audit log (ADR-draft-grant-audit-log): who
+  // The Activity section is the grant audit log (ADR-0184): who
   // changed access to this project and when. It is owner-only on the server, so it is
   // fetched and shown only for an owner, and re-fetched after every mutation below so
   // a share/revoke/visibility change appears without reopening the dialog.

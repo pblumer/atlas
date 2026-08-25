@@ -212,7 +212,7 @@ type Server struct {
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
-	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-draft-grant-audit-log)
+	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0184)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)

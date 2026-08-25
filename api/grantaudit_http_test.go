@@ -29,7 +29,7 @@ func decodeAudit(t *testing.T, b []byte) []auditEntry {
 	return out
 }
 
-// TestGrantAuditLog drives the full ADR-draft-grant-audit-log flow: every grant
+// TestGrantAuditLog drives the full ADR-0184 flow: every grant
 // mutation on a project is recorded, no-ops leave no trail, and the history is
 // owner-only.
 func TestGrantAuditLog(t *testing.T) {

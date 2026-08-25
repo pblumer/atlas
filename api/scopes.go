@@ -286,7 +286,7 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
-		// Record the grant (ADR-draft-grant-audit-log). The implicit flip to shared
+		// Record the grant (ADR-0184). The implicit flip to shared
 		// is part of sharing, so it is folded into this one entry, not double-logged.
 		if sErr = s.recordGrantAudit(r, grantAudit{
 			ApplicationID: proj.ID, Action: GrantActionShare,
@@ -351,7 +351,7 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		// Record the revoke only when one actually happened — removing a non-member is
-		// an idempotent no-op and leaves no trail (ADR-draft-grant-audit-log).
+		// an idempotent no-op and leaves no trail (ADR-0184).
 		if subjType != "" {
 			if sErr = s.recordGrantAudit(r, grantAudit{
 				ApplicationID: proj.ID, Action: GrantActionUnshare,

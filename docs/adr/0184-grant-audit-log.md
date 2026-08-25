@@ -1,4 +1,4 @@
-# ADR-DRAFT: Grant audit log
+# ADR-0184: Grant audit log
 
 - **Status:** Proposed
 - **Date:** 2026-08-25

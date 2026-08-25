@@ -4,7 +4,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// This file implements the durable side of ADR-draft-grant-audit-log: an
+// This file implements the durable side of ADR-0184: an
 // append-only history of the access-control changes made to a project (ADR-0071) —
 // shares, revokes, visibility flips, and ownership transfers. It is design-time
 // config data, exactly like a project or a release, so it stays off the six engine
