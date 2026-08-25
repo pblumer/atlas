@@ -1053,7 +1053,7 @@
       "route": "#/operations"
     }
   },
-  "a-server-that-requires-a-login-no-longer-calls-itself-singl": {
+  "a-server-that-requires-a-login-no-longer-calls-itself-single": {
     "tags": [
       "Operations"
     ],

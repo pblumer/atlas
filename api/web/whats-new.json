@@ -264,17 +264,20 @@
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A server that requires a login no longer calls itself single-user mode.",
-        "de": "A server that requires a login no longer calls itself single-user mode."
+        "en": "The account menu stops claiming there is no login",
+        "de": "Das Konto-Menü behauptet nicht mehr, es gäbe keinen Login"
       },
       "summary": {
-        "en": "The account menu's label was written for the case where nobody can sign in — enforcement off, the API and UI open — but it was rendered whenever nobody is signed in, which on a server with --auth is the login screen itself.",
-        "de": "The account menu's label was written for the case where nobody can sign in — enforcement off, the API and UI open — but it was rendered whenever nobody is signed in, which on a server with --auth is the login screen itself."
+        "en": "On an instance that requires a login, the account menu said \"Single-user mode\" — the label for a server that has no login at all — whenever nobody was signed in, including on the login screen itself. It now says \"Not signed in\" there, and keeps the old label where it is actually true.",
+        "de": "Auf einer Instanz mit Anmeldepflicht stand im Konto-Menü \"Single-user mode\" — die Bezeichnung für einen Server ganz ohne Login —, sobald niemand angemeldet war, also auch auf dem Login-Bildschirm selbst. Dort steht jetzt \"Nicht angemeldet\"; wo die alte Bezeichnung zutrifft, bleibt sie."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
+      },
+      "tags": [
+        "Operations"
+      ]
     },
     {
       "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
