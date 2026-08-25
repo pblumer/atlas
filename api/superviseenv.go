@@ -153,7 +153,80 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// is, and defaulting it without this would have moved every vault-backed AD
 		// task to a worker holding nothing to bind with.
 		"ad": s.adWorkerEnv,
+		// Entra is worker-only like AD (the engine holds no tenant credential, ADR-0172),
+		// and provisioned for the same reason: a supervised worker has no vault, so the
+		// engine renders its client secret out of the vault. Only the secret — tenant and
+		// client id are not secret and are inherited from this process's own environment.
+		"entra": s.entraWorkerEnv,
 	}
+}
+
+// Environment a supervised Entra worker reads its tenants from — the same names an
+// operator sets by hand for an external worker (there is no private channel, ADR-0157).
+const (
+	entraEnvPrefix     = "ATLAS_ENTRA_"
+	entraConnectorsEnv = entraEnvPrefix + "CONNECTORS"
+)
+
+// entraWorkerEnv renders the client secrets a supervised Entra worker needs out of the
+// vault, one variable per tenant this process's environment names in ATLAS_ENTRA_CONNECTORS.
+//
+// It is the AD story with a connector name in place of a bind-secret reference. The
+// Entra worker is worker-only (ADR-0172): it reads ATLAS_ENTRA_<NAME>_TENANT_ID,
+// _CLIENT_ID and _CLIENT_SECRET, and the engine never builds an Entra client. Tenant
+// and client id are not secret and reach a supervised child by inheriting this
+// process's environment; the secret must not sit there in the clear, so an operator who
+// wants it in the vault sets ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF to a vault key instead
+// and types the secret into the Console. This resolves that reference — vault first,
+// environment on a miss (ADR-0069/0041) — and hands the child the value under the exact
+// name the worker reads it by.
+//
+// A tenant whose secret the operator set directly is left untouched: the child already
+// inherits ATLAS_ENTRA_<NAME>_CLIENT_SECRET, and overriding it would let a stale vault
+// entry silently win over an explicit choice.
+//
+// Re-rendered on every spawn and refresh, like the mail and AD configuration, so a
+// secret an operator adds or rotates in the Console reaches the worker without a restart.
+// It reads the vault, so it runs on the run-loop goroutine (invariant I3), its owner.
+func (s *Server) entraWorkerEnv() []string {
+	var env []string
+	s.do(func() {
+		for _, name := range splitConnectorList(os.Getenv(entraConnectorsEnv)) {
+			envKey := connectorEnvKey(name)
+			if envKey == "" {
+				continue
+			}
+			key := entraEnvPrefix + envKey + "_"
+			// The operator set the secret directly: the child inherits it, nothing to do.
+			if strings.TrimSpace(os.Getenv(key+"CLIENT_SECRET")) != "" {
+				continue
+			}
+			ref := strings.TrimSpace(os.Getenv(key + "CLIENT_SECRET_REF"))
+			if ref == "" {
+				continue
+			}
+			// A reference nothing answers to is left out rather than handed over empty:
+			// an empty variable reads as a configured blank secret, and the worker's own
+			// error — which names the tenant and the missing variable — is the better
+			// failure.
+			if secret := s.resolveConnectorSecret(ref); secret != "" {
+				env = append(env, key+"CLIENT_SECRET="+secret)
+			}
+		}
+	})
+	return env
+}
+
+// splitConnectorList splits a comma-separated connector-names value, trimming spaces
+// and dropping empties — the same shape the worker's own splitAndTrim produces.
+func splitConnectorList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // workerTokenEnv is the credential a supervised worker authenticates to this server
