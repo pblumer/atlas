@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Account-Bestellung</title>
+<!--
+  Einbettbares Account-Bestell-Widget für Atlas (ADR-0029 öffentliches Start-Formular
+  + ADR-draft-embed-public-forms-cross-origin CORS). Eine self-contained Datei: kein externes CSS/JS, überall hostbar.
+
+  Einbetten — zwei Wege:
+
+  1) Per <iframe> (einfachster Weg, kein CORS nötig):
+       <iframe src="https://DEIN-HOST/account-order-widget.html?atlas=https://atlas.blumer.cloud&token=DEIN_TOKEN"
+               style="width:100%;max-width:560px;height:760px;border:0"></iframe>
+
+  2) Direkt auf einer fremden Seite hosten und per JS an Atlas posten. Dafür muss der
+     Atlas-Server die Origin deiner Seite erlauben:
+       atlas serve --public-forms-cors "https://deine-seite.example"
+     (oder ATLAS_PUBLIC_FORMS_CORS_ORIGINS). Ohne das blockt der Browser den POST.
+
+  Konfiguration (in dieser Reihenfolge): URL-Query (?atlas=…&token=…) →
+  window.ATLAS_ORDER_CONFIG → data-Attribute am #order-Wurzelelement. Ist kein Token
+  gesetzt, läuft das Widget im Demo-Modus und zeigt nur, was gesendet würde.
+-->
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#101828; --muted:#667085; --line:#e4e7ec;
+    --accent:#0f6cbd; --accent-ink:#ffffff; --ok:#067647; --ok-bg:#ecfdf3; --warn:#b42318; --warn-bg:#fef3f2;
+    --ring:rgba(15,108,189,.28);
+  }
+  :root:not([data-theme="light"]){ }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b0f16; --card:#141a23; --ink:#e7ecf3; --muted:#93a1b5; --line:#243040;
+      --accent:#4aa3e6; --accent-ink:#0b0f16; --ok:#6ee7b7; --ok-bg:#0f2a20; --warn:#fca5a5; --warn-bg:#2a1414;
+      --ring:rgba(74,163,230,.32);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0f16; --card:#141a23; --ink:#e7ecf3; --muted:#93a1b5; --line:#243040;
+    --accent:#4aa3e6; --accent-ink:#0b0f16; --ok:#6ee7b7; --ok-bg:#0f2a20; --warn:#fca5a5; --warn-bg:#2a1414;
+    --ring:rgba(74,163,230,.32);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       display:flex;justify-content:center;padding:24px}
+  .order{width:100%;max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:16px;
+         box-shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06);overflow:hidden}
+  .head{padding:22px 24px 14px}
+  .head h1{margin:0;font-size:20px;letter-spacing:-.01em}
+  .head p{margin:6px 0 0;color:var(--muted);font-size:13.5px}
+  .body{padding:6px 24px 22px}
+  .field{margin-top:16px}
+  label.lbl{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+  .row{display:flex;gap:12px}
+  .row .field{flex:1;margin-top:0}
+  input[type=text],textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+       background:transparent;color:var(--ink);font:inherit;transition:border-color .15s,box-shadow .15s}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--ring)}
+  textarea{resize:vertical;min-height:64px}
+  .types{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .type{position:relative;border:1.5px solid var(--line);border-radius:12px;padding:12px 12px 12px 14px;cursor:pointer;
+        transition:border-color .15s,background .15s,transform .05s;background:transparent}
+  .type:hover{border-color:var(--accent)}
+  .type:active{transform:translateY(1px)}
+  .type[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .type .k{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;
+           background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:14px}
+  .type .t{font-weight:650;margin-top:8px;font-size:14px}
+  .type .s{color:var(--muted);font-size:12px;margin-top:2px}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-top:8px}
+  .badge.on{color:var(--ok);background:var(--ok-bg)} .badge.off{color:var(--warn);background:var(--warn-bg)}
+  .preview{margin-top:16px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--muted);
+           min-height:44px}
+  .preview code{color:var(--ink);font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+  .preview .hint{display:block;margin-top:4px;font-size:11.5px}
+  button.submit{margin-top:20px;width:100%;padding:12px 16px;border:0;border-radius:10px;background:var(--accent);
+         color:var(--accent-ink);font:inherit;font-weight:650;cursor:pointer;transition:filter .15s}
+  button.submit:hover{filter:brightness(1.05)} button.submit:disabled{opacity:.55;cursor:not-allowed}
+  .msg{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13.5px;display:none}
+  .msg.show{display:block}
+  .msg.ok{color:var(--ok);background:var(--ok-bg)} .msg.err{color:var(--warn);background:var(--warn-bg)}
+  .foot{padding:12px 24px 18px;color:var(--muted);font-size:11.5px;border-top:1px solid var(--line)}
+  .foot b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+  <form class="order" id="order" novalidate
+        data-atlas="https://atlas.blumer.cloud" data-token="">
+    <div class="head">
+      <h1>🧩 Account-Bestellung</h1>
+      <p>Neues Konto im Tenant <b>blumer.net</b> — der Kontotyp bestimmt Aktivierung, Kategorie und Namen.</p>
+    </div>
+    <div class="body">
+      <div class="row">
+        <div class="field">
+          <label class="lbl" for="vorname">Vorname</label>
+          <input id="vorname" name="vorname" type="text" autocomplete="given-name" required/>
+        </div>
+        <div class="field">
+          <label class="lbl" for="nachname">Nachname</label>
+          <input id="nachname" name="nachname" type="text" autocomplete="family-name" required/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">Kontotyp</label>
+        <div class="types" id="types" role="group" aria-label="Kontotyp"></div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="begruendung">Begründung <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <textarea id="begruendung" name="begruendung" placeholder="Wofür wird das Konto benötigt?"></textarea>
+      </div>
+
+      <div class="preview" id="preview">Wähle einen Kontotyp, um die Vorschau zu sehen.</div>
+
+      <button class="submit" id="submit" type="submit" disabled>Bestellung absenden</button>
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    </div>
+    <div class="foot">
+      Läuft als <b>Atlas-Prozess</b>: die Bestellung startet einen Ablauf, ein Administrator gibt frei,
+      dann provisioniert der Entra-Konnektor. Schreibt nur klar benannte Test-Objekte
+      (<b>jml-test-…@blumer.net</b>).
+    </div>
+  </form>
+
+<script>
+(function(){
+  "use strict";
+  var TYPES = {
+    A:{k:"a",label:"Administrativ",enabled:true, desc:"Erhöhte Rechte. Aktiv angelegt."},
+    E:{k:"e",label:"Bildung / Extern",enabled:true, desc:"Bildungs-/externe Nutzer. Aktiv."},
+    T:{k:"t",label:"Test",enabled:false,desc:"Testkonto. Deaktiviert angelegt."},
+    S:{k:"s",label:"Service / Dienst",enabled:false,desc:"Automationskonto. Deaktiviert."}
+  };
+  var root = document.getElementById("order");
+  // Config precedence: URL query → window.ATLAS_ORDER_CONFIG → data-attributes.
+  var q = new URLSearchParams(location.search);
+  var cfg = window.ATLAS_ORDER_CONFIG || {};
+  var atlasBase = (q.get("atlas") || cfg.atlasBase || root.dataset.atlas || "").replace(/\/+$/,"");
+  var token = q.get("token") || cfg.token || root.dataset.token || "";
+  var demo = !token;
+
+  var typesEl = document.getElementById("types");
+  var previewEl = document.getElementById("preview");
+  var submitEl = document.getElementById("submit");
+  var msgEl = document.getElementById("msg");
+  var vorname = document.getElementById("vorname");
+  var nachname = document.getElementById("nachname");
+  var chosen = null;
+
+  Object.keys(TYPES).forEach(function(code){
+    var t = TYPES[code];
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "type"; b.setAttribute("aria-pressed","false"); b.dataset.code = code;
+    b.innerHTML = '<span class="k">'+code+'</span><div class="t">'+t.label+'</div>'+
+      '<div class="s">'+t.desc+'</div>'+
+      '<span class="badge '+(t.enabled?"on":"off")+'">'+(t.enabled?"aktiviert":"deaktiviert")+'</span>';
+    b.addEventListener("click", function(){
+      chosen = code;
+      Array.prototype.forEach.call(typesEl.children,function(c){c.setAttribute("aria-pressed", c===b?"true":"false");});
+      render();
+    });
+    typesEl.appendChild(b);
+  });
+
+  function slug(s){ return (s||"").trim().toLowerCase().replace(/[^a-z0-9.-]+/g,""); }
+  function upnPreview(){
+    if(!chosen) return "";
+    var mn = slug(vorname.value) + "." + slug(nachname.value);
+    if(mn === ".") mn = "vorname.nachname";
+    return "jml-test-" + TYPES[chosen].k + "-" + mn + "@blumer.net";
+  }
+  function render(){
+    if(!chosen){ previewEl.textContent = "Wähle einen Kontotyp, um die Vorschau zu sehen."; submitEl.disabled = true; return; }
+    var t = TYPES[chosen];
+    previewEl.innerHTML = 'Vorgeschlagener UPN: <code>'+upnPreview()+'</code>'+
+      '<span class="hint">Kategorie <b style="color:var(--ink)">'+t.label+'</b> · wird '+
+      (t.enabled?"aktiviert":"deaktiviert")+' angelegt · Freigabe durch einen Administrator.</span>';
+    submitEl.disabled = !(vorname.value.trim() && nachname.value.trim() && chosen);
+  }
+  vorname.addEventListener("input", render);
+  nachname.addEventListener("input", render);
+
+  function show(kind, text){ msgEl.className = "msg show " + kind; msgEl.textContent = text; }
+
+  root.addEventListener("submit", function(ev){
+    ev.preventDefault();
+    if(!chosen || !vorname.value.trim() || !nachname.value.trim()) return;
+    var payload = { variables: {
+      vorname: vorname.value.trim(), nachname: nachname.value.trim(),
+      kontotyp: chosen, begruendung: document.getElementById("begruendung").value.trim()
+    }};
+    if(demo){
+      show("ok", "Demo-Modus (kein Token gesetzt) — gesendet würde:\n" + JSON.stringify(payload.variables));
+      return;
+    }
+    submitEl.disabled = true; show("ok","Wird gesendet…");
+    fetch(atlasBase + "/public/forms/" + encodeURIComponent(token) + "/start", {
+      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)
+    }).then(function(res){
+      if(res.status === 429){ throw new Error("Zu viele Anfragen — bitte kurz warten."); }
+      if(!res.ok){ throw new Error("Serverantwort " + res.status); }
+      return res.json();
+    }).then(function(){
+      root.reset(); chosen = null;
+      Array.prototype.forEach.call(typesEl.children,function(c){c.setAttribute("aria-pressed","false");});
+      render();
+      show("ok","✓ Bestellung eingegangen. Ein Administrator prüft und gibt sie frei.");
+    }).catch(function(err){
+      submitEl.disabled = false;
+      show("err","Konnte nicht senden: " + err.message + (location.protocol==="file:"?" (lokal geöffnet — CORS/Token nötig).":""));
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

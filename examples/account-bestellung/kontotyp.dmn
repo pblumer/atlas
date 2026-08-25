@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  KontotypMapping — bildet den bestellten Kontotyp (A/E/T/S) auf ein
+  Provisionierungs-Profil ab. Eine Entscheidungstabelle statt if/else im Prozess:
+  wer die Regeln fuer einen Typ aendern will, aendert die Tabelle, nicht das BPMN.
+
+    A = Administrativ   kuerzel "a", aktiviert,   Kategorie "Administrativ"
+    E = Edu/Extern      kuerzel "e", aktiviert,   Kategorie "Bildung/Extern"
+    T = Test            kuerzel "t", deaktiviert, Kategorie "Test"
+    S = Service/Dienst  kuerzel "s", deaktiviert, Kategorie "Dienstkonto"
+
+  Der Prozess baut daraus den UPN "jml-test-<kuerzel>-<mailNick>@blumer.net" — das
+  "jml-test-" steht im Prozess, nicht in der Tabelle, damit die Test-Objekt-Grenze
+  eine Prozess-Invariante bleibt und nicht aus Versehen wegkonfiguriert wird.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_kontotyp" name="kontotyp" namespace="http://atlas/dmn">
+  <inputData id="id_kontotyp" name="kontotyp"/>
+  <decision id="KontotypMapping" name="KontotypMapping">
+    <informationRequirement>
+      <requiredInput href="#id_kontotyp"/>
+    </informationRequirement>
+    <decisionTable id="dt_kontotyp" hitPolicy="UNIQUE">
+      <input id="in_kt" label="Kontotyp">
+        <inputExpression id="ie_kt" typeRef="string"><text>kontotyp</text></inputExpression>
+      </input>
+      <output id="o_kuerzel"  label="kuerzel"        name="kuerzel"        typeRef="string"/>
+      <output id="o_enabled"  label="accountEnabled" name="accountEnabled" typeRef="boolean"/>
+      <output id="o_kat"      label="kategorie"      name="kategorie"      typeRef="string"/>
+      <output id="o_ul"       label="usageLocation"  name="usageLocation"  typeRef="string"/>
+      <rule id="r_a">
+        <inputEntry id="i_a"><text>"A"</text></inputEntry>
+        <outputEntry id="ka"><text>"a"</text></outputEntry>
+        <outputEntry id="ea"><text>true</text></outputEntry>
+        <outputEntry id="ta"><text>"Administrativ"</text></outputEntry>
+        <outputEntry id="la"><text>"CH"</text></outputEntry>
+      </rule>
+      <rule id="r_e">
+        <inputEntry id="i_e"><text>"E"</text></inputEntry>
+        <outputEntry id="ke"><text>"e"</text></outputEntry>
+        <outputEntry id="ee"><text>true</text></outputEntry>
+        <outputEntry id="te"><text>"Bildung/Extern"</text></outputEntry>
+        <outputEntry id="le"><text>"CH"</text></outputEntry>
+      </rule>
+      <rule id="r_t">
+        <inputEntry id="i_t"><text>"T"</text></inputEntry>
+        <outputEntry id="kt"><text>"t"</text></outputEntry>
+        <outputEntry id="et"><text>false</text></outputEntry>
+        <outputEntry id="tt"><text>"Test"</text></outputEntry>
+        <outputEntry id="lt"><text>"CH"</text></outputEntry>
+      </rule>
+      <rule id="r_s">
+        <inputEntry id="i_s"><text>"S"</text></inputEntry>
+        <outputEntry id="ks"><text>"s"</text></outputEntry>
+        <outputEntry id="es"><text>false</text></outputEntry>
+        <outputEntry id="ts"><text>"Dienstkonto"</text></outputEntry>
+        <outputEntry id="ls"><text>"CH"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

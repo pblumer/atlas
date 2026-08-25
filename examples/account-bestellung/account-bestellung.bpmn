@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Account-Bestellung (Entra ID) — eine Applikation mit oeffentlichem Start-Formular,
+  DMN-gesteuertem Kontotyp-Mapping, menschlicher Freigabe und Entra-Provisionierung.
+  Scharf gegen blumer.net, aber fail-closed nur fuer klar benannte Test-Objekte.
+
+    Start (oeffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begruendung)
+     -> [DMN] "Profil bestimmen"   KontotypMapping: kontotyp A/E/T/S -> profil
+                                   { kuerzel, accountEnabled, kategorie, usageLocation }
+     -> [Script] "aufbereiten"     mailNick, upn = jml-test-<kuerzel>-<mailNick>@blumer.net,
+                                   displayName, kategorie
+     -> (X) "Test-Objekt?"         nur jml-test-*@blumer.net weiter; sonst Ende ohne Entra
+     -> User-Task "Freigeben"      (account-freigabe; Admin setzt Initialpasswort)
+     -> (X) "Freigegeben?"         nur "anlegen" legt an; sonst Ende "Abgelehnt"
+     -> [entra create-user]        Attribute aus profil (accountEnabled, usageLocation) + Form
+     -> Ende "Konto bereitgestellt"
+
+  Der Kontotyp bestimmt ueber die DMN-Tabelle das Profil; das "jml-test-"-Praefix baut
+  der Script-Task, nicht die Tabelle — so bleibt die Test-Objekt-Grenze eine
+  Prozess-Invariante. Beide Gateways sind fail-closed (Default = ablehnen/Ende).
+
+  Worker-only (ADR-0164/0172): das Tenant-Credential liegt nie in der Engine.
+  Berechtigung: User.ReadWrite.All.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_account_bestellung"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="proc_account_bestellung" name="Account-Bestellung (Entra ID)" isExecutable="true">
+    <bpmn:documentation>Oeffentlich bestellbare Account-Provisionierung fuer blumer.net. Ein oeffentliches
+Start-Formular (ADR-0029) nimmt Vorname, Nachname, Kontotyp (A/E/T/S) und eine
+Begruendung entgegen. Eine DMN-Regel (KontotypMapping) bildet den Typ auf ein Profil
+ab (kuerzel, accountEnabled, kategorie, usageLocation); ein Script baut daraus den UPN
+jml-test-&lt;kuerzel&gt;-&lt;mailNick&gt;@blumer.net. Zwei fail-closed Gateways sichern jeden
+Schreibzugriff: nur ein Test-UPN geht weiter, nur eine ausdrueckliche Freigabe legt an.
+Der create-user-Task ist worker-only (ADR-0172). Berechtigung: User.ReadWrite.All.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Bestellung erfasst">
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="account-order"/>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>f_start_profil</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:businessRuleTask id="profil" name="Profil bestimmen (DMN)">
+      <bpmn:documentation>Wertet die Entscheidungstabelle KontotypMapping aus: kontotyp (A/E/T/S) -> profil
+{ kuerzel, accountEnabled, kategorie, usageLocation }. Eine Tabelle statt if/else, damit
+sich die Regeln je Typ aendern lassen, ohne den Prozess anzufassen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="KontotypMapping" resultVariable="profil"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=kontotyp" target="kontotyp"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_profil</bpmn:incoming>
+      <bpmn:outgoing>f_profil_script</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+
+    <bpmn:scriptTask id="aufbereiten" name="UPN und Anzeige aufbereiten">
+      <bpmn:documentation>Baut mailNickname (Script), UPN, Anzeigenamen und Kategorie (Output-Mappings) aus den
+Formularwerten und dem DMN-Profil. Ein Script-Task traegt nur ein einziges
+&lt;zeebe:script&gt;, deshalb setzt die eigentliche Rechnung die drei weiteren Werte als
+zeebe:output-Mappings — jeweils direkt aus den schon vorhandenen Variablen, ohne
+Abhaengigkeit untereinander. Das "jml-test-"-Praefix steht hier im Prozess, nicht in
+der DMN-Tabelle, damit die Test-Objekt-Grenze eine Prozess-Invariante bleibt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="mailNick" expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
+        <zeebe:ioMapping>
+          <zeebe:output source="= lower case(vorname) + &quot;.&quot; + lower case(nachname)" target="mailNick"/>
+          <zeebe:output source="= &quot;jml-test-&quot; + profil.kuerzel + &quot;-&quot; + lower case(vorname) + &quot;.&quot; + lower case(nachname) + &quot;@blumer.net&quot;" target="upn"/>
+          <zeebe:output source="= vorname + &quot; &quot; + nachname + &quot; [&quot; + profil.kategorie + &quot;]&quot;" target="displayName"/>
+          <zeebe:output source="= profil.kategorie" target="kategorie"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_profil_script</bpmn:incoming>
+      <bpmn:outgoing>f_script_test</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="gw_test" name="Test-Objekt?" default="f_test_reject">
+      <bpmn:incoming>f_script_test</bpmn:incoming>
+      <bpmn:outgoing>f_test_ok</bpmn:outgoing>
+      <bpmn:outgoing>f_test_reject</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="freigabe" name="Bestellung freigeben">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="account-provisioning"/>
+        <zeebe:formDefinition formId="account-freigabe"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_test_ok</bpmn:incoming>
+      <bpmn:outgoing>f_freigabe_gw</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="gw_frei" name="Freigegeben?" default="f_frei_ablehnen">
+      <bpmn:incoming>f_freigabe_gw</bpmn:incoming>
+      <bpmn:outgoing>f_frei_anlegen</bpmn:outgoing>
+      <bpmn:outgoing>f_frei_ablehnen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="anlegen" name="Konto anlegen">
+      <bpmn:documentation>create-user gegen blumer.net. Der Body wird inline als JSON verfasst; accountEnabled
+und usageLocation kommen aus dem DMN-Profil, displayName/mailNickname/userPrincipalName
+aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. Antwort in
+"konto".</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="blumer_net" operation="create-user" resultVariable="konto"
+                              attributes="{ &quot;accountEnabled&quot;: &quot;=profil.accountEnabled&quot;, &quot;displayName&quot;: &quot;=displayName&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;usageLocation&quot;: &quot;=profil.usageLocation&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=initialpasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_frei_anlegen</bpmn:incoming>
+      <bpmn:outgoing>f_anlegen_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="end_bereit" name="Konto bereitgestellt">
+      <bpmn:incoming>f_anlegen_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="end_kein_test" name="Kein Test-Objekt">
+      <bpmn:incoming>f_test_reject</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="end_abgelehnt" name="Abgelehnt">
+      <bpmn:incoming>f_frei_ablehnen</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_profil" sourceRef="start" targetRef="profil"/>
+    <bpmn:sequenceFlow id="f_profil_script" sourceRef="profil" targetRef="aufbereiten"/>
+    <bpmn:sequenceFlow id="f_script_test" sourceRef="aufbereiten" targetRef="gw_test"/>
+    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@blumer.net" sourceRef="gw_test" targetRef="freigabe">
+      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@blumer.net")</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_test_reject" name="sonst" sourceRef="gw_test" targetRef="end_kein_test"/>
+    <bpmn:sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="gw_frei"/>
+    <bpmn:sequenceFlow id="f_frei_anlegen" name="anlegen" sourceRef="gw_frei" targetRef="anlegen">
+      <bpmn:conditionExpression>= entscheidung = "anlegen"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_frei_ablehnen" name="ablehnen" sourceRef="gw_frei" targetRef="end_abgelehnt"/>
+    <bpmn:sequenceFlow id="f_anlegen_ende" sourceRef="anlegen" targetRef="end_bereit"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_account_bestellung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="134" y="222" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_profil" bpmnElement="profil">
+        <dc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_aufbereiten" bpmnElement="aufbereiten">
+        <dc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_test" bpmnElement="gw_test" isMarkerVisible="true">
+        <dc:Bounds x="550" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="538" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_freigabe" bpmnElement="freigabe">
+        <dc:Bounds x="660" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_frei" bpmnElement="gw_frei" isMarkerVisible="true">
+        <dc:Bounds x="820" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="808" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_anlegen" bpmnElement="anlegen">
+        <dc:Bounds x="930" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_bereit" bpmnElement="end_bereit">
+        <dc:Bounds x="1092" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1066" y="222" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_kein_test" bpmnElement="end_kein_test">
+        <dc:Bounds x="557" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="533" y="360" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
+        <dc:Bounds x="827" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="809" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_profil" bpmnElement="f_start_profil">
+        <di:waypoint x="188" y="200"/><di:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_profil_script" bpmnElement="f_profil_script">
+        <di:waypoint x="340" y="200"/><di:waypoint x="390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_script_test" bpmnElement="f_script_test">
+        <di:waypoint x="490" y="200"/><di:waypoint x="550" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_test_ok" bpmnElement="f_test_ok">
+        <di:waypoint x="600" y="200"/><di:waypoint x="660" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="602" y="176" width="106" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_test_reject" bpmnElement="f_test_reject">
+        <di:waypoint x="575" y="225"/><di:waypoint x="575" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="581" y="262" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_freigabe_gw" bpmnElement="f_freigabe_gw">
+        <di:waypoint x="760" y="200"/><di:waypoint x="820" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frei_anlegen" bpmnElement="f_frei_anlegen">
+        <di:waypoint x="870" y="200"/><di:waypoint x="930" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="878" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frei_ablehnen" bpmnElement="f_frei_ablehnen">
+        <di:waypoint x="845" y="225"/><di:waypoint x="845" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="851" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_anlegen_ende" bpmnElement="f_anlegen_ende">
+        <di:waypoint x="1030" y="200"/><di:waypoint x="1092" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

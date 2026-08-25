@@ -1,0 +1,59 @@
+{
+  "type": "default",
+  "id": "account-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔑 Bestellung freigeben\n\nPrüfe die Account-Bestellung. Typ, Kategorie, Aktivierung und der vorgeschlagene UPN kommen aus der DMN-Regel `KontotypMapping`. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Konnektor legt das Konto in blumer.net an."
+    },
+    {
+      "key": "kategorie",
+      "type": "textfield",
+      "label": "Kategorie (aus DMN)",
+      "disabled": true
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "User Principal Name",
+      "disabled": true
+    },
+    {
+      "key": "displayName",
+      "type": "textfield",
+      "label": "Anzeigename",
+      "description": "Vorschlag – bei Bedarf anpassen.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung des Antragstellers",
+      "disabled": true
+    },
+    {
+      "key": "entscheidung",
+      "type": "radio",
+      "label": "Entscheidung",
+      "values": [
+        { "label": "Freigeben – Konto in blumer.net anlegen", "value": "anlegen" },
+        { "label": "Bestellung ablehnen", "value": "ablehnen" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initiales Passwort",
+      "description": "Mindestens 8 Zeichen. Wird beim ersten Login geändert.",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true, "minLength": 8 }
+    },
+    {
+      "key": "ablehnungsgrund",
+      "type": "textarea",
+      "label": "Ablehnungsgrund",
+      "conditional": { "hide": "=entscheidung != \"ablehnen\"" }
+    }
+  ]
+}
