@@ -1,0 +1,59 @@
+{
+  "type": "default",
+  "id": "onb-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔑 Onboarding freigeben\n\nPrüfe den Antrag. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Konnektor legt daraufhin das Konto in blumer.net an (`create-user`).\n\n> Das Passwort ist ein **Laufzeitwert** — es steht nie im Modell, sondern wird hier gesetzt und als `passwordProfile` an Microsoft Graph übergeben (`forceChangePasswordNextSignIn`). Der UPN wurde bereits gegen die Test-Objekt-Regel geprüft; du siehst hier nur Anträge, die sie bestanden haben."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "disabled": true
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "disabled": true
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "User Principal Name",
+      "disabled": true
+    },
+    {
+      "key": "displayName",
+      "type": "textfield",
+      "label": "Anzeigename",
+      "description": "Vorschlag aus Vor- und Nachname – bei Bedarf anpassen.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "entscheidung",
+      "type": "radio",
+      "label": "Entscheidung",
+      "values": [
+        { "label": "Freigeben – Konto in blumer.net anlegen", "value": "anlegen" },
+        { "label": "Antrag ablehnen", "value": "ablehnen" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initiales Passwort",
+      "description": "Mindestens 8 Zeichen. Wird beim ersten Login geändert (forceChangePasswordNextSignIn).",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true, "minLength": 8 }
+    },
+    {
+      "key": "ablehnungsgrund",
+      "type": "textarea",
+      "label": "Ablehnungsgrund",
+      "conditional": { "hide": "=entscheidung != \"ablehnen\"" }
+    }
+  ]
+}

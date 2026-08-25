@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Onboarding-Self-Service (Entra ID) — eine Atlas-Applikation mit Formularen, die
+  scharf gegen den Tenant blumer.net schreibt, aber nur gegen klar benannte
+  Test-Objekte.
+
+  Der rote Faden ist die doppelte, fail-closed Absicherung vor jedem Schreibzugriff:
+
+    Start (Formular onb-start: Vorname, Nachname, UPN, Abteilung)
+     -> [Script] "Vorschlag"      (displayName + mailNickname aus den Namen)
+     -> (X) "Test-Objekt?"        Gate 1: nur ein UPN, der mit jml-test- beginnt UND
+                                  auf @blumer.net endet, geht weiter. Default (alles
+                                  andere) -> Ende "Kein Test-Objekt". Es wird dann
+                                  KEIN Entra-Aufruf gemacht.
+     -> User-Task "Freigeben"     (Formular onb-freigabe; Admin setzt Initialpasswort)
+     -> (X) "Freigegeben?"        Gate 2: nur die ausdrueckliche Entscheidung "anlegen"
+                                  legt an. Default -> Ende "Abgelehnt".
+     -> Service "Benutzer anlegen"(entra create-user, connector="blumer_net")
+     -> Ende "Konto angelegt"
+
+  Warum fail-closed: beide Gateways nehmen den ABLEHNENDEN Pfad als Default. Nur eine
+  ausdrueckliche, positive Bedingung (Test-UPN bzw. entscheidung="anlegen") fuehrt zum
+  Schreiben. Ein fehlender oder unerwarteter Wert landet nie beim create-user.
+
+  Das Gate im Prozess ist die massgebliche Grenze — die pattern-Validierung im
+  Start-Formular ist nur Komfort und laesst sich (etwa bei per MCP gestarteten
+  Instanzen ohne Formular) umgehen; das BPMN-Gateway nicht.
+
+  Das Anfangspasswort ist ein Laufzeitwert: es wird erst im Freigabe-Formular gesetzt
+  und pro Feld als FEEL in den create-user-Body eingesetzt (passwordProfile), steht
+  also nie im Modell.
+
+  Laeuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
+  Tenant-Credential liegt nie in der Engine. Der create-user-Task parkt, bis ein
+  Entra-Worker ihn abholt; auf atlas.blumer.cloud beaufsichtigt die Engine den Worker
+  standardmaessig (ADR-0172), sobald der Connector "blumer_net" im Store steht.
+
+  Startvariablen (Formular onb-start): vorname, nachname, upn, abteilung
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra_onboarding_selfservice"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="proc_entra_onboarding_selfservice" name="Onboarding-Self-Service (Entra ID)" isExecutable="true">
+    <bpmn:documentation>Self-Service-Onboarding fuer den Tenant blumer.net: ein Antragsteller erfasst das
+neue Mitglied, ein Administrator gibt frei und setzt das Initialpasswort, danach legt
+der Entra-Konnektor das Konto an (create-user).
+
+Scharf, aber nur gegen Test-Objekte: zwei fail-closed Gateways sichern jeden
+Schreibzugriff ab. Gate 1 laesst nur einen UPN durch, der mit "jml-test-" beginnt und
+auf "@blumer.net" endet; alles andere endet vor jedem Entra-Aufruf bei "Kein
+Test-Objekt". Gate 2 legt nur bei der ausdruecklichen Entscheidung "anlegen" an.
+
+Der create-user-Task ist ein Entra-Konnektor-Task (ADR-0172): das Modell waehlt die
+benannte Operation statt eine Graph-URL zu schreiben. Er parkt, bis ein Entra-Worker
+ihn abholt — der Konnektor ist worker-only, damit das Tenant-Credential nie in die
+Engine gelangt (ADR-0164/0172).
+
+Benoetigte Anwendungsberechtigung (mit Administratorzustimmung): User.ReadWrite.All.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Onboarding beantragt">
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="onb-start"/>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>f_start_vorschlag</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:scriptTask id="vorschlag" name="Vorschlag">
+      <bpmn:documentation>Schlaegt aus den Namensbestandteilen einen Anzeigenamen und einen mailNickname vor.
+Der Anzeigename ist im Freigabe-Formular editierbar; der mailNickname geht unveraendert
+in den create-user-Body.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="displayName" expression="= vorname + &quot; &quot; + nachname"/>
+        <zeebe:script resultVariable="mailNick" expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_vorschlag</bpmn:incoming>
+      <bpmn:outgoing>f_vorschlag_test</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="gw_test" name="Test-Objekt?" default="f_test_reject">
+      <bpmn:documentation>Gate 1, fail-closed: nur ein UPN, der mit "jml-test-" beginnt und auf "@blumer.net"
+endet, geht zur Freigabe. Der Default-Pfad (jeder andere UPN) fuehrt direkt zum Ende
+"Kein Test-Objekt" — ohne jeden Entra-Aufruf.</bpmn:documentation>
+      <bpmn:incoming>f_vorschlag_test</bpmn:incoming>
+      <bpmn:outgoing>f_test_ok</bpmn:outgoing>
+      <bpmn:outgoing>f_test_reject</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="freigabe" name="Onboarding freigeben">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="entra-onboarding"/>
+        <zeebe:formDefinition formId="onb-freigabe"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_test_ok</bpmn:incoming>
+      <bpmn:outgoing>f_freigabe_gw</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="gw_frei" name="Freigegeben?" default="f_frei_ablehnen">
+      <bpmn:documentation>Gate 2, fail-closed: nur die ausdrueckliche Entscheidung "anlegen" fuehrt zum
+create-user. Der Default-Pfad (Ablehnung oder jeder andere Wert) fuehrt zum Ende
+"Abgelehnt".</bpmn:documentation>
+      <bpmn:incoming>f_freigabe_gw</bpmn:incoming>
+      <bpmn:outgoing>f_frei_anlegen</bpmn:outgoing>
+      <bpmn:outgoing>f_frei_ablehnen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="anlegen" name="Benutzer anlegen">
+      <bpmn:documentation>create-user: ein POST /users gegen blumer.net. Der Body wird inline als JSON verfasst;
+String-Werte mit fuehrendem "=" sind FEEL, pro Feld ausgewertet. Der displayName kommt
+aus dem (ggf. angepassten) Freigabe-Wert, mailNickname aus dem Vorschlag, userPrincipalName
+aus dem geprueften UPN. Das Passwort ist die Laufzeit-Variable initialpasswort und steht
+nie im Modell. Die Antwort (Konto samt id) landet in "konto".</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="blumer_net" operation="create-user" resultVariable="konto"
+                              attributes="{ &quot;accountEnabled&quot;: true, &quot;displayName&quot;: &quot;=displayName&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=initialpasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_frei_anlegen</bpmn:incoming>
+      <bpmn:outgoing>f_anlegen_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="end_bereit" name="Konto angelegt">
+      <bpmn:incoming>f_anlegen_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="end_kein_test" name="Kein Test-Objekt">
+      <bpmn:documentation>Der UPN entsprach nicht der Test-Objekt-Regel (jml-test-*@blumer.net). Es wurde nichts
+in Entra angelegt.</bpmn:documentation>
+      <bpmn:incoming>f_test_reject</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="end_abgelehnt" name="Abgelehnt">
+      <bpmn:incoming>f_frei_ablehnen</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_vorschlag" sourceRef="start" targetRef="vorschlag"/>
+    <bpmn:sequenceFlow id="f_vorschlag_test" sourceRef="vorschlag" targetRef="gw_test"/>
+    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@blumer.net" sourceRef="gw_test" targetRef="freigabe">
+      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@blumer.net")</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_test_reject" name="sonst" sourceRef="gw_test" targetRef="end_kein_test"/>
+    <bpmn:sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="gw_frei"/>
+    <bpmn:sequenceFlow id="f_frei_anlegen" name="anlegen" sourceRef="gw_frei" targetRef="anlegen">
+      <bpmn:conditionExpression>= entscheidung = "anlegen"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_frei_ablehnen" name="ablehnen" sourceRef="gw_frei" targetRef="end_abgelehnt"/>
+    <bpmn:sequenceFlow id="f_anlegen_ende" sourceRef="anlegen" targetRef="end_bereit"/>
+  </bpmn:process>
+
+  <!--
+    Hand-authored BPMN-DI (AGENTS.md): gerade Hauptachse auf y=200, 150px-Raster.
+    Die beiden Ablehnungs-Enden haengen senkrecht unter ihrem Gateway (y=320), damit
+    keine Kante durch einen Knoten laeuft.
+  -->
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_entra_onboarding_selfservice">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="132" y="222" width="80" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_vorschlag" bpmnElement="vorschlag">
+        <dc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_test" bpmnElement="gw_test" isMarkerVisible="true">
+        <dc:Bounds x="400" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="388" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_freigabe" bpmnElement="freigabe">
+        <dc:Bounds x="510" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_frei" bpmnElement="gw_frei" isMarkerVisible="true">
+        <dc:Bounds x="680" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="668" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_anlegen" bpmnElement="anlegen">
+        <dc:Bounds x="790" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_bereit" bpmnElement="end_bereit">
+        <dc:Bounds x="952" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="930" y="222" width="82" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_kein_test" bpmnElement="end_kein_test">
+        <dc:Bounds x="407" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="383" y="360" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
+        <dc:Bounds x="687" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="669" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_vorschlag" bpmnElement="f_start_vorschlag">
+        <di:waypoint x="188" y="200"/><di:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_vorschlag_test" bpmnElement="f_vorschlag_test">
+        <di:waypoint x="340" y="200"/><di:waypoint x="400" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_test_ok" bpmnElement="f_test_ok">
+        <di:waypoint x="450" y="200"/><di:waypoint x="510" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="452" y="176" width="106" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_test_reject" bpmnElement="f_test_reject">
+        <di:waypoint x="425" y="225"/><di:waypoint x="425" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="431" y="262" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_freigabe_gw" bpmnElement="f_freigabe_gw">
+        <di:waypoint x="610" y="200"/><di:waypoint x="680" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frei_anlegen" bpmnElement="f_frei_anlegen">
+        <di:waypoint x="730" y="200"/><di:waypoint x="790" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="738" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_frei_ablehnen" bpmnElement="f_frei_ablehnen">
+        <di:waypoint x="705" y="225"/><di:waypoint x="705" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="711" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_anlegen_ende" bpmnElement="f_anlegen_ende">
+        <di:waypoint x="890" y="200"/><di:waypoint x="952" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
