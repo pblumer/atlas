@@ -1065,5 +1065,11 @@
       "en": "On an instance that requires a login, the account menu said \"Single-user mode\" — the label for a server that has no login at all — whenever nobody was signed in, including on the login screen itself. It now says \"Not signed in\" there, and keeps the old label where it is actually true.",
       "de": "Auf einer Instanz mit Anmeldepflicht stand im Konto-Menü \"Single-user mode\" — die Bezeichnung für einen Server ganz ohne Login —, sobald niemand angemeldet war, also auch auf dem Login-Bildschirm selbst. Dort steht jetzt \"Nicht angemeldet\"; wo die alte Bezeichnung zutrifft, bleibt sie."
     }
+  },
+  "the-handbook-s-recipes-are-compiled-by-a-test-now-and-one-of": {
+    "hidden": true
+  },
+  "the-call-activity-recipe-no-longer-promises-an-incident-that": {
+    "hidden": true
   }
 }
