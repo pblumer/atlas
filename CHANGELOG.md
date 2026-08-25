@@ -14,6 +14,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Active Directory connector gets a mock mode, so an identity process can be run
+  before anybody goes near a real forest.** The connector could do the whole lifecycle
+  (ADR-0166) and could run on a worker (ADR-0168), and neither made it *testable*: the
+  directory a joiner/mover/leaver touches is production by definition, so the only ways to
+  try a draft were to swap the task for an ADR-0120 mockup — which throws the AD
+  configuration away and proves nothing about the task — or to find a test forest. Now
+  `atlas worker --connector ad` with `ATLAS_AD_MOCK=1` serves AD jobs against a directory in
+  its own memory. Every line of the connector but the transport is the production one: the
+  mock implements the same `Dialer`/`Conn` the go-ldap adapter does, so `Resolve`, `Run`,
+  `dispatch` and the DirSync pass are the code that runs against a domain controller.
+
+  **The model does not change**, and that is the point of putting the switch on the worker
+  rather than on the task: a mockup flag in the model is a flag that eventually gets deployed
+  still set, and a task reporting success while touching nothing is the worst failure
+  available. Promoting a mockup run to a real one is an environment variable on a worker, not
+  an edit and a redeploy.
+
+  **It refuses what Active Directory refuses**, because a mock that accepts more teaches a
+  model to be wrong and the lesson arrives in production: a replayed create fails with "entry
+  already exists" (delivery is at-least-once), `unicodePwd` may only be written over an
+  encrypted channel and must carry AD's quoted UTF-16LE encoding, a group member cannot be
+  added or removed twice, a container with children cannot be deleted, a simple bind naming a
+  DN with no password behind it is refused — what an unset `ATLAS_CONNECTOR_<REF>_TOKEN` looks
+  like on the wire — and DirSync is answered only at a naming context root. The delta is real:
+  every write stamps a change counter, a delete leaves a tombstone carrying `isDeleted`, and
+  the cookie *is* that counter, so a reconciliation loop converges against the mock exactly as
+  it does against a real domain controller, `more` signal and `maxEntries` cap included.
+  A set-password is checked and then dropped — the entry records `pwdLastSet`, never the
+  value, and the operation journal redacts it.
+
+  `ATLAS_AD_MOCK_SEED` fills the directory from an LDIF or DSML file, read with the
+  directory-file connector's own parser (ADR-0171), because a leaver has nothing to disable in
+  an empty forest. And the worker says what it is doing: a warning at startup that no
+  directory is being written, then one line per simulated operation in the log the Workers
+  console shows (ADR-0157) — that log being the only place a mock worker is distinguishable
+  from a working one. See ADR-draft-ad-connector-mock-mode.
+
 - **The handbook takes on the process developer's role, and builds a whole application in
   front of you.** Everything the handbook taught so far was a *piece*: a recipe per BPMN
   pattern, a tutorial per process. The question it left unanswered is the one an author
