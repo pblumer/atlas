@@ -286,6 +286,14 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		if sErr = s.projects.Save(proj); sErr != nil {
 			return
 		}
+		// Record the grant (ADR-draft-grant-audit-log). The implicit flip to shared
+		// is part of sharing, so it is folded into this one entry, not double-logged.
+		if sErr = s.recordGrantAudit(r, grantAudit{
+			ApplicationID: proj.ID, Action: GrantActionShare,
+			SubjectType: refType, SubjectID: userID, Role: payload.Role,
+		}); sErr != nil {
+			return
+		}
 		n, e := s.countArtifactsInProject(proj.ID)
 		if e != nil {
 			sErr = e
@@ -328,10 +336,29 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 		view projectView
 	)
 	s.do(func() {
+		// Capture the member's type before removal so the audit entry names the right
+		// kind; if the id is not a member this stays empty and no entry is written.
+		subjType := ""
+		for _, m := range proj.Members {
+			if m.Ref.ID == userID {
+				subjType = m.Ref.Type
+				break
+			}
+		}
 		proj.Members = removeMember(proj.Members, userID)
 		proj.UpdatedAt = time.Now().Unix()
 		if sErr = s.projects.Save(proj); sErr != nil {
 			return
+		}
+		// Record the revoke only when one actually happened — removing a non-member is
+		// an idempotent no-op and leaves no trail (ADR-draft-grant-audit-log).
+		if subjType != "" {
+			if sErr = s.recordGrantAudit(r, grantAudit{
+				ApplicationID: proj.ID, Action: GrantActionUnshare,
+				SubjectType: subjType, SubjectID: userID,
+			}); sErr != nil {
+				return
+			}
 		}
 		n, e := s.countArtifactsInProject(proj.ID)
 		if e != nil {

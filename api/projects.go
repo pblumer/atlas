@@ -241,6 +241,13 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// Old values, captured before mutation, so the audit entries below record the
+		// actual transition and only when something changed (ADR-draft-grant-audit-log).
+		oldVisibility := rec.Visibility
+		if oldVisibility == "" {
+			oldVisibility = VisibilityPrivate
+		}
+		oldOwner := rec.OwnerID
 		if payload.Name != nil {
 			rec.Name = name
 		}
@@ -261,6 +268,25 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		rec.UpdatedAt = time.Now().Unix()
 		if saveErr = s.projects.Save(rec); saveErr != nil {
 			return
+		}
+		// Audit the access-control changes — visibility flips and ownership transfers,
+		// each only when the value actually changed (ADR-draft-grant-audit-log). A
+		// rename is not an access change and is not recorded.
+		if payload.Visibility != nil && *payload.Visibility != oldVisibility {
+			if saveErr = s.recordGrantAudit(r, grantAudit{
+				ApplicationID: id, Action: GrantActionVisibility,
+				From: oldVisibility, To: *payload.Visibility,
+			}); saveErr != nil {
+				return
+			}
+		}
+		if payload.OwnerID != nil && *payload.OwnerID != oldOwner {
+			if saveErr = s.recordGrantAudit(r, grantAudit{
+				ApplicationID: id, Action: GrantActionTransfer,
+				From: oldOwner, To: *payload.OwnerID,
+			}); saveErr != nil {
+				return
+			}
 		}
 		n, e := s.countArtifactsInProject(id)
 		if e != nil {
@@ -333,6 +359,13 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		// this cleanup exists to prevent, permanently — the retry would take the
 		// idempotent "already gone" path and never revisit the records.
 		if delErr = s.releases.deleteForApplication(id); delErr != nil {
+			return
+		}
+		// The access-control history is metadata about this application, reachable only
+		// through its id, so it is cleaned up with the application like its releases
+		// (ADR-draft-grant-audit-log). Same ordering rationale: audit before the
+		// application, so a failed cleanup self-heals on retry.
+		if delErr = s.grantAudit.deleteForApplication(id); delErr != nil {
 			return
 		}
 		if delErr = s.projects.Delete(id); delErr != nil {

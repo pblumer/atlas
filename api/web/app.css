@@ -2316,6 +2316,12 @@ tr[hidden] { display: none; }
 .add-row #add-btn { flex: 0 0 auto; }
 .role-sel { flex: 0 0 auto; font-size: 12px; padding: 4px 6px; }
 
+/* Grant audit log (ADR-draft-grant-audit-log): the Activity section's rows. */
+.audit-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; color: var(--text); }
+.audit-row + .audit-row { border-top: 1px solid var(--border); }
+.audit-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.audit-row > .small { flex: 0 0 auto; white-space: nowrap; }
+
 /* ---------- Token simulation (Design view, ADR-0078) ---------- */
 /* A client-side walkthrough: tokens move along sequence flows so the control flow
    reads at a glance. No engine, no deploy — a teaching aid on the unsaved diagram. */

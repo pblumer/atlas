@@ -2521,8 +2521,41 @@ function openShareModal(proj, users, degraded, reload) {
         <div class="mlabel">Add people</div>
         ${addControl}
       </div>
-      ${transferSec}`;
+      ${transferSec}
+      ${p.myRole === "owner" ? `<div class="share-sec" id="share-activity"></div>` : ""}`;
     wire();
+    refreshActivity();
+  };
+
+  // The Activity section is the grant audit log (ADR-draft-grant-audit-log): who
+  // changed access to this project and when. It is owner-only on the server, so it is
+  // fetched and shown only for an owner, and re-fetched after every mutation below so
+  // a share/revoke/visibility change appears without reopening the dialog.
+  const auditLine = (e) => {
+    const who = `<b>${esc(e.actorName || e.actorId || "someone")}</b>`;
+    const subj = () => esc(nameOf(e.subjectId));
+    switch (e.action) {
+      case "share": return `${who} shared with ${subj()} as ${esc(e.role)}`;
+      case "unshare": return `${who} removed ${subj()}`;
+      case "visibility": return `${who} set visibility to ${esc(e.to)}`;
+      case "transfer": return `${who} transferred ownership to ${esc(nameOf(e.to))}`;
+      default: return `${who} changed access`;
+    }
+  };
+  const refreshActivity = async () => {
+    const host = body.querySelector("#share-activity");
+    if (!host) return;
+    let events;
+    try { events = await api("GET", `/api/v1/applications/${encodeURIComponent(p.id)}/audit`); }
+    catch { host.innerHTML = ""; return; }
+    if (!events || !events.length) {
+      host.innerHTML = `<div class="mlabel">Activity</div><p class="muted small">No access changes recorded yet.</p>`;
+      return;
+    }
+    const rows = events.slice(0, 10).map((e) =>
+      `<div class="audit-row"><span>${auditLine(e)}</span><span class="muted small">${esc(fmtTime(e.at))}</span></div>`).join("");
+    const more = events.length > 10 ? `<p class="muted small">Showing the 10 most recent of ${events.length} changes.</p>` : "";
+    host.innerHTML = `<div class="mlabel">Activity</div>${rows}${more}`;
   };
 
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
