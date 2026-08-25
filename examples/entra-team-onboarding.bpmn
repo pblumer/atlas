@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Team-Onboarding (Entra ID) — was der Konnektor nach ADR-0172 (amended) beherrscht.
+
+  Das dritte Entra-Beispiel neben entra-create-account.bpmn (anlegen) und
+  entra-konten-rezertifizierung.bpmn (befragen): hier *baut* ein Prozess einen
+  vollständigen Arbeitsplatz auf — Konto, Lizenz, Projektgruppe, Mitgliedschaft und
+  ein Team auf dieser Gruppe. Genau die Objekte, die ein Joiner-Prozess anfasst, in
+  einer geraden Kette:
+
+    Start "Onboarding angefordert"
+     → "Benutzer anlegen"              (entra create-user   → konto)
+     → "Lizenz zuweisen"              (entra assign-license)
+     → "Projektgruppe anlegen"        (entra create-group  → gruppe)
+     → "In die Gruppe aufnehmen"      (entra add-group-member)
+     → "Team aus der Gruppe erstellen"(entra create-team   → team)
+     → "Als Team-Mitglied hinzufügen" (entra add-team-member)
+     → Ende "Arbeitsplatz bereit"
+
+  Der rote Faden ist die id-Kette: create-user gibt das angelegte Konto als `konto`
+  zurück, create-group die Gruppe als `gruppe`. Alle folgenden Schritte adressieren
+  über `=konto.id` bzw. `=gruppe.id` — nichts wird von Hand verdrahtet. Und die
+  Team-Schritte nehmen dieselbe `=gruppe.id`: die id eines Teams *ist* die seiner
+  Microsoft-365-Gruppe, deshalb gibt es kein zweites Team-Feld.
+
+  Kein Geheimnis im Modell: Das Anfangspasswort steht im passwordProfile der
+  Startvariablen `neuerBenutzer`, also in einem Laufzeitwert, nie im Diagramm.
+
+  Läuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
+  Tenant-Credential liegt nie in der Engine. Jeder Service-Task parkt, bis ein
+  Entra-Worker ihn abholt — wie der zu starten ist und welche Anwendungsberechtigungen
+  die App-Registrierung braucht, steht in der Dokumentation des Prozesses selbst, damit
+  es mit dem Modell reist.
+
+  Startvariablen:
+    neuerBenutzer  { accountEnabled, displayName, mailNickname, userPrincipalName,
+                     passwordProfile: { password, forceChangePasswordNextSignIn } }
+    lizenz         { addLicenses: [ { skuId } ], removeLicenses: [] }
+    projektGruppe  { displayName, mailNickname, mailEnabled: true,
+                     securityEnabled: false, groupTypes: [ "Unified" ] }
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra_team_onboarding"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="entra-team-onboarding" name="Team-Onboarding (Entra ID)" isExecutable="true">
+    <bpmn:documentation>Richtet einem neuen Mitglied den Arbeitsplatz in Entra ID ein: Konto, Lizenz,
+Projektgruppe, Gruppenmitgliedschaft und ein Team auf dieser Gruppe.
+
+Startet mit drei JSON-Objekten — `neuerBenutzer`, `lizenz`, `projektGruppe` — und
+verkettet die angelegten Objekte über ihre id: `konto` aus create-user und `gruppe`
+aus create-group tragen jeden folgenden Schritt. Die Team-Schritte adressieren
+dieselbe Gruppe, denn die id eines Teams ist die seiner Microsoft-365-Gruppe.
+
+Jeder Service-Task ist ein Entra-Konnektor-Task: das Modell wählt eine benannte
+Operation statt eine Graph-URL und ein JSON-Fragment von Hand zu schreiben
+(ADR-0172). Die Tasks parken, bis ein Entra-Worker sie abholt — der Konnektor ist
+worker-only, damit das Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
+
+    export ATLAS_ENTRA_CONNECTORS=contoso
+    export ATLAS_ENTRA_CONTOSO_TENANT_ID=… ATLAS_ENTRA_CONTOSO_CLIENT_ID=…
+    export ATLAS_ENTRA_CONTOSO_CLIENT_SECRET=…
+    atlas worker --server http://localhost:8080 --connector entra
+
+Berechtigungen (mit Administratorzustimmung): User.ReadWrite.All, Group.ReadWrite.All,
+Team.Create, TeamMember.ReadWrite.All; assign-license zusätzlich eine Directory-Rolle.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Onboarding angefordert">
+      <bpmn:documentation>Ein einfaches (none) Start-Event: der Prozess wird bewusst angestoßen — aus dem
+Personalsystem, einem Formular oder von Hand. Wer eingerichtet wird, kommt als
+Startvariable mit und steht nicht im Modell.</bpmn:documentation>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="benutzer" name="Benutzer anlegen">
+      <bpmn:documentation>create-user: ein POST /users mit den Eigenschaften aus `neuerBenutzer`. Das
+Anfangspasswort liegt im passwordProfile dieser Variablen — ein Laufzeitwert, kein
+Modelltext. Die Antwort (das angelegte Konto samt id) landet in `konto` und trägt
+jeden folgenden Schritt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="create-user"
+                              attributesVariable="neuerBenutzer" resultVariable="konto"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="lizenz" name="Lizenz zuweisen">
+      <bpmn:documentation>assign-license: ein POST /users/{id}/assignLicense. Der Body kommt aus `lizenz`
+({ addLicenses, removeLicenses }); die id adressiert das eben angelegte Konto über
+`=konto.id`. Eine benannte Operation statt der rohen assignLicense-Nutzlast.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="assign-license"
+                              userId="=konto.id" attributesVariable="lizenz"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="gruppe" name="Projektgruppe anlegen">
+      <bpmn:documentation>create-group: ein POST /groups mit den Eigenschaften aus `projektGruppe`. Für ein
+späteres Team muss es eine Microsoft-365-Gruppe sein — mailEnabled true,
+groupTypes ["Unified"]. Die angelegte Gruppe (mit id) landet in `gruppe`.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="create-group"
+                              attributesVariable="projektGruppe" resultVariable="gruppe"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="mitglied" name="In die Gruppe aufnehmen">
+      <bpmn:documentation>add-group-member: ein POST auf die $ref-Sammlung der Gruppe, dessen Body die
+absolute @odata.id des Kontos trägt — eine URL, die man nicht von Hand schreiben
+soll, weshalb der Konnektor sie baut. `userId="=konto.id"`, `groupId="=gruppe.id"`.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="add-group-member"
+                              userId="=konto.id" groupId="=gruppe.id"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="team" name="Team aus der Gruppe erstellen">
+      <bpmn:documentation>create-team: ein PUT /groups/{id}/team, das die Gruppe zum Team macht. Die id des
+Teams ist die der Gruppe, deshalb genügt `groupId="=gruppe.id"` und es gibt kein
+eigenes Team-Feld. Die Team-Einstellungen setzt der Konnektor ausdrücklich, damit
+dasselbe Modell überall dasselbe Team ergibt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="create-team"
+                              groupId="=gruppe.id" resultVariable="team"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="teammitglied" name="Als Team-Mitglied hinzufügen">
+      <bpmn:documentation>add-team-member: ein POST /teams/{teamId}/members — mit derselben `=gruppe.id`, weil
+Team- und Gruppen-id dieselbe sind. Wer ein Team wieder verlassen soll, wird über
+remove-group-member entfernt: ein Team-Mitglied ist Mitglied seiner Gruppe.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="add-team-member"
+                              userId="=konto.id" groupId="=gruppe.id"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="end" name="Arbeitsplatz bereit">
+      <bpmn:documentation>Konto, Lizenz, Gruppe, Mitgliedschaft und Team stehen. Ein einzelner Abschluss,
+weil die Kette linear ist: scheitert ein Schritt, wird sein Job zum Incident und
+der Prozess kommt hier gar nicht erst an.</bpmn:documentation>
+      <bpmn:incoming>f7</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="benutzer"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="benutzer" targetRef="lizenz"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="lizenz" targetRef="gruppe"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="gruppe" targetRef="mitglied"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="mitglied" targetRef="team"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="team" targetRef="teammitglied"/>
+    <bpmn:sequenceFlow id="f7" sourceRef="teammitglied" targetRef="end"/>
+  </bpmn:process>
+
+  <!--
+    Hand-authored BPMN-DI (AGENTS.md): eine gerade Hauptachse auf y=200 mit 150px
+    Raster. Nichts überlappt, keine Kante läuft durch einen Knoten.
+  -->
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="entra-team-onboarding">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="222" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_benutzer" bpmnElement="benutzer">
+        <dc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lizenz" bpmnElement="lizenz">
+        <dc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gruppe" bpmnElement="gruppe">
+        <dc:Bounds x="540" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_mitglied" bpmnElement="mitglied">
+        <dc:Bounds x="690" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_team" bpmnElement="team">
+        <dc:Bounds x="840" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_teammitglied" bpmnElement="teammitglied">
+        <dc:Bounds x="990" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="1162" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1138" y="222" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="340" y="200"/>
+        <di:waypoint x="390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="490" y="200"/>
+        <di:waypoint x="540" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="640" y="200"/>
+        <di:waypoint x="690" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="790" y="200"/>
+        <di:waypoint x="840" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="940" y="200"/>
+        <di:waypoint x="990" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7">
+        <di:waypoint x="1090" y="200"/>
+        <di:waypoint x="1162" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
