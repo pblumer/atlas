@@ -445,9 +445,11 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// and somebody trying Atlas configures nothing to get there. That includes mail,
 	// whose configuration the server hands to the child at spawn out of its own
 	// connector store — the SMTP handshake being the stall an operator actually
-	// notices. --in-process-connectors returns to the old arrangement wholesale;
-	// --offload-connectors adds the remaining credential-bearing kinds on top, once
-	// their secrets have been moved to a worker by hand.
+	// notices — and Active Directory, whose per-task bind-password references are
+	// handed over the same way (ADR-draft-ad-default-offload). --in-process-connectors
+	// returns to the old arrangement wholesale; --offload-connectors adds the remaining
+	// credential-bearing kinds on top, once their secrets have been moved to a worker
+	// by hand.
 	//
 	// One worker per kind, not one for all of them. Three reasons, and the first is
 	// not about tidiness: a script task inherits its worker's whole environment, so a
@@ -702,7 +704,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, rest, script, webscrape). The server must be offloading them (it offloads csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, and entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, and entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

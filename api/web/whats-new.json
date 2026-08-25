@@ -162,6 +162,47 @@
       }
     },
     {
+      "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Active Directory tasks run beside the engine now",
+        "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
+      },
+      "summary": {
+        "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
+        "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
+          "Its log lists every directory operation it performed — and says so when it is in mock mode.",
+          "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
+        ],
+        "de": [
+          "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
+          "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
+          "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "a-dot-in-a-write-target-is-refused-at-deploy",
       "version": "Unreleased",
       "date": null,
@@ -328,27 +369,6 @@
         },
         "route": "#/operations"
       }
-    },
-    {
-      "id": "token-markers-on-one-element-no-longer-overlap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Several tokens on one shape are readable again",
-        "de": "Mehrere Tokens auf einer Form sind wieder lesbar"
-      },
-      "summary": {
-        "en": "The replay draws a marker per token on an element, and they were spaced slightly closer than they are wide — so every pair sat partly on top of the one before it. A loop puts two on its task at all times, so this was the normal case rather than a rare one. They now stand clear of each other, and where a shape runs out of room the rest become a \"+n\".",
-        "de": "Der Replay zeichnet je Token einen Marker auf dem Element, und der Abstand war etwas kleiner als der Marker breit ist — jedes Paar lag also teilweise übereinander. Eine Schleife hat immer zwei davon auf ihrem Task, das war also der Normalfall, nicht die Ausnahme. Sie stehen jetzt frei nebeneinander, und wo die Form zu schmal wird, fasst ein „+n\" den Rest zusammen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }
