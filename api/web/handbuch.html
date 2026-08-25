@@ -1928,6 +1928,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>temis</b></td><td data-l="de">DMN-Entscheidungen auswerten.</td><td data-l="en">Evaluate DMN decisions.</td></tr>
           <tr><td><b>HTTP REST</b></td><td data-l="de">Eine REST-API aufrufen, Antwort als Variable speichern.</td><td data-l="en">Call a REST API, store the response as a variable.</td></tr>
           <tr><td><b>Mail</b></td><td data-l="de">E-Mail versenden (SMTP, Gmail, Microsoft&nbsp;365) – oder <b>Vorschau</b>: die Nachricht wird genauso gebaut, landet aber im Postausgang unter <i>Operations &rsaquo; Outbox</i> statt beim Empfänger. So lässt sich ein Mail-Task ohne Mailserver und ohne Zugangsdaten ausprobieren.</td><td data-l="en">Send email (SMTP, Gmail, Microsoft&nbsp;365) – or <b>preview</b>: the message is framed exactly the same way but lands in the outbox under <i>Operations &rsaquo; Outbox</i> instead of reaching a recipient, so a mail task can be tried with no mail server and no credentials.</td></tr>
+          <tr><td><b>Active&nbsp;Directory</b></td><td data-l="de">Konto anlegen, Passwort setzen, aktivieren/deaktivieren, verschieben, löschen, Gruppenmitgliedschaft pflegen, Änderungen per DirSync lesen – oder <b>Mockup</b>: derselbe Task läuft gegen ein Verzeichnis im Arbeitsspeicher des Workers, ohne dass ein Domain Controller angefasst wird (siehe <a href="#testen">Testen &amp; Simulieren</a>).</td><td data-l="en">Create an account, set a password, enable/disable, move, delete, manage group membership, read changes via DirSync – or <b>mockup</b>: the same task runs against a directory in the worker's memory, with no domain controller touched (see <a href="#testen">Test &amp; simulate</a>).</td></tr>
           <tr><td><b>SharePoint</b></td><td data-l="de">Listeneintrag in SharePoint anlegen (Graph API).</td><td data-l="en">Create a list item in SharePoint (Graph API).</td></tr>
           <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
           <tr><td><b>clio</b></td><td data-l="de">Ereignisse in den Event-Store schreiben/lesen.</td><td data-l="en">Write/read events to the event store.</td></tr>
@@ -2019,6 +2020,73 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
             it against your instance.</p>
           <a class="applink" href="/conformance-gallery.html" target="_blank" rel="noopener">→ <span data-l="de">Galerie öffnen</span><span data-l="en">Open the gallery</span> ↗</a>
         </div>
+        <div class="card">
+          <b data-l="de">⑤ Connector ohne Fremdsystem</b><b data-l="en">⑤ A connector without the real system</b>
+          <p class="lead" data-l="de">Ein Service-Task, der ein fremdes System anfasst, lässt sich auch ohne dieses
+            ausprobieren: <b>Mail</b> als Vorschau in den Postausgang, <b>Active Directory</b> als Mockup gegen ein
+            Verzeichnis, das es nicht gibt.</p>
+          <p class="lead" data-l="en">A service task that touches a foreign system can be tried without it:
+            <b>mail</b> as a preview into the outbox, <b>Active Directory</b> as a mockup against a directory that
+            does not exist.</p>
+        </div>
+      </div>
+
+      <h3 data-l="de">Active Directory ausprobieren, ohne ein Active Directory</h3>
+      <h3 data-l="en">Trying Active Directory without an Active Directory</h3>
+      <p data-l="de">Ein Identity-Prozess ist die eine Sorte, die niemand gefahrlos ausprobieren kann: Das
+        Verzeichnis, in dem er Konten anlegt, ist das echte, und ein Test-Joiner hinterlässt ein echtes Konto.
+        Deshalb kann der Worker, der AD-Aufgaben abarbeitet, gegen ein Verzeichnis in seinem eigenen
+        Arbeitsspeicher laufen.</p>
+      <p data-l="en">An identity process is the one kind nobody can safely try out: the directory it creates
+        accounts in is the real one, and a test joiner leaves a real account behind. So the worker that serves AD
+        tasks can run against a directory in its own memory instead.</p>
+      <p data-l="de"><b>Am Modell ändert sich dabei nichts</b> – dieselbe Server-URL, derselbe Bind-DN, dieselben
+        Operationen. Anders ist nur, welcher Worker die Aufgaben abholt. Ein Modell, das im Mockup durchläuft, ist
+        also dasselbe Modell, das später produktiv läuft: Der Weg dorthin ist eine Umgebungsvariable, keine
+        Änderung am Prozess.</p>
+      <p data-l="en"><b>Nothing changes in the model</b> – the same server URL, the same bind DN, the same
+        operations. What differs is only which worker leases the tasks. A model that runs through in mockup mode is
+        therefore the same model that later runs in production: getting there is an environment variable, not an
+        edit.</p>
+      <p data-l="de">Einschalten am Server – der AD-Worker, den Atlas selbst startet, erbt die Variable:</p>
+      <p data-l="en">Switch it on at the server – the AD worker Atlas starts for you inherits the variable:</p>
+      <pre><code>ATLAS_AD_MOCK=1 atlas serve</code></pre>
+      <p data-l="de">Mit Startbestand, also den Konten, die der Prozess vorzufinden erwartet – ein Leaver hat in
+        einem leeren Verzeichnis nichts zu deaktivieren. Die Datei ist LDIF oder DSML, dasselbe Format, das ein
+        Verzeichnis exportiert:</p>
+      <p data-l="en">With a starting population – the accounts the process expects to find, since a leaver has
+        nothing to disable in an empty directory. The file is LDIF or DSML, the same format a directory exports:</p>
+      <pre><code>ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=forest.ldif atlas serve</code></pre>
+      <p data-l="de">Zu sehen ist das Ganze unter <a href="/#/operations/workers">Betrieb &rsaquo; Workers</a>: Dort
+        läuft der Worker <code>ad</code>. Sein Log warnt beim Start, dass kein Verzeichnis geschrieben wird, und
+        zeigt danach jede simulierte Operation mit ihrem DN – Passwörter sind darin redigiert.</p>
+      <p data-l="en">You watch it under <a href="/#/operations/workers">Operations &rsaquo; Workers</a>: the worker
+        called <code>ad</code> runs there. Its log warns at startup that no directory is being written, then lists
+        every simulated operation with its DN – passwords redacted.</p>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Es lehnt ab, was auch AD ablehnt</span><span class="lbl" data-l="en">It refuses what AD refuses</span>
+        <p data-l="de" style="margin:.3em 0 0">Dasselbe Konto ein zweites Mal anlegen, ein Passwort über eine
+          unverschlüsselte Verbindung setzen, ein Gruppenmitglied zweimal hinzufügen, einen Container mit Inhalt
+          löschen, einen Delta-Abgleich an der falschen Stelle im Verzeichnisbaum: Das scheitert im Mockup genauso
+          wie am echten Domain Controller. Genau das ist der Sinn – die Fehler, die man sonst erst in der
+          Produktion trifft, trifft man beim Entwerfen.</p>
+        <p data-l="en" style="margin:.3em 0 0">Creating the same account twice, setting a password over an
+          unencrypted connection, adding a group member twice, deleting a container that still has children,
+          reading a delta from the wrong place in the tree: all of that fails in the mockup exactly as it does
+          against a real domain controller. That is the point – the mistakes you would otherwise meet in
+          production, you meet while drafting.</p>
+      </div>
+
+      <div class="note warn">
+        <span class="lbl" data-l="de">Nicht auf einem Produktivsystem</span><span class="lbl" data-l="en">Not on a production system</span>
+        <p data-l="de" style="margin:.3em 0 0">Ein Mockup-Worker sieht von außen aus wie ein funktionierender: Er
+          schließt jede Aufgabe erfolgreich ab. Die Warnung in seinem Log ist die einzige Stelle, an der man den
+          Unterschied sieht. Und das Verzeichnis lebt im Worker-Prozess – ein Neustart beginnt wieder beim
+          Startbestand.</p>
+        <p data-l="en" style="margin:.3em 0 0">A mockup worker looks exactly like a working one from the outside:
+          it completes every task successfully. The warning in its log is the only place the difference shows. And
+          the directory lives in the worker process – a restart starts over from the seed.</p>
       </div>
 
       <div class="note">
