@@ -277,6 +277,49 @@
       }
     },
     {
+      "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Every task now says where its work will run",
+        "de": "Jede Aufgabe sagt jetzt, wo ihre Arbeit läuft"
+      },
+      "summary": {
+        "en": "The type list on a service task marked every connector as running inside the engine, and that had quietly stopped being true: e-mail, text files, scripts and web scraping are handed to a worker Atlas starts for you, and the database and Entra ID connectors never ran in the engine at all. The mark now comes from the server you are connected to, so it also follows however that server was started. It has also appeared in the two places that said nothing at all — the language of a script task, and a business rule task's choice between the built-in decision engine and an external service. What each one tells you differs, because what a worker holds differs: a connector's credentials, a script's interpreter, a decision service's address.",
+        "de": "Die Typ-Liste einer Service-Aufgabe wies jeden Konnektor als „in der Engine laufend“ aus — und das stimmte längst nicht mehr: E-Mail, Textdateien, Skripte und Web-Scraping übergibt Atlas an einen Worker, den es selbst für Sie startet, und die Datenbank- und Entra-ID-Konnektoren liefen nie in der Engine. Die Kennzeichnung kommt jetzt von dem Server, mit dem Sie verbunden sind, und folgt damit auch dem, womit dieser Server gestartet wurde. Und sie ist an den beiden Stellen aufgetaucht, die bisher gar nichts sagten: bei der Sprache einer Skript-Aufgabe und bei der Wahl einer Business-Rule-Aufgabe zwischen der eingebauten Entscheidungs-Engine und einem externen Dienst. Was dort jeweils steht, unterscheidet sich — weil sich unterscheidet, was ein Worker hält: die Zugangsdaten eines Konnektors, den Interpreter eines Skripts, die Adresse eines Entscheidungsdienstes."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and drop a service task on the canvas.",
+          "In the properties panel, open Type: every connector now carries a mark — in-engine, on a worker, or worker only.",
+          "Pick the E-Mail connector: on a standard install it reads on a worker, and the note underneath says where that connector is configured.",
+          "Change the task into a script task and choose PowerShell: the same mark sits beside the language, and says something a connector would not."
+        ],
+        "de": [
+          "Modeler öffnen und eine Service-Aufgabe auf die Fläche ziehen.",
+          "Im Eigenschaften-Panel „Type“ aufklappen: Jeder Konnektor trägt jetzt eine Kennzeichnung — in-engine, on a worker oder worker only.",
+          "Den E-Mail-Konnektor wählen: Bei einer Standardinstallation steht dort „on a worker“, und der Hinweis darunter sagt, wo dieser Konnektor konfiguriert wird.",
+          "Die Aufgabe in eine Skript-Aufgabe umwandeln und PowerShell wählen: Dieselbe Kennzeichnung steht neben der Sprache — mit einem Hinweis, den ein Konnektor so nicht bekommt."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-loop-contained-in-an-ad-hoc-subprocess-keeps-its-result-to",
       "version": "Unreleased",
       "date": null,
@@ -320,34 +363,6 @@
       "link": {
         "label": "ADR-0077",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-new-validation-rule-can-no-longer-take-down-a-running-serv",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An upgrade no longer stops on a model you already deployed",
-        "de": "Ein Upgrade bleibt nicht mehr an einem bereits deployten Modell hängen"
-      },
-      "summary": {
-        "en": "Atlas recompiles every deployed definition when it starts, and it used to apply the deploy checks again while doing so. A check added to a later version therefore met models that were deployed before it existed, refused them, and the server stopped starting at all — over a model nobody had touched, with every other definition and every running instance out of reach behind it. Those checks decide whether a model may be deployed, not whether it may run, so they no longer run at startup. A definition that was accepted comes back and keeps running, and Atlas writes one warning per model naming what it would fail today, so you can fix it in the Modeler in your own time. The decision models deployed with a process are treated the same way: a decision that no longer compiles no longer stops the server — it fails only if something evaluates it, and the other decisions keep answering. Deploying such a model still refuses it, with the rule named.",
-        "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
-      },
-      "link": {
-        "label": "ADR-0177",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0177-reload-skips-the-deploy-gate.md"
       },
       "tags": [
         "Operations"

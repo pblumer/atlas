@@ -106,10 +106,10 @@ func TestEveryInProcessHandlerIsOffloadable(t *testing.T) {
 	// The user-provisioning connector is deliberately absent from the map: it mutates
 	// the run-loop-owned user store directly (ADR-0123), so there is nothing for a
 	// worker to hold and no endpoint for it to reach. Every other handler must be
-	// namable.
-	engineOnly := map[int32]string{
-		compiler.UserConnectorJobTypeIndex: "mutates the run-loop-owned user store, so it has no out-of-process form",
-	}
+	// namable. The exception is recorded once, in engineOnlyJobTypes, because the
+	// Modeler's placement badge needs the same fact — a kind with no out-of-process
+	// form must not be advised to move to one.
+	engineOnly := engineOnlyJobTypes
 
 	reserved := compiler.ReservedJobTypes()
 	srv.do(func() {

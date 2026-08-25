@@ -247,6 +247,41 @@ _Changed_ / _Removed_ for each version.
   now reads "Not signed in" where a login is enforced and keeps "Single-user mode" where
   it is the truth. Found while diagnosing an instance whose operator concluded from that
   label that a deploy had turned their authentication off.
+- **The Modeler stops guessing where a task's work runs — and starts saying it in all
+  three panels that choose an implementation**
+  ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)). Every kind but the plain job
+  worker carried an **in-engine** badge, decided by a constant compiled into the
+  browser — written when that was true of all of them, and left behind twice over.
+  Five kinds (Active Directory, Text File, E-Mail, script, Web Scraping) now run on a
+  worker the server starts and supervises *by default*, and the SQL and Entra ID connectors were born on
+  a worker with no in-engine form at all — so the badge contradicted the E-Mail
+  connector's own runtime, and sat directly beside "…against a SQL Server database **on
+  a worker**". It could also never reflect `--offload-connectors` or
+  `--in-process-connectors`, which are the server's command line. The Modeler now asks
+  the server (`GET /api/v1/connector-kinds`), which derives the answer from the registry
+  an offload actually removes a handler from, and the badge says one of four things:
+  *in-engine*, *in-engine* with no worker form to move to, *on a worker* (offloaded
+  here), or *worker only* (born there). The notice under the chosen kind follows, so a
+  kind that is already on a worker is no longer advised to move to one, a kind with no
+  out-of-process form is not given advice it cannot take, and a kind whose credential
+  lives at the worker says so. A kind the server reports nothing for — the plain job
+  worker, the Mockup — shows no badge, and so does a Modeler that cannot reach a server:
+  silence rather than a confident wrong answer.
+
+  The same badge now appears in the two panels that never said anything at all, while
+  authoring work the same flag moves. A **script task** says where its language runs, *per
+  language*: scripts are among the kinds offloaded by default, and since each language can
+  also be turned off on its own, Python can be waiting for a worker on a server where
+  PowerShell is not. What it is told differs from a connector's advice, because it has to:
+  an in-engine script is not told to "prefer a job worker" — it cannot become one — but
+  that a hanging script holds the engine's loop with it, and an offloaded one that the
+  interpreter has to exist where that worker runs. A **business rule task** says it per
+  binding, embedded DMN and temis moving separately; its Evaluation select stops claiming
+  a placement in an option label ("In-engine (embedded DMN)" → "Embedded DMN — a decision
+  deployed here"), since `--offload-connectors dmn` made that label false too. A FEEL
+  script still says nothing: it is evaluated inline and creates no job to place.
 
 - **A loop contained in an ad-hoc subprocess keeps its result too**
   ([ADR-0077](docs/adr/0077-multi-instance-activities.md) with [ADR-0138](docs/adr/0138-adhoc-subprocesses.md)).
