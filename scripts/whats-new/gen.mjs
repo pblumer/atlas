@@ -205,6 +205,26 @@ function main() {
   }
 
   const parsed = parseChangelog(changelog);
+
+  // An override is keyed by the id the generator derives from the bullet's headline,
+  // and a key that matches no bullet does nothing at all — the entry still renders,
+  // from the CHANGELOG's own wording, with German falling back to English. That is
+  // indistinguishable from "no override was written", so a mistyped key ships an
+  // untranslated entry and nothing anywhere says so. One did: a key one character
+  // short of its 60-character slug put the raw English sentence in both languages.
+  // Keys are curated by hand, so an unmatched one is always a mistake — either a typo
+  // or a headline that was reworded out from under it. Fail, and name it.
+  const known = new Set(parsed.map((e) => e.id));
+  const orphans = Object.keys(overrides).filter((k) => !k.startsWith("_") && !known.has(k));
+  if (orphans.length) {
+    console.error(
+      `whats-new: ${orphans.length} override key(s) match no CHANGELOG bullet:\n` +
+        orphans.map((k) => `  ${k}`).join("\n") +
+        "\nEach does nothing. Fix the key to the bullet's id, or drop it.",
+    );
+    process.exit(1);
+  }
+
   const entries = [];
   for (const e of parsed) {
     const ov = overrides[e.id];
