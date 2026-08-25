@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Modeler asks the server where an authored kind runs
+# ADR-0183: The Modeler asks the server where an authored kind runs
 
 - **Status:** Accepted
 - **Date:** 2026-08-25

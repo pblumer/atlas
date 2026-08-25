@@ -216,7 +216,7 @@ var mcpOmittedRoutes = map[string]string{
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each connector kind: the Modeler's picker reads it to
-	// badge a kind it is about to author (ADR-draft-the-modeler-asks-where-a-kind-runs).
+	// badge a kind it is about to author (ADR-0183).
 	// It describes the server's own arrangement, like the rest of this family, and an
 	// agent that needs the same fact reads servedInProcess per job type from
 	// atlas_workers, where it comes with the queue and the workers holding it.

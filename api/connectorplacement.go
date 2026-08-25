@@ -27,7 +27,7 @@ import (
 // an offload *removes a handler from*, and it is the same registry the type-keyed pull
 // consults to decide whether a job may be leased at all. So the picker asks rather
 // than guesses, which also means a kind that moves later needs no second edit here
-// (ADR-draft-the-modeler-asks-where-a-kind-runs).
+// (ADR-0183).
 
 // The placements a connector kind can have. The pair of "-only" values is not
 // pedantry: each is the case where the *advice* attached to the plain value would be

@@ -2771,7 +2771,7 @@ function stKindFieldsHTML(cur, ext) {
 // catalog: --offload-connectors and --in-process-connectors are its command line, and
 // some kinds were born on a worker with no in-engine form at all (ADR-0168/0173). This
 // used to be a constant here — true the day it was written, false a day later — so the
-// picker now asks (ADR-draft-the-modeler-asks-where-a-kind-runs). KIND_PLACEMENT holds
+// picker now asks (ADR-0183). KIND_PLACEMENT holds
 // the answer, keyed by catalog id; null until it arrives, which renders no badge rather
 // than a guess.
 let KIND_PLACEMENT = null;
@@ -4681,7 +4681,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           // FEEL is evaluated inline by the engine and creates no job, so it has no
           // placement to report; every other language is a job the server either runs
           // itself or leaves for a worker — and it is offloaded by default, which this
-          // panel never said (ADR-draft-the-modeler-asks-where-a-kind-runs).
+          // panel never said (ADR-0183).
           html += `<h3>Script</h3>
             <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
               <select id="f-scriptlang">${opts.join("")}</select></label>
