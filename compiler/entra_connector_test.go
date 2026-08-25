@@ -97,6 +97,15 @@ func TestEntraConnectorGroupsAndTeams(t *testing.T) {
 	if got := cpG.Intern(grp.EntraAttributesVar); got != "neueGruppe" {
 		t.Errorf("attributesVariable = %q", got)
 	}
+	// Inline attributes compile to a FEEL context expression, and the variable name is
+	// then left unset — the two are mutually exclusive.
+	_, inline := entraDetail(t, `connector="contoso" operation="create-user" attributes="{&#34;displayName&#34;:&#34;=name&#34;}"`)
+	if inline.EntraAttributes.Expr == nil {
+		t.Error("inline attributes should compile to a FEEL context expression")
+	}
+	if inline.EntraAttributesVar != -1 {
+		t.Errorf("attributesVariable = %d, want unset when inline attributes are authored", inline.EntraAttributesVar)
+	}
 	cp, team := entraDetail(t, `connector="contoso" operation="create-team" groupId="=gruppe.id"`)
 	if got := cp.Intern(team.EntraOp); got != "create-team" {
 		t.Errorf("operation = %q, want create-team", got)
@@ -127,6 +136,9 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"newPassword on the wrong operation", `connector="c" operation="disable" userId="u" newPassword="x"`, "applies to reset-password"},
 		{"create-team without a group", `connector="c" operation="create-team"`, "groupId"},
 		{"team member without a user", `connector="c" operation="add-team-member" groupId="g"`, "userId"},
+		{"both inline and variable attributes", `connector="c" operation="create-user" attributes="{}" attributesVariable="v"`, "use one, not both"},
+		{"inline attributes on a wrong op", `connector="c" operation="disable" userId="u" attributes="{}"`, "attributes apply to"},
+		{"malformed inline attributes", `connector="c" operation="create-user" attributes="{oops}"`, "invalid attributes JSON"},
 		{"bad FEEL userId", `connector="c" operation="disable" userId="="`, "userId"},
 		{"bad FEEL groupId", `connector="c" operation="add-group-member" userId="u" groupId="="`, "groupId"},
 		{"list without a result variable", `connector="c" operation="list-users"`, "resultVariable"},
