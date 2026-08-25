@@ -8300,18 +8300,43 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const expandedVars = new Set();
   let varsContext = "";
 
-  // syncCollapseAll shows the toolbar's collapse control exactly while something is open,
-  // so the way out of a wall of JSON is where the reader is looking, not only on the row
-  // they opened (which the JSON itself may have pushed off screen).
-  function syncCollapseAll() {
-    const btn = varsEl.querySelector("#v-collapse");
-    if (btn) btn.hidden = expandedVars.size === 0;
+  // syncStructToggle keeps the toolbar's one structure control current. It opens all the
+  // structures in the table and closes them again, from where the reader is looking —
+  // a chevron per row is fine for one value, but the JSON of an opened one can push the
+  // rows either side of it off the screen, and a control that only appears once something
+  // is open is not there when it is first looked for. It is absent only when the table
+  // holds nothing to open.
+  function syncStructToggle(shown) {
+    const btn = varsEl.querySelector("#v-struct-toggle");
+    if (!btn) return;
+    const any = shown.some(isComplexVar);
+    btn.hidden = !any;
+    const open = expandedVars.size > 0;
+    btn.textContent = open ? "\u25BE Collapse all" : "\u25B8 Expand all";
+    btn.title = open
+      ? "Close every structure opened in the table"
+      : "Open every object and list in the table";
+    btn.dataset.act = open ? "collapse" : "expand";
   }
 
-  // collapseAllVars closes every open structure and redraws the rows.
-  function collapseAllVars() {
-    expandedVars.clear();
+  // toggleAllVars opens every structure the table currently shows, or closes them all —
+  // whichever the control says. Expanding follows the name filter: what is not on screen
+  // is not what "all" means to the reader looking at it.
+  function toggleAllVars() {
+    const btn = varsEl.querySelector("#v-struct-toggle");
+    if (btn && btn.dataset.act === "expand") {
+      for (const v of shownVars()) if (isComplexVar(v)) expandedVars.add(varRef(v));
+    } else {
+      expandedVars.clear();
+    }
     renderVarRows();
+  }
+
+  // shownVars is the current variable set as the name filter leaves it — what the table
+  // is actually showing, which is what the count and the expand-all control are about.
+  function shownVars() {
+    const f = varFilter.trim().toLowerCase();
+    return f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
   }
 
   // renderVarRows fills the table body from the current variable set, honoring the
@@ -8321,7 +8346,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const body = varsEl.querySelector("#v-rows");
     if (!body) return;
     const f = varFilter.trim().toLowerCase();
-    const shown = f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
+    const shown = shownVars();
     varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
@@ -8334,7 +8359,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       open.setAttribute("aria-expanded", "true");
       open.querySelector(".v-chev").textContent = "\u25BE";
     }
-    syncCollapseAll();
+    syncStructToggle(shown);
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -8353,8 +8378,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
           <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
         </span>
-        <button type="button" class="btn ghost small v-collapse" id="v-collapse" hidden
-                title="Close every structure opened in the table">&#9662; Collapse all</button>
+        <button type="button" class="btn ghost small v-collapse" id="v-struct-toggle" hidden
+                data-act="expand" title="Open every object and list in the table">&#9656; Expand all</button>
         <span class="vp-actions" id="v-copyall"></span>
       </div>
       <div class="v-scroll">
@@ -8366,7 +8391,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const filterEl = varsEl.querySelector("#v-filter");
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
-    varsEl.querySelector("#v-collapse").addEventListener("click", collapseAllVars);
+    varsEl.querySelector("#v-struct-toggle").addEventListener("click", toggleAllVars);
     varsEl.querySelector("#v-side").addEventListener("click", (e) => {
       const b = e.target.closest(".v-side-btn");
       if (!b) return;
@@ -9035,7 +9060,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     open.setAttribute("aria-expanded", String(show));
     open.querySelector(".v-chev").textContent = show ? "\u25BE" : "\u25B8";
     if (show) expandedVars.add(key); else expandedVars.delete(key);
-    syncCollapseAll(); // the toolbar's way out appears with the first open structure
+    syncStructToggle(shownVars()); // the toolbar control flips to "Collapse all" and back
   });
   modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
   modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
