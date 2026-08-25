@@ -181,7 +181,9 @@ func (s *Server) handleRenameGroup(w http.ResponseWriter, r *http.Request) {
 // handleDeleteGroup removes a group (admin-only). Idempotent: deleting an absent
 // group succeeds. Any scope that named this group as a member keeps the stale
 // ref, which grants nobody once the group is gone — the same graceful degrade a
-// deleted user id gets.
+// deleted user id gets. The deletion takes effect live: the group id is dropped from
+// every live session, so its grants stop applying for everyone at once without a
+// re-login (ADR-draft-live-group-membership).
 func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
@@ -193,14 +195,16 @@ func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "delete group: "+delErr.Error())
 		return
 	}
+	s.sessions.dropGroupFromSessions(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleAddGroupMember adds a user to a group (admin-only).
 // PUT /api/v1/groups/{id}/members/{userId}. The user must exist. Adding an
-// already-present member is idempotent. A membership change takes effect for the
-// user on their next login, when their group ids are re-snapshotted
-// (ADR-0180).
+// already-present member is idempotent. The grant takes effect live: it is pushed
+// into the user's live sessions, so it applies on their next request without a
+// re-login, and a user not signed in snapshots it at their next login
+// (ADR-draft-live-group-membership).
 func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
@@ -248,13 +252,19 @@ func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "add group member: "+saveErr.Error())
 	default:
+		// Push the grant into the user's live sessions so it applies without a
+		// re-login (ADR-draft-live-group-membership). No-op when auth is off (no
+		// sessions) or the user is not signed in.
+		s.sessions.setUserGroupMembership(userID, id, true)
 		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
 
 // handleRemoveGroupMember removes a user from a group (admin-only).
 // DELETE /api/v1/groups/{id}/members/{userId}. Idempotent: removing a non-member
-// succeeds.
+// succeeds. The revoke takes effect live — the group id is dropped from the user's
+// live sessions, so access is gone on their next request without a re-login
+// (ADR-draft-live-group-membership).
 func (s *Server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
@@ -297,6 +307,9 @@ func (s *Server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request)
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "remove group member: "+saveErr.Error())
 	default:
+		// Drop the grant from the user's live sessions so access is revoked without a
+		// re-login (ADR-draft-live-group-membership).
+		s.sessions.setUserGroupMembership(userID, id, false)
 		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
