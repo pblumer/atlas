@@ -152,7 +152,7 @@ func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) 
 	httpapi.JSON(w, http.StatusOK, map[string]any{"token": token})
 }
 
-// --- cross-origin embedding of the public form (ADR-draft-embed-public-forms-cross-origin) ---
+// --- cross-origin embedding of the public form (ADR-0186) ---
 //
 // The public endpoints below are reachable from Atlas's own origin with no extra
 // help. To let a start form be embedded in an *external* site — a custom order

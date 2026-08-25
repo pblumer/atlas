@@ -39,7 +39,7 @@ func reqOrigin(t *testing.T, url, method, origin, body, contentType string) (int
 
 // With an allow-listed origin, the public form endpoints echo it in
 // Access-Control-Allow-Origin, and the POST /start preflight is answered — the two
-// things a cross-origin embedded widget needs (ADR-draft-embed-public-forms-cross-origin). Credentials are never
+// things a cross-origin embedded widget needs (ADR-0186). Credentials are never
 // allowed, so the header must be absent.
 func TestPublicFormsCORSAllowedOrigin(t *testing.T) {
 	const origin = "https://embed.example"

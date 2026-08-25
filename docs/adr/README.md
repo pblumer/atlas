@@ -222,6 +222,7 @@ comment safe to write.
 | [0183](0183-the-modeler-asks-where-a-kind-runs.md) | The Modeler asks the server where an authored kind runs | Accepted |
 | [0184](0184-grant-audit-log.md) | Grant audit log | Proposed |
 | [0185](0185-live-group-membership.md) | Live group membership | Proposed |
+| [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Proposed |
 
 ## Status values
 

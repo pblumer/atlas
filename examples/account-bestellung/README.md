@@ -57,7 +57,7 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
    Oder das Widget selbst per iframe (es liest `?atlas=…&token=…` aus der URL).
 
 2. **Direkt auf einer fremden Seite** (das schöne Widget, cross-origin) — dafür muss
-   der Atlas-Server die Origin deiner Seite per CORS erlauben (ADR-draft-embed-public-forms-cross-origin):
+   der Atlas-Server die Origin deiner Seite per CORS erlauben (ADR-0186):
    ```
    atlas serve --public-forms-cors "https://deine-seite.example"
    ```

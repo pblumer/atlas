@@ -1,4 +1,4 @@
-# ADR-DRAFT: Embedding a public start form cross-origin (scoped CORS)
+# ADR-0186: Embedding a public start form cross-origin (scoped CORS)
 
 - **Status:** Proposed
 - **Date:** 2026-08-25
