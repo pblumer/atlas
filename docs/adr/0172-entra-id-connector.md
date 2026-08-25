@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`)
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `delete-group`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; and Teams (`create-team` on a group, `add-team-member`), a Team being addressed by its group's id)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -88,6 +88,31 @@ mostly be a way to build something that stops working when someone leaves.
 lifecycle, and deliberately more than the AD connector covers today (AD has no read,
 update, or delete; that is recorded as a gap in the MIM comparison).
 
+The 2026-08-25 amendment extends the set past the account and its group membership to
+the two objects an identity process most often manages beside them — groups and Teams
+— and to a first-class password reset:
+
+- `reset-password` sets a new secret. It is not folded into `update-user` because the
+  secret is not a directory attribute a model should hand-author inside a
+  `passwordProfile`: like the AD/LDAP connectors' modify-password, it authors one
+  `newPassword` value (literal-or-FEEL, almost always a variable), and the connector
+  wraps it in a `passwordProfile` with `forceChangePasswordNextSignIn`. The encoding
+  is the connector's, the way ADR-0172 argues an operation's URL is.
+- `create-group` and `delete-group` sit beside the existing membership operations, so
+  a process can stand up the group it then fills. `create-group` authors its
+  properties through the same attributes variable `create-user` uses (`displayName`,
+  `mailNickname`, `mailEnabled`, `securityEnabled`, `groupTypes`).
+- `create-team` and `add-team-member` reach Microsoft Teams. A Team's id *is* its
+  Microsoft 365 group's id, so `create-team` teamifies an existing group
+  (`PUT /groups/{id}/team`) and `add-team-member` addresses `/teams/{groupId}/members`
+  — both authored through the same `groupId`, with no separate team identifier. The
+  team is created with settings spelled out by the connector rather than left to the
+  tenant's defaults, so the same model yields the same team everywhere. `POST /teams`
+  from scratch is deliberately not used: it is asynchronous (a `202` with a polling
+  location), which this connector's single synchronous `Call` does not model; the
+  teamify-a-group path is synchronous and is the documented way to create a
+  group-backed Team.
+
 The rules live in a table — which operation needs a user, a group, an attributes
 object — because they are needed in two places. The compiler validates a model at
 deploy, and the worker re-checks a job it was handed, so an under-specified task
@@ -97,9 +122,10 @@ the connector (the dependency runs the other way), so the table exists twice and
 operation, a model supplying exactly what the connector requires must compile, and
 one missing any required field must not.
 
-A password is set through `create-user`/`update-user`'s attributes variable
-(Graph's `passwordProfile`), so it reaches Graph as a process value and never appears
-in the model — the same shape the AD connector uses for `newPassword`.
+A password reaches Graph as a process value, never as model text — at creation
+through `create-user`'s attributes variable (Graph's `passwordProfile`), and
+afterwards through the dedicated `reset-password` operation added on 2026-08-25, which
+authors one `newPassword` value the same shape the AD connector uses.
 
 ### Amendment (2026-08-24): `list-users`, and who follows the pages
 

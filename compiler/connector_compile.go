@@ -178,6 +178,9 @@ type entraOp struct {
 	needsUser       bool
 	needsGroup      bool
 	needsAttributes bool
+	// needsPassword marks reset-password, the one operation that authors a newPassword
+	// (literal-or-FEEL). It is an error anywhere else, like the listing attributes.
+	needsPassword bool
 	// isList marks the one operation that returns a collection rather than an object
 	// or nothing. It is what makes filter/select/pageSize/maxUsers meaningful — and
 	// what makes them an error anywhere else.
@@ -190,10 +193,15 @@ var entraOps = map[string]entraOp{
 	"list-users":          {isList: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
 	"delete-user":         {needsUser: true},
+	"reset-password":      {needsUser: true, needsPassword: true},
 	"enable":              {needsUser: true},
 	"disable":             {needsUser: true},
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
+	"create-group":        {needsAttributes: true},
+	"delete-group":        {needsGroup: true},
+	"create-team":         {needsGroup: true},
+	"add-team-member":     {needsUser: true, needsGroup: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -250,6 +258,12 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if spec.needsAttributes && strings.TrimSpace(cn.AttributesVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs an attributesVariable naming the directory properties", st.Id, op)
 	}
+	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a newPassword (the value to set, typically a FEEL variable)", st.Id, op)
+	}
+	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
+	}
 	if spec.isList && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q operation list-users needs a resultVariable (a listing that discards its result is a directory read nothing asked for)", st.Id)
 	}
@@ -272,6 +286,10 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	newPassword, err := connectorValue(st.Id, "entra connector", "newPassword", cn.NewPassword)
+	if err != nil {
+		return 0, err
+	}
 	filter, err := connectorValue(st.Id, "entra connector", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
@@ -289,6 +307,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		Op:            op,
 		UserID:        userID,
 		GroupID:       groupID,
+		NewPassword:   newPassword,
 		AttributesVar: strings.TrimSpace(cn.AttributesVariable),
 		ResultVar:     strings.TrimSpace(cn.ResultVariable),
 		Filter:        filter,

@@ -718,6 +718,7 @@ type ConnectorTaskDetail struct {
 	EntraOp            int32
 	EntraUserID        RestExpr
 	EntraGroupID       RestExpr
+	EntraNewPassword   RestExpr // reset-password's new secret (literal-or-FEEL), zero otherwise
 	EntraAttributesVar int32
 	EntraFilter        RestExpr
 	EntraSelect        int32

@@ -29,10 +29,15 @@ type VarStore interface {
 type Op struct {
 	// Method and the path builder produce the Graph request.
 	Method string
-	// NeedsUser, NeedsGroup and NeedsAttributes are what the compiler validates.
+	// NeedsUser, NeedsGroup, NeedsAttributes and NeedsPassword are what the compiler
+	// validates. NeedsPassword marks reset-password, whose new secret is a
+	// literal-or-FEEL value (typically a variable) the connector wraps in a
+	// passwordProfile — the same shape the LDAP connector's modify-password takes, so
+	// a modeler picks the operation rather than authoring the encoding (ADR-0172).
 	NeedsUser       bool
 	NeedsGroup      bool
 	NeedsAttributes bool
+	NeedsPassword   bool
 	// IsList marks the operation that returns a collection instead of one object or
 	// nothing. It is the one operation [Run] does not perform with a single call:
 	// a collection is paged, and following those pages is this connector's work
@@ -44,17 +49,26 @@ type Op struct {
 
 // Ops is the operation table. The set covers a joiner/mover/leaver lifecycle: create
 // and read an account, find accounts, change one, enable and disable it, delete it,
-// and move it in and out of groups.
+// reset its password, move it in and out of groups, create and delete a group, and
+// stand up a Team on a group and add a member to it.
 var Ops = map[string]Op{
 	"create-user":         {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":            {Method: "GET", NeedsUser: true, Label: "read a user"},
 	"list-users":          {Method: "GET", IsList: true, Label: "list users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
 	"delete-user":         {Method: "DELETE", NeedsUser: true, Label: "delete a user"},
+	"reset-password":      {Method: "PATCH", NeedsUser: true, NeedsPassword: true, Label: "reset a password"},
 	"enable":              {Method: "PATCH", NeedsUser: true, Label: "enable an account"},
 	"disable":             {Method: "PATCH", NeedsUser: true, Label: "disable an account"},
 	"add-group-member":    {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group member"},
 	"remove-group-member": {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group member"},
+	"create-group":        {Method: "POST", NeedsAttributes: true, Label: "create a group"},
+	"delete-group":        {Method: "DELETE", NeedsGroup: true, Label: "delete a group"},
+	// A Team's id is its group's id: create-team teamifies an existing (Microsoft
+	// 365) group, and add-team-member addresses /teams/{groupId}. GroupID therefore
+	// carries the team throughout, so no separate team-id field is authored.
+	"create-team":     {Method: "PUT", NeedsGroup: true, Label: "create a team"},
+	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -78,8 +92,12 @@ type Job struct {
 	// UserID is a user principal name or object id; GroupID an object id.
 	UserID  string `json:"userId,omitempty"`
 	GroupID string `json:"groupId,omitempty"`
-	// Attributes is the resolved JSON body for create-user and update-user.
+	// Attributes is the resolved JSON body for create-user, update-user and
+	// create-group.
 	Attributes map[string]any `json:"attributes,omitempty"`
+	// NewPassword is the resolved secret for reset-password: the value the connector
+	// wraps in a passwordProfile. It is zero on every other operation.
+	NewPassword string `json:"newPassword,omitempty"`
 	// Filter, Select, PageSize and MaxUsers configure list-users and are zero on
 	// every other operation. Filter is the resolved OData $filter and Select the
 	// $select projection; PageSize is the $top asked of each request (0 leaves Graph
@@ -126,6 +144,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Operation:      op,
 		UserID:         resolveValue(detail.EntraUserID, elementInstanceKey, vars),
 		GroupID:        resolveValue(detail.EntraGroupID, elementInstanceKey, vars),
+		NewPassword:    resolveValue(detail.EntraNewPassword, elementInstanceKey, vars),
 		Filter:         resolveValue(detail.EntraFilter, elementInstanceKey, vars),
 		Select:         cp.Intern(detail.EntraSelect),
 		PageSize:       detail.EntraPageSize,
@@ -332,6 +351,9 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsAttributes && len(j.Attributes) == 0 {
 		return fmt.Errorf("entra: operation %q resolved no attributes", j.Operation)
 	}
+	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
+		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
+	}
 	if spec.IsList && strings.TrimSpace(j.ResultVariable) == "" {
 		return fmt.Errorf("entra: operation %q resolved no resultVariable; a listing that discards its result is a directory read nothing asked for", j.Operation)
 	}
@@ -357,6 +379,7 @@ func (j Job) advanced() bool {
 func request(j Job, spec Op, baseURL string) Request {
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
+	base := strings.TrimRight(baseURL, "/")
 	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced()}
 	switch j.Operation {
 	case "create-user":
@@ -367,17 +390,54 @@ func request(j Job, spec Op, baseURL string) Request {
 		r.Path = listPath(j)
 	case "update-user":
 		r.Path, r.Body = "/users/"+user, j.Attributes
+	case "reset-password":
+		// forceChangePasswordNextSignIn is the convention a reset carries: the account
+		// gets a temporary secret its owner must replace. Encoding it here is the point
+		// of a named operation over a hand-authored passwordProfile.
+		r.Path = "/users/" + user
+		r.Body = map[string]any{"passwordProfile": map[string]any{
+			"password":                      j.NewPassword,
+			"forceChangePasswordNextSignIn": true,
+		}}
 	case "enable":
 		r.Path, r.Body = "/users/"+user, map[string]any{"accountEnabled": true}
 	case "disable":
 		r.Path, r.Body = "/users/"+user, map[string]any{"accountEnabled": false}
 	case "add-group-member":
 		r.Path = "/groups/" + group + "/members/$ref"
-		r.Body = map[string]any{"@odata.id": strings.TrimRight(baseURL, "/") + "/directoryObjects/" + user}
-	default: // remove-group-member — the only one left, guarded by the Ops lookup
+		r.Body = map[string]any{"@odata.id": base + "/directoryObjects/" + user}
+	case "remove-group-member":
 		r.Path = "/groups/" + group + "/members/" + user + "/$ref"
+	case "create-group":
+		r.Path, r.Body = "/groups", j.Attributes
+	case "delete-group":
+		r.Path = "/groups/" + group
+	case "create-team":
+		// A Team is stood up on the group by PUT .../team; the id it gets is the
+		// group's own. The default settings are sent explicitly so a team never depends
+		// on whatever Graph would infer from an empty body.
+		r.Path = "/groups/" + group + "/team"
+		r.Body = defaultTeam()
+	default: // add-team-member — the only one left, guarded by the Ops lookup
+		r.Path = "/teams/" + group + "/members"
+		r.Body = map[string]any{
+			"@odata.type":     "#microsoft.graph.aadUserConversationMember",
+			"roles":           []any{},
+			"user@odata.bind": base + "/users('" + user + "')",
+		}
 	}
 	return r
+}
+
+// defaultTeam is the body create-team sends to PUT /groups/{id}/team: a standard team
+// with sane collaboration defaults. It is spelled out rather than left to Graph so the
+// team a process creates is the same team every time, independent of tenant defaults.
+func defaultTeam() map[string]any {
+	return map[string]any{
+		"memberSettings":    map[string]any{"allowCreateUpdateChannels": true},
+		"messagingSettings": map[string]any{"allowUserEditMessages": true, "allowUserDeleteMessages": true},
+		"funSettings":       map[string]any{"allowGiphy": true, "giphyContentRating": "moderate"},
+	}
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's

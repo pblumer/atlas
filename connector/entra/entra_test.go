@@ -215,6 +215,35 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "remove-group-member", job: Job{UserID: "u1", GroupID: "g1"},
 			method: "DELETE", path: "/groups/g1/members/u1/$ref",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "create-group",
+			job:    Job{Attributes: map[string]any{"displayName": "Sales"}},
+			method: "POST", path: "/groups",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); return ok && m["displayName"] == "Sales" }},
+		{op: "delete-group", job: Job{GroupID: "g1"},
+			method: "DELETE", path: "/groups/g1",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "reset-password", job: Job{UserID: "u1", NewPassword: "S3cret!"},
+			method: "PATCH", path: "/users/u1",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				if !ok {
+					return false
+				}
+				pp, ok := m["passwordProfile"].(map[string]any)
+				return ok && pp["password"] == "S3cret!" && pp["forceChangePasswordNextSignIn"] == true
+			}},
+		// A team's id is its group's id, so create-team teamifies the group and
+		// add-team-member addresses /teams/{groupId}.
+		{op: "create-team", job: Job{GroupID: "g1"},
+			method: "PUT", path: "/groups/g1/team",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); _, has := m["memberSettings"]; return ok && has }},
+		{op: "add-team-member", job: Job{UserID: "u1", GroupID: "g1"},
+			method: "POST", path: "/teams/g1/members",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				return ok && m["@odata.type"] == "#microsoft.graph.aadUserConversationMember" &&
+					m["user@odata.bind"] == "https://graph.microsoft.com/v1.0/users('u1')"
+			}},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			res := map[string]any{"id": "x"}
@@ -236,7 +265,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 9 {
+	if len(Ops) != 14 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -546,6 +575,9 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 		if spec.NeedsAttributes && omit != "attributes" {
 			parts = append(parts, `attributesVariable="attrs"`)
 		}
+		if spec.NeedsPassword && omit != "password" {
+			parts = append(parts, `newPassword="S3cret!"`)
+		}
 		// A listing has nowhere to put a collection without one, which both halves
 		// enforce — the compiler at deploy, checkRequired on the worker.
 		if spec.IsList && omit != "result" {
@@ -563,10 +595,11 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 			if err := compile(attrsFor(op, spec, "")); err != nil {
 				t.Fatalf("the compiler rejects a model that satisfies Ops[%q]: %v", op, err)
 			}
-			for _, omit := range []string{"user", "group", "attributes", "result"} {
+			for _, omit := range []string{"user", "group", "attributes", "password", "result"} {
 				required := (omit == "user" && spec.NeedsUser) ||
 					(omit == "group" && spec.NeedsGroup) ||
 					(omit == "attributes" && spec.NeedsAttributes) ||
+					(omit == "password" && spec.NeedsPassword) ||
 					(omit == "result" && spec.IsList)
 				if !required {
 					continue
