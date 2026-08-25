@@ -1,0 +1,99 @@
+name: What's New feed
+
+# api/web/whats-new.json is generated from CHANGELOG.md and committed, because
+# ADR-0012 keeps the web UI buildless — nothing regenerates it at build or run time.
+# CI fails on a stale feed, and on a branch that check does its job: the author runs
+# `make whats-new` and commits the result.
+#
+# It cannot do its job across a *merge*. Two branches that each add a changelog entry
+# each regenerate the feed; the merge combines both files textually, and the result is
+# no longer a function of the merged CHANGELOG — an entry duplicated, or one past the
+# generator's cap left in. Both sides are individually correct, so nothing conflicts and
+# nothing warns. CI does check the merge result (`pull_request` builds refs/pull/N/merge)
+# but only the merge that existed when that run started; a base that moves afterwards
+# walks straight past it. Main then goes red on its own push, over a defect no branch
+# introduced. That has happened four times.
+#
+# `.gitattributes` marks the file unmergeable, which makes `git merge` conflict instead
+# of inventing an answer — but only for merges git performs. GitHub's own merge button
+# ignores it (measured: the same merge conflicts locally and lands clean there), and that
+# is the path every one of those four failures took.
+#
+# So this job repairs it where the damage is done. On every push to main it regenerates
+# the feed and, if that differs from what is committed, pushes the correction. On the
+# overwhelming majority of pushes there is no difference and it does nothing.
+#
+# This is a backstop, not the contract: a PR that adds a changelog entry without
+# regenerating still fails CI, and should. The only prevention is branch protection's
+# "require branches to be up to date before merging", which is a repository setting.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One at a time: two runs would both regenerate against different mains and the second
+# push would race the first.
+concurrency:
+  group: whats-new-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: regenerate the feed if a merge left it stale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Only for the guard below, and only on the rare push that needs correcting —
+      # but the toolchain has to be in place before that is known.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Regenerate, verify, push
+        run: |
+          set -euo pipefail
+          node scripts/whats-new/gen.mjs
+          if git diff --quiet -- api/web/whats-new.json; then
+            echo "The feed matches CHANGELOG.md. Nothing to do."
+            exit 0
+          fi
+          echo "The committed feed does not match CHANGELOG.md — correcting it:"
+          git --no-pager diff --stat -- api/web/whats-new.json
+
+          # A push made with GITHUB_TOKEN triggers no workflow run, so CI will never
+          # check this commit. Run the one test that reads this file — valid JSON,
+          # non-empty, required fields, newest-first — here instead.
+          go test ./api/ -run TestWhatsNewJSONIsValid
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/web/whats-new.json
+          git commit -m "Regenerate the What's New feed after a merge"
+
+          # A push that landed while this job ran would otherwise reject ours. Rebase,
+          # then regenerate once more: the rebase may have brought a newer CHANGELOG.md
+          # with it, and the feed has to match *that*.
+          git pull --rebase origin main
+          node scripts/whats-new/gen.mjs
+          if ! git diff --quiet -- api/web/whats-new.json; then
+            git add api/web/whats-new.json
+            git commit --amend --no-edit
+          fi
+
+          if ! git push origin HEAD:main; then
+            echo "::error::Could not push the regenerated What's New feed to main."
+            echo "Main is red on a stale feed. Run 'make whats-new' on an up-to-date"
+            echo "main, review the diff, and push it yourself."
+            exit 1
+          fi

@@ -95,8 +95,14 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
   git add api/web/whats-new.json
   ```
 
-  The conflict is the only thing standing between a concurrent merge and a red main —
-  CI checks the merge result, but only the one that existed when that run started.
+  This covers merges git performs. **GitHub's merge button ignores the attribute** — the
+  same merge that conflicts locally lands clean there — so it is not prevention.
+- **`.github/workflows/whats-new-sync.yml` repairs main.** On every push to main it
+  regenerates the feed and pushes the correction if the committed one differs. That is
+  the backstop for the merge-button path; it is not a licence to skip `make whats-new` on
+  a branch, which still fails CI. Preventing the bad merge outright takes branch
+  protection's *"require branches to be up to date before merging"* — a repository
+  setting, not something a file in the tree can do.
 
 Neither check can tell that an entry *reads* well, or that a user-facing change has
 an override at all. That part stays a human step — step 3 above.

@@ -14,5 +14,11 @@
 # both sides changed it git raises a conflict instead of inventing an answer. The
 # resolution is never to pick a side — it is to take the merged CHANGELOG.md and run
 # `make whats-new` (or `node scripts/whats-new/gen.mjs`), which is what CI checks anyway.
-# The breakage becomes loud at the moment it is created instead of quiet two pushes later.
+#
+# This covers merges *git* performs — a branch updated locally, or a rebase. It does not
+# cover GitHub's merge button, which ignores the attribute: the merge of #555 conflicts
+# here and landed clean there. The backstop for that path is
+# .github/workflows/whats-new-sync.yml, which regenerates the feed on main and pushes the
+# correction. Preventing the bad merge outright takes branch protection's "require
+# branches to be up to date before merging", which is a repository setting, not a file.
 api/web/whats-new.json -merge
