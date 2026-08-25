@@ -62,3 +62,34 @@ a regeneration is a clean, reviewable diff. It needs only the Python standard li
 When you change the view in `../enterprise-architecture.md` or the diagrams in
 `../diagrams/gen_diagrams.py`, update the corresponding entry here in the same PR so
 the three stay in step.
+
+## Exporting a single BPMN process to Archi
+
+`atlas.xml` above is the *architecture* model. To take a concrete **BPMN process** —
+one of the `.bpmn` files Atlas runs — into Archi instead, use
+[`bpmn_to_archimate.py`](bpmn_to_archimate.py). Archi speaks ArchiMate, not BPMN, so
+this converts the process into the same Open Exchange format:
+
+```bash
+# a file with exactly one process:
+python3 bpmn_to_archimate.py ../../../examples/order-to-cash.bpmn
+# -> writes examples/order-to-cash.archimate.xml
+
+# choose one when the file holds several processes, and name the output:
+python3 bpmn_to_archimate.py path/to/models.bpmn --process order-to-cash -o out.xml
+```
+
+Then import the resulting `.xml` into Archi (**File → Import → Other → Open Exchange
+File**). The mapping is:
+
+| BPMN | ArchiMate |
+|------|-----------|
+| start / end / intermediate / boundary event | Business event |
+| task, user/service/script task, call activity, subprocess | Business process |
+| gateway (exclusive, parallel, inclusive, …) | Business process (a routing step; original kind kept in a `BPMN element` property) |
+| sequence flow | Triggering relationship (its name or condition becomes the label) |
+
+The BPMN diagram geometry (shape bounds and edge waypoints) is reused, so the imported
+ArchiMate view keeps the process's original layout. Gateways map to a plain routing
+step rather than an ArchiMate And/Or junction to keep the output always schema-valid;
+refine them by hand in Archi if you want the stricter junction semantics.
