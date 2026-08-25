@@ -115,8 +115,12 @@ _Changed_ / _Removed_ for each version.
   but not a move to another element, whose variables are a different set: carried there,
   an opening nobody asked for reads as "these come open by default". Everything starts
   closed, an open structure is bounded against the viewport rather than a fixed height,
-  and the toolbar offers **Collapse all** while anything is open, because a structure can
-  push the row it belongs to off the screen.
+  and the toolbar carries one control — **Expand all**, becoming **Collapse all** once
+  anything is open — whenever the table holds a structure at all. A chevron per row is
+  enough for one value, but an opened structure's JSON can push the rows either side of it
+  off the screen, and a way out that only appears after the fact is not there when it is
+  first looked for. Expanding follows the name filter: what is not on screen is not what
+  "all" means to the reader looking at it.
 
 ### Changed
 
