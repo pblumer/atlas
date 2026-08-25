@@ -215,6 +215,12 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
+	// Where this server runs each connector kind: the Modeler's picker reads it to
+	// badge a kind it is about to author (ADR-draft-the-modeler-asks-where-a-kind-runs).
+	// It describes the server's own arrangement, like the rest of this family, and an
+	// agent that needs the same fact reads servedInProcess per job type from
+	// atlas_workers, where it comes with the queue and the workers holding it.
+	"GET /api/v1/connector-kinds":                        "server connector arrangement; atlas_workers reports the same per job type",
 	"GET /api/v1/connectors":                             "connector infrastructure is admin config",
 	"POST /api/v1/connectors":                            "connector infrastructure is admin config",
 	"POST /api/v1/connectors/test":                       "connector infrastructure is admin config",

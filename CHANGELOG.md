@@ -129,6 +129,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The connector picker stops calling every connector in-engine**
+  ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)). Every kind but the plain job
+  worker carried an **in-engine** badge, decided by a constant compiled into the
+  browser — written when that was true of all of them, and left behind twice over.
+  Four kinds (Text File, E-Mail, script, Web Scraping) now run on a worker the server
+  starts and supervises *by default*, and the SQL and Entra ID connectors were born on
+  a worker with no in-engine form at all — so the badge contradicted the E-Mail
+  connector's own runtime, and sat directly beside "…against a SQL Server database **on
+  a worker**". It could also never reflect `--offload-connectors` or
+  `--in-process-connectors`, which are the server's command line. The Modeler now asks
+  the server (`GET /api/v1/connector-kinds`), which derives the answer from the registry
+  an offload actually removes a handler from, and the badge says one of four things:
+  *in-engine*, *in-engine* with no worker form to move to, *on a worker* (offloaded
+  here), or *worker only* (born there). The notice under the chosen kind follows, so a
+  kind that is already on a worker is no longer advised to move to one, a kind with no
+  out-of-process form is not given advice it cannot take, and a kind whose credential
+  lives at the worker says so. A kind the server reports nothing for — the plain job
+  worker, the Mockup — shows no badge, and so does a Modeler that cannot reach a server:
+  silence rather than a confident wrong answer.
+
 - **A loop a gateway routes into keeps its result** ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
   Taking a sequence flow is one operation with one rule about multi-instance activities: the
   flow activates the *body*, the scope that seeds the iterations and, when they have all
