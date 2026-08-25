@@ -96,6 +96,7 @@ func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
 			"connector": "contoso", "operation": "list-users",
 			"filter": "department eq 'IT'", "select": "id,displayName",
 			"pageSize": int32(200), "maxUsers": int32(50),
+			"search": `"displayName:Arno"`, "advancedQuery": true,
 			"resultVariable": "leute",
 		},
 	}}, reg)
@@ -104,25 +105,58 @@ func TestRunEntraJobCarriesTheListingBounds(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "50-user") {
 		t.Fatalf("err = %v, want the 50-user cap to have refused the listing", err)
 	}
-	// filter, select and pageSize arrived: each is in the query the connector built.
-	for _, want := range []string{"$filter=department", "$select=id", "$top=200"} {
+	// filter, select, pageSize and search arrived: each is in the query it built.
+	for _, want := range []string{"$filter=department", "$select=id", "$top=200", "$search=%22displayName"} {
 		if !strings.Contains(spy.path, want) {
 			t.Errorf("path = %q, want it to carry %q", spy.path, want)
 		}
 	}
 }
 
+// advancedQuery has to survive the hop *on its own*, which is the case the bounds
+// test above cannot see: it also carries a search, and a search implies an advanced
+// query, so the flag could be dropped entirely and both halves would still appear.
+//
+// Dropped is exactly what happened. The resolved detail is keyed advancedQuery and
+// the Job's JSON tag said advanced, so the flag decoded to false without a word: the
+// listing ran as a plain query and Graph refused the endsWith filter that needed the
+// header. Nothing caught it because every test either set Job.Advanced directly or
+// went through the compiler — never across the wire the engine hands the worker.
+func TestRunEntraJobCarriesAdvancedQueryOnItsOwn(t *testing.T) {
+	spy := &listingSpy{}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", spy)
+
+	if _, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "list-users",
+			"filter": "endsWith(mail,'@blumer.net')", "advancedQuery": true,
+			"resultVariable": "leute",
+		},
+	}}, reg); err != nil {
+		t.Fatalf("RunEntraJob: %v", err)
+	}
+	if !spy.eventual {
+		t.Error("advancedQuery did not survive the hop: no ConsistencyLevel was asked for")
+	}
+	if !strings.Contains(spy.path, "$count=true") {
+		t.Errorf("path = %q, want $count=true, the other half Graph insists on", spy.path)
+	}
+}
+
 // listingSpy answers one page of a given size and records the path it was asked for,
 // which is where the decoded query becomes observable.
 type listingSpy struct {
-	users int
-	path  string
+	users    int
+	path     string
+	eventual bool
 }
 
 func (listingSpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
 
 func (s *listingSpy) Call(_ context.Context, r entra.Request) (any, error) {
-	s.path = r.Path
+	s.path, s.eventual = r.Path, r.Eventual
 	vals := make([]any, 0, s.users)
 	for i := 0; i < s.users; i++ {
 		vals = append(vals, map[string]any{"id": "u"})
