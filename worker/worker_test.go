@@ -631,3 +631,58 @@ func mustConnectors(t *testing.T, kinds ...string) map[string]worker.Exec {
 	}
 	return execs.Handlers
 }
+
+// TestWorkerRunsAnOffloadedADConnectorInMockMode is the whole ask in one test: the
+// Active Directory connector running as a worker, and that worker serving it without
+// a domain controller.
+//
+// The engine resolved the task — the DN out of a FEEL expression, the entry out of a
+// process variable — and offloaded the kind, so nothing about AD ran on the run loop.
+// The worker performed the create against a directory in its own memory and completed
+// the job, which is how an identity model is exercised end to end before anybody is
+// allowed near a real forest.
+func TestWorkerRunsAnOffloadedADConnectorInMockMode(t *testing.T) {
+	ts := liveAtlasWith(t, adConnectorModel,
+		`{"userDN":"cn=Arno,ou=users,dc=example,dc=com","account":{"sAMAccountName":"arno","cn":"Arno"}}`,
+		api.WithOffloadedConnectorKinds([]string{"ad"}))
+
+	execs, err := worker.BuiltinConnectors(mockADEnv, "ad")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "ad-1", Handlers: execs.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the AD job was not completed", running)
+	}
+}
+
+// mockADEnv is a worker environment with mock mode on and nothing else set: an AD
+// worker needs no configuration beyond it.
+func mockADEnv(name string) string {
+	if name == "ATLAS_AD_MOCK" {
+		return "1"
+	}
+	return ""
+}
+
+const adConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="joiner" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:adConnector url="ldaps://dc.example.com:636" operation="create-user"
+                           dn="=userDN" entryVariable="account"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`

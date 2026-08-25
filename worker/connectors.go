@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/logging"
 )
 
 // Connector kinds this worker can serve out of process (ADR-0168).
@@ -123,10 +125,19 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		case "ad":
 			// AD needs no startup configuration: its server is model-authored and its
 			// bind password is a per-task reference, so there is nothing here a
-			// misconfiguration could be caught in (see adSecretFromEnv).
+			// misconfiguration could be caught in (see adSecretFromEnv) — except the
+			// one thing that is this worker's own: whether it serves a real directory
+			// or a mock one, and the seed file a mock starts from.
+			dialer, mock, err := adDialerFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if mock != nil {
+				announceADMock(mock, env(adMockSeedEnv))
+			}
 			secret := adSecretFromEnv(env)
 			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunADJob(ctx, j, ad.NewDialer(), secret)
+				return RunADJob(ctx, j, dialer, secret)
 			})
 		case "entra":
 			reg, names, err := entraRegistryFromEnv(env)
@@ -495,4 +506,25 @@ func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretR
 		return nil, nil // the model discards the response
 	}
 	return map[string]any{res.ResultVariable: res.Body}, nil
+}
+
+// announceADMock says once, at startup, that this worker writes to no directory, and
+// then says what it does instead — one line per simulated operation.
+//
+// Both matter, and the warning matters most: a worker in mock mode looks exactly like
+// a working one from the engine's side, because it completes every job. The line in
+// its log is the only place the difference is visible, and the Workers console is
+// where an operator reads it (ADR-0157).
+func announceADMock(mock *ad.MockDirectory, seed string) {
+	attrs := []slog.Attr{slog.Int("seeded", len(mock.Entries()))}
+	if seed = strings.TrimSpace(seed); seed != "" {
+		attrs = append(attrs, slog.String("seed", seed))
+	}
+	logging.Warn(logging.ADMockEnabled,
+		"the ad connector is in mock mode: operations are simulated in this worker's memory and reach no domain controller",
+		attrs...)
+	mock.Observe(func(op ad.MockOperation) {
+		logging.Info(logging.ADMockPerformed, "ad mock directory",
+			slog.String("operation", op.Op), slog.String("dn", op.DN), slog.String("detail", op.Detail))
+	})
 }
