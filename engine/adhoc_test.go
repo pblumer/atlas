@@ -434,3 +434,158 @@ func TestAdHocBoundaryEventInterrupts(t *testing.T) {
 		t.Error("a contained activity's job survived the interrupting boundary")
 	}
 }
+
+// adHocMultiInstanceProcess builds: start → seed(items) → adhoc{ work(MI over items,
+// collecting results) } → end, with an output mapping on the ad-hoc that hands `results`
+// out of its scope. The loop is the ad-hoc's only entry activity, so entering the ad-hoc
+// is the only way it is ever activated.
+func adHocMultiInstanceProcess(t *testing.T, sequential bool) *compiler.CompiledProcess {
+	t.Helper()
+	bl := compiler.NewBuilder(300, "adhoc-mi", 1)
+	start := bl.AddStartEvent()
+	seed := bl.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	adhoc := bl.AddAdHocSubProcess(compiler.AdHocDetail{CancelRemaining: true})
+	// A scope's locals go with it, so the collection only survives the ad-hoc if an
+	// output mapping promotes it (ADR-0074).
+	bl.AddOutputMapping(adhoc, "results", mustCompile(t, "results"))
+	end := bl.AddEndEvent()
+	bl.Connect(start, seed)
+	bl.Connect(seed, adhoc)
+	bl.Connect(adhoc, end)
+	bl.PushScope(adhoc)
+	work := bl.AddScriptTask(mustCompile(t, "item * 10"), "result")
+	bl.SetMultiInstance(work, sequential, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, "result"), nil)
+	bl.PopScope()
+	cp, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestAdHocMultiInstanceOutputCollection: a loop contained in an ad-hoc subprocess assembles
+// its output collection and hands it to the ad-hoc's scope, where the ad-hoc's own output
+// mapping can promote it further (ADR-0077 with ADR-0138).
+//
+// An ad-hoc activates its entry activities itself rather than over a sequence flow, and that
+// activation has to say the same thing a flow says about a multi-instance activity: what is
+// being activated is the loop's *body*, the scope that seeds the iterations and promotes what
+// they produced. Left unsaid, the loop still ran — the seeding gate does not look at the role —
+// but the body completed as an ordinary activity: nothing promoted the collection, the scope
+// holding it was dropped with it, and the ad-hoc's output mapping had a null to hand out. The
+// same omission on the exclusive gateway is what lost a loop's result behind a branch.
+func TestAdHocMultiInstanceOutputCollection(t *testing.T) {
+	for _, seq := range []bool{false, true} {
+		name := "parallel"
+		if seq {
+			name = "sequential"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := adHocMultiInstanceProcess(t, seq)
+
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+			if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+				t.Fatalf("process=%d element=%d, want 0 and 0 (completed)", pi, ei)
+			}
+			got := readVar(t, h.store, model.NewKey(1, 1), "results")
+			if got == nil || got.Kind != model.VarJSON {
+				t.Fatalf("results = %v, want a JSON list handed out of the ad-hoc", got)
+			}
+			if got.Text != "[10,20,30]" {
+				t.Errorf("results = %s, want [10,20,30] (input order preserved)", got.Text)
+			}
+		})
+	}
+}
+
+// TestAdHocMultiInstanceRecovers parks a loop contained in an ad-hoc mid-sequence, crashes,
+// and replays: the body's role is a fact in the log like every other, so the recovered loop
+// seeds its remaining iterations and still promotes its collection into the ad-hoc's scope,
+// where the ad-hoc's output mapping hands it out (ADR-0001 with ADR-0077/ADR-0138).
+func TestAdHocMultiInstanceRecovers(t *testing.T) {
+	dir := t.TempDir()
+	clk := &manualClock{}
+
+	bl := compiler.NewBuilder(301, "adhoc-mi-rec", 1)
+	start := bl.AddStartEvent()
+	seed := bl.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	adhoc := bl.AddAdHocSubProcess(compiler.AdHocDetail{CancelRemaining: true})
+	bl.AddOutputMapping(adhoc, "results", mustCompile(t, "results"))
+	end := bl.AddEndEvent()
+	bl.Connect(start, seed)
+	bl.Connect(seed, adhoc)
+	bl.Connect(adhoc, end)
+	bl.PushScope(adhoc)
+	work := bl.AddServiceTask("adhocseq", 3)
+	bl.SetMultiInstance(work, true /*sequential*/, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, "result"), nil)
+	bl.PopScope()
+	cp, err := bl.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	// Iteration 1 is the single live job; complete it and stop with iteration 2 waiting.
+	jobs := activatableJobs(t, h1.store, jobType)
+	if len(jobs) != 1 {
+		t.Fatalf("iteration 1: jobs = %d, want 1 (sequential)", len(jobs))
+	}
+	p1.CompleteJob(jobs[0], numVar("result", "10"))
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 1: %v", err)
+	}
+	if jobs := activatableJobs(t, h1.store, jobType); len(jobs) != 1 {
+		t.Fatalf("iteration 2: jobs = %d, want 1", len(jobs))
+	}
+	h1.close(t)
+
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2: %v", err)
+	}
+	for _, result := range []string{"20", "30"} {
+		jobs := activatableJobs(t, h2.store, jobType)
+		if len(jobs) != 1 {
+			t.Fatalf("iteration producing %s after recovery: jobs = %d, want 1", result, len(jobs))
+		}
+		p2.CompleteJob(jobs[0], numVar("result", result))
+		if err := p2.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle (result %s): %v", result, err)
+		}
+	}
+	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
+		t.Fatalf("after recovery completion: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h2.store, cp.Key)[end]; v != 1 {
+		t.Errorf("end visits = %d, want 1 (the recovered ad-hoc completed)", v)
+	}
+	got := readVar(t, h2.store, model.NewKey(1, 1), "results")
+	if got == nil || got.Text != "[10,20,30]" {
+		t.Errorf("results = %v, want [10,20,30] — the iterations either side of the crash, in order", got)
+	}
+}
