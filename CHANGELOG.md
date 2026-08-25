@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
+  ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)). Offloading a kind and running a
+  worker for it were only ever paired for the four Atlas offloads by default:
+  `--offload-connectors` takes a kind off the engine and leaves its jobs parked for a
+  worker somebody else runs, and `--supervise` names a *job type* with an external
+  command, so neither can ask for a built-in connector. Every other kind was therefore
+  reachable only by running `atlas worker --connector <kind>` yourself — and on a server
+  with `--auth` that is not friction but a wall: the job pull is authenticated, and the
+  only bearer credentials are the server's own internal token (minted per boot, handed
+  to its children, never published) and a deploy token allowlisted to two endpoints.
+  There is nothing an outside worker could hold, so the kind's jobs park forever. That
+  hit the AD connector's mock mode, whose follow-up in ADR-0181 anticipated exactly this,
+  and every worker-only kind alike — `entra` above all, which has no in-process handler at
+  all. Naming a kind here now gets it the same pairing the defaults get: its own
+  supervised worker, handed this server's token and environment at spawn, and the kind
+  taken off the engine so that worker is what leases its jobs. A worker-only kind is
+  supervised without being offloaded, since it has no in-process handlers to remove and
+  the offload list refuses it. Asking for a kind that is already supervised is a no-op
+  rather than a second worker racing the first, and an unknown kind is refused at startup.
+  So `atlas serve --auth --supervise-connector ad` with `ATLAS_AD_MOCK=1` in the server's
+  environment is a full mockup directory on an authenticated server, configured with one
+  flag and one variable.
+
 - **The Active Directory connector gets a mock mode, so an identity process can be run
   before anybody goes near a real forest.** The connector could do the whole lifecycle
   (ADR-0166) and could run on a worker (ADR-0168), and neither made it *testable*: the
@@ -152,10 +177,48 @@ _Changed_ / _Removed_ for each version.
   but not a move to another element, whose variables are a different set: carried there,
   an opening nobody asked for reads as "these come open by default". Everything starts
   closed, an open structure is bounded against the viewport rather than a fixed height,
-  and the toolbar offers **Collapse all** while anything is open, because a structure can
-  push the row it belongs to off the screen.
+  and the toolbar carries one control — **Expand all**, becoming **Collapse all** once
+  anything is open — whenever the table holds a structure at all. A chevron per row is
+  enough for one value, but an opened structure's JSON can push the rows either side of it
+  off the screen, and a way out that only appears after the fact is not there when it is
+  first looked for. Expanding follows the name filter: what is not on screen is not what
+  "all" means to the reader looking at it.
 
 ### Changed
+
+- **Active Directory now runs on a worker by default, and the engine hands that worker the
+  bind passwords it needs.** [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) made
+  out-of-process the default for every connector kind a supervised worker could actually
+  serve — and Active Directory, of all kinds, was not one of them. Not for want of a worker:
+  [ADR-0166](docs/adr/0166-active-directory-connector.md) had built that half. The obstacle
+  was the credential. An AD task names its bind password as a *reference* the model authors,
+  and that reference resolves out of the engine's encrypted vault, which a worker cannot
+  read. Defaulting the kind would have moved every vault-backed directory task to a worker
+  holding nothing to bind with, so it stayed opt-in — which meant that in practice, a dial,
+  a bind and a modify against somebody else's domain controller kept running on the engine's
+  single-writer loop.
+
+  The engine now renders exactly the references its **deployed models** name into the
+  supervised AD worker's environment, resolved through the same vault-or-environment
+  resolver it used itself. That is the narrowest set that works: the worker holds the
+  passwords for the directories the deployed models actually bind to, and nothing else in
+  the vault. It is re-rendered whenever a secret changes and whenever a model is deployed
+  that names one, and the worker is restarted only when what it holds actually changed — so
+  a first AD deploy cycles it once and an ordinary redeploy costs nothing. A reference
+  nothing answers to is left out rather than handed over empty, because a blank variable
+  reads as a configured blank password; the worker's own error names the variable to set
+  instead. Two references that fold to one environment name cannot both be handed over, so
+  the second is skipped and said out loud.
+
+  **Nothing needs to be done to upgrade**, and nothing changes in any model: the same
+  reference, resolved in a different process. Only the AD worker is given these — a script
+  worker, which runs model-authored code and inherits its whole environment, is never handed
+  a directory service account, and a test holds that. `--in-process-connectors` still returns
+  the old arrangement wholesale. And because a supervised worker inherits the server's
+  environment, `ATLAS_AD_MOCK=1` on `atlas serve` puts its AD worker into mock mode
+  ([ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)) — one variable, no flags, and a
+  joiner runs end to end against a directory that does not exist. See
+  ADR-0182.
 
 - **A dot in a write target is refused at deploy** (new rule `variable.dotted-target`).
   Every place a model names a variable to write — a script or decision result, a
@@ -174,6 +237,51 @@ _Changed_ / _Removed_ for each version.
   `<assignment><to>` *is* a member path (ADR-0058), and a dot there means what it says.
 
 ### Fixed
+
+- **A server that requires a login no longer calls itself single-user mode.** The account
+  menu's label was written for the case where nobody *can* sign in — enforcement off, the
+  API and UI open — but it was rendered whenever nobody *is* signed in, which on a server
+  with `--auth` is the login screen itself. So an instance that was refusing an operator
+  entry told them, in the menu right beside that refusal, that it had no login at all. The
+  tooltip on the same button had told the two apart all along; only the menu did not. It
+  now reads "Not signed in" where a login is enforced and keeps "Single-user mode" where
+  it is the truth. Found while diagnosing an instance whose operator concluded from that
+  label that a deploy had turned their authentication off.
+- **The Modeler stops guessing where a task's work runs — and starts saying it in all
+  three panels that choose an implementation**
+  ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
+  [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0173](docs/adr/0173-generic-sql-connector.md)). Every kind but the plain job
+  worker carried an **in-engine** badge, decided by a constant compiled into the
+  browser — written when that was true of all of them, and left behind twice over.
+  Five kinds (Active Directory, Text File, E-Mail, script, Web Scraping) now run on a
+  worker the server starts and supervises *by default*, and the SQL and Entra ID connectors were born on
+  a worker with no in-engine form at all — so the badge contradicted the E-Mail
+  connector's own runtime, and sat directly beside "…against a SQL Server database **on
+  a worker**". It could also never reflect `--offload-connectors` or
+  `--in-process-connectors`, which are the server's command line. The Modeler now asks
+  the server (`GET /api/v1/connector-kinds`), which derives the answer from the registry
+  an offload actually removes a handler from, and the badge says one of four things:
+  *in-engine*, *in-engine* with no worker form to move to, *on a worker* (offloaded
+  here), or *worker only* (born there). The notice under the chosen kind follows, so a
+  kind that is already on a worker is no longer advised to move to one, a kind with no
+  out-of-process form is not given advice it cannot take, and a kind whose credential
+  lives at the worker says so. A kind the server reports nothing for — the plain job
+  worker, the Mockup — shows no badge, and so does a Modeler that cannot reach a server:
+  silence rather than a confident wrong answer.
+
+  The same badge now appears in the two panels that never said anything at all, while
+  authoring work the same flag moves. A **script task** says where its language runs, *per
+  language*: scripts are among the kinds offloaded by default, and since each language can
+  also be turned off on its own, Python can be waiting for a worker on a server where
+  PowerShell is not. What it is told differs from a connector's advice, because it has to:
+  an in-engine script is not told to "prefer a job worker" — it cannot become one — but
+  that a hanging script holds the engine's loop with it, and an offloaded one that the
+  interpreter has to exist where that worker runs. A **business rule task** says it per
+  binding, embedded DMN and temis moving separately; its Evaluation select stops claiming
+  a placement in an option label ("In-engine (embedded DMN)" → "Embedded DMN — a decision
+  deployed here"), since `--offload-connectors dmn` made that label false too. A FEEL
+  script still says nothing: it is evaluated inline and creates no job to place.
 
 - **A loop contained in an ad-hoc subprocess keeps its result too**
   ([ADR-0077](docs/adr/0077-multi-instance-activities.md) with [ADR-0138](docs/adr/0138-adhoc-subprocesses.md)).

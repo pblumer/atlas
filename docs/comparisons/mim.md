@@ -58,7 +58,7 @@ MIM's supported-connector list, mapped to Atlas as of this writing.
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Plus a **DirSync delta read** for reconciliation. Runs on a worker (`--offload-connectors ad`). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no incremental-values flag. |
+| Active Directory Domain Services | `ad` (ADR-0166, amended) | **Implemented** for the lifecycle — create-user, create-group, update-attributes, set-password, enable/disable, move/rename, delete, add/remove-group-member. Plus a **DirSync delta read** for reconciliation. Runs on a worker (`--supervise-connector ad` for one Atlas starts itself, or `--offload-connectors ad` plus a worker you run). Search stays with `ldap` by design. Remaining: simple bind over TLS only (no Kerberos/NTLM), and no incremental-values flag. |
 | *(no MIM counterpart — the cloud directory)* | `entra` (ADR-0172) | **Implemented** — the same lifecycle against Entra ID over Graph. |
 | Active Directory Lightweight Directory Services (ADLDS) | `ldap` (ADR-0154) | **Implemented** — plain LDAP, no AD-specific encoding needed. |
 | Active Directory Global Address List (GAL) | a **process**, not a connector — [`examples/galsync.bpmn`](../../examples/galsync.bpmn) | **Implemented as a model.** GALSync is a policy ("show forest A's mailboxes in forest B's address book"), not a protocol: the DirSync delta, the contact create/update/delete and the loop are all connectors already. `ad create-contact` was the one piece missing. |
@@ -85,7 +85,7 @@ on a worker, so a database credential never enters the engine (ADR-0164/0170).
 
 | MIM connector | Atlas | Status |
 |---|---|---|
-| Microsoft Graph Connector | `entra` (ADR-0172) | **Partial** — the directory surface: create / read / list / update / delete a user, enable, disable, and group membership. A listing follows Graph's paging itself, so a model never sees `@odata.nextLink`, and can opt into Graph's advanced query support (`ConsistencyLevel: eventual` plus `$count=true`) for `endsWith`, `ne`, `not` and `$search`. Other Graph areas (licences, directory roles, administrative units) and `$orderby` go through the `rest` connector. |
+| Microsoft Graph Connector | `entra` (ADR-0172) | **Partial** — the directory surface: users (create / read / list / update / delete, enable, disable, reset password), groups (create / read / list / update / delete, members and owners), Teams (create on a group, add members and owners, create a channel, archive), and licence and directory-role assignment. A listing follows Graph's paging itself, so a model never sees `@odata.nextLink`, and can opt into Graph's advanced query support (`ConsistencyLevel: eventual` plus `$count=true`) for `endsWith`, `ne`, `not` and `$search`. Other Graph areas (administrative units, group-based licensing) and `$orderby` go through the `rest` connector. |
 | Microsoft Azure Active Directory Connector | `entra` (ADR-0172) | Out of support in MIM itself; superseded by Graph, which is what this connector speaks. |
 | Connector for Web Services | `soap` (ADR-0165) | **Implemented** |
 | SharePoint Services Connector UPA | `sharepoint` (ADR-0141) | **Partial** — Graph list items, not the SharePoint User Profile Application. |

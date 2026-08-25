@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -105,10 +106,10 @@ func TestEveryInProcessHandlerIsOffloadable(t *testing.T) {
 	// The user-provisioning connector is deliberately absent from the map: it mutates
 	// the run-loop-owned user store directly (ADR-0123), so there is nothing for a
 	// worker to hold and no endpoint for it to reach. Every other handler must be
-	// namable.
-	engineOnly := map[int32]string{
-		compiler.UserConnectorJobTypeIndex: "mutates the run-loop-owned user store, so it has no out-of-process form",
-	}
+	// namable. The exception is recorded once, in engineOnlyJobTypes, because the
+	// Modeler's placement badge needs the same fact — a kind with no out-of-process
+	// form must not be advised to move to one.
+	engineOnly := engineOnlyJobTypes
 
 	reserved := compiler.ReservedJobTypes()
 	srv.do(func() {
@@ -165,6 +166,26 @@ func TestEveryDefaultOffloadedKindCanBeServedByItsWorker(t *testing.T) {
 			t.Errorf("default kind %q is managed but not provisioned: its credentials live in the "+
 				"connector store, which a supervised worker cannot read and is not handed", kind)
 		}
+	}
+}
+
+// Active Directory is offloaded by default, and the reason it can be is that the
+// engine hands its bind passwords over (ADR-0182).
+//
+// AD is not a managed kind, so the property above does not cover it: it holds no
+// connector record, and its secret is a per-task *reference* the model authors. That
+// reference resolves out of the vault, which a supervised worker cannot read any more
+// than it can read the connector store — so defaulting AD without provisioning it
+// would move every vault-backed directory task to a worker with nothing to bind with,
+// which is the same outcome the property above exists to prevent, reached by a
+// different route.
+func TestActiveDirectoryIsOffloadedByDefaultAndItsBindSecretsAreHandedOver(t *testing.T) {
+	if !slices.Contains(DefaultOffloadedKinds(), "ad") {
+		t.Error("ad is not offloaded by default; a directory task runs on the engine's own loop")
+	}
+	if _, handed := (&Server{}).provisionedConnectorKinds()["ad"]; !handed {
+		t.Error("ad is defaulted but its bind secrets are not handed to the supervised worker; " +
+			"every vault-backed AD task would fail on a worker nobody configured")
 	}
 }
 

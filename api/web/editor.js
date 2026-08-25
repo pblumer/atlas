@@ -1912,17 +1912,12 @@ function withRetries(kind) {
 // generically from this data, so no bespoke panel code is needed per kind.
 const SERVICE_TASK_KINDS = [
   {
-    id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
-    // outOfProcess marks the kinds Atlas does NOT execute itself. The polarity is
-    // deliberate: every other kind today runs inside the engine, and a kind that
-    // later gains a worker sets this rather than being remembered as an exception
-    // in a list somewhere else (ADR-0164).
-    outOfProcess: true,
+    id: "worker", name: "Job worker", group: "No connector", desc: "Handled by an external job worker", icon: "⚙",
     ext: "zeebe:TaskDefinition",
     fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
   },
   {
-    id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    id: "rest", name: "REST Outbound Connector", group: "Web & API", desc: "Invoke a REST API", icon: "R",
     // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
     // the connector's counterpart to a script task's language icon. The plain job worker
     // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
@@ -1952,7 +1947,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "scim", name: "SCIM Provisioning Connector", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
+    id: "scim", name: "SCIM Provisioning Connector", group: "Directory & identity", desc: "Create, read, or update a user or group on a SCIM 2.0 provider", icon: "I",
     // A person mark with an outbound arrow reads "push this identity to another
     // system", which is what SCIM is for — distinct from the user-provisioning
     // connector's plain person, which acts on Atlas's own login store.
@@ -2005,7 +2000,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ldap", name: "LDAP Directory Connector", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
+    id: "ldap", name: "LDAP Directory Connector", group: "Directory & identity", desc: "Search a directory or add, modify, or delete an entry over LDAP", icon: "L",
     // A root node branching into three children reads "directory tree" at a glance —
     // the hierarchy is what distinguishes LDAP from the flat HTTP connectors.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2620f"/><path d="M8 4.7v1.7M4.6 6.4h6.8M4.6 6.4v2.5M8 6.4v2.5M11.4 6.4v2.5" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/><g fill="#fff"><circle cx="8" cy="3.4" r="1.3"/><circle cx="4.6" cy="10.2" r="1.3"/><circle cx="8" cy="10.2" r="1.3"/><circle cx="11.4" cy="10.2" r="1.3"/></g></svg>`,
@@ -2074,7 +2069,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "soap", name: "SOAP / Web Services Connector", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
+    id: "soap", name: "SOAP / Web Services Connector", group: "Web & API", desc: "Invoke a SOAP operation on a legacy web service (WSDL)", icon: "W",
     // An envelope mark reads "SOAP envelope" at a glance — the wrapper that distinguishes
     // a SOAP call from the flat REST globe, on a teal tile to stand apart from the HTTP
     // connectors.
@@ -2111,7 +2106,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ad", name: "Active Directory Connector", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
+    id: "ad", name: "Active Directory Connector", group: "Directory & identity", desc: "Create a user, set a password, enable/disable an account, or manage group membership in AD", icon: "A",
     // A person mark on an azure tile reads "directory account" at a glance — AD's
     // people-and-groups focus, distinct from the generic LDAP tree.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2f6fb0"/><circle cx="8" cy="6" r="2.1" fill="#fff"/><path d="M3.9 12.4c0-2.3 1.9-3.6 4.1-3.6s4.1 1.3 4.1 3.6z" fill="#fff"/></svg>`,
@@ -2207,7 +2202,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "ldif", name: "Directory File Connector", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
+    id: "ldif", name: "Directory File Connector", group: "Files", desc: "Read or write directory entries held in an LDIF or DSML file", icon: "D",
     // A document mark with a directory node on it: the LDAP tile's hierarchy, on a
     // page — a file of entries rather than a live directory.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#8a5a2b"/><path d="M4.4 2.9h4.4l2.8 2.8v7.4H4.4z" fill="#fff"/><path d="M8.8 2.9v2.8h2.8" fill="#8a5a2b" opacity=".45"/><g fill="#8a5a2b"><circle cx="7.7" cy="8" r="1"/><circle cx="6" cy="11" r="1"/><circle cx="9.4" cy="11" r="1"/></g><path d="M7.7 9v.8M6 9.8h3.4M6 9.8V10M9.4 9.8V10" stroke="#8a5a2b" stroke-width=".8" fill="none"/></svg>`,
@@ -2235,7 +2230,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", desc: "Create, read, find or search, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, update, enable, disable, reset password, delete), groups (create, read, list, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2254,41 +2249,63 @@ const SERVICE_TASK_KINDS = [
           { v: "get-user", l: "Read user" },
           { v: "list-users", l: "List users" },
           { v: "update-user", l: "Update user" },
+          { v: "reset-password", l: "Reset password" },
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
           { v: "delete-user", l: "Delete user" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "create-group", l: "Create group" },
+          { v: "get-group", l: "Read group" },
+          { v: "list-groups", l: "List groups" },
+          { v: "update-group", l: "Update group" },
+          { v: "delete-group", l: "Delete group" },
+          { v: "add-group-owner", l: "Add group owner" },
+          { v: "remove-group-owner", l: "Remove group owner" },
+          { v: "create-team", l: "Create team" },
+          { v: "add-team-member", l: "Add team member" },
+          { v: "add-team-owner", l: "Add team owner" },
+          { v: "create-channel", l: "Create channel" },
+          { v: "archive-team", l: "Archive team" },
+          { v: "assign-license", l: "Assign licence" },
+          { v: "assign-role", l: "Assign directory role" },
         ],
       },
       {
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
-        showIf: (v) => v.operation && v.operation !== "create-user" && v.operation !== "list-users",
+        // The operations that address a user (compiler's needsUser). An explicit list so
+        // an operation that takes only a group never prompts for a user it ignores.
+        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
-        key: "groupId", label: "Group", placeholder: "8f9a…-object-id", fx: true,
-        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
-        hint: "The group's object id. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+        key: "groupId", label: "Group / Team", placeholder: "8f9a…-object-id", fx: true,
+        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team"].includes(v.operation),
+        hint: "The group's object id — which is also the id of the Team stood up on it, so the team operations take it here too. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=tempPassword", fx: true,
+        showIf: (v) => v.operation === "reset-password",
+        hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The connector wraps it in a passwordProfile and forces a change at next sign-in.",
       },
       {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
-        showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
-        hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation),
+        hint: "A process variable holding a JSON object sent as the request body: user properties (displayName, mailNickname, userPrincipalName, passwordProfile) for a user; group properties (displayName, mailNickname, mailEnabled, securityEnabled, groupTypes) for a group; {displayName, description} for a channel; {addLicenses, removeLicenses} for a licence; {roleDefinitionId} for a role (the connector adds the user as principal). A password never appears in the model.",
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
       },
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Konnektor kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         options: [
           { v: "", l: "Aus (streng konsistent)" },
           { v: "true", l: "Ein (ConsistencyLevel: eventual)" },
@@ -2297,17 +2314,17 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "An OData $select: which properties each user comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large listing out of the state store.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "How many users to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole listing, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
         key: "maxUsers", label: "Maximum users", placeholder: "1000",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "Caps what may land in the result variable. A listing returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
       },
       { group: "Output" },
@@ -2318,7 +2335,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mssql", name: "Microsoft SQL Server Connector", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
+    id: "mssql", name: "Microsoft SQL Server Connector", group: "Database", desc: "Run one query or statement against a SQL Server database on a worker", icon: "S",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#a4373a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#a4373a" opacity=".45"/></svg>`,
     ext: "atlas:MssqlConnector",
     fields: [
@@ -2356,7 +2373,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mariadb", name: "MariaDB Connector", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
+    id: "mariadb", name: "MariaDB Connector", group: "Database", desc: "Run one query or statement against a MariaDB database on a worker", icon: "M",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c0765a"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#c0765a" opacity=".45"/></svg>`,
     ext: "atlas:MariadbConnector",
     fields: [
@@ -2394,7 +2411,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "postgres", name: "PostgreSQL Connector", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
+    id: "postgres", name: "PostgreSQL Connector", group: "Database", desc: "Run one query or statement against a PostgreSQL database on a worker", icon: "P",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#31648c"/><ellipse cx="8" cy="4.6" rx="4.2" ry="1.6" fill="#fff"/><path d="M3.8 4.6v6.8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4.6c0 .9-1.9 1.6-4.2 1.6S3.8 5.5 3.8 4.6z" fill="#fff" opacity=".85"/><ellipse cx="8" cy="8" rx="4.2" ry="1.6" fill="#31648c" opacity=".45"/></svg>`,
     ext: "atlas:PostgresConnector",
     fields: [
@@ -2432,7 +2449,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
+    id: "clio", name: "clio Event Store Connector", group: "Messaging & events", desc: "Send, query, or read events on a clio event store", icon: "C",
     // A stacked event-stream mark on a violet tile reads "append-only event log" at a
     // glance — clio's counterpart to REST's globe. Three white rows with a leading
     // dot suggest a growing stream of events; the drawImplBadges/stkind-icon CSS adds
@@ -2458,7 +2475,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound Connector", desc: "Send an e-mail via a mail provider", icon: "M",
+    id: "mail", name: "E-Mail Outbound Connector", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
     // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
     // connector's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2479,7 +2496,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "csv", name: "Text File Connector", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
+    id: "csv", name: "Text File Connector", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
     // A grid/table mark on a teal tile reads "tabular data ↔ rows" at a glance — the
     // file connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2532,7 +2549,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    id: "sharepoint", name: "SharePoint Connector", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2552,7 +2569,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    id: "remedy", name: "BMC Remedy Connector", group: "Applications", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
     // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
     // Remedy connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2570,7 +2587,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "webscrape", name: "Web Scraping Connector", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
+    id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
     // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
     // connector's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2588,7 +2605,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "userconnector", name: "User Provisioning Connector", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning Connector", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -2624,7 +2641,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    id: "mockup", name: "Mockup (Simulation)", group: "No connector", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
     // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
     // task's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
@@ -2692,18 +2709,68 @@ function fillConnectorDatalist(api, dl, kind) {
   }).catch(() => { /* no suggestions; the field stays free text */ });
 }
 
+// placementBadgeHTML is the where-does-this-run badge: beside a kind's name in the
+// connector picker, and beside the field that picks one in the script and decision
+// panels. A kind the server said nothing about gets none: silence beats a badge that
+// might be wrong, which is what the compiled-in one turned out to be.
+function placementBadgeHTML(id) {
+  const b = PLACEMENT_BADGE[placementOf(id)];
+  if (!b) return "";
+  return `<span class="stkind-where ${b.cls}" title="${esc(b.title)}">${b.label}</span>`;
+}
+
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
-function stKindRowsHTML(kinds, curId) {
-  return kinds.map((k) => `
+const ST_KIND_GROUPS = ["Directory & identity", "Database", "Web & API", "Files",
+  "Applications", "Messaging & events", "No connector"];
+
+// stKindRow renders one picker row, with the placement badge that says where this kind's
+// work runs on this server (ADR-0164/0168/0173).
+function stKindRow(k, curId) {
+  return `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span style="line-height:1.25"><b>${esc(k.name)}</b>${runsInEngine(k)
-        ? `<span class="stkind-inengine" title="Atlas runs this kind itself. Work that can fail slowly belongs on a worker (ADR-0164).">in&#8209;engine</span>` : ""}<br>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b>${placementBadgeHTML(k.id)}<br>
         <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+    </div>`;
+}
+
+// stKindRowsHTML renders the picker as titled groups rather than one flat run of
+// nineteen. It leads with the kinds this installation actually has a connector
+// configured for: on a server with two of them, the author is almost always reaching for
+// one of those and not for the nineteenth entry of a catalog. Those kinds are *moved*
+// there rather than repeated, so no kind appears twice.
+function stKindRowsHTML(kinds, curId) {
+  const configured = kinds.filter((k) => configuredKinds.has(k.id));
+  const rest = kinds.filter((k) => !configuredKinds.has(k.id));
+  const groups = configured.length ? [["Configured on this server", configured]] : [];
+  for (const name of ST_KIND_GROUPS) {
+    const list = rest.filter((k) => k.group === name);
+    if (list.length) groups.push([name, list]);
+  }
+  const other = rest.filter((k) => !ST_KIND_GROUPS.includes(k.group));
+  if (other.length) groups.push(["Other", other]);
+  return groups.map(([name, list]) => `<div class="stkind-group">
+      <div class="stkind-group-h">${esc(name)}</div>
+      ${list.map((k) => stKindRow(k, curId)).join("")}
     </div>`).join("");
+}
+
+// Which connector kinds this server has a configured, enabled connector for. Cached at
+// module scope because the properties panel is rebuilt on every selection; empty until
+// the first fetch lands, which just means the picker shows the plain catalog.
+let configuredKinds = new Set();
+
+function loadConfiguredKinds(api, onChange) {
+  if (!api) return;
+  api("GET", "/api/v1/connectors").then((list) => {
+    const next = new Set((list || []).filter((c) => c && c.enabled && c.kind).map((c) => c.kind));
+    const same = next.size === configuredKinds.size && [...next].every((k) => configuredKinds.has(k));
+    configuredKinds = next;
+    if (!same && onChange) onChange();
+  }).catch(() => { /* no configured section; the catalog stands on its own */ });
 }
 
 // stKindFieldsHTML renders the typed field form for one catalog kind over its stored
@@ -2763,6 +2830,124 @@ function stKindFieldsHTML(cur, ext) {
   return fields;
 }
 
+// Where a connector kind's work runs is a property of the *server*, not of the
+// catalog: --offload-connectors and --in-process-connectors are its command line, and
+// some kinds were born on a worker with no in-engine form at all (ADR-0168/0173). This
+// used to be a constant here — true the day it was written, false a day later — so the
+// picker now asks (ADR-0183). KIND_PLACEMENT holds
+// the answer, keyed by catalog id; null until it arrives, which renders no badge rather
+// than a guess.
+let KIND_PLACEMENT = null;
+let kindPlacementLoad = null;
+
+// loadKindPlacement fetches the placements once per page and shares the request. It
+// returns the in-flight promise so the first panel can re-render when the answer lands,
+// and null when there is nothing to wait for (already loaded, or no API to ask —
+// a Modeler with no server says nothing about placement instead of inventing it).
+function loadKindPlacement(api) {
+  if (!api || KIND_PLACEMENT) return null;
+  if (!kindPlacementLoad) {
+    kindPlacementLoad = api("GET", "/api/v1/connector-kinds").then((r) => {
+      const by = {};
+      for (const k of (r && r.kinds) || []) if (k && k.id) by[k.id] = k.placement;
+      KIND_PLACEMENT = by;
+    }).catch(() => { KIND_PLACEMENT = {}; }); // unreachable server: no badges, no fiction
+  }
+  return kindPlacementLoad;
+}
+
+// placementOf returns an authored kind's placement, or "" when the server has not
+// answered or says nothing about it (the plain job worker, whose name is already the
+// statement, and the mockup and a FEEL script, which create no job at all). The id is
+// the server's word for what the author picked: a catalog kind for a connector, a
+// language for a script task, "dmn" or "temis" for a decision binding.
+function placementOf(id) { return (KIND_PLACEMENT && KIND_PLACEMENT[id]) || ""; }
+
+// PLACEMENT_BADGE is what each placement says in the picker. The two "-only" rows read
+// like their plain counterparts on purpose — where the work runs is the same fact —
+// and differ in the advice, because a kind with no other form cannot take it.
+const PLACEMENT_BADGE = {
+  "engine": { label: "in&#8209;engine", cls: "stkind-where-engine",
+    title: "This server runs this kind in its own process, so the call's latency and failures are the engine's. It can be moved onto a worker (ADR-0164)." },
+  "engine-only": { label: "in&#8209;engine", cls: "stkind-where-engine",
+    title: "This server runs this kind in its own process. It has no out-of-process form, so there is no worker to move it to." },
+  "worker": { label: "on a worker", cls: "stkind-where-worker",
+    title: "This server does not run this kind itself: its jobs are leased by a worker process, so a slow call cannot stall the engine (ADR-0168)." },
+  "worker-only": { label: "worker only", cls: "stkind-where-worker",
+    title: "This kind has no in-engine form — its work always runs on a worker (ADR-0173)." },
+};
+
+// PLACEMENT_LEAD says where the work runs. It is the same sentence wherever it appears,
+// because it is the same fact — a connector call, a script and a decision are all a job
+// this server either runs itself or leaves for a worker.
+const PLACEMENT_LEAD = {
+  "engine": `Atlas runs this <b>in its own process</b> on this server, so its latency and its
+    failures are the engine&rsquo;s.`,
+  "engine-only": `Atlas runs this <b>in its own process</b>, and it has no out-of-process form.`,
+  "worker": `This server does <b>not</b> run this itself: its jobs are leased by a <b>worker</b>,
+    so a slow call cannot stall the engine.`,
+  "worker-only": `This has <b>no in-engine form</b>: its jobs always run on a worker.`,
+};
+
+// PLACEMENT_TAIL is what follows from that, which is *not* the same in the three panels.
+// A worker holds a connector's credential, a script's interpreter and a decision
+// service's endpoint; only some of those are the author's problem, and the advice for an
+// in-engine connector ("prefer a job worker") is not advice a script task can take.
+// A missing entry means the lead says it all — the notice never disappears for want of a
+// tail.
+const PLACEMENT_TAIL = {
+  connector: {
+    "engine": `New models should prefer a <b>Job worker</b> and an <code>atlas worker</code> serving
+      that job type; these kinds keep working and are being moved out of the engine.`,
+    "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
+      so there is nothing to move onto a worker.`,
+    "worker": `Its jobs wait for a worker serving this job type — Atlas supervises one for the kinds
+      it offloads by default. That worker holds the connector&rsquo;s configuration, so the credential
+      lives where it is used; <b>Workers</b> in the Console shows which names are served and which
+      are configured nowhere (ADR-0168).`,
+    "worker-only": `The worker holds the connection and its credential &mdash; the model names the
+      connector and nothing else (ADR-0168).`,
+  },
+  script: {
+    "engine": `A script that hangs holds the loop with it. Atlas normally runs script tasks on a
+      worker it starts and supervises itself; <code>--in-process-connectors</code> is what turns
+      that off (ADR-0047).`,
+    "worker": `Atlas supervises a script worker of its own by default. The language&rsquo;s
+      interpreter has to be installed where that worker runs, which need not be this server
+      (ADR-0047).`,
+  },
+  dmn: {
+    "engine": `The engine&rsquo;s embedded DMN library evaluates it here. A decision table is
+      computation rather than a network call, so what moving it out buys is CPU time, not
+      protection from a slow endpoint.`,
+    "worker": `Its jobs wait for a worker serving the decision job type. <b>Workers</b> in the
+      Console shows whether one is running (ADR-0157).`,
+  },
+  temis: {
+    "engine": `A temis evaluation is a network call this server makes itself, so its latency is the
+      engine&rsquo;s — the case ADR-0164 is about. Moving it onto a worker also moves the
+      service&rsquo;s endpoint and credential there (ADR-0168).`,
+    "worker": `Its jobs wait for a worker serving this job type, and that worker holds the temis
+      endpoint and its credential. <b>Workers</b> in the Console shows whether one is running
+      (ADR-0157/0168).`,
+  },
+};
+
+// placementNoticeHTML says, on the implementation that has been chosen, what its
+// placement means for the model being authored. It belongs in these panels rather than
+// only in the Workers view because this is where the choice is made; the Workers view
+// can only report the consequence afterwards. `context` picks the wording: the
+// connector catalog, a script language, or one of the two decision bindings.
+function placementNoticeHTML(id, context) {
+  const placement = placementOf(id);
+  const lead = PLACEMENT_LEAD[placement];
+  if (!lead) return "";
+  const tail = (PLACEMENT_TAIL[context] || {})[placement] || "";
+  // An in-engine kind is being warned about; one already on a worker is being described.
+  const cls = placement === "worker" || placement === "worker-only" ? " stkind-notice-worker" : "";
+  return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
+}
+
 // stKindHeadingHTML renders the heading above the chosen kind's fields.
 //
 // When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
@@ -2772,23 +2957,6 @@ function stKindFieldsHTML(cur, ext) {
 // (data-standalone-group keeps it a sibling instead of being folded into the Type group),
 // and keep a real <h3> only for a kind whose fields live directly under it (Job worker),
 // where the heading does have content to collapse.
-// runsInEngine reports whether Atlas executes a catalog kind itself. Everything
-// except the plain job worker does, today (ADR-0164): the engine's own process
-// makes the call, so its latency and its failures are the engine's.
-function runsInEngine(k) { return !k.outOfProcess; }
-
-// inEngineNoticeHTML is the deprecation notice for a kind Atlas runs itself
-// (ADR-0164). It says it where the choice is actually made — the Workers view can
-// only report the consequence afterwards — and it says what to do instead rather
-// than only that something is discouraged.
-function inEngineNoticeHTML(cur) {
-  if (!runsInEngine(cur)) return "";
-  return `<p class="stkind-notice">Atlas runs this kind <b>in its own process</b>, so this call&rsquo;s
-    latency and failures are the engine&rsquo;s. New models should prefer a <b>Job worker</b> and an
-    <code>atlas worker</code> serving that job type; these kinds keep working and are being moved out
-    of the engine.</p>`;
-}
-
 function stKindHeadingHTML(cur) {
   const fields = cur.fields || [];
   // Fields listed before the kind's first group have no group of their own (the Job
@@ -2813,7 +2981,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${inEngineNoticeHTML(cur)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "connector")}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -2821,7 +2989,7 @@ function serviceTaskKindHTML(bo) {
 // picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
 // to the send task's picker.
 const SEND_MESSAGE_KIND = {
-  id: "message", name: "Message", icon: "✉",
+  id: "message", name: "Message", icon: "✉", group: "Messaging & events",
   desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
 };
@@ -2855,7 +3023,7 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "connector") + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -4573,9 +4741,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>`]
             .concat(Object.entries(JOB_LANGS).map(([k, v]) =>
               `<option value="${k}" ${lang === k ? "selected" : ""}>${v.label}</option>`));
+          // FEEL is evaluated inline by the engine and creates no job, so it has no
+          // placement to report; every other language is a job the server either runs
+          // itself or leaves for a worker — and it is offloaded by default, which this
+          // panel never said (ADR-0183).
           html += `<h3>Script</h3>
-            <label class="field"><span>Language</span>
-              <select id="f-scriptlang">${opts.join("")}</select></label>`;
+            <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
+              <select id="f-scriptlang">${opts.join("")}</select></label>
+            ${placementNoticeHTML(lang, "script")}`;
           if (lang === "feel") {
             const s = findExt(bo, "zeebe:Script") || {};
             const exprText = (s.expression || "").replace(/^=\s*/, "");
@@ -4620,12 +4793,18 @@ function wireProperties(root, modeler, api, projectId, toast) {
             .map((v) => `<option value="${esc(v.name)}">${esc(v.source || v.origin || "")}</option>`).join("");
           const inNameOpts = [...new Set(inputs.map((p) => (p.target || "").trim()).filter(Boolean))]
             .map((n) => `<option value="${esc(n)}"></option>`).join("");
+          // The option labels name the *decision* — which engine evaluates it — and no
+          // longer where that runs: "In-engine (embedded DMN)" was a placement claim the
+          // select could not keep, since --offload-connectors moves either binding onto a
+          // worker. The badge and notice below answer that from the server instead.
+          const brtKind = mode === "connector" ? "temis" : "dmn";
           html += `<h3>Called decision (DMN)</h3>
-            <label class="field"><span>Evaluation</span>
+            <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
-                <option value="local" ${mode === "local" ? "selected" : ""}>In-engine (embedded DMN)</option>
+                <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
                 <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis connector)</option>
-              </select></label>`;
+              </select></label>
+            ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
             html += `<label class="field"><span>Connector</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
@@ -5054,6 +5233,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
       if (assocTo) assocTo.addEventListener("change", applyAssoc);
     }
 
+    // The badges describe THIS server, which only the server knows, and the panel is
+    // already on screen by the time it answers. So render without them and come back
+    // once — every later panel finds the answer cached and is right the first time.
+    // Keyed off the three fields that pick an implementation: the connector picker, a
+    // script task's language, a business rule task's decision binding.
+    if (body.querySelector("#f-stkind-list, #f-scriptlang, #f-brt-mode")) {
+      const placements = loadKindPlacement(api);
+      if (placements) placements.then(() => { try { show(element); } catch { /* the panel moved on */ } });
+    }
+
     const tasktype = body.querySelector("#f-tasktype");
     if (tasktype) {
       tasktype.addEventListener("change", (e) => {
@@ -5132,9 +5321,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
         stlist.querySelectorAll(".stkind-row").forEach((row) => {
           row.hidden = q !== "" && !row.dataset.match.includes(q);
         });
+        // A group whose rows are all filtered away would otherwise leave its header
+        // standing over nothing.
+        stlist.querySelectorAll(".stkind-group").forEach((g) => {
+          g.hidden = !g.querySelector(".stkind-row:not([hidden])");
+        });
       });
     }
     if (stlist) {
+      const sendPicker = bo.$type === "bpmn:SendTask";
+      const curKindId = (sendPicker ? sendTaskKind(bo) : serviceTaskKind(bo)).id;
+      loadConfiguredKinds(api, () => {
+        if (!stlist.isConnected) return; // the panel moved on while the request was out
+        stlist.innerHTML = stKindRowsHTML(
+          sendPicker ? [SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS] : SERVICE_TASK_KINDS, curKindId);
+      });
       stlist.addEventListener("click", (e) => {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
@@ -8300,18 +8501,43 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const expandedVars = new Set();
   let varsContext = "";
 
-  // syncCollapseAll shows the toolbar's collapse control exactly while something is open,
-  // so the way out of a wall of JSON is where the reader is looking, not only on the row
-  // they opened (which the JSON itself may have pushed off screen).
-  function syncCollapseAll() {
-    const btn = varsEl.querySelector("#v-collapse");
-    if (btn) btn.hidden = expandedVars.size === 0;
+  // syncStructToggle keeps the toolbar's one structure control current. It opens all the
+  // structures in the table and closes them again, from where the reader is looking —
+  // a chevron per row is fine for one value, but the JSON of an opened one can push the
+  // rows either side of it off the screen, and a control that only appears once something
+  // is open is not there when it is first looked for. It is absent only when the table
+  // holds nothing to open.
+  function syncStructToggle(shown) {
+    const btn = varsEl.querySelector("#v-struct-toggle");
+    if (!btn) return;
+    const any = shown.some(isComplexVar);
+    btn.hidden = !any;
+    const open = expandedVars.size > 0;
+    btn.textContent = open ? "\u25BE Collapse all" : "\u25B8 Expand all";
+    btn.title = open
+      ? "Close every structure opened in the table"
+      : "Open every object and list in the table";
+    btn.dataset.act = open ? "collapse" : "expand";
   }
 
-  // collapseAllVars closes every open structure and redraws the rows.
-  function collapseAllVars() {
-    expandedVars.clear();
+  // toggleAllVars opens every structure the table currently shows, or closes them all —
+  // whichever the control says. Expanding follows the name filter: what is not on screen
+  // is not what "all" means to the reader looking at it.
+  function toggleAllVars() {
+    const btn = varsEl.querySelector("#v-struct-toggle");
+    if (btn && btn.dataset.act === "expand") {
+      for (const v of shownVars()) if (isComplexVar(v)) expandedVars.add(varRef(v));
+    } else {
+      expandedVars.clear();
+    }
     renderVarRows();
+  }
+
+  // shownVars is the current variable set as the name filter leaves it — what the table
+  // is actually showing, which is what the count and the expand-all control are about.
+  function shownVars() {
+    const f = varFilter.trim().toLowerCase();
+    return f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
   }
 
   // renderVarRows fills the table body from the current variable set, honoring the
@@ -8321,7 +8547,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const body = varsEl.querySelector("#v-rows");
     if (!body) return;
     const f = varFilter.trim().toLowerCase();
-    const shown = f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
+    const shown = shownVars();
     varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
@@ -8334,7 +8560,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       open.setAttribute("aria-expanded", "true");
       open.querySelector(".v-chev").textContent = "\u25BE";
     }
-    syncCollapseAll();
+    syncStructToggle(shown);
   }
 
   // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
@@ -8353,8 +8579,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
           <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
         </span>
-        <button type="button" class="btn ghost small v-collapse" id="v-collapse" hidden
-                title="Close every structure opened in the table">&#9662; Collapse all</button>
+        <button type="button" class="btn ghost small v-collapse" id="v-struct-toggle" hidden
+                data-act="expand" title="Open every object and list in the table">&#9656; Expand all</button>
         <span class="vp-actions" id="v-copyall"></span>
       </div>
       <div class="v-scroll">
@@ -8366,7 +8592,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const filterEl = varsEl.querySelector("#v-filter");
     filterEl.value = varFilter;
     filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
-    varsEl.querySelector("#v-collapse").addEventListener("click", collapseAllVars);
+    varsEl.querySelector("#v-struct-toggle").addEventListener("click", toggleAllVars);
     varsEl.querySelector("#v-side").addEventListener("click", (e) => {
       const b = e.target.closest(".v-side-btn");
       if (!b) return;
@@ -9035,7 +9261,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     open.setAttribute("aria-expanded", String(show));
     open.querySelector(".v-chev").textContent = show ? "\u25BE" : "\u25B8";
     if (show) expandedVars.add(key); else expandedVars.delete(key);
-    syncCollapseAll(); // the toolbar's way out appears with the first open structure
+    syncStructToggle(shownVars()); // the toolbar control flips to "Collapse all" and back
   });
   modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
   modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });

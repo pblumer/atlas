@@ -2,6 +2,34 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can run the worker a connector needs",
+        "de": "Atlas startet den Worker, den ein Konnektor braucht"
+      },
+      "summary": {
+        "en": "Some connectors do their work in a separate worker process rather than in the engine — Active Directory's mock directory, for instance, or Entra, which only ever runs that way. Atlas started such a worker for four kinds and no others, so using any of the rest meant running one yourself; on a server that requires a login there was no credential such a worker could hold, and its tasks simply waited forever. Naming a kind with the new --supervise-connector option now gets it a worker Atlas starts, watches and restarts like the others, with the login it needs handed over at start. Trying Active Directory against a directory that does not exist is one option and one environment variable.",
+        "de": "Manche Konnektoren arbeiten in einem eigenen Worker-Prozess statt in der Engine — etwa das Mock-Verzeichnis von Active Directory oder Entra, das ausschließlich so läuft. Atlas startete einen solchen Worker bisher für vier Sorten und sonst keine; für alle übrigen musste man selbst einen betreiben, und auf einem Server mit Anmeldepflicht gab es kein Zugangstoken, das dieser Worker hätte haben können — die Aufgaben warteten schlicht ewig. Mit der neuen Option --supervise-connector bekommt eine genannte Sorte jetzt einen Worker, den Atlas startet, überwacht und neu startet wie die anderen, samt Anmeldung beim Start. Active Directory gegen ein Verzeichnis auszuprobieren, das es gar nicht gibt, ist damit eine Option und eine Variable."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-active-directory-connector-gets-a-mock-mode-so-an-identi",
       "version": "Unreleased",
       "date": null,
@@ -162,6 +190,47 @@
       }
     },
     {
+      "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Active Directory tasks run beside the engine now",
+        "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
+      },
+      "summary": {
+        "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
+        "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
+          "Its log lists every directory operation it performed — and says so when it is in mock mode.",
+          "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
+        ],
+        "de": [
+          "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
+          "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
+          "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "a-dot-in-a-write-target-is-refused-at-deploy",
       "version": "Unreleased",
       "date": null,
@@ -181,6 +250,70 @@
       "tags": [
         "Modeler"
       ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-server-that-requires-a-login-no-longer-calls-itself-single",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The account menu stops claiming there is no login",
+        "de": "Das Konto-Menü behauptet nicht mehr, es gäbe keinen Login"
+      },
+      "summary": {
+        "en": "On an instance that requires a login, the account menu said \"Single-user mode\" — the label for a server that has no login at all — whenever nobody was signed in, including on the login screen itself. It now says \"Not signed in\" there, and keeps the old label where it is actually true.",
+        "de": "Auf einer Instanz mit Anmeldepflicht stand im Konto-Menü \"Single-user mode\" — die Bezeichnung für einen Server ganz ohne Login —, sobald niemand angemeldet war, also auch auf dem Login-Bildschirm selbst. Dort steht jetzt \"Nicht angemeldet\"; wo die alte Bezeichnung zutrifft, bleibt sie."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Every task now says where its work will run",
+        "de": "Jede Aufgabe sagt jetzt, wo ihre Arbeit läuft"
+      },
+      "summary": {
+        "en": "The type list on a service task marked every connector as running inside the engine, and that had quietly stopped being true: e-mail, text files, scripts and web scraping are handed to a worker Atlas starts for you, and the database and Entra ID connectors never ran in the engine at all. The mark now comes from the server you are connected to, so it also follows however that server was started. It has also appeared in the two places that said nothing at all — the language of a script task, and a business rule task's choice between the built-in decision engine and an external service. What each one tells you differs, because what a worker holds differs: a connector's credentials, a script's interpreter, a decision service's address.",
+        "de": "Die Typ-Liste einer Service-Aufgabe wies jeden Konnektor als „in der Engine laufend“ aus — und das stimmte längst nicht mehr: E-Mail, Textdateien, Skripte und Web-Scraping übergibt Atlas an einen Worker, den es selbst für Sie startet, und die Datenbank- und Entra-ID-Konnektoren liefen nie in der Engine. Die Kennzeichnung kommt jetzt von dem Server, mit dem Sie verbunden sind, und folgt damit auch dem, womit dieser Server gestartet wurde. Und sie ist an den beiden Stellen aufgetaucht, die bisher gar nichts sagten: bei der Sprache einer Skript-Aufgabe und bei der Wahl einer Business-Rule-Aufgabe zwischen der eingebauten Entscheidungs-Engine und einem externen Dienst. Was dort jeweils steht, unterscheidet sich — weil sich unterscheidet, was ein Worker hält: die Zugangsdaten eines Konnektors, den Interpreter eines Skripts, die Adresse eines Entscheidungsdienstes."
+      },
+      "link": {
+        "label": "ADR-0164",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
+      },
+      "tags": [
+        "Modeler",
+        "Connectors"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and drop a service task on the canvas.",
+          "In the properties panel, open Type: every connector now carries a mark — in-engine, on a worker, or worker only.",
+          "Pick the E-Mail connector: on a standard install it reads on a worker, and the note underneath says where that connector is configured.",
+          "Change the task into a script task and choose PowerShell: the same mark sits beside the language, and says something a connector would not."
+        ],
+        "de": [
+          "Modeler öffnen und eine Service-Aufgabe auf die Fläche ziehen.",
+          "Im Eigenschaften-Panel „Type“ aufklappen: Jeder Konnektor trägt jetzt eine Kennzeichnung — in-engine, on a worker oder worker only.",
+          "Den E-Mail-Konnektor wählen: Bei einer Standardinstallation steht dort „on a worker“, und der Hinweis darunter sagt, wo dieser Konnektor konfiguriert wird.",
+          "Die Aufgabe in eine Skript-Aufgabe umwandeln und PowerShell wählen: Dieselbe Kennzeichnung steht neben der Sprache — mit einem Hinweis, den ein Konnektor so nicht bekommt."
+        ]
+      },
       "try": {
         "label": {
           "en": "Open the Modeler",
@@ -244,139 +377,6 @@
         },
         "route": "#/operations"
       }
-    },
-    {
-      "id": "a-new-validation-rule-can-no-longer-take-down-a-running-serv",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An upgrade no longer stops on a model you already deployed",
-        "de": "Ein Upgrade bleibt nicht mehr an einem bereits deployten Modell hängen"
-      },
-      "summary": {
-        "en": "Atlas recompiles every deployed definition when it starts, and it used to apply the deploy checks again while doing so. A check added to a later version therefore met models that were deployed before it existed, refused them, and the server stopped starting at all — over a model nobody had touched, with every other definition and every running instance out of reach behind it. Those checks decide whether a model may be deployed, not whether it may run, so they no longer run at startup. A definition that was accepted comes back and keeps running, and Atlas writes one warning per model naming what it would fail today, so you can fix it in the Modeler in your own time. The decision models deployed with a process are treated the same way: a decision that no longer compiles no longer stops the server — it fails only if something evaluates it, and the other decisions keep answering. Deploying such a model still refuses it, with the rule named.",
-        "de": "Atlas übersetzt beim Start jede deployte Definition neu und hat dabei bisher auch die Deploy-Prüfungen erneut angewendet. Eine Prüfung, die erst später dazukam, traf so auf Modelle, die vor ihr deployt wurden, wies sie ab — und der Server startete überhaupt nicht mehr: wegen eines Modells, das niemand angefasst hatte, mit allen anderen Definitionen und allen laufenden Instanzen dahinter unerreichbar. Diese Prüfungen entscheiden, ob ein Modell deployt werden darf, nicht ob es laufen darf; sie laufen beim Start deshalb nicht mehr. Eine einmal akzeptierte Definition kommt zurück und läuft weiter, und Atlas schreibt pro Modell eine Warnung, was heute beanstandet würde — zu korrigieren im Modeler, wenn es passt. Für die mit einem Prozess deployten Entscheidungsmodelle gilt dasselbe: Eine Entscheidung, die nicht mehr übersetzt, stoppt den Server nicht mehr — sie scheitert nur, wenn sie ausgewertet wird, die übrigen Entscheidungen antworten weiter. Beim Deploy wird ein solches Modell weiterhin abgewiesen, mit Nennung der Regel."
-      },
-      "link": {
-        "label": "ADR-0177",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0177-reload-skips-the-deploy-gate.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-structure-in-the-variables-tab-no-longer-comes-open-by-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Structures in the Variables tab stay closed until you open them",
-        "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
-      },
-      "summary": {
-        "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
-        "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-bpmn-file-with-no-layout-renders-when-you-import-it-not-on",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A file without a diagram no longer imports into an empty canvas",
-        "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
-      },
-      "summary": {
-        "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
-        "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
-      },
-      "link": {
-        "label": "ADR-0124",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0124-server-side-auto-layout.md"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-s-badge-counts-its-rounds-not-its-activations",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A loop's badge says how often it ran",
-        "de": "Der Zähler an einer Schleife sagt, wie oft sie lief"
-      },
-      "summary": {
-        "en": "The number at the corner of a looping task counted one more than the rounds it ran: the engine enters the activity once as the loop itself and once per round, and the badge showed both. It now says the round count, marked with the loop symbol — and 0 for a loop that was reached but ran nothing, which is the case most worth noticing.",
-        "de": "Die Zahl an der Ecke eines Schleifen-Tasks zählte einen mehr als die tatsächlichen Durchläufe: Die Engine betritt die Aktivität einmal als Schleife selbst und einmal je Durchlauf, und der Zähler zeigte beides. Jetzt steht dort die Anzahl der Durchläufe, mit dem Schleifensymbol gekennzeichnet — und 0 bei einer Schleife, die erreicht wurde, aber nichts ausgeführt hat; genau der Fall, den man sehen will."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "token-markers-on-one-element-no-longer-overlap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Several tokens on one shape are readable again",
-        "de": "Mehrere Tokens auf einer Form sind wieder lesbar"
-      },
-      "summary": {
-        "en": "The replay draws a marker per token on an element, and they were spaced slightly closer than they are wide — so every pair sat partly on top of the one before it. A loop puts two on its task at all times, so this was the normal case rather than a rare one. They now stand clear of each other, and where a shape runs out of room the rest become a \"+n\".",
-        "de": "Der Replay zeichnet je Token einen Marker auf dem Element, und der Abstand war etwas kleiner als der Marker breit ist — jedes Paar lag also teilweise übereinander. Eine Schleife hat immer zwei davon auf ihrem Task, das war also der Normalfall, nicht die Ausnahme. Sie stehen jetzt frei nebeneinander, und wo die Form zu schmal wird, fasst ein „+n\" den Rest zusammen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }

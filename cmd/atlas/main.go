@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -218,6 +219,7 @@ func runServe(args []string) error {
 	offload := fs.String("offload-connectors", "", "comma-separated connector kinds this server must NOT run itself (e.g. remedy,sharepoint): their jobs park for a worker instead (ADR-0168). Adds to the default set unless --in-process-connectors turns that off. A kind whose credentials live in this server's connector store and that the supervisor cannot hand over needs its secret moved to the worker by hand, so those are never defaulted. An unknown kind is refused at startup rather than ignored")
 	history := fs.String("worker-history", "", "name of a clio connector to append every settled job run to, so a worker's history outlives this process (ADR-0036). The console reads it back under a worker's recent jobs; retention and querying are then your clio's, not another flag here. Off unless given, in which case the console keeps only its in-memory tail")
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
+	superviseConnectors := fs.String("supervise-connector", "", "comma-separated connector kinds this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
 	inProcess := fs.Bool("in-process-connectors", false, "run every connector inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying Atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
@@ -239,7 +241,7 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), *inProcess, *history, *historyScope)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -288,7 +290,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds []string, inProcessConnectors bool, historyConnector, historyScope string) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -445,9 +447,11 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	// and somebody trying Atlas configures nothing to get there. That includes mail,
 	// whose configuration the server hands to the child at spawn out of its own
 	// connector store — the SMTP handshake being the stall an operator actually
-	// notices. --in-process-connectors returns to the old arrangement wholesale;
-	// --offload-connectors adds the remaining credential-bearing kinds on top, once
-	// their secrets have been moved to a worker by hand.
+	// notices — and Active Directory, whose per-task bind-password references are
+	// handed over the same way (ADR-0182). --in-process-connectors
+	// returns to the old arrangement wholesale; --offload-connectors adds the remaining
+	// credential-bearing kinds on top, once their secrets have been moved to a worker
+	// by hand.
 	//
 	// One worker per kind, not one for all of them. Three reasons, and the first is
 	// not about tidiness: a script task inherits its worker's whole environment, so a
@@ -467,6 +471,18 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 			handles = append(handles, nil)
 		}
 	}
+	// Kinds the operator asked this server to run a worker for. After the defaults, so
+	// asking for one of them is the no-op it should be rather than a second worker
+	// racing the first for the same jobs.
+	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs)
+	if err != nil {
+		return err
+	}
+	for _, spec := range askedSpecs {
+		specs = append(specs, spec)
+		handles = append(handles, nil)
+	}
+	offloadKinds = append(offloadKinds, askedOffload...)
 	if len(offloadKinds) > 0 {
 		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
 	}
@@ -569,6 +585,51 @@ func splitList(v string) []string {
 		}
 	}
 	return out
+}
+
+// superviseConnectorSpecs turns --supervise-connector kinds into the workers this
+// server starts for them, and the kinds it must therefore stop working itself.
+//
+// It exists because offloading and supervising were only ever paired for the four
+// default kinds (ADR-0164). --offload-connectors takes a kind away from the engine
+// and leaves its jobs parked for a worker somebody else runs; --supervise names a
+// *job type* and an external command, so it cannot ask for a built-in connector. A
+// kind outside the defaults was therefore reachable only by running `atlas worker
+// --connector <kind>` yourself — which a server with --auth makes impossible, since
+// the job pull is authenticated and the only bearer credentials are this server's
+// ephemeral internal token (handed to its own children, never published) and a
+// deploy token allowlisted to two endpoints. ADR-0181 named the friction as a
+// follow-up for AD's mock mode; on an authenticated server it is not friction but a
+// wall, and the same one stands in front of every worker-only kind.
+//
+// The pairing is the same one the defaults get: a worker for the kind, and the kind
+// removed from the engine so that worker is the one that leases its jobs. A
+// worker-only kind (entra) is supervised without being offloaded — there are no
+// in-process handlers to remove, and naming it in the offload list is refused at
+// startup as an unknown kind.
+func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec) ([]api.SuperviseSpec, []string, error) {
+	var (
+		specs   []api.SuperviseSpec
+		offload []string
+	)
+	for _, kind := range kinds {
+		if !slices.Contains(worker.KnownConnectorKinds(), kind) {
+			return nil, nil, fmt.Errorf("atlas: cannot supervise a worker for connector kind %q: no such kind (have %s)",
+				kind, strings.Join(worker.KnownConnectorKinds(), ", "))
+		}
+		// Two workers leasing one kind is not a configuration error the operator would
+		// ever see reported — it is two processes racing for the same jobs — so asking
+		// for a kind the defaults already supervise is a no-op rather than a second one.
+		if slices.ContainsFunc(supervised, func(s api.SuperviseSpec) bool { return s.ID == kind }) ||
+			slices.ContainsFunc(specs, func(s api.SuperviseSpec) bool { return s.ID == kind }) {
+			continue
+		}
+		specs = append(specs, api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}})
+		if api.IsOffloadableKind(kind) {
+			offload = append(offload, kind)
+		}
+	}
+	return specs, offload, nil
 }
 
 // superviseFlag collects repeated --supervise id=type=command entries: which worker
@@ -702,7 +763,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, rest, script, webscrape). The server must be offloading them (it offloads csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, and entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, mail, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, and entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
