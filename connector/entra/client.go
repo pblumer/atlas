@@ -32,12 +32,8 @@ const DefaultScope = "https://graph.microsoft.com/.default"
 // level — naming the lifecycle operations and building their URLs and bodies — not
 // in wrapping nine HTTP calls in nine Go signatures.
 type Client interface {
-	// Call performs one request. path is normally a path under [Client.BaseURL], but
-	// a paged listing passes back the absolute @odata.nextLink Graph handed it —
-	// verbatim, because a continuation token is not something to take apart and
-	// reassemble. An implementation must confine such a URL to its own endpoint
-	// (see [GraphClient.Call]).
-	Call(ctx context.Context, method, path string, body any) (any, error)
+	// Call performs one request described by a [Request].
+	Call(ctx context.Context, req Request) (any, error)
 	// BaseURL is the tenant's Graph root. Adding a group member is the one operation
 	// whose *body* carries a URL — the @odata.id of the member being added — so the
 	// caller has to know which cloud this connector talks to, not just its path.
@@ -50,6 +46,38 @@ type Registry = clientreg.Registry[Client]
 
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry { return clientreg.New[Client]() }
+
+// Request is one Graph call. It is a struct rather than a parameter list because
+// the fourth thing a call needs — whether it asks for advanced query support — is a
+// property of the *query*, and a bare bool at the end of a signature says nothing at
+// the call site about which one it is.
+type Request struct {
+	Method string
+	// Path is normally a path under [Client.BaseURL], but a paged listing passes back
+	// the absolute @odata.nextLink Graph handed it — verbatim, because a continuation
+	// token is not something to take apart and reassemble. An implementation must
+	// confine such a URL to its own endpoint (see [GraphClient.Call]).
+	Path string
+	Body any
+	// Eventual asks for Graph's advanced query support by sending
+	// ConsistencyLevel: eventual. It is what makes endsWith, ne, not and $search
+	// usable on a directory collection — and it must be set on *every* request of a
+	// listing, continuations included, because Graph rejects a page fetched without
+	// it. The matching $count=true belongs in Path; Graph requires the two together.
+	//
+	// It is deliberately not derived from Path carrying $count=true. Graph does pair
+	// them, so deriving it would work today — but a behavioural header inferred by
+	// sniffing a URL is the kind of coupling that breaks quietly, and a fake client
+	// in a test could then only observe the string rather than the intent.
+	Eventual bool
+}
+
+// consistencyLevelHeader is the header Graph reads for advanced query support, and
+// eventualConsistency its only value this connector sends.
+const (
+	consistencyLevelHeader = "ConsistencyLevel"
+	eventualConsistency    = "eventual"
+)
 
 // GraphClient calls Microsoft Graph with an OAuth2 bearer token.
 type GraphClient struct {
@@ -91,22 +119,22 @@ type graphError struct {
 // A 2xx with no body — which is what Graph answers a DELETE or a successful PATCH
 // with — returns a nil result rather than an error: the operation succeeded, and
 // there is simply nothing to write into a result variable.
-func (c *GraphClient) Call(ctx context.Context, method, path string, body any) (any, error) {
-	target, err := c.resolve(path)
+func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
+	target, err := c.resolve(r.Path)
 	if err != nil {
 		return nil, err
 	}
 	var rdr io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
+	if r.Body != nil {
+		raw, err := json.Marshal(r.Body)
 		if err != nil {
 			return nil, fmt.Errorf("entra: encode request body: %w", err)
 		}
 		rdr = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, target, rdr)
+	req, err := http.NewRequestWithContext(ctx, r.Method, target, rdr)
 	if err != nil {
-		return nil, fmt.Errorf("entra: build %s %s: %w", method, path, err)
+		return nil, fmt.Errorf("entra: build %s %s: %w", r.Method, r.Path, err)
 	}
 	tok, err := c.tokens.Token(ctx)
 	if err != nil {
@@ -114,27 +142,30 @@ func (c *GraphClient) Call(ctx context.Context, method, path string, body any) (
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
+	if r.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if r.Eventual {
+		req.Header.Set(consistencyLevelHeader, eventualConsistency)
 	}
 	resp, err := c.httpc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("entra: %s %s: %w", method, path, err)
+		return nil, fmt.Errorf("entra: %s %s: %w", r.Method, r.Path, err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("entra: read %s %s response: %w", method, path, err)
+		return nil, fmt.Errorf("entra: read %s %s response: %w", r.Method, r.Path, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, graphFailure(method, path, resp.StatusCode, raw)
+		return nil, graphFailure(r.Method, r.Path, resp.StatusCode, raw)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, nil
 	}
 	var out any
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("entra: %s %s returned a body that is not JSON: %w", method, path, err)
+		return nil, fmt.Errorf("entra: %s %s returned a body that is not JSON: %w", r.Method, r.Path, err)
 	}
 	return out, nil
 }

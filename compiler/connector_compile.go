@@ -276,6 +276,14 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	search, err := connectorValue(st.Id, "entra connector", "search", cn.Search)
+	if err != nil {
+		return 0, err
+	}
+	advanced, err := entraAdvancedQuery(st.Id, cn)
+	if err != nil {
+		return 0, err
+	}
 	return b.AddEntraConnectorTask(EntraConfig{
 		Connector:     strings.TrimSpace(cn.Connector),
 		Op:            op,
@@ -287,8 +295,41 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		Select:        strings.TrimSpace(cn.Select),
 		PageSize:      pageSize,
 		MaxUsers:      maxUsers,
+		Search:        search,
+		Advanced:      advanced,
 		Retries:       retries,
 	}), nil
+}
+
+// entraAdvancedQuery settles whether the listing asks for Graph's advanced query
+// support: the ConsistencyLevel: eventual header plus $count=true, which is what makes
+// endsWith, ne, not and $search usable on a directory collection.
+//
+// A search sets it on its own. Graph offers no other way to run one, so making an
+// author tick a second box would be a trap whose only outcome is a 400 — and refusing
+// advancedQuery="false" next to a search is better than honouring a combination that
+// cannot work.
+//
+// Otherwise it is opt-in, and deliberately not inferred from the filter text. The
+// filter may be a FEEL expression with no text to read at deploy, and eventual
+// consistency is a change to what the process is told about the directory — a
+// decision that belongs to the author rather than to a substring match.
+func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
+	raw := strings.ToLower(strings.TrimSpace(cn.AdvancedQuery))
+	hasSearch := strings.TrimSpace(cn.Search) != ""
+	switch raw {
+	case "":
+		return hasSearch, nil
+	case "true":
+		return true, nil
+	case "false":
+		if hasSearch {
+			return false, fmt.Errorf("compiler: entra connector task %q sets a search with advancedQuery=\"false\", but Graph runs a $search only as an advanced query", taskID)
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("compiler: entra connector task %q has a non-boolean advancedQuery %q (want true or false)", taskID, cn.AdvancedQuery)
+	}
 }
 
 // entraListOnly rejects a listing attribute on an operation that returns one object
@@ -302,6 +343,8 @@ func entraListOnly(taskID, op string, isList bool, cn *xmlEntraConnector) error 
 	for _, a := range []struct{ what, raw string }{
 		{"filter", cn.Filter},
 		{"select", cn.Select},
+		{"search", cn.Search},
+		{"advancedQuery", cn.AdvancedQuery},
 	} {
 		if strings.TrimSpace(a.raw) != "" {
 			return fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which addresses one user directly (%s applies to list-users)", taskID, a.what, op, a.what)

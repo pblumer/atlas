@@ -25,8 +25,8 @@ type pagingClient struct {
 
 func (c *pagingClient) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
 
-func (c *pagingClient) Call(_ context.Context, _, path string, _ any) (any, error) {
-	c.paths = append(c.paths, path)
+func (c *pagingClient) Call(_ context.Context, r Request) (any, error) {
+	c.paths = append(c.paths, r.Path)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -254,13 +254,13 @@ func TestGraphClientRefusesAForeignContinuation(t *testing.T) {
 	g := newGraphServer(t)
 	g.response = `{"value":[]}`
 	c := g.client()
-	if _, err := c.Call(context.Background(), "GET", "https://evil.example/v1.0/users", nil); err == nil {
+	if _, err := c.Call(context.Background(), Request{Method: "GET", Path: "https://evil.example/v1.0/users"}); err == nil {
 		t.Fatal("a continuation on another host must be refused")
 	} else if !strings.Contains(err.Error(), "evil.example") {
 		t.Errorf("error = %v, want it to name the host it refused", err)
 	}
 	// Its own origin is followed, absolute or not.
-	if _, err := c.Call(context.Background(), "GET", g.srv.URL+"/users?$skiptoken=A", nil); err != nil {
+	if _, err := c.Call(context.Background(), Request{Method: "GET", Path: g.srv.URL + "/users?$skiptoken=A"}); err != nil {
 		t.Errorf("a continuation on the connector's own endpoint must be followed: %v", err)
 	}
 	if g.path != "/users" {
@@ -273,12 +273,12 @@ func TestGraphClientRefusesAForeignContinuation(t *testing.T) {
 func TestGraphClientRefusesAnUnparseableContinuation(t *testing.T) {
 	g := newGraphServer(t)
 	c := g.client()
-	if _, err := c.Call(context.Background(), "GET", "https://exa mple.com/users", nil); err == nil {
+	if _, err := c.Call(context.Background(), Request{Method: "GET", Path: "https://exa mple.com/users"}); err == nil {
 		t.Error("an unparseable continuation must be refused")
 	}
 	// And a client whose own base URL cannot be parsed cannot decide the question.
 	bad := NewGraphClient(staticToken{tok: "t"}, "https://exa mple.com", http.DefaultClient)
-	if _, err := bad.Call(context.Background(), "GET", "https://graph.microsoft.com/v1.0/users", nil); err == nil {
+	if _, err := bad.Call(context.Background(), Request{Method: "GET", Path: "https://graph.microsoft.com/v1.0/users"}); err == nil {
 		t.Error("an unparseable base URL must refuse a continuation")
 	}
 }

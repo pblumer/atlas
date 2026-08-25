@@ -67,9 +67,18 @@ _Changed_ / _Removed_ for each version.
   expires. And a continuation may only stay on the connector's own endpoint: a paged
   result is the one place a *response* names the next URL, and the token behind it
   can read an entire directory, so a redirected page is refused rather than followed.
-  Advanced queries (`endsWith`, `$search`) need Graph's `ConsistencyLevel` header and
-  remain the REST connector's; Graph names that refusal and the connector surfaces it
-  verbatim.
+  **A listing can also run as an advanced query.** Graph gates `endsWith`, `ne`, `not`
+  and `$search` behind advanced query support, and refuses them otherwise — "which
+  mailboxes are on this domain" is an `endsWith`, so this was not an exotic corner.
+  `advancedQuery="true"` sends the two halves Graph only accepts together, the
+  `ConsistencyLevel: eventual` header and `$count=true`, so there is no way to author
+  half of it. A `search` term carries Graph's own quoting (a compound `"a" AND "b"`
+  has quotes inside it, so the connector encodes the term but does not invent quotes
+  around it) and implies the advanced query, because Graph runs a `$search` no other
+  way. It is never inferred from the filter text: a FEEL filter has no text at deploy,
+  and eventual consistency means a listing may be slightly stale — the author's call,
+  not a substring match's. The header rides on every page, since Graph rejects a
+  continuation fetched without it. `$orderby` stays the REST connector's.
 
 - **A loop says what it was told to repeat while — and what it decided**
   (ADR-0077/ADR-0133). A looping activity's replay could say which round a step was and

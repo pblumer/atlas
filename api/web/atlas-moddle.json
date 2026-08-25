@@ -207,6 +207,16 @@
           "type": "String",
           "isAttr": true
         },
+        {
+          "name": "search",
+          "type": "String",
+          "isAttr": true
+        },
+        {
+          "name": "advancedQuery",
+          "type": "String",
+          "isAttr": true
+        },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
