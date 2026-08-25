@@ -153,6 +153,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 - **[n8n comparison](docs/comparisons/n8n.md)** — where integration automation and durable BPMN orchestration differ, and how they can work together
 - **[MIM comparison](docs/comparisons/mim.md)** — Microsoft Identity Manager's connector surface mapped to Atlas, and the connector gaps that remain
 - **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
+- **[Compliance](docs/compliance/)** — the Swiss federal **ISDS-Konzept** (P042-Hi01) answered for Atlas, in German, plus the product gaps a Bund deployment would have to close
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 

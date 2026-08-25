@@ -348,6 +348,12 @@ func (s *Server) buildRemedyClients() (map[string]remedy.Client, map[string]stri
 // the write.
 func (s *Server) rebuildConnectorRegistries() error {
 	for _, k := range managedConnectorKinds {
+		// A worker-only kind has no in-engine registry to rebuild: it is served by a
+		// supervised worker, which refreshSupervisedWorkers restarts when its store
+		// entry changes (ADR-0172). Skipping it here is why its rebuild is nil.
+		if k.workerOnly {
+			continue
+		}
 		if err := k.rebuild(s); err != nil {
 			return err
 		}

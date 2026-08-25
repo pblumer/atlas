@@ -2251,7 +2251,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Create, read, find or search, change, enable, disable or delete a cloud account, and manage group membership", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, update, enable, disable, reset password, delete), groups (create, read, list, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2270,41 +2270,71 @@ const SERVICE_TASK_KINDS = [
           { v: "get-user", l: "Read user" },
           { v: "list-users", l: "List users" },
           { v: "update-user", l: "Update user" },
+          { v: "reset-password", l: "Reset password" },
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
           { v: "delete-user", l: "Delete user" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "create-group", l: "Create group" },
+          { v: "get-group", l: "Read group" },
+          { v: "list-groups", l: "List groups" },
+          { v: "update-group", l: "Update group" },
+          { v: "delete-group", l: "Delete group" },
+          { v: "add-group-owner", l: "Add group owner" },
+          { v: "remove-group-owner", l: "Remove group owner" },
+          { v: "create-team", l: "Create team" },
+          { v: "add-team-member", l: "Add team member" },
+          { v: "add-team-owner", l: "Add team owner" },
+          { v: "create-channel", l: "Create channel" },
+          { v: "archive-team", l: "Archive team" },
+          { v: "assign-license", l: "Assign licence" },
+          { v: "assign-role", l: "Assign directory role" },
         ],
       },
       {
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
-        showIf: (v) => v.operation && v.operation !== "create-user" && v.operation !== "list-users",
+        // The operations that address a user (compiler's needsUser). An explicit list so
+        // an operation that takes only a group never prompts for a user it ignores.
+        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
-        key: "groupId", label: "Group", placeholder: "8f9a…-object-id", fx: true,
-        showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
-        hint: "The group's object id. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+        key: "groupId", label: "Group / Team", placeholder: "8f9a…-object-id", fx: true,
+        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team"].includes(v.operation),
+        hint: "The group's object id — which is also the id of the Team stood up on it, so the team operations take it here too. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+      },
+      {
+        key: "newPassword", label: "New password", placeholder: "=tempPassword", fx: true,
+        showIf: (v) => v.operation === "reset-password",
+        hint: "The password to set. Almost always a FEEL expression (fx) naming a variable — e.g. =tempPassword — so the secret is a runtime value, never written into the model. The connector wraps it in a passwordProfile and forces a change at next sign-in.",
+      },
+      {
+        key: "attributes", label: "Attributes (JSON)", type: "json", rows: 8,
+        // The two ways to supply the body are mutually exclusive (the compiler refuses
+        // both): the inline editor shows until a variable is named, and vice versa.
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributesVariable,
+        placeholder: '{\n  "accountEnabled": true,\n  "displayName": "=vorname + \\" \\" + nachname",\n  "userPrincipalName": "=upn",\n  "passwordProfile": { "password": "=tempPasswort", "forceChangePasswordNextSignIn": true }\n}',
+        hint: "The request body, authored here as JSON. A string value beginning with '=' is a FEEL expression over the instance's variables, evaluated per field at runtime (e.g. \"displayName\": \"=vorname + \\\" \\\" + nachname\"); everything else is literal. Shapes: user (displayName, mailNickname, userPrincipalName, passwordProfile); group (displayName, mailNickname, mailEnabled, securityEnabled, groupTypes); channel {displayName, description}; licence {addLicenses, removeLicenses}; role {roleDefinitionId}. A password is a FEEL value, never a literal in the model.",
       },
       {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
-        showIf: (v) => v.operation === "create-user" || v.operation === "update-user",
-        hint: "A process variable holding a JSON object of Graph user properties (accountEnabled, displayName, mailNickname, userPrincipalName, passwordProfile). Sent as the request body, so a password never appears in the model.",
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributes,
+        hint: "Alternative to the inline JSON above: a process variable holding the JSON object to send as the request body. Use one or the other, not both.",
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
       },
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Konnektor kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         options: [
           { v: "", l: "Aus (streng konsistent)" },
           { v: "true", l: "Ein (ConsistencyLevel: eventual)" },
@@ -2313,17 +2343,17 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "An OData $select: which properties each user comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large listing out of the state store.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "How many users to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole listing, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
         key: "maxUsers", label: "Maximum users", placeholder: "1000",
-        showIf: (v) => v.operation === "list-users",
+        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
         hint: "Caps what may land in the result variable. A listing returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
       },
       { group: "Output" },
@@ -2809,6 +2839,12 @@ function stKindFieldsHTML(cur, ext) {
       // code editor below (and F2-able into the Developer View, ADR-0145).
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+    } else if (f.type === "json") {
+      // A JSON field: the same textarea the save wiring reads, upgraded to the JSON
+      // editor below (highlighting, validation, auto-format). String values with a
+      // leading '=' are FEEL, evaluated per field at runtime (compiled to one context).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
@@ -5410,6 +5446,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
       // template. The Developer View is where it gets a gutter and the full width.
       attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
       markDevField(el, "html", { title: f.label });
+    }
+    // JSON fields (the Entra attributes template) get the shared JSON editor:
+    // highlighting, live validation and auto-format. A '=' inside a string value is
+    // FEEL, evaluated per field at runtime — the compiler turns the whole template into
+    // one FEEL context. onChange saves, since the editor consumes the native change.
+    for (const f of stKind.fields) {
+      if (f.type !== "json") continue;
+      const el = body.querySelector("#f-st-" + f.key);
+      if (!el) continue;
+      attachJSONEditor(el, { rows: f.rows || 8, onChange: saveKindFields });
     }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;

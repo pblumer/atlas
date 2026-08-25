@@ -35,7 +35,12 @@ overrides.json ┘
    ```
    Look up the entry's `id` in `api/web/whats-new.json`.
 3. (Optional but recommended for anything a user should notice) add an override in
-   `overrides.json` under that id. Every field is optional:
+   `overrides.json` under that id — **copy it, don't retype it.** The id is the
+   headline slugified and cut to 60 characters, so a hand-typed key is easy to get one
+   character wrong, and a key that matches nothing is not an error the entry shows:
+   it renders from the CHANGELOG's own wording, in English, in both languages. The
+   generator refuses an unmatched key for exactly that reason (below). Every field is
+   optional:
 
    ```json
    "the-secrets-panel-says-what-a-value-has-to-be": {
@@ -68,6 +73,11 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
   `make whats-new` turns the build red with the missing diff printed. This is why
   `generatedAt` is derived from the newest dated CHANGELOG section rather than the
   wall clock — a today-stamp would make every CI run differ from the commit.
+- **The generator refuses an override key that matches no bullet.** Such a key does
+  nothing — the entry still renders, from the CHANGELOG headline, with German falling
+  back to English — and that is indistinguishable from having written no override at
+  all. Keys are curated by hand, so an unmatched one is always a typo or a headline
+  that was reworded out from under it; `gen.mjs` exits non-zero and names it.
 - **`api/whatsnew_test.go` guards the committed JSON**: valid, non-empty, required
   fields present, newest-first, and no summary that starts with punctuation (the
   signature of a generator parse artifact rather than real prose).

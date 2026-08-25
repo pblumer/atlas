@@ -26,8 +26,18 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, k := range managedConnectorKinds {
-		if k.name == "" || k.validateCreate == nil || k.rebuild == nil {
+		// Every kind is created and validated in the Console, so name and validateCreate
+		// are always required. The in-engine wiring (registry/rebuild/handlers) is only
+		// required for a kind the engine runs itself; a worker-only kind has none of it
+		// by design — its credential never enters the engine (ADR-0172).
+		if k.name == "" || k.validateCreate == nil {
 			t.Errorf("kind %q is incompletely defined: %+v", k.name, k)
+		}
+		if !k.workerOnly && (k.newRegistry == nil || k.rebuild == nil || k.registerHandlers == nil || k.problem == nil) {
+			t.Errorf("engine-run kind %q is missing its in-engine wiring: %+v", k.name, k)
+		}
+		if k.workerOnly && (k.newRegistry != nil || k.rebuild != nil || k.registerHandlers != nil) {
+			t.Errorf("worker-only kind %q must not wire an in-engine registry: %+v", k.name, k)
 		}
 		if seen[k.name] {
 			t.Errorf("duplicate managed kind %q", k.name)
@@ -42,7 +52,7 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 		t.Error("http.rest should not be a managed connector kind")
 	}
 	// The whitelist error lists exactly the registered kinds, in order.
-	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", or \"remedy\""
+	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", or \"entra\""
 	if got := managedConnectorKindsError(); got != want {
 		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
 	}

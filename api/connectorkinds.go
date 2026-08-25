@@ -57,6 +57,12 @@ type managedConnectorKind struct {
 	// into "a connector of kind X is required here", so a deploy can check the name
 	// against the store instead of leaving the mismatch to the first token (ADR-0158).
 	jobTypes []int32
+	// workerOnly marks a kind the engine never runs itself: it builds no client and
+	// subscribes no in-process handler, so the tenant credential never enters the
+	// engine (ADR-0172). The store entry exists only so an operator can configure it in
+	// the Console and the supervised worker is provisioned from it (superviseEnv). Its
+	// newRegistry/rebuild/registerHandlers are therefore nil and skipped at setup.
+	workerOnly bool
 }
 
 // createConnectorParams is the decoded body of a create-connector request. The
@@ -228,6 +234,19 @@ var managedConnectorKinds = []managedConnectorKind{
 		},
 		jobTypes: []int32{compiler.RemedyJobTypeIndex},
 	},
+	{
+		// A Microsoft Entra ID connector task manages the cloud directory over Graph
+		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
+		// credential — the store entry exists only so an operator can add a tenant in the
+		// Console and the supervised entra worker is provisioned from it (superviseEnv),
+		// the credential resolved from the vault as an OAuth bundle. So there is no
+		// registry, no rebuild and no in-process handler here; the compiler's connector
+		// name check (jobTypes) still uses the store so a deploy catches a name typo.
+		name:           connectorKindEntra,
+		workerOnly:     true,
+		validateCreate: validateEntraConnector,
+		jobTypes:       []int32{compiler.EntraJobTypeIndex},
+	},
 }
 
 // setupManagedConnectors wires every managed connector kind at startup: it creates each
@@ -238,6 +257,12 @@ var managedConnectorKinds = []managedConnectorKind{
 // s.jobRunner and s.connectors are set.
 func (s *Server) setupManagedConnectors(store *state.Store) error {
 	for _, k := range managedConnectorKinds {
+		// A worker-only kind runs entirely on a supervised worker: the engine builds no
+		// client and subscribes no handler for it, so the tenant credential never enters
+		// the engine (ADR-0172). Its store entry is read only by superviseEnv.
+		if k.workerOnly {
+			continue
+		}
 		k.newRegistry(s)
 		if err := k.rebuild(s); err != nil {
 			return err
@@ -313,6 +338,17 @@ var offloadableKinds = map[string][]int32{
 // until an operator moves their secrets themselves, with --offload-connectors.
 func DefaultOffloadedKinds() []string {
 	return []string{"ad", "csv", connectorKindMail, "script", "webscrape"}
+}
+
+// DefaultSupervisedWorkerOnlyKinds are the worker-only connector kinds Atlas supervises
+// by default (ADR-0172). Unlike the offloaded kinds these have no in-engine form at all,
+// so --in-process-connectors cannot apply to them: the worker is the only way to run
+// them. It starts with nothing to serve and parks (exitNothingToServe); the moment an
+// operator adds a tenant in the Console, refreshSupervisedWorkers brings it up — no
+// flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
+// deployment change.
+func DefaultSupervisedWorkerOnlyKinds() []string {
+	return []string{connectorKindEntra}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -418,6 +454,19 @@ func validateSharePointConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
 		return "a sharepoint connector requires a credentialsRef naming a vault auth bundle"
+	}
+	return ""
+}
+
+// validateEntraConnector checks an Entra tenant a Console operator is adding. The
+// tenant id, client id and client secret live together in a vault bundle the
+// credentialsRef names — never in the record, and never in a model (ADR-0172). An
+// optional endpoint overrides the Graph base for a national cloud; the mail-only
+// fields do not apply.
+func validateEntraConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if p.CredentialsRef == "" {
+		return "an entra connector requires a credentialsRef naming a vault bundle {tenantId, clientId, clientSecret}"
 	}
 	return ""
 }

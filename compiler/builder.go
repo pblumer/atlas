@@ -1369,6 +1369,8 @@ type EntraConfig struct {
 	Op            string
 	UserID        RestExpr
 	GroupID       RestExpr
+	NewPassword   RestExpr
+	Attributes    RestExpr
 	AttributesVar string
 	ResultVar     string
 	Filter        RestExpr
@@ -1401,6 +1403,8 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraOp:            b.intern(cfg.Op),
 		EntraUserID:        cfg.UserID,
 		EntraGroupID:       cfg.GroupID,
+		EntraNewPassword:   cfg.NewPassword,
+		EntraAttributes:    cfg.Attributes,
 		EntraAttributesVar: b.intern(cfg.AttributesVar),
 		EntraFilter:        cfg.Filter,
 		EntraSelect:        b.intern(cfg.Select),

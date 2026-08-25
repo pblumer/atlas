@@ -178,6 +178,9 @@ type entraOp struct {
 	needsUser       bool
 	needsGroup      bool
 	needsAttributes bool
+	// needsPassword marks reset-password, the one operation that authors a newPassword
+	// (literal-or-FEEL). It is an error anywhere else, like the listing attributes.
+	needsPassword bool
 	// isList marks the one operation that returns a collection rather than an object
 	// or nothing. It is what makes filter/select/pageSize/maxUsers meaningful — and
 	// what makes them an error anywhere else.
@@ -190,10 +193,25 @@ var entraOps = map[string]entraOp{
 	"list-users":          {isList: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
 	"delete-user":         {needsUser: true},
+	"reset-password":      {needsUser: true, needsPassword: true},
 	"enable":              {needsUser: true},
 	"disable":             {needsUser: true},
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
+	"create-group":        {needsAttributes: true},
+	"get-group":           {needsGroup: true},
+	"list-groups":         {isList: true},
+	"update-group":        {needsGroup: true, needsAttributes: true},
+	"delete-group":        {needsGroup: true},
+	"add-group-owner":     {needsUser: true, needsGroup: true},
+	"remove-group-owner":  {needsUser: true, needsGroup: true},
+	"create-team":         {needsGroup: true},
+	"add-team-member":     {needsUser: true, needsGroup: true},
+	"add-team-owner":      {needsUser: true, needsGroup: true},
+	"create-channel":      {needsGroup: true, needsAttributes: true},
+	"archive-team":        {needsGroup: true},
+	"assign-license":      {needsUser: true, needsAttributes: true},
+	"assign-role":         {needsUser: true, needsAttributes: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -247,8 +265,26 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if spec.needsGroup && strings.TrimSpace(cn.GroupID) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a groupId", st.Id, op)
 	}
-	if spec.needsAttributes && strings.TrimSpace(cn.AttributesVariable) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs an attributesVariable naming the directory properties", st.Id, op)
+	hasInlineAttrs := strings.TrimSpace(cn.Attributes) != ""
+	hasAttrsVar := strings.TrimSpace(cn.AttributesVariable) != ""
+	if spec.needsAttributes && !hasInlineAttrs && !hasAttrsVar {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs its directory properties — an inline attributes JSON or an attributesVariable naming them", st.Id, op)
+	}
+	if hasInlineAttrs && hasAttrsVar {
+		return 0, fmt.Errorf("compiler: entra connector task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
+	}
+	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
+		return 0, fmt.Errorf("compiler: entra connector task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
+	}
+	attrs, err := entraAttributesExpr(st.Id, cn.Attributes)
+	if err != nil {
+		return 0, err
+	}
+	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a newPassword (the value to set, typically a FEEL variable)", st.Id, op)
+	}
+	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
 	if spec.isList && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q operation list-users needs a resultVariable (a listing that discards its result is a directory read nothing asked for)", st.Id)
@@ -272,6 +308,10 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	newPassword, err := connectorValue(st.Id, "entra connector", "newPassword", cn.NewPassword)
+	if err != nil {
+		return 0, err
+	}
 	filter, err := connectorValue(st.Id, "entra connector", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
@@ -289,6 +329,8 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		Op:            op,
 		UserID:        userID,
 		GroupID:       groupID,
+		NewPassword:   newPassword,
+		Attributes:    attrs,
 		AttributesVar: strings.TrimSpace(cn.AttributesVariable),
 		ResultVar:     strings.TrimSpace(cn.ResultVariable),
 		Filter:        filter,

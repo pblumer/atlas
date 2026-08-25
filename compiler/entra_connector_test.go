@@ -85,6 +85,41 @@ func TestEntraConnectorCreateUser(t *testing.T) {
 	}
 }
 
+// reset-password authors one newPassword value (literal-or-FEEL) the worker wraps in a
+// passwordProfile; create-team and add-team-member both address the group by its id,
+// which is the Team's id too.
+func TestEntraConnectorGroupsAndTeams(t *testing.T) {
+	_, pw := entraDetail(t, `connector="contoso" operation="reset-password" userId="u1" newPassword="=tempPassword"`)
+	if pw.EntraNewPassword.Expr == nil {
+		t.Errorf("newPassword should be a compiled FEEL expression, got literal %q", pw.EntraNewPassword.Literal)
+	}
+	cpG, grp := entraDetail(t, `connector="contoso" operation="create-group" attributesVariable="neueGruppe"`)
+	if got := cpG.Intern(grp.EntraAttributesVar); got != "neueGruppe" {
+		t.Errorf("attributesVariable = %q", got)
+	}
+	// Inline attributes compile to a FEEL context expression, and the variable name is
+	// then left unset — the two are mutually exclusive.
+	_, inline := entraDetail(t, `connector="contoso" operation="create-user" attributes="{&#34;displayName&#34;:&#34;=name&#34;}"`)
+	if inline.EntraAttributes.Expr == nil {
+		t.Error("inline attributes should compile to a FEEL context expression")
+	}
+	if inline.EntraAttributesVar != -1 {
+		t.Errorf("attributesVariable = %d, want unset when inline attributes are authored", inline.EntraAttributesVar)
+	}
+	cp, team := entraDetail(t, `connector="contoso" operation="create-team" groupId="=gruppe.id"`)
+	if got := cp.Intern(team.EntraOp); got != "create-team" {
+		t.Errorf("operation = %q, want create-team", got)
+	}
+	if team.EntraGroupID.Expr == nil {
+		t.Error("groupId should be a compiled FEEL expression for create-team")
+	}
+	// A non-password operation carries no password state at all.
+	_, single := entraDetail(t, `connector="c" operation="disable" userId="u"`)
+	if single.EntraNewPassword.Literal != "" || single.EntraNewPassword.Expr != nil {
+		t.Errorf("a non-password task carries a newPassword: %+v", single.EntraNewPassword)
+	}
+}
+
 func TestEntraConnectorValidation(t *testing.T) {
 	for _, tc := range []struct{ name, attrs, want string }{
 		{"no connector", `operation="disable" userId="u"`, "connector"},
@@ -95,6 +130,15 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"group op without user", `connector="c" operation="remove-group-member" groupId="g"`, "userId"},
 		{"create without attributes", `connector="c" operation="create-user"`, "attributesVariable"},
 		{"update without attributes", `connector="c" operation="update-user" userId="u"`, "attributesVariable"},
+		{"create-group without attributes", `connector="c" operation="create-group"`, "attributesVariable"},
+		{"delete-group without a group", `connector="c" operation="delete-group"`, "groupId"},
+		{"reset-password without a password", `connector="c" operation="reset-password" userId="u"`, "newPassword"},
+		{"newPassword on the wrong operation", `connector="c" operation="disable" userId="u" newPassword="x"`, "applies to reset-password"},
+		{"create-team without a group", `connector="c" operation="create-team"`, "groupId"},
+		{"team member without a user", `connector="c" operation="add-team-member" groupId="g"`, "userId"},
+		{"both inline and variable attributes", `connector="c" operation="create-user" attributes="{}" attributesVariable="v"`, "use one, not both"},
+		{"inline attributes on a wrong op", `connector="c" operation="disable" userId="u" attributes="{}"`, "attributes apply to"},
+		{"malformed inline attributes", `connector="c" operation="create-user" attributes="{oops}"`, "invalid attributes JSON"},
 		{"bad FEEL userId", `connector="c" operation="disable" userId="="`, "userId"},
 		{"bad FEEL groupId", `connector="c" operation="add-group-member" userId="u" groupId="="`, "groupId"},
 		{"list without a result variable", `connector="c" operation="list-users"`, "resultVariable"},

@@ -186,6 +186,8 @@
         { "name": "operation", "type": "String", "isAttr": true },
         { "name": "userId", "type": "String", "isAttr": true },
         { "name": "groupId", "type": "String", "isAttr": true },
+        { "name": "newPassword", "type": "String", "isAttr": true },
+        { "name": "attributes", "type": "String", "isAttr": true },
         { "name": "attributesVariable", "type": "String", "isAttr": true },
         {
           "name": "filter",
