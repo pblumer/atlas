@@ -1211,6 +1211,8 @@ function devVariables(modeler, element) {
     if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
     const cd = bo && findExt(bo, "zeebe:CalledDecision");
     if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
+    const cr = connectorResultVariable(bo);
+    if (cr) push(cr, "connector result", "output");
   } catch { /* best-effort */ }
   try {
     for (const v of collectDiagramVariables(modeler)) {
@@ -1325,6 +1327,23 @@ function devViewContext(modeler, api, field) {
 // formFieldCache maps a linked form's id to its input-field keys once fetched:
 // null marks a fetch in flight (so each form is requested once), otherwise
 // { name, fields } — the form's display name and its variable-bearing field keys.
+// connectorResultVariable is the variable a task's connector writes what it fetched
+// into — Entra's user list, a query's rows, a REST response. Sixteen of the catalog's
+// nineteen kinds have one, and none of them reached the Variables panel: it knew a
+// script's result and a decision's, but nothing a connector produced, so a model whose
+// whole point was `Users` showed no `Users`. Read through the catalog rather than by
+// assuming the attribute is there, so a kind that names the field differently is a
+// catalog question and not a silent omission here.
+function connectorResultVariable(bo) {
+  if (!bo) return "";
+  const kind = serviceTaskKind(bo);
+  if (!kind || !kind.ext) return "";
+  const field = (kind.fields || []).find((f) => f.key === "resultVariable");
+  if (!field) return "";
+  const ext = findExt(bo, kind.ext);
+  return (ext && ext[field.key]) || "";
+}
+
 // collectDiagramVariables reads it synchronously; ensureFormFields fills it.
 const formFieldCache = new Map();
 
@@ -1394,6 +1413,8 @@ function collectDiagramVariables(modeler) {
       if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
       const cd = findExt(bo, "zeebe:CalledDecision");
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
+      const cr = connectorResultVariable(bo);
+      if (cr) push(cr, label, bo.id, "connector result");
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
       // A data object is first-class per-instance state (ADR-0053): its name is the
