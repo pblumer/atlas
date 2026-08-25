@@ -248,6 +248,14 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			rec.Visibility = *payload.Visibility
 		}
 		if payload.OwnerID != nil {
+			// Ownership transfer (ADR-0071). The new owner holds the implicit owner
+			// role, so drop any explicit grant they had — the owner is never also a
+			// listed member, the same invariant handleSetProjectMember enforces on the
+			// add path. Matching by id alone is safe: a user id and a group id never
+			// collide (distinct usr_/grp_ prefixes). The previous owner is left with no
+			// grant on purpose: a transfer is a clean handoff, so an owner who wants
+			// continued access shares the project before transferring it.
+			rec.Members = removeMember(rec.Members, *payload.OwnerID)
 			rec.OwnerID = *payload.OwnerID
 		}
 		rec.UpdatedAt = time.Now().Unix()

@@ -2487,6 +2487,24 @@ function openShareModal(proj, users, degraded, reload) {
       ? `<p class="muted small">Members are kept but have no access while the project is private.</p>`
       : "";
 
+    // Ownership can be handed to any other user (never a group — ownership is a
+    // single principal). Only the owner (admin included, who reports as owner) may
+    // transfer, and only when the directory loaded so targets carry real names.
+    const xferTargets = (users || []).filter((u) => u.type !== "group" && u.id !== p.ownerId);
+    const canTransfer = p.myRole === "owner" && !degraded && xferTargets.length > 0;
+    const transferSec = canTransfer
+      ? `<div class="share-sec">
+           <div class="mlabel">Transfer ownership</div>
+           <div class="add-row">
+             <select class="field" id="xfer-uid">
+               ${xferTargets.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
+             </select>
+             <button type="button" class="btn danger" id="xfer-btn" title="Hand this application over to another person">Transfer…</button>
+           </div>
+           <p class="muted small">The new owner gains full control.${me === p.ownerId ? " You will lose owner access unless they share it back." : ""}</p>
+         </div>`
+      : "";
+
     body.innerHTML = `
       <div class="share-sec">
         <div class="seg" role="group" aria-label="Visibility">
@@ -2502,7 +2520,8 @@ function openShareModal(proj, users, degraded, reload) {
       <div class="share-sec">
         <div class="mlabel">Add people</div>
         ${addControl}
-      </div>`;
+      </div>
+      ${transferSec}`;
     wire();
   };
 
@@ -2522,6 +2541,25 @@ function openShareModal(proj, users, degraded, reload) {
     api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role, type: memberType(uid) }));
   const removeMember = (uid) => apply(() =>
     api("DELETE", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
+  // transferOwnership hands the project to another user (ADR-0071). It is a clean
+  // handoff — the previous owner keeps no access — and mostly irreversible for the
+  // current owner, so it is gated behind a confirm. On success the dialog closes:
+  // the caller is no longer the owner (unless admin) and the page re-gates on reload.
+  const transferOwnership = async (uid) => {
+    if (!uid) return;
+    const name = nameOf(uid);
+    const iAmOwner = me === p.ownerId;
+    const msg = `Transfer ownership of “${p.name}” to ${name}?\n\n` +
+      (iAmOwner
+        ? "You will no longer be the owner and lose access unless the new owner shares it back."
+        : "This replaces the current owner.");
+    if (!window.confirm(msg)) return;
+    try {
+      await api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { ownerId: uid });
+      toast(`Ownership transferred to ${name}`, "ok");
+      close();
+    } catch (e) { toast(e.message, "err"); }
+  };
 
   function wire() {
     for (const b of body.querySelectorAll("[data-vis]"))
@@ -2535,6 +2573,9 @@ function openShareModal(proj, users, degraded, reload) {
       const uid = (body.querySelector("#add-uid").value || "").trim();
       setMember(uid, body.querySelector("#add-role").value);
     });
+    const xferBtn = body.querySelector("#xfer-btn");
+    if (xferBtn) xferBtn.addEventListener("click", () =>
+      transferOwnership((body.querySelector("#xfer-uid").value || "").trim()));
   }
 
   renderBody();

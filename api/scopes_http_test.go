@@ -183,6 +183,61 @@ func TestProjectSharingLifecycle(t *testing.T) {
 	}
 }
 
+// TestProjectTransferDropsNewOwnerMembership checks the invariant that the owner
+// is never also a listed member (ADR-0071): transferring a shared project to a
+// user who is already a member drops that stale grant, so they appear only as the
+// owner and not a second time in the member list.
+func TestProjectTransferDropsNewOwnerMembership(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1"}`)
+	bobID := idOf(t, bb)
+
+	alice := newClient(t)
+	login(t, alice, ts, "alice", "password1")
+
+	// Alice owns a project and shares it with Bob as editor.
+	_, pb := cReq(t, alice, ts, "POST", "/api/v1/projects", `{"name":"Handoff"}`)
+	pid := decodeProject(t, pb).ID
+	if code, mb := cReq(t, alice, ts, "PUT", "/api/v1/projects/"+pid+"/members/"+bobID, `{"role":"editor"}`); code != http.StatusOK {
+		t.Fatalf("share with bob = %d %s", code, mb)
+	}
+
+	// Transfer to Bob: he becomes owner and his now-redundant member grant is gone.
+	code, tb := cReq(t, alice, ts, "PATCH", "/api/v1/projects/"+pid, `{"ownerId":"`+bobID+`"}`)
+	if code != http.StatusOK {
+		t.Fatalf("transfer: %d %s", code, tb)
+	}
+	after := decodeProject(t, tb)
+	if after.OwnerID != bobID {
+		t.Fatalf("owner after transfer = %s, want %s", after.OwnerID, bobID)
+	}
+	for _, m := range after.Members {
+		if m.Ref.ID == bobID {
+			t.Fatalf("new owner still listed as a member: %+v", after.Members)
+		}
+	}
+	// Bob, now owner, sees it as owner; Alice keeps a viewer grant only if she were
+	// added — she was not, so the clean handoff leaves her without access.
+	bob := newClient(t)
+	login(t, bob, ts, "bob", "password1")
+	if _, gb := cReq(t, bob, ts, "GET", "/api/v1/projects", ""); !containsID(t, bob, ts, pid) {
+		t.Fatalf("bob should own the project after transfer: %s", gb)
+	}
+	if containsID(t, admin, ts, pid) {
+		_, lb := cReq(t, admin, ts, "GET", "/api/v1/projects", "")
+		var list []scopeProjectView
+		_ = json.Unmarshal(lb, &list)
+		for _, pv := range list {
+			if pv.ID == pid && pv.OwnerID != bobID {
+				t.Fatalf("admin view owner = %s, want %s", pv.OwnerID, bobID)
+			}
+		}
+	}
+}
+
 // containsID reports whether a client's project listing includes the given id.
 func containsID(t *testing.T, c *http.Client, ts *httptest.Server, id string) bool {
 	t.Helper()
