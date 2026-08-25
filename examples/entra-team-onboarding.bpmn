@@ -23,8 +23,11 @@
   Team-Schritte nehmen dieselbe `=gruppe.id`: die id eines Teams *ist* die seiner
   Microsoft-365-Gruppe, deshalb gibt es kein zweites Team-Feld.
 
-  Kein Geheimnis im Modell: Das Anfangspasswort steht im passwordProfile der
-  Startvariablen `neuerBenutzer`, also in einem Laufzeitwert, nie im Diagramm.
+  Die Attribute für create-user und create-group werden **inline als JSON** verfasst
+  (nicht aus einer Variablen gelesen): String-Werte mit `=` sind FEEL über die
+  Startvariablen, pro Feld ausgewertet. So bleibt das Anfangspasswort die FEEL-Variable
+  `tempPasswort` — ein Laufzeitwert, nie Modelltext. (assign-license zeigt zum Vergleich
+  weiter den Variablen-Weg über `lizenz`.)
 
   Läuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
   Tenant-Credential liegt nie in der Engine. Jeder Service-Task parkt, bis ein
@@ -33,11 +36,11 @@
   es mit dem Modell reist.
 
   Startvariablen:
-    neuerBenutzer  { accountEnabled, displayName, mailNickname, userPrincipalName,
-                     passwordProfile: { password, forceChangePasswordNextSignIn } }
-    lizenz         { addLicenses: [ { skuId } ], removeLicenses: [] }
-    projektGruppe  { displayName, mailNickname, mailEnabled: true,
-                     securityEnabled: false, groupTypes: [ "Unified" ] }
+    vorname, nachname   Namensbestandteile → displayName (FEEL: vorname + " " + nachname)
+    mailNick, upn       mailNickname und userPrincipalName des neuen Kontos
+    tempPasswort        Anfangspasswort (FEEL-Wert, nie Modelltext)
+    projektName, projektNick  Anzeigename und mailNickname der Projektgruppe
+    lizenz              { addLicenses: [ { skuId } ], removeLicenses: [] }
 -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
@@ -52,10 +55,12 @@
     <bpmn:documentation>Richtet einem neuen Mitglied den Arbeitsplatz in Entra ID ein: Konto, Lizenz,
 Projektgruppe, Gruppenmitgliedschaft und ein Team auf dieser Gruppe.
 
-Startet mit drei JSON-Objekten — `neuerBenutzer`, `lizenz`, `projektGruppe` — und
-verkettet die angelegten Objekte über ihre id: `konto` aus create-user und `gruppe`
-aus create-group tragen jeden folgenden Schritt. Die Team-Schritte adressieren
-dieselbe Gruppe, denn die id eines Teams ist die seiner Microsoft-365-Gruppe.
+Startet mit den Namens- und Projektangaben als Startvariablen (siehe unten) plus dem
+Lizenz-Objekt `lizenz`. create-user und create-group verfassen ihren Body inline als
+JSON mit FEEL-Werten; die angelegten Objekte werden über ihre id verkettet: `konto` aus
+create-user und `gruppe` aus create-group tragen jeden folgenden Schritt. Die
+Team-Schritte adressieren dieselbe Gruppe, denn die id eines Teams ist die seiner
+Microsoft-365-Gruppe.
 
 Jeder Service-Task ist ein Entra-Konnektor-Task: das Modell wählt eine benannte
 Operation statt eine Graph-URL und ein JSON-Fragment von Hand zu schreiben
@@ -78,13 +83,14 @@ Startvariable mit und steht nicht im Modell.</bpmn:documentation>
     </bpmn:startEvent>
 
     <bpmn:serviceTask id="benutzer" name="Benutzer anlegen">
-      <bpmn:documentation>create-user: ein POST /users mit den Eigenschaften aus `neuerBenutzer`. Das
-Anfangspasswort liegt im passwordProfile dieser Variablen — ein Laufzeitwert, kein
-Modelltext. Die Antwort (das angelegte Konto samt id) landet in `konto` und trägt
-jeden folgenden Schritt.</bpmn:documentation>
+      <bpmn:documentation>create-user: ein POST /users. Der Body wird hier **inline als JSON** verfasst statt
+aus einer Variablen gelesen — String-Werte mit führendem `=` sind FEEL über die
+Startvariablen, pro Feld zur Laufzeit ausgewertet. So entsteht der displayName aus
+Vor- und Nachname, und das Anfangspasswort ist die FEEL-Variable `tempPasswort` (ein
+Laufzeitwert, kein Modelltext). Die Antwort (das Konto samt id) landet in `konto`.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="contoso" operation="create-user"
-                              attributesVariable="neuerBenutzer" resultVariable="konto"/>
+        <atlas:entraConnector connector="contoso" operation="create-user" resultVariable="konto"
+                              attributes="{ &quot;accountEnabled&quot;: true, &quot;displayName&quot;: &quot;=vorname + \&quot; \&quot; + nachname&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=tempPasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f1</bpmn:incoming>
       <bpmn:outgoing>f2</bpmn:outgoing>
@@ -103,12 +109,13 @@ jeden folgenden Schritt.</bpmn:documentation>
     </bpmn:serviceTask>
 
     <bpmn:serviceTask id="gruppe" name="Projektgruppe anlegen">
-      <bpmn:documentation>create-group: ein POST /groups mit den Eigenschaften aus `projektGruppe`. Für ein
-späteres Team muss es eine Microsoft-365-Gruppe sein — mailEnabled true,
-groupTypes ["Unified"]. Die angelegte Gruppe (mit id) landet in `gruppe`.</bpmn:documentation>
+      <bpmn:documentation>create-group: ein POST /groups, Body wieder inline. Für ein späteres Team muss es
+eine Microsoft-365-Gruppe sein — mailEnabled true, groupTypes ["Unified"]. displayName
+und mailNickname kommen per FEEL aus `projektName`/`projektNick`. Die angelegte Gruppe
+(mit id) landet in `gruppe`.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="contoso" operation="create-group"
-                              attributesVariable="projektGruppe" resultVariable="gruppe"/>
+        <atlas:entraConnector connector="contoso" operation="create-group" resultVariable="gruppe"
+                              attributes="{ &quot;displayName&quot;: &quot;=projektName&quot;, &quot;mailNickname&quot;: &quot;=projektNick&quot;, &quot;mailEnabled&quot;: true, &quot;securityEnabled&quot;: false, &quot;groupTypes&quot;: [&quot;Unified&quot;] }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f3</bpmn:incoming>
       <bpmn:outgoing>f4</bpmn:outgoing>
