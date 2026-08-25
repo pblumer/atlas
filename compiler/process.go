@@ -709,7 +709,9 @@ type ConnectorTaskDetail struct {
 	// interned $select projection. EntraPageSize is the $top asked of each request
 	// (0 leaves Graph its own page size) and EntraMaxUsers caps what may reach the
 	// result variable (0 is unbounded); the compiler has already applied the defaults,
-	// so the runtime interprets nothing (I5).
+	// so the runtime interprets nothing (I5). EntraSearch is a literal-or-FEEL $search
+	// term and EntraAdvanced asks for Graph's advanced query support; a search sets
+	// the flag on its own, because Graph offers no other way to run one.
 	//
 	// Each is the zero value for a non-Entra task. No in-process worker reads these:
 	// they are resolved onto the job and read by a worker (ADR-0164/0168).
@@ -721,6 +723,8 @@ type ConnectorTaskDetail struct {
 	EntraSelect        int32
 	EntraPageSize      int32
 	EntraMaxUsers      int32
+	EntraSearch        RestExpr
+	EntraAdvanced      bool
 	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the

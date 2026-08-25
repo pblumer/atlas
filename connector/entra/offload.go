@@ -85,10 +85,17 @@ type Job struct {
 	// $select projection; PageSize is the $top asked of each request (0 leaves Graph
 	// its own page size) and MaxUsers caps what may reach the result variable
 	// (0 unbounded). The compiler has already applied the defaults.
-	Filter         string `json:"filter,omitempty"`
-	Select         string `json:"select,omitempty"`
-	PageSize       int32  `json:"pageSize,omitempty"`
-	MaxUsers       int32  `json:"maxUsers,omitempty"`
+	Filter   string `json:"filter,omitempty"`
+	Select   string `json:"select,omitempty"`
+	PageSize int32  `json:"pageSize,omitempty"`
+	MaxUsers int32  `json:"maxUsers,omitempty"`
+	// Search is Graph's $search term, authored exactly as Graph takes it — quotes
+	// included, so a compound term stays expressible. Advanced asks for advanced
+	// query support (ConsistencyLevel: eventual plus $count=true), which a search
+	// requires and which endsWith, ne and not need too. A search implies it; the
+	// compiler has already set both.
+	Search         string `json:"search,omitempty"`
+	Advanced       bool   `json:"advanced,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
@@ -118,6 +125,8 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Select:         cp.Intern(detail.EntraSelect),
 		PageSize:       detail.EntraPageSize,
 		MaxUsers:       detail.EntraMaxUsers,
+		Search:         resolveValue(detail.EntraSearch, elementInstanceKey, vars),
+		Advanced:       detail.EntraAdvanced,
 		ResultVariable: cp.Intern(detail.ResultVar),
 	}
 	if spec.NeedsAttributes {
@@ -179,8 +188,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		}
 		return map[string]any{j.ResultVariable: users}, nil
 	}
-	path, body := request(j, client.BaseURL())
-	res, err := client.Call(ctx, spec.Method, path, body)
+	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
 	if err != nil {
 		return nil, err
 	}
@@ -213,10 +221,10 @@ const maxListPages = 1000
 // paging protocol in its diagram — the same thing ADR-0172 refused to make a modeler
 // hand-author for a $ref URL.
 func listUsers(ctx context.Context, j Job, client Client) ([]any, error) {
-	path, _ := request(j, client.BaseURL())
+	req := request(j, Ops[j.Operation], client.BaseURL())
 	users := []any{}
 	for pages := 0; pages < maxListPages; pages++ {
-		res, err := client.Call(ctx, "GET", path, nil)
+		res, err := client.Call(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +242,10 @@ func listUsers(ctx context.Context, j Job, client Client) ([]any, error) {
 		if next == "" {
 			return users, nil
 		}
-		path = next
+		// The continuation replaces the path but keeps everything else — above all
+		// Eventual, because Graph rejects a page of an advanced query fetched
+		// without the header that made the query legal in the first place.
+		req.Path = next
 	}
 	return nil, fmt.Errorf("entra: the listing still offered another page after %d requests; narrow the filter, or set maxUsers so an oversized listing fails by its own bound", maxListPages)
 }
@@ -278,11 +289,23 @@ func listPath(j Job) string {
 	if f := strings.TrimSpace(j.Filter); f != "" {
 		q = append(q, "$filter="+url.QueryEscape(f))
 	}
+	// The term is encoded but not quoted: Graph's $search carries its own quoting,
+	// and a compound term ("a" AND "b") has quotes inside it. Inventing them here
+	// would make the compound case unwritable.
+	if se := strings.TrimSpace(j.Search); se != "" {
+		q = append(q, "$search="+url.QueryEscape(se))
+	}
 	if sel := strings.TrimSpace(j.Select); sel != "" {
 		q = append(q, "$select="+url.QueryEscape(sel))
 	}
 	if j.PageSize > 0 {
 		q = append(q, "$top="+strconv.FormatInt(int64(j.PageSize), 10))
+	}
+	// $count=true is not a request for a number here — it is the other half of
+	// Graph's advanced query support, which refuses ConsistencyLevel: eventual
+	// without it. The two are one switch, so the connector never sends half of it.
+	if j.advanced() {
+		q = append(q, "$count=true")
 	}
 	if len(q) == 0 {
 		return "/users"
@@ -310,30 +333,46 @@ func checkRequired(j Job, spec Op) error {
 	return nil
 }
 
-// request builds the Graph path and body for one operation. baseURL is needed only by
+// advanced reports whether the listing runs as an advanced query.
+//
+// A search implies it even when the flag is unset. The compiler already sets both, so
+// this is the worker repeating the rule for the same reason [checkRequired] repeats
+// the shape rules: a job built by hand, or by an engine older than the flag, would
+// otherwise send Graph a $search it refuses — a 400 an operator has to decode from
+// the far side instead of a request that simply works.
+func (j Job) advanced() bool {
+	return j.Advanced || strings.TrimSpace(j.Search) != ""
+}
+
+// request builds the Graph request for one operation. baseURL is needed only by
 // add-group-member, whose body carries an absolute @odata.id.
-func request(j Job, baseURL string) (path string, body any) {
+//
+// Only a listing can ask for eventual consistency: every other operation addresses
+// one object by id, where an advanced query has nothing to mean.
+func request(j Job, spec Op, baseURL string) Request {
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
+	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced()}
 	switch j.Operation {
 	case "create-user":
-		return "/users", j.Attributes
+		r.Path, r.Body = "/users", j.Attributes
 	case "get-user", "delete-user":
-		return "/users/" + user, nil
+		r.Path = "/users/" + user
 	case "list-users":
-		return listPath(j), nil
+		r.Path = listPath(j)
 	case "update-user":
-		return "/users/" + user, j.Attributes
+		r.Path, r.Body = "/users/"+user, j.Attributes
 	case "enable":
-		return "/users/" + user, map[string]any{"accountEnabled": true}
+		r.Path, r.Body = "/users/"+user, map[string]any{"accountEnabled": true}
 	case "disable":
-		return "/users/" + user, map[string]any{"accountEnabled": false}
+		r.Path, r.Body = "/users/"+user, map[string]any{"accountEnabled": false}
 	case "add-group-member":
-		return "/groups/" + group + "/members/$ref",
-			map[string]any{"@odata.id": strings.TrimRight(baseURL, "/") + "/directoryObjects/" + user}
+		r.Path = "/groups/" + group + "/members/$ref"
+		r.Body = map[string]any{"@odata.id": strings.TrimRight(baseURL, "/") + "/directoryObjects/" + user}
 	default: // remove-group-member — the only one left, guarded by the Ops lookup
-		return "/groups/" + group + "/members/" + user + "/$ref", nil
+		r.Path = "/groups/" + group + "/members/" + user + "/$ref"
 	}
+	return r
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's

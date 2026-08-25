@@ -84,6 +84,11 @@ dieser Prozess den Bereich auflisten, um den es gerade geht, statt einen fest
 verdrahteten. `select` holt nur die vier Eigenschaften, die die folgenden
 Schritte lesen; das hält eine große Auflistung aus dem State-Store heraus.
 
+Dieser Filter kommt mit Graphs Standardabfrage aus. Formen wie endsWith, ne oder
+not — und jedes $search — brauchen zusätzlich `advancedQuery="true"`, was
+ConsistencyLevel: eventual und $count=true schickt; dafür darf die Antwort dann
+leicht veraltet sein.
+
 `pageSize` bestimmt nur, wie viele Konten pro Anfrage geholt werden — *jede*
 Seite wird gefolgt, `konten` erhält immer die vollständige Trefferliste. Und
 `maxUsers` deckelt, was in der Prozessvariablen landen darf: Wird die Grenze

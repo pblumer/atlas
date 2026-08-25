@@ -28,6 +28,20 @@
 // connector's own endpoint, so a redirected page cannot carry the directory-wide
 // bearer to another host.
 //
+// # Advanced queries
+//
+// Graph gates endsWith, ne, not and $search behind *advanced query support*, which is
+// two things that only work together: the ConsistencyLevel: eventual header and
+// $count=true in the query. [Job.Advanced] sends both, so there is no way to author
+// half of it and collect the 400 that follows.
+//
+// It is opted into rather than read out of the filter text — the filter may be a FEEL
+// expression with nothing to read at deploy, and eventual consistency changes what
+// the process is told about the directory. A [Job.Search] implies it, because Graph
+// runs a $search no other way. And it rides on every page: [Request.Eventual] is part
+// of the request the paging loop keeps, since Graph rejects a continuation fetched
+// without the header that made the query legal.
+//
 // # Worker-only
 //
 // Like the SQL connectors (ADR-0173) and unlike everything built before them, this

@@ -1358,10 +1358,12 @@ func (b *Builder) AddLdifConnectorTask(cfg LdifConfig) int32 {
 // process variable holding the directory properties for create-user and update-user;
 // ResultVar receives what Graph returned (empty = discard).
 //
-// Filter, Select, PageSize and MaxUsers configure list-users: the OData $filter
-// (literal-or-FEEL), the $select projection, the $top per request, and the cap on
-// what may reach the result variable. The compiler has already applied their
-// defaults and refused them on the operations that return one object or none.
+// Filter, Select, PageSize, MaxUsers, Search and Advanced configure list-users: the
+// OData $filter (literal-or-FEEL), the $select projection, the $top per request, the
+// cap on what may reach the result variable, the $search term (literal-or-FEEL), and
+// whether the query asks for Graph's advanced query support. The compiler has already
+// applied their defaults, set Advanced for a search, and refused all of them on the
+// operations that return one object or none.
 type EntraConfig struct {
 	Connector     string
 	Op            string
@@ -1373,6 +1375,8 @@ type EntraConfig struct {
 	Select        string
 	PageSize      int32
 	MaxUsers      int32
+	Search        RestExpr
+	Advanced      bool
 	Retries       int32
 }
 
@@ -1402,6 +1406,8 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraSelect:        b.intern(cfg.Select),
 		EntraPageSize:      cfg.PageSize,
 		EntraMaxUsers:      cfg.MaxUsers,
+		EntraSearch:        cfg.Search,
+		EntraAdvanced:      cfg.Advanced,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

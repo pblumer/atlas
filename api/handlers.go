@@ -4709,6 +4709,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"connector": j.Connector, "operation": j.Operation, "userId": j.UserID,
 			"groupId": j.GroupID, "attributes": j.Attributes, "filter": j.Filter,
 			"select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
+			"search": j.Search, "advancedQuery": j.Advanced,
 			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.WebScrapeJobTypeIndex:

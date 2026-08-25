@@ -106,6 +106,11 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"select on a single-object read", `connector="c" operation="get-user" userId="u" select="id"`, "applies to list-users"},
 		{"pageSize on a single-object read", `connector="c" operation="disable" userId="u" pageSize="10"`, "applies to list-users"},
 		{"maxUsers on a single-object read", `connector="c" operation="disable" userId="u" maxUsers="10"`, "applies to list-users"},
+		{"search on a single-object read", `connector="c" operation="get-user" userId="u" search="&#34;x:y&#34;"`, "applies to list-users"},
+		{"advancedQuery on a single-object read", `connector="c" operation="disable" userId="u" advancedQuery="true"`, "applies to list-users"},
+		{"non-boolean advancedQuery", `connector="c" operation="list-users" resultVariable="r" advancedQuery="vielleicht"`, "non-boolean advancedQuery"},
+		{"search with advancedQuery false", `connector="c" operation="list-users" resultVariable="r" search="&#34;x:y&#34;" advancedQuery="false"`, "only as an advanced query"},
+		{"bad FEEL search", `connector="c" operation="list-users" resultVariable="r" search="="`, "search"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
@@ -163,6 +168,40 @@ func TestEntraConnectorListDefaults(t *testing.T) {
 	_, single := entraDetail(t, `connector="c" operation="disable" userId="u"`)
 	if single.EntraPageSize != 0 || single.EntraMaxUsers != 0 || single.EntraFilter.Literal != "" || single.EntraSelect != -1 {
 		t.Errorf("a non-listing task carries listing state: %+v", single)
+	}
+}
+
+// Graph runs a $search only as an advanced query, so authoring a search is the whole
+// of asking for one — the compiler sets the flag rather than leaving an author to
+// discover the requirement as a 400.
+func TestEntraConnectorSearchImpliesAdvancedQuery(t *testing.T) {
+	_, d := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" search="&#34;displayName:Arno&#34;"`)
+	if !d.EntraAdvanced {
+		t.Error("a search must compile to an advanced query")
+	}
+	if d.EntraSearch.Literal != `"displayName:Arno"` {
+		t.Errorf("search = %+v, want the authored term with its quotes intact", d.EntraSearch)
+	}
+	// Without a search it is opt-in, and never inferred from the filter text — the
+	// filter may be FEEL, with nothing to read at deploy.
+	_, plain := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" filter="endsWith(mail,'@blumer.net')"`)
+	if plain.EntraAdvanced {
+		t.Error("an advanced query must be asked for, not guessed from the filter")
+	}
+	_, opted := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" filter="endsWith(mail,'@x.de')" advancedQuery="true"`)
+	if !opted.EntraAdvanced {
+		t.Error("advancedQuery=\"true\" must compile to an advanced query")
+	}
+	// And it can be turned off in as many words, which is not the same as leaving it
+	// out: an author who writes it has decided, and the model records the decision.
+	_, off := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" advancedQuery="false"`)
+	if off.EntraAdvanced {
+		t.Error(`advancedQuery="false" must compile to a plain query`)
+	}
+	// A FEEL search compiles like every other authored value.
+	_, feel := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" search="=suchbegriff"`)
+	if feel.EntraSearch.Expr == nil {
+		t.Errorf("search should be a compiled FEEL expression, got literal %q", feel.EntraSearch.Literal)
 	}
 }
 

@@ -121,8 +121,8 @@ type listingSpy struct {
 
 func (listingSpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
 
-func (s *listingSpy) Call(_ context.Context, _, path string, _ any) (any, error) {
-	s.path = path
+func (s *listingSpy) Call(_ context.Context, r entra.Request) (any, error) {
+	s.path = r.Path
 	vals := make([]any, 0, s.users)
 	for i := 0; i < s.users; i++ {
 		vals = append(vals, map[string]any{"id": "u"})
