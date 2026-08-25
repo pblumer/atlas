@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "account-order",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🧩 Account-Bestellung\n\nBestelle ein neues Konto im Tenant **blumer.net**. Wähle den passenden **Kontotyp** — daraus ergeben sich automatisch Aktivierung, Kategorie und Namenskonvention. Ein Administrator gibt die Bestellung frei und setzt das Initialpasswort."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "validate": { "required": true }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "validate": { "required": true }
+    },
+    {
+      "key": "kontotyp",
+      "type": "radio",
+      "label": "Kontotyp",
+      "description": "Bestimmt Aktivierung, Kategorie und UPN-Präfix.",
+      "values": [
+        { "label": "A — Administrativ (aktiv)", "value": "A" },
+        { "label": "E — Bildung / Extern (aktiv)", "value": "E" },
+        { "label": "T — Test (deaktiviert)", "value": "T" },
+        { "label": "S — Service / Dienstkonto (deaktiviert)", "value": "S" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Wofür wird das Konto benötigt?"
+    }
+  ]
+}

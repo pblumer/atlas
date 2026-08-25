@@ -212,7 +212,7 @@ type Server struct {
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
-	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0184)
+	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-draft-embed-public-forms-cross-origin)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
@@ -474,6 +474,14 @@ type Server struct {
 	// the command did not wire a buffer (WithLogBuffer), in which case the endpoint
 	// reports no lines. Set once at construction; read-only thereafter.
 	logs *LogBuffer
+
+	// publicCORSOrigins is the allow-list of web origins permitted to call the
+	// unauthenticated /public/forms endpoints cross-origin, so a start form can be
+	// embedded in an external site (ADR-draft-embed-public-forms-cross-origin). Empty is the closed default — no
+	// cross-origin access, exactly as before the field existed; the sentinel "*"
+	// allows any origin. It opens *only* the cookieless public surface, never
+	// /api/v1. Set once before Handler is mounted; read-only thereafter.
+	publicCORSOrigins []string
 }
 
 // Option configures a Server at construction. Options are applied in New before
@@ -490,6 +498,27 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithPublicFormsCORS allows the given web origins to call the unauthenticated
+// /public/forms endpoints cross-origin, so a process's start form can be embedded
+// in an external site (a custom order widget, say) rather than only iframed from
+// Atlas's own page (ADR-draft-embed-public-forms-cross-origin). Off by default — with no origins the public
+// endpoints send no CORS headers and a cross-origin fetch is blocked by the
+// browser, exactly as before. The sentinel "*" allows any origin. It opens only the
+// cookieless public surface; the authenticated /api/v1 surface is never
+// CORS-enabled, and no Access-Control-Allow-Credentials is ever sent, so a
+// permissive origin still reaches only what a visitor to the public link can.
+func WithPublicFormsCORS(origins []string) Option {
+	return func(s *Server) {
+		trimmed := make([]string, 0, len(origins))
+		for _, o := range origins {
+			if o = strings.TrimSpace(o); o != "" {
+				trimmed = append(trimmed, o)
+			}
+		}
+		s.publicCORSOrigins = trimmed
+	}
+}
 
 // WithSystemProcesses bootstrap-deploys Atlas's own embedded platform processes
 // (user intake, access review, offboarding) into the protected system project at
@@ -2018,6 +2047,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
 	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)
+	// CORS preflight for the two JSON endpoints above, so an allow-listed external
+	// site can embed the start form as a custom widget (ADR-draft-embed-public-forms-cross-origin). A cross-origin
+	// GET /schema is a "simple" request needing no preflight (its handler sets the
+	// header); a POST /start of application/json is preflighted, so it needs this.
+	mux.HandleFunc("OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
+	mux.HandleFunc("OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
 
 	// The embedded UI is the catch-all; the more specific API patterns above win
 	// under net/http's precedence rules.

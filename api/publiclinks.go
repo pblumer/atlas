@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -151,6 +152,64 @@ func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) 
 	httpapi.JSON(w, http.StatusOK, map[string]any{"token": token})
 }
 
+// --- cross-origin embedding of the public form (ADR-draft-embed-public-forms-cross-origin) ---
+//
+// The public endpoints below are reachable from Atlas's own origin with no extra
+// help. To let a start form be embedded in an *external* site — a custom order
+// widget on a marketing page — a cross-origin browser fetch needs CORS headers,
+// which are sent only for an origin an operator has allow-listed (WithPublicFormsCORS).
+// This opens strictly the cookieless public surface: no Access-Control-Allow-Credentials
+// is ever sent, so even "*" grants a caller nothing a visitor to the public link
+// lacks, and /api/v1 is never CORS-enabled.
+
+// allowedPublicOrigin reports the Access-Control-Allow-Origin value to echo for a
+// request's Origin, and whether it is allowed at all. An empty allow-list (the
+// default) allows nothing. The sentinel "*" echoes the caller's own origin rather
+// than a literal "*", which keeps the door open to tightening to specific origins
+// without a browser-visible behaviour change, and is required anyway once (if ever)
+// credentials are involved.
+func (s *Server) allowedPublicOrigin(origin string) (string, bool) {
+	if origin == "" || len(s.publicCORSOrigins) == 0 {
+		return "", false
+	}
+	for _, o := range s.publicCORSOrigins {
+		if o == "*" {
+			return origin, true
+		}
+		if strings.EqualFold(o, origin) {
+			return origin, true
+		}
+	}
+	return "", false
+}
+
+// setPublicCORS writes the CORS response headers when the request's Origin is
+// allow-listed, and does nothing otherwise (so a disallowed or same-origin caller
+// sees the unchanged response). It never sets Allow-Credentials — the public
+// endpoints carry no session — so echoing an origin grants no authenticated reach.
+func (s *Server) setPublicCORS(w http.ResponseWriter, r *http.Request) {
+	origin, ok := s.allowedPublicOrigin(r.Header.Get("Origin"))
+	if !ok {
+		return
+	}
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Add("Vary", "Origin")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	h.Set("Access-Control-Allow-Headers", "Content-Type")
+	h.Set("Access-Control-Max-Age", "600")
+}
+
+// handlePublicFormPreflight answers a CORS preflight (OPTIONS) for the public form
+// endpoints. A POST of application/json is not a "simple" request, so the browser
+// preflights /start; this replies with the CORS headers for an allowed origin and
+// 204 either way — a disallowed origin gets 204 with no CORS headers, which the
+// browser then treats as a blocked request, the safe default.
+func (s *Server) handlePublicFormPreflight(w http.ResponseWriter, r *http.Request) {
+	s.setPublicCORS(w, r)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- public, unauthenticated endpoints (ADR-0029) ---
 //
 // These live under /public/, outside the /api/v1 surface auth gates, so an
@@ -160,6 +219,7 @@ func (s *Server) handleRevokePublicLink(w http.ResponseWriter, r *http.Request) 
 // link renders. It is the one read a public visitor may perform, scoped to the
 // token's form. 404 if the token is unknown or its form/process is gone.
 func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) {
+	s.setPublicCORS(w, r)
 	if !s.publicRate.allow(httpapi.ClientIP(r)) {
 		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
@@ -210,6 +270,7 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 // no other process. Rate-limited and payload-capped. 404 if the token is unknown
 // or its process is no longer deployed.
 func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
+	s.setPublicCORS(w, r)
 	if !s.publicRate.allow(httpapi.ClientIP(r)) {
 		httpapi.Error(w, http.StatusTooManyRequests, "too many requests")
 		return
