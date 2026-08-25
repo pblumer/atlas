@@ -2754,15 +2754,27 @@ function placementBadgeHTML(id) {
 const ST_KIND_GROUPS = ["Directory & identity", "Database", "Web & API", "Files",
   "Applications", "Messaging & events", "No connector"];
 
+// pickerLabel is a kind's name as the *list* shows it. All but three catalog names end
+// in "Connector", so in a list of connectors the word tells them apart from nothing while
+// pushing the part that does to the right. Dropped from the row only: the heading under
+// the picker still names the chosen kind in full, where it reads as a title rather than
+// as one of nineteen.
+const pickerLabel = (name) => String(name || "").replace(/\s+Connector$/, "");
+
 // stKindRow renders one picker row, with the placement badge that says where this kind's
-// work runs on this server (ADR-0164/0168/0173).
+// work runs on this server (ADR-0164/0168/0173). One line per kind: the description is
+// the row's tooltip, and is spelled out under the kind currently chosen — the one an
+// author is reading rather than scanning past. Nineteen two-line cards were four screens
+// for a single choice.
 function stKindRow(k, curId) {
+  const chosen = k.id === curId;
   return `
-    <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
-         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+    <div class="stkind-row${chosen ? " stkind-row-on" : ""}" data-kind="${k.id}"
+         data-match="${esc((k.name + " " + k.desc).toLowerCase())}" title="${esc(k.desc)}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span style="line-height:1.25"><b>${esc(k.name)}</b>${placementBadgeHTML(k.id)}<br>
-        <span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+      <span class="stkind-name"><b>${esc(pickerLabel(k.name))}</b>${chosen
+        ? `<span class="stkind-desc">${esc(k.desc)}</span>` : ""}</span>
+      ${placementBadgeHTML(k.id)}
     </div>`;
 }
 

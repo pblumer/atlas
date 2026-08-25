@@ -186,6 +186,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The connector picker is one line per kind.** The Modeler's Type picker lists nineteen
+  kinds ([ADR-0067](docs/adr/0067-connector-kind-catalog.md)), and each was a two-line card:
+  name, then the catalog's one-sentence description underneath. That put a single choice
+  across roughly four screens of scrolling — the list stood 2015px tall, and the tallest
+  entry alone took 211px — so the way to find a kind was to search for it, and the way to
+  discover one was not to. Sixteen of the names then ended in the word "Connector", which in
+  a list of connectors separates nothing while pushing the words that do separate them
+  further right, into a 270px panel that has no room to spare. A row is now the name without
+  that shared suffix, the placement badge parked at the right edge where a column of them
+  can be read down, and the description as the row's tooltip — spelled out under the one
+  kind actually chosen, which is the one being read rather than scanned past. The same list
+  is 1084px, and nothing is lost on the way: the full name is still what the search box
+  matches (so "connector" still finds all sixteen), the description is still searched, and
+  the heading under the picker still names the chosen kind in full, where it reads as a
+  title rather than as one of nineteen. Fixes an unclosed CSS rule that had been swallowing
+  the picker's group headings since they were added, leaving them unstyled.
+
 - **Active Directory now runs on a worker by default, and the engine hands that worker the
   bind passwords it needs.** [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) made
   out-of-process the default for every connector kind a supervised worker could actually

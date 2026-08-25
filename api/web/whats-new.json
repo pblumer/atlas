@@ -190,6 +190,24 @@
       }
     },
     {
+      "id": "the-connector-picker-is-one-line-per-kind",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The connector picker is one line per kind.",
+        "de": "The connector picker is one line per kind."
+      },
+      "summary": {
+        "en": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath.",
+        "de": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath."
+      },
+      "link": {
+        "label": "ADR-0067",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-connector-kind-catalog.md"
+      }
+    },
+    {
       "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
       "version": "Unreleased",
       "date": null,
@@ -334,34 +352,6 @@
       "summary": {
         "en": "The companion to the gateway fix in this release. An activity that repeats once per list entry collects what each round produced into a list. Inside an ad-hoc subprocess — where the steps are not wired in a sequence and all start at once — every round still ran and produced its result, but the collected list was dropped as the activity finished, so anything reading it afterwards found nothing. It is kept now, including after a restart mid-run.",
         "de": "Das Gegenstück zur Gateway-Korrektur in dieser Version. Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe in einer Liste. In einem Ad-hoc-Subprozess — dessen Schritte nicht in einer Reihenfolge verdrahtet sind, sondern gemeinsam starten — liefen zwar alle Durchläufe und lieferten ihr Ergebnis, die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen; wer sie danach las, fand nichts vor. Sie bleibt jetzt erhalten, auch nach einem Neustart mitten im Lauf."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-loop-a-gateway-routes-into-keeps-its-result",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A repeated step reached through a gateway keeps its collected results",
-        "de": "Ein wiederholter Schritt hinter einem Gateway behält seine gesammelten Ergebnisse"
-      },
-      "summary": {
-        "en": "An activity that repeats once per list entry collects what each round produced into a list for the steps that follow. When the only way into that activity was an exclusive gateway, every round still ran and still produced its result — but the collected list was thrown away as the activity finished, so the next step read nothing at all. It is kept now.",
-        "de": "Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe für die folgenden Schritte in einer Liste. Führte der einzige Weg in diese Aktivität über ein exklusives Gateway, liefen zwar alle Durchläufe und lieferten ihr Ergebnis — die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen, und der nächste Schritt las nichts. Sie bleibt jetzt erhalten."
       },
       "link": {
         "label": "ADR-0077",
