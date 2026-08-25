@@ -160,3 +160,20 @@ const mailCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// TestIsOffloadableKindTellsInProcessKindsFromWorkerOnlyOnes pins the distinction a
+// caller asking for a supervised worker depends on: offloading is the removal of
+// in-process handlers, so a kind that has none cannot be named in the offload list
+// and must not be pushed into it just because someone wants a worker for it.
+func TestIsOffloadableKindTellsInProcessKindsFromWorkerOnlyOnes(t *testing.T) {
+	for _, kind := range []string{"ad", "mail", "script", "webscrape"} {
+		if !IsOffloadableKind(kind) {
+			t.Errorf("IsOffloadableKind(%q) = false, want true: the engine handles it today", kind)
+		}
+	}
+	for _, kind := range []string{"entra", "nonsense"} {
+		if IsOffloadableKind(kind) {
+			t.Errorf("IsOffloadableKind(%q) = true, want false: there is nothing in process to remove", kind)
+		}
+	}
+}
