@@ -12,6 +12,38 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job
+  handler only ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)), which is the
+  arrangement [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) exists to end: a
+  login, a create and a logout against somebody else's ITSM host, on the engine's
+  single-writer loop. It now has the same split every offloaded kind has
+  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)) — the engine resolves the task,
+  because only it has the compiled process and the scope chain, and what travels is the
+  connector's *name*, the form and the evaluated field values. There is nowhere in that
+  payload to put a base URL or a password.
+
+  `atlas worker --connector remedy` serves the kind from its own environment
+  (`ATLAS_REMEDY_CONNECTORS`, plus `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and
+  `_PASSWORD`), and a worker Atlas supervises is handed that configuration at spawn out of
+  the connector store and the vault — so a Helix instance added in the Console is served
+  without anything set by hand. A connector with no endpoint, or whose credential bundle is
+  missing or half-filled, is left out rather than handed over incomplete: a named instance
+  missing a field makes the worker refuse at startup, which would take down every other
+  kind it serves. A worker holding no instance at all parks Remedy tasks instead of leasing
+  and failing them.
+
+  **Atlas runs that worker itself, by default** (ADR-0192). The kind
+  was opt-in only for as long as there was no worker to hand the credentials to; with the
+  handover built, that reason is gone, and a ticket create leaves the engine's loop on every
+  installation rather than only where somebody moved it by hand. **Nothing needs to be done
+  to upgrade** and nothing changes in any model — the same connector, built from the same
+  three values, resolved in a different process — and `--in-process-connectors` returns the
+  old arrangement wholesale. The payoff is an AR System reachable only from inside a
+  customer's network: a worker sitting there can serve it, and the service account can live
+  only in that worker rather than in the engine.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives
@@ -43,6 +75,21 @@ the element and the way to write what was meant. Running instances are unaffecte
 rules run at deploy.
 
 ### Added
+
+- **Entra ID delta queries — `delta-users` and `delta-groups`**
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Change detection instead of
+  a full compare: a delta operation enumerates the directory the first run and returns
+  only what changed on every run after, which is what makes an hourly identity sync
+  affordable. The `@odata.deltaLink` cursor round-trips through the process — the
+  operation takes an optional `deltaLink` (empty on the first run, the previous run's
+  cursor thereafter) and returns `{ value, deltaLink }` so a model persists the cursor
+  and hands it back next time. Deletions arrive in `value` marked `@removed`; `$select`,
+  `$top` and the `maxUsers` cap apply, while `$filter`/`$search`/advanced query do not
+  (Graph's delta endpoint runs none of them, and the compiler refuses them at deploy).
+  This closes the third Entra capability tracked in [issue #433](https://github.com/pblumer/atlas/issues/433).
+  Fixed alongside: `newPassword` and `deltaLink` were being dropped from the job payload
+  the engine hands the worker, so `reset-password` resolved an empty secret — both now
+  cross the wire and are covered by a worker round-trip test.
 
 - **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),

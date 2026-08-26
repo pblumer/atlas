@@ -17,18 +17,20 @@ import (
 // belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs a BMC Remedy connector task. Register it
-// with a [job.Runner] for the reserved [compiler.RemedyJobTypeIndex] via
-// HandleWithOutput; the runner then pulls activatable Remedy jobs, and for each the
-// handler resolves the task's connector/form/fields from the compiled process —
-// evaluating any FEEL field over the variables the task sees, up its scope chain (the
-// fx toggle, ADR-0067/0068) —
-// resolves the named connector's AR System client from reg, and creates the entry
-// keyed by the job key so an at-least-once retry carries the same X-Request-ID
+// Handler builds a job handler that performs a BMC Remedy connector task in the
+// engine's own process. Register it with a [job.Runner] for the reserved
+// [compiler.RemedyJobTypeIndex] via HandleWithOutput; the runner then pulls
+// activatable Remedy jobs, and for each the handler resolves the task and creates the
+// entry, keyed by the job key so an at-least-once retry carries the same X-Request-ID
 // (ADR-0106). When the task names a result variable, the created entry's id is
 // returned as that variable to be written back into the instance on completion.
 // Returning an error leaves the job pending (retry, then an incident, ADR-0061); the
 // runner completes it only on success.
+//
+// It is the in-process half of the same [Resolve]/[Run] pair a worker uses
+// (ADR-0168): running in the engine changes only *where* the registry comes from,
+// never what a resolved Remedy task means — which is the point of routing both paths
+// through one pair rather than two implementations that can drift.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
@@ -46,40 +48,18 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if err != nil {
 			return nil, fmt.Errorf("remedy: %w", err)
 		}
-		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
-			return nil, reg.Unresolved("remedy", name)
-		}
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). The form and every
-		// field FEEL value evaluates against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("remedy: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		form := resolveValue(detail.RemedyForm, piKey, scopeVars)
-		if form == "" {
-			return nil, fmt.Errorf("remedy: task resolved no form")
-		}
-		values := make(map[string]any, len(detail.RemedyFields))
-		for _, f := range detail.RemedyFields {
-			values[f.Name] = resolveValue(f.Val, piKey, scopeVars)
-		}
-		res, err := client.CreateEntry(context.Background(), Entry{
-			Form:      form,
-			Values:    values,
-			RequestID: strconv.FormatUint(j.Key, 10),
-		})
+		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" {
+		res, err := Run(context.Background(), resolved, reg)
+		if err != nil {
+			return nil, err
+		}
+		if resolved.ResultVariable == "" {
 			return nil, nil // the model discards the entry id
 		}
-		return []model.VariableValue{{Name: resultVar, Kind: model.VarString, Text: res.EntryID}}, nil
+		return []model.VariableValue{{Name: resolved.ResultVariable, Kind: model.VarString, Text: res.EntryID}}, nil
 	}
 }
 

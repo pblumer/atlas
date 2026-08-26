@@ -1,5 +1,59 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "entra-id-delta-queries-delta-users-and-delta-groups": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Read only what changed in Entra ID",
+      "de": "Nur Änderungen aus Entra ID lesen"
+    },
+    "summary": {
+      "en": "Two new Entra operations — delta-users and delta-groups — read the whole directory the first time and only what changed on every run after, which is what makes an hourly identity sync affordable rather than re-listing everyone each time. The cursor Microsoft Graph hands back travels through the process, not the connector: the task takes it as an optional input (empty on the first run) and returns it beside the changes, so a model saves it and passes it back next run. Deleted accounts arrive marked as removed, so a leaver flow sees them instead of losing them.",
+      "de": "Zwei neue Entra-Operationen — delta-users und delta-groups — lesen das Verzeichnis beim ersten Mal vollständig und danach bei jedem Lauf nur noch, was sich geändert hat; erst das macht einen stündlichen Identity-Sync bezahlbar, statt jedes Mal alle neu aufzulisten. Der Cursor, den Microsoft Graph zurückgibt, reist durch den Prozess, nicht durch den Konnektor: Die Aufgabe nimmt ihn als optionale Eingabe (beim ersten Lauf leer) und gibt ihn neben den Änderungen zurück, sodass ein Modell ihn speichert und beim nächsten Lauf wieder hereinreicht. Gelöschte Konten kommen als entfernt markiert mit — ein Leaver-Flow sieht sie, statt sie zu verlieren."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "the-bmc-remedy-connector-runs-on-a-worker": {
+    "tags": [
+      "Connectors",
+      "Operations"
+    ],
+    "title": {
+      "en": "Remedy tickets can be filed beside the engine",
+      "de": "Remedy-Tickets können neben der Engine geschrieben werden"
+    },
+    "summary": {
+      "en": "A task that opens a Remedy ticket talks to your ITSM system over the network — a login, the create, a logout — and until now Atlas did all three on the same thread that moves every process forward. It now runs a worker for that beside the engine, started by Atlas itself and configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model and nothing needs configuring; a slow or unreachable ITSM host holds up nothing but its own task. And because that worker holds the credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+      "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und bis jetzt tat Atlas alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Dafür läuft jetzt ein Worker neben der Engine, von Atlas selbst gestartet und aus der Helix-Instanz eingerichtet, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsames oder nicht erreichbares ITSM-System hält nur noch seine eigene Aufgabe auf. Und weil dieser Worker die Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
+    },
+    "tutorial": {
+      "en": [
+        "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+        "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
+        "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
+      ],
+      "de": [
+        "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+        "Öffnen Sie Betrieb › Workers: Der Worker namens remedy läuft dort, von Atlas selbst gestartet.",
+        "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
+      ]
+    },
+    "try": {
+      "label": {
+        "en": "Open Workers",
+        "de": "Workers öffnen"
+      },
+      "route": "#/operations/workers"
+    }
+  },
   "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star": {
     "tags": [
       "Modeler",

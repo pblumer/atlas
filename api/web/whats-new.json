@@ -2,6 +2,76 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-bmc-remedy-connector-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Remedy tickets can be filed beside the engine",
+        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
+      },
+      "summary": {
+        "en": "A task that opens a Remedy ticket talks to your ITSM system over the network — a login, the create, a logout — and until now Atlas did all three on the same thread that moves every process forward. It now runs a worker for that beside the engine, started by Atlas itself and configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model and nothing needs configuring; a slow or unreachable ITSM host holds up nothing but its own task. And because that worker holds the credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und bis jetzt tat Atlas alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Dafür läuft jetzt ein Worker neben der Engine, von Atlas selbst gestartet und aus der Helix-Instanz eingerichtet, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsames oder nicht erreichbares ITSM-System hält nur noch seine eigene Aufgabe auf. Und weil dieser Worker die Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
+      },
+      "link": {
+        "label": "ADR-0106",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+          "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
+          "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
+        ],
+        "de": [
+          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+          "Öffnen Sie Betrieb › Workers: Der Worker namens remedy läuft dort, von Atlas selbst gestartet.",
+          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
+      "id": "entra-id-delta-queries-delta-users-and-delta-groups",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Added",
+      "title": {
+        "en": "Read only what changed in Entra ID",
+        "de": "Nur Änderungen aus Entra ID lesen"
+      },
+      "summary": {
+        "en": "Two new Entra operations — delta-users and delta-groups — read the whole directory the first time and only what changed on every run after, which is what makes an hourly identity sync affordable rather than re-listing everyone each time. The cursor Microsoft Graph hands back travels through the process, not the connector: the task takes it as an optional input (empty on the first run) and returns it beside the changes, so a model saves it and passes it back next run. Deleted accounts arrive marked as removed, so a leaver flow sees them instead of losing them.",
+        "de": "Zwei neue Entra-Operationen — delta-users und delta-groups — lesen das Verzeichnis beim ersten Mal vollständig und danach bei jedem Lauf nur noch, was sich geändert hat; erst das macht einen stündlichen Identity-Sync bezahlbar, statt jedes Mal alle neu aufzulisten. Der Cursor, den Microsoft Graph zurückgibt, reist durch den Prozess, nicht durch den Konnektor: Die Aufgabe nimmt ihn als optionale Eingabe (beim ersten Lauf leer) und gibt ihn neben den Änderungen zurück, sodass ein Modell ihn speichert und beim nächsten Lauf wieder hereinreicht. Gelöschte Konten kommen als entfernt markiert mit — ein Leaver-Flow sieht sie, statt sie zu verlieren."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -259,75 +329,6 @@
       "link": {
         "label": "ADR-0067",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
-      }
-    },
-    {
-      "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "Active Directory tasks run beside the engine now",
-        "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
-      },
-      "summary": {
-        "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
-        "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
-      },
-      "link": {
-        "label": "ADR-0164",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
-          "Its log lists every directory operation it performed — and says so when it is in mock mode.",
-          "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
-        ],
-        "de": [
-          "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
-          "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
-          "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "A dot in a variable name is caught at deploy",
-        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
-      },
-      "summary": {
-        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
-        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

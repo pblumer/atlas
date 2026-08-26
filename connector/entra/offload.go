@@ -43,7 +43,14 @@ type Op struct {
 	// is paged, and following those pages is this connector's work rather than
 	// something a process has to model with a loop. ListPath is the collection such an
 	// operation reads ("/users", "/groups"); it is empty on every non-listing op.
-	IsList   bool
+	IsList bool
+	// IsDelta marks a change-tracking (delta-query) operation. Like a listing it pages a
+	// collection, but it also carries back Graph's @odata.deltaLink so a later run
+	// resumes from it and reads only what changed since (ADR-0172). Its result is an
+	// object {value, deltaLink}, not the bare array a listing returns, because the cursor
+	// is half of what the operation is for. ListPath is the delta collection it reads
+	// ("/users/delta", "/groups/delta").
+	IsDelta  bool
 	ListPath string
 	// Describes the operation for an error message.
 	Label string
@@ -58,6 +65,7 @@ var Ops = map[string]Op{
 	"create-user":         {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":            {Method: "GET", NeedsUser: true, Label: "read a user"},
 	"list-users":          {Method: "GET", IsList: true, ListPath: "/users", Label: "list users"},
+	"delta-users":         {Method: "GET", IsDelta: true, ListPath: "/users/delta", Label: "delta-query users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
 	"delete-user":         {Method: "DELETE", NeedsUser: true, Label: "delete a user"},
 	"reset-password":      {Method: "PATCH", NeedsUser: true, NeedsPassword: true, Label: "reset a password"},
@@ -68,6 +76,7 @@ var Ops = map[string]Op{
 	"create-group":        {Method: "POST", NeedsAttributes: true, Label: "create a group"},
 	"get-group":           {Method: "GET", NeedsGroup: true, Label: "read a group"},
 	"list-groups":         {Method: "GET", IsList: true, ListPath: "/groups", Label: "list groups"},
+	"delta-groups":        {Method: "GET", IsDelta: true, ListPath: "/groups/delta", Label: "delta-query groups"},
 	"update-group":        {Method: "PATCH", NeedsGroup: true, NeedsAttributes: true, Label: "update a group"},
 	"delete-group":        {Method: "DELETE", NeedsGroup: true, Label: "delete a group"},
 	"add-group-owner":     {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group owner"},
@@ -126,6 +135,13 @@ type Job struct {
 	Select   string `json:"select,omitempty"`
 	PageSize int32  `json:"pageSize,omitempty"`
 	MaxUsers int32  `json:"maxUsers,omitempty"`
+	// DeltaLink resumes a change-tracking query (delta-users, delta-groups): the
+	// @odata.deltaLink a previous run returned, empty on the first run. Empty starts a
+	// fresh delta from the collection's /delta path — a full enumeration that also seeds
+	// the cursor; a non-empty link is fetched verbatim (confined to the connector's own
+	// endpoint, client.go) and returns only what changed since it was minted. It is zero
+	// on every non-delta operation.
+	DeltaLink string `json:"deltaLink,omitempty"`
 	// Search is Graph's $search term, authored exactly as Graph takes it — quotes
 	// included, so a compound term stays expressible. Advanced asks for advanced
 	// query support (ConsistencyLevel: eventual plus $count=true), which a search
@@ -180,6 +196,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Select:         cp.Intern(detail.EntraSelect),
 		PageSize:       detail.EntraPageSize,
 		MaxUsers:       detail.EntraMaxUsers,
+		DeltaLink:      resolveValue(detail.EntraDeltaLink, elementInstanceKey, vars),
 		Search:         resolveValue(detail.EntraSearch, elementInstanceKey, vars),
 		Advanced:       detail.EntraAdvanced,
 		ResultVariable: cp.Intern(detail.ResultVar),
@@ -273,6 +290,13 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	}
 	if err := checkRequired(j, spec); err != nil {
 		return nil, err
+	}
+	if spec.IsDelta {
+		out, err := deltaCollection(ctx, j, spec, client)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{j.ResultVariable: out}, nil
 	}
 	if spec.IsList {
 		items, err := listCollection(ctx, j, spec, client)
@@ -408,6 +432,108 @@ func listPath(j Job, collection string) string {
 	return collection + "?" + strings.Join(q, "&")
 }
 
+// deltaLinkKey is the member Graph puts the change-tracking cursor in. It is present
+// only on the last page of a delta query, where nextLinkKey is absent, and — like the
+// next link — is an OData annotation addressed by its literal name.
+const deltaLinkKey = "@odata.deltaLink"
+
+// deltaPath builds the first request of a fresh delta query over the given collection
+// ("/users/delta", "/groups/delta"). Only $select and $top are carried: Graph's delta
+// endpoint takes neither a $search nor advanced query (the compiler refuses filter,
+// search and advancedQuery on a delta op), and it threads $select forward into the
+// deltaLink itself, so a resume sends nothing but the cursor.
+func deltaPath(j Job, collection string) string {
+	var q []string
+	if sel := strings.TrimSpace(j.Select); sel != "" {
+		q = append(q, "$select="+url.QueryEscape(sel))
+	}
+	if j.PageSize > 0 {
+		q = append(q, "$top="+strconv.FormatInt(int64(j.PageSize), 10))
+	}
+	if len(q) == 0 {
+		return collection
+	}
+	return collection + "?" + strings.Join(q, "&")
+}
+
+// deltaCollection performs a whole delta query: the first request (a fresh /delta, or
+// the resume deltaLink), then every @odata.nextLink page, capturing the
+// @odata.deltaLink the final page carries. It returns an object rather than the bare
+// array a listing returns — {value, deltaLink} — because the cursor is half of what a
+// change-tracking read is for: the process persists deltaLink and hands it back next run
+// to read only what changed since.
+//
+// Removed objects are not filtered out. Graph reports a deletion as an item carrying an
+// @removed annotation, and dropping it would hide exactly the change a leaver flow is
+// watching for — so the page is passed through as Graph sent it, deletions included.
+func deltaCollection(ctx context.Context, j Job, spec Op, client Client) (map[string]any, error) {
+	req := request(j, spec, client.BaseURL())
+	items := []any{}
+	for pages := 0; pages < maxListPages; pages++ {
+		res, err := client.Call(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		batch, next, delta, err := deltaPage(res, j.Operation)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, batch...)
+		// The cap fails the job rather than truncating, as a listing's does: a short
+		// change set is a wrong answer a process would act on confidently, and it also
+		// means the deltaLink would be persisted having skipped changes.
+		if j.MaxUsers > 0 && len(items) > int(j.MaxUsers) {
+			return nil, fmt.Errorf("entra: %s returned more than the %d-item maxUsers cap; narrow with $select or raise maxUsers (a truncated change set drops changes silently)", j.Operation, j.MaxUsers)
+		}
+		if next == "" {
+			// The last page carries the deltaLink in place of a nextLink. Graph always
+			// mints one on a completed delta; a response with neither is malformed, and
+			// returning "" as a cursor would make the next run re-enumerate the whole
+			// directory in silence — so it is reported instead.
+			if delta == "" {
+				return nil, fmt.Errorf("entra: %s finished with no %s to resume from; the last page carried neither another page nor a delta cursor", j.Operation, deltaLinkKey)
+			}
+			return map[string]any{"value": items, "deltaLink": delta}, nil
+		}
+		req.Path = next
+	}
+	return nil, fmt.Errorf("entra: %s still offered another page after %d requests; narrow with $select, or set maxUsers so an oversized change set fails by its own bound", j.Operation, maxListPages)
+}
+
+// deltaPage reads one page of a delta query: its items, the @odata.nextLink to the next
+// page (empty on the last), and the @odata.deltaLink cursor (present only on the last).
+// It is collectionPage's delta twin — the same collection shape, plus the trailing
+// cursor a change-tracking read carries.
+func deltaPage(res any, op string) (items []any, next, delta string, err error) {
+	obj, ok := res.(map[string]any)
+	if !ok {
+		return nil, "", "", fmt.Errorf("entra: %s expected a collection, got %T", op, res)
+	}
+	raw, ok := obj["value"]
+	if !ok {
+		return nil, "", "", fmt.Errorf("entra: %s response carries no %q collection", op, "value")
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, "", "", fmt.Errorf("entra: %s response has a %q that is a %T, not a list", op, "value", raw)
+	}
+	if nl, present := obj[nextLinkKey]; present {
+		s, ok := nl.(string)
+		if !ok {
+			return nil, "", "", fmt.Errorf("entra: %s response has an %s that is a %T, not a URL", op, nextLinkKey, nl)
+		}
+		next = s
+	}
+	if dl, present := obj[deltaLinkKey]; present {
+		s, ok := dl.(string)
+		if !ok {
+			return nil, "", "", fmt.Errorf("entra: %s response has an %s that is a %T, not a URL", op, deltaLinkKey, dl)
+		}
+		delta = s
+	}
+	return list, next, delta, nil
+}
+
 // checkRequired repeats the compiler's shape rules on the worker. The compiler
 // catches an under-specified model at deploy; this catches a job built by hand or by
 // an older engine, and turns what would be a confusing Graph 404 into a sentence
@@ -425,8 +551,8 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
-	if spec.IsList && strings.TrimSpace(j.ResultVariable) == "" {
-		return fmt.Errorf("entra: operation %q resolved no resultVariable; a listing that discards its result is a directory read nothing asked for", j.Operation)
+	if (spec.IsList || spec.IsDelta) && strings.TrimSpace(j.ResultVariable) == "" {
+		return fmt.Errorf("entra: operation %q resolved no resultVariable; a directory read that discards its result is one nothing asked for", j.Operation)
 	}
 	return nil
 }
@@ -455,6 +581,16 @@ func request(j Job, spec Op, baseURL string) Request {
 	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced()}
 	if spec.IsList {
 		r.Path = listPath(j, spec.ListPath)
+		return r
+	}
+	if spec.IsDelta {
+		// A resume link is fetched verbatim — Graph threaded $select and the cursor into
+		// it, so there is nothing to rebuild. A fresh delta starts at the /delta path.
+		if dl := strings.TrimSpace(j.DeltaLink); dl != "" {
+			r.Path = dl
+			return r
+		}
+		r.Path = deltaPath(j, spec.ListPath)
 		return r
 	}
 	switch j.Operation {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -214,6 +215,116 @@ func TestActiveDirectoryIsOffloadedByDefaultAndItsBindSecretsAreHandedOver(t *te
 			"every vault-backed AD task would fail on a worker nobody configured")
 	}
 }
+
+// BMC Remedy is offloaded by default (ADR-0192), and unlike AD
+// above it *is* a managed kind — so the property two tests up already proves a
+// supervised worker can serve it. What that property cannot say is that the kind is in
+// the default set at all, which is the whole of this decision: an ITSM create is three
+// round trips to somebody else's host, and leaving it opt-in is what kept it on the
+// engine's loop.
+//
+// The in-process handler stays, deliberately: --in-process-connectors must still return
+// the old arrangement, so a Remedy job type an operator opted out of is served here
+// again rather than by nobody.
+func TestRemedyIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
+	if !slices.Contains(DefaultOffloadedKinds(), connectorKindRemedy) {
+		t.Error("remedy is not offloaded by default; a ticket create runs on the engine's own loop")
+	}
+	if _, handed := (&Server{}).provisionedConnectorKinds()[connectorKindRemedy]; !handed {
+		t.Error("remedy is defaulted but its endpoint and service account are not handed to the " +
+			"supervised worker; every Remedy task would park on a worker holding no instance")
+	}
+	// Opting out puts it back in the engine, which is what makes the default reversible.
+	srv := newServerWithOptions(t)
+	srv.do(func() {
+		if !srv.jobRunner.Handles(compiler.RemedyJobTypeIndex) {
+			t.Error("a server that was not told to offload remedy has no in-process handler for it, " +
+				"so --in-process-connectors would leave the kind served by nobody")
+		}
+	})
+}
+
+// TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential is the engine's half of
+// ADR-0106's move onto a worker, checked where the engine hands the work over.
+//
+// What a leased Remedy job carries is the *resolved* task: the connector's name, the
+// form, the field values with their FEEL already evaluated against the instance, and
+// the job key as the X-Request-ID an at-least-once replay repeats. What it does not
+// carry — and has nowhere to put — is the AR System's base URL or its service account.
+// That is the whole of ADR-0168's split, and it is only true on this side of it: the
+// worker's own tests prove it can act on this payload, not that this is what it gets.
+func TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential(t *testing.T) {
+	srv := newServerWithOptions(t, WithOffloadedConnectorKinds([]string{connectorKindRemedy}))
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", remedyPullBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"summary":"Disk full on server 7"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+
+	code, got := pull(t, srv, fmt.Sprintf(`{"type":%q,"worker":"w1"}`, compiler.RemedyJobType))
+	if code != http.StatusOK {
+		t.Fatalf("pull: status=%d", code)
+	}
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want the one Remedy task", len(got.Jobs))
+	}
+	j := got.Jobs[0]
+	if j.Connector == nil {
+		t.Fatal("the leased job carries no resolved connector detail; the worker would have nothing to file")
+	}
+	if j.Connector.Kind != connectorKindRemedy {
+		t.Errorf("kind = %q, want %q", j.Connector.Kind, connectorKindRemedy)
+	}
+	f := j.Connector.Fields
+	if f["connector"] != "helix" {
+		t.Errorf("connector = %v, want the name the model authored", f["connector"])
+	}
+	if f["form"] != "HPD:IncidentInterface_Create" {
+		t.Errorf("form = %v, want the authored form", f["form"])
+	}
+	if f["resultVariable"] != "incidentNumber" {
+		t.Errorf("resultVariable = %v, want the model's result variable", f["resultVariable"])
+	}
+	if f["requestId"] != strconv.FormatUint(j.JobKey, 10) {
+		t.Errorf("requestId = %v, want the job key %d, which is what makes a replay recognizable", f["requestId"], j.JobKey)
+	}
+	values, ok := f["values"].(map[string]any)
+	if !ok {
+		t.Fatalf("values = %#v, want the entry's field values", f["values"])
+	}
+	// The FEEL field was evaluated by the engine, against this instance's variables,
+	// before the job was handed out — a worker has neither the compiled process nor
+	// the scope chain to do it itself.
+	if values["Description"] != "Disk full on server 7" {
+		t.Errorf("Description = %v, want the FEEL field resolved from the instance", values["Description"])
+	}
+	if values["Impact"] != "2-Significant" {
+		t.Errorf("Impact = %v, want the literal field", values["Impact"])
+	}
+}
+
+// remedyPullBPMN is a Remedy connector task with one literal field and one FEEL field,
+// so a resolved payload shows both halves of what the engine evaluates.
+const remedyPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="ticketing" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:remedyConnector connector="helix" form="HPD:IncidentInterface_Create" resultVariable="incidentNumber">
+          <atlas:remedyField name="Description" value="=summary"/>
+          <atlas:remedyField name="Impact" value="2-Significant"/>
+        </atlas:remedyConnector>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
 
 // The check above is only worth anything if it could fail, and it could not if every
 // managed kind were provisioned. Naming the ones that are not is what keeps it a

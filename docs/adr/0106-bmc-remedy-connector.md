@@ -1,8 +1,49 @@
 # ADR-0106: A BMC Remedy connector — server-registered ITSM entry creation
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-26 — the connector's work moved onto a worker; see the amendment note below)
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
+
+> **Amendment (2026-08-26): the entry is created on a worker.** The original decision
+> shipped the Remedy worker **in the engine's own process** — an in-process job handler
+> holding a registry the server built from the connector store and the vault. That was
+> the right first slice, and it is the shape [ADR-0164](0164-no-in-process-service-tasks.md)
+> and [ADR-0168](0168-connector-work-on-a-worker.md) then moved every side-effecting
+> service task away from; the 2026-08-25 implementation audit named `remedy` among the
+> offloadable kinds with no worker implementation behind them.
+>
+> It now has one, in mail's exact shape ([ADR-0079](0079-outbound-mail-connector.md)/ADR-0168),
+> because Remedy is mail's situation: one operator-managed instance behind a name, with
+> its address and service account in the connector store rather than in the model.
+>
+> - **The split.** `remedy.Resolve` (engine) turns the compiled task into a `remedy.Job`
+>   of plain values — the connector *name*, the form, the evaluated field values, the job
+>   key as `X-Request-ID`, the result variable. `remedy.Run` (either process) creates the
+>   entry through whichever registry its caller holds. Both paths call the same pair, so
+>   in-engine and on-worker cannot drift. A `remedy.Job` has nowhere to put a base URL or
+>   a password, which is the property that makes the offload safe rather than the code
+>   that fills it in.
+> - **The worker.** `atlas worker --connector remedy` reads `ATLAS_REMEDY_CONNECTORS` and,
+>   per name, `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and `_PASSWORD` — from the
+>   environment, never argv. A worker with no instance configured parks the kind instead
+>   of leasing its jobs and failing them, as mail and Entra do.
+> - **The handover.** A *supervised* worker is provisioned from the connector store and
+>   the vault at spawn (`remedyWorkerEnv`, [ADR-0157](0157-worker-processes-supervision-and-console.md)),
+>   so an operator who adds a Helix instance in the Console gets a worker that can file
+>   against it without setting anything by hand. A connector with no endpoint, or whose
+>   bundle is missing or half-filled, is left out rather than handed over incomplete.
+> - **What did not change.** The model is byte-identical, and the in-process handler
+>   remains — it is what `--in-process-connectors` returns to. When this amendment was
+>   written the default offload set was left untouched, because whether Remedy should be
+>   offloaded *by default* was a separate decision, as it was for AD
+>   ([ADR-0182](0182-ad-default-offload.md)). That decision has since been taken in
+>   [the record on defaulting this kind](0192-remedy-default-offload.md): Remedy is now
+>   in `DefaultOffloadedKinds()`, so Atlas supervises the worker itself unless an
+>   operator opts out.
+>
+> The payoff is the one the ADR's own trade-off list could not offer: an AR System
+> reachable only from inside a customer's network can now be served by a worker sitting
+> there, and the service account can live only in that worker.
 
 ## Context and problem statement
 

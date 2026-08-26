@@ -737,6 +737,11 @@ type ConnectorTaskDetail struct {
 	EntraMaxUsers      int32
 	EntraSearch        RestExpr
 	EntraAdvanced      bool
+	// EntraDeltaLink resumes a change-tracking query (delta-users, delta-groups): a
+	// literal-or-FEEL value naming the @odata.deltaLink a previous run returned, empty
+	// (a fresh full enumeration) on the first run. It is the zero RestExpr on every
+	// other operation, which the compiler enforces (ADR-0172).
+	EntraDeltaLink RestExpr
 	// Directory-file connector fields (JobType == LdifJobType, ADR-0171). LdifFormat
 	// is the interned file format ("ldif" | "dsml") and LdifOperation the direction
 	// ("read" | "write"). LdifSource is the interned name of the variable holding the

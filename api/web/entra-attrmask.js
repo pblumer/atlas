@@ -81,6 +81,9 @@ export function entraResultShape(operation) {
       return "Bei dieser Operation das Gruppen-Objekt (id, displayName, mailNickname, …).";
     case "list-groups":
       return "Bei List groups ein JSON-Array aller passenden Gruppen (erforderlich).";
+    case "delta-users":
+    case "delta-groups":
+      return "Bei einer Delta-Abfrage ein Objekt { value: [Änderungen], deltaLink: \"…\" } — value die geänderten Objekte (gelöschte mit @removed markiert), deltaLink der Cursor für den nächsten Lauf (erforderlich).";
     case "create-team":
       return "Bei Create team das Team-Objekt — seine id ist die der zugrunde liegenden Gruppe.";
     case "create-channel":

@@ -258,7 +258,16 @@ The control-flow basics most real models use.
   is wired into the single-binary server run loop under the reserved Remedy job type and
   authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
-  a Remedy-side dedup field are follow-ups. For local development without a real
+  a Remedy-side dedup field are follow-ups.
+  Since the 2026-08-26 amendment the work also **runs on a worker** (ADR-0164/0168): the
+  engine resolves the task into plain values and `atlas worker --connector remedy` creates
+  the entry, holding the AR System base URL and the service account in its own environment
+  (`ATLAS_REMEDY_CONNECTORS` plus per name `_ENDPOINT`, `_USERNAME`, `_PASSWORD`) — handed
+  to a supervised worker out of the connector store and the vault at spawn, exactly as mail
+  is. A Helix instance reachable only from the worker's network is thereby serviceable.
+  Atlas supervises that worker **by default** (ADR-0192), so a
+  ticket create leaves the loop with nothing to configure; the in-process handler remains
+  as the fallback `--in-process-connectors` returns to. For local development without a real
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   connector runs against unmodified (package `connector/remedy/mock`).
