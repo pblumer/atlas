@@ -418,6 +418,20 @@ func (s *Server) doAndRefresh(fn func()) {
 func (s *Server) adWorkerEnv() []string {
 	var env []string
 	s.do(func() {
+		// The Console's mockup switch, when an operator has decided there
+		// (ADR-draft-ad-mock-in-the-console). No stored record renders nothing, so a
+		// server started with ATLAS_AD_MOCK by hand keeps deciding for itself; a
+		// stored one decides either way, because a switch that says "off" while the
+		// worker still simulates would be lying to the person who flipped it.
+		if a, stored, err := s.settings.getADMock(); err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the AD mockup switch for a supervised worker",
+				slog.String("error", err.Error()))
+		} else if stored {
+			env = append(env, adMockEnv+"="+boolEnv(a.Enabled))
+			if seed := strings.TrimSpace(a.Seed); seed != "" && a.Enabled {
+				env = append(env, adMockSeedEnv+"="+seed)
+			}
+		}
 		keys := make([]uint64, 0, len(s.deployments))
 		for key := range s.deployments {
 			keys = append(keys, key)
@@ -485,4 +499,21 @@ func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
 		}
 	}
 	return out
+}
+
+// Environment variables the AD worker reads its mockup configuration from. They are
+// the same names an operator sets by hand for an external worker (ADR-0181) — there
+// is no private channel between a supervised worker and its parent, so what the
+// Console writes and what a hand-run worker reads are one contract.
+const (
+	adMockEnv     = "ATLAS_AD_MOCK"
+	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
+)
+
+// boolEnv renders a switch as the yes/no the worker parses.
+func boolEnv(on bool) string {
+	if on {
+		return "1"
+	}
+	return "0"
 }

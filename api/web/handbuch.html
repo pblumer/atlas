@@ -2058,15 +2058,22 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         operations. What differs is only which worker leases the tasks. A model that runs through in mockup mode is
         therefore the same model that later runs in production: getting there is an environment variable, not an
         edit.</p>
-      <p data-l="de">Einschalten am Server – der AD-Worker, den Atlas selbst startet, erbt die Variable:</p>
-      <p data-l="en">Switch it on at the server – the AD worker Atlas starts for you inherits the variable:</p>
-      <pre><code>ATLAS_AD_MOCK=1 atlas serve</code></pre>
-      <p data-l="de">Mit Startbestand, also den Konten, die der Prozess vorzufinden erwartet – ein Leaver hat in
-        einem leeren Verzeichnis nichts zu deaktivieren. Die Datei ist LDIF oder DSML, dasselbe Format, das ein
-        Verzeichnis exportiert:</p>
-      <p data-l="en">With a starting population – the accounts the process expects to find, since a leaver has
-        nothing to disable in an empty directory. The file is LDIF or DSML, the same format a directory exports:</p>
-      <pre><code>ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=forest.ldif atlas serve</code></pre>
+      <p data-l="de">Eingeschaltet wird es in der Konsole: <a href="/#/console/connectors">Connectors</a> →
+        Karte <b>Active Directory</b> → <i>Serve Active Directory tasks against a mockup</i> → Speichern. Der
+        AD-Worker startet daraufhin neu und kommt gemockt zurück; Atlas läuft dabei weiter. Im selben Feld gibst
+        du optional den <b>Startbestand</b> an – eine LDIF- oder DSML-Datei auf dem Worker-Host mit den Konten
+        und Gruppen, die dein Prozess vorzufinden erwartet, denn ein Leaver hat in einem leeren Verzeichnis
+        nichts zu deaktivieren.</p>
+      <p data-l="en">You switch it on in the Console: <a href="/#/console/connectors">Connectors</a> → the
+        <b>Active Directory</b> card → <i>Serve Active Directory tasks against a mockup</i> → Save. The AD worker
+        restarts and comes back mocked; Atlas keeps running. The same card takes an optional <b>seed file</b> – an
+        LDIF or DSML file on the worker's host holding the accounts and groups your process expects to find, since
+        a leaver has nothing to disable in an empty directory.</p>
+      <p data-l="de">Einen Worker, den du selbst startest – etwa in einem anderen Netz – erreicht der Schalter
+        nicht. Der liest dieselbe Einstellung aus seiner eigenen Umgebung:</p>
+      <p data-l="en">A worker you start yourself – in another network, say – is not reached by the switch. It
+        reads the same setting from its own environment:</p>
+      <pre><code>ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=forest.ldif atlas worker --connector ad</code></pre>
       <p data-l="de">Zu sehen ist das Ganze unter <a href="/#/operations/workers">Betrieb &rsaquo; Workers</a>: Dort
         läuft der Worker <code>ad</code>. Sein Log warnt beim Start, dass kein Verzeichnis geschrieben wird, und
         zeigt danach jede simulierte Operation mit ihrem DN – Passwörter sind darin redigiert.</p>
@@ -2091,12 +2098,13 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <div class="note warn">
         <span class="lbl" data-l="de">Nicht auf einem Produktivsystem</span><span class="lbl" data-l="en">Not on a production system</span>
         <p data-l="de" style="margin:.3em 0 0">Ein Mockup-Worker sieht von außen aus wie ein funktionierender: Er
-          schließt jede Aufgabe erfolgreich ab. Die Warnung in seinem Log ist die einzige Stelle, an der man den
-          Unterschied sieht. Und das Verzeichnis lebt im Worker-Prozess – ein Neustart beginnt wieder beim
-          Startbestand.</p>
+          schließt jede Aufgabe erfolgreich ab. Zwei Stellen verraten den Unterschied – die Karte in der Konsole
+          und die Warnung im Worker-Log. Und das Verzeichnis lebt im Worker-Prozess: ein Neustart beginnt wieder
+          beim Startbestand.</p>
         <p data-l="en" style="margin:.3em 0 0">A mockup worker looks exactly like a working one from the outside:
-          it completes every task successfully. The warning in its log is the only place the difference shows. And
-          the directory lives in the worker process – a restart starts over from the seed.</p>
+          it completes every task successfully. Two places give it away – the card in the Console and the warning
+          in the worker's log. And the directory lives in the worker process: a restart starts over from the
+          seed.</p>
       </div>
 
       <div class="note">

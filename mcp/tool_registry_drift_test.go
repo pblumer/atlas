@@ -306,6 +306,14 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/settings/logo":    "UI branding is a Console concern, not an agent action",
 	"DELETE /api/v1/settings/logo": "UI branding is a Console concern, not an agent action",
 
+	// The Active Directory mockup switch (ADR-0181/ADR-draft-ad-mock-in-the-console).
+	// The write decides whether this instance writes to a real directory — an
+	// operator's call about their forest, not an agent's. The state is not hidden
+	// from an agent either way: a mocked worker says so in the log atlas_workers
+	// returns, which is where it is worth reading anyway, next to what it did.
+	"GET /api/v1/settings/ad-mock": "the AD mockup switch is a Console concern; its state shows in atlas_workers",
+	"PUT /api/v1/settings/ad-mock": "whether this instance writes to a real directory is an operator decision, not an agent action",
+
 	// Self-service registration config (ADR-0126): a login-screen/admin concern,
 	// not an agent action.
 	"GET /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",

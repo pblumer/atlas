@@ -651,6 +651,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
 			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
+			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings",
+			resp: jsonBody("ADMock", tObject())}},
+		{"PUT", "/api/v1/settings/ad-mock", s.handleSetADMock, apiOp{
+			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings",
+			req:  jsonBody("ADMockRequest", tObject()),
+			resp: jsonBody("ADMock", tObject())}},
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
 			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System",
 			resp: jsonBody("Registration config", schemaObj(map[string]any{
