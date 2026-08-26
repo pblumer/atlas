@@ -26,6 +26,18 @@ Verhältnis zu den bestehenden Unterlagen:
 | [`isds-konzept.md`](isds-konzept.md) | Restrisiko **R-08** (unauthentisierte Endpunkte) ist heute **rot**, solange `/mcp` erreichbar ist. Dieses Konzept bringt R-08 auf grün und verbessert R-03, R-04, R-12 und R-13, ohne sie zu schliessen. |
 | [`isds-offene-punkte.md`](isds-offene-punkte.md) | Schliesst **O-07** vollständig, **O-03** und **O-04** weitgehend. Legt die Grundlage, auf der **O-01** (Föderation) und **O-02** (feingranulare Autorisierung) später aufsetzen — beide bleiben ausdrücklich draussen. |
 
+### Umsetzungsstand
+
+| Massnahme | Stand |
+|-----------|-------|
+| **M1** — Zugriffsklassen je Route + Inventar-Test | ✅ umgesetzt — [`ADR-draft-route-access-classes`](../adr/draft-route-access-classes.md), `api/access.go` |
+| **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-draft-authenticated-mcp-transport`](../adr/draft-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
+| M3–M8 | offen |
+
+Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
+Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
+Begründung für die restlichen Massnahmen. Was heute gilt, steht in Kapitel 6.
+
 ---
 
 ## 1 Befund
@@ -128,8 +140,8 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 
 | Nr. | Massnahme | Aufwand | Schliesst | Grundsatz |
 |-----|-----------|---------|-----------|-----------|
-| M1 | Zugriffsklassen je Route + Inventar-Test | S | Ursache aus 1.1/1.4 | G2 |
-| M2 | `/mcp` hinter dieselbe Grenze, Identität durchreichen | M | R-08, O-07 | G1, G4 |
+| M1 ✅ | Zugriffsklassen je Route + Inventar-Test | S | Ursache aus 1.1/1.4 | G2 |
+| M2 ✅ | `/mcp` hinter dieselbe Grenze, Identität durchreichen | M | R-08, O-07 | G1, G4 |
 | M3 | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
 | M4 | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
 | M5 | `--auth` standardmässig an | S | R-08, R-03 | G5 |
@@ -327,13 +339,18 @@ damit die Aussage «jede Schnittstelle verlangt einen Login» wahr wird.**
 
 Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
 
-1. Ein Test zählt jede gemountete Route auf und schlägt fehl, wenn eine keine
-   Zugriffsklasse deklariert. Die Liste der `public`-Routen ist kurz und
-   begründet. *(M1)*
-2. `POST /mcp` ohne Credential → `401`; mit gültigem Token → `200`. Analog zu
-   `api/mcp_auth_test.go`, das dasselbe für die API bereits beweist. *(M2a)*
-3. Ein MCP-Werkzeugaufruf handelt unter der Identität des Aufrufers: ein
-   Nicht-Admin erreicht über MCP keine admin-geschützte Operation. *(M2b)*
+1. ✅ Die öffentliche Routenmenge wird gegen eine ausgeschriebene Liste gehalten;
+   eine nicht deklarierte Route ist geschützt.
+   `TestPublicRoutesAreExactlyTheAllowlist`, `TestUndeclaredRouteIsGated`,
+   `TestEveryPublicAPIRouteEntryIsRegistered`, `TestAccessClassification`. *(M1)*
+2. ✅ `POST /mcp` ohne Credential → `401` mit `WWW-Authenticate: Bearer`; mit
+   gültiger Sitzung → `200`. `TestMCPTransportRequiresAuthentication`,
+   `TestMCPTransportAdmitsASignedInCaller`. *(M2a)*
+3. ✅ Ein MCP-Werkzeugaufruf handelt unter der Identität des Aufrufers: ein Admin
+   erreicht ein admin-geschütztes Werkzeug, ein angemeldeter Nicht-Admin nicht.
+   `TestMCPToolActsAsTheCallingPrincipal`, dazu
+   `TestHTTPForwardsTheCallersCredential` und
+   `TestHTTPCallerCredentialBeatsTheAdapters` im `mcp`-Paket. *(M2b)*
 4. Ein widerrufenes und ein abgelaufenes API-Token werden abgewiesen; das
    Geheimnis ist über keinen Endpunkt erneut abrufbar. *(M3)*
 5. Ein Server ohne Flags verlangt einen Login; `--auth=false` erzeugt eine
@@ -344,6 +361,7 @@ Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
 8. `docs/compliance/isds-konzept.md` (Kap. 5.2.2, 5.2.3, 5.4.2, 6.1) und
    `isds-offene-punkte.md` (O-03, O-04, O-07) sind in derselben Änderung
    nachgeführt — so verlangt es die Pflegeregel in [`README.md`](README.md).
+   Für M1 und M2 ✅ erfolgt.
 
 Ergänzend, nicht Teil der Abnahme: ein `atlas check`-Lauf, der die
 sicherheitsrelevante Konfiguration bewertet, macht die jährliche Prüfung
@@ -362,13 +380,14 @@ reproduzierbar (O-15).
 | [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | `openapi.json` vor dem Login lesbar | Hinter die Schranke, sobald Auth aktiv ist (M5). |
 | [ADR-0142](../adr/0142-prometheus-metrics.md) | `/metrics` ungated wie `/healthz` | Eigener Listener bzw. Zugriffsklasse `operator` (M6). |
 
-Umzusetzen als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
+Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
-- `draft-authenticated-mcp-transport.md` — M2, ersetzt die `/mcp`-Aussage aus
-  ADR-0016 und erledigt die Folgearbeit aus ADR-0049
-- `draft-api-tokens.md` — M3
-- `draft-route-access-classes.md` — M1
-- `draft-auth-on-by-default.md` — M5
+- ✅ [`draft-route-access-classes.md`](../adr/draft-route-access-classes.md) — M1
+- ✅ [`draft-authenticated-mcp-transport.md`](../adr/draft-authenticated-mcp-transport.md)
+  — M2, ersetzt die `/mcp`-Aussage aus ADR-0016 und erledigt die Folgearbeit aus
+  ADR-0049
+- `draft-api-tokens.md` — M3, offen
+- `draft-auth-on-by-default.md` — M5, offen
 
 ---
 

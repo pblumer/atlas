@@ -151,8 +151,10 @@ Empfehlung des Projektteams für eine Einführung im Bund:
    Klassifizierung «vertraulich» oder RINA-Relevanz erst nach Schliessen der
    Punkte R-03/R-04/R-05 und nach einem Penetrationstest.
 2. **Reverse Proxy mit TLS und Authentisierung davor ist obligatorisch** — Atlas
-   spricht ausschliesslich Klartext-HTTP (`docs/install.md`). `/mcp` und
-   `/metrics` sind am Proxy zu sperren.
+   spricht ausschliesslich Klartext-HTTP (`docs/install.md`). `/metrics` ist am
+   Proxy zu sperren; `/mcp` ist seit ADR-draft-authenticated-mcp-transport durch
+   `--auth` geschützt, eine Proxy-Regel dafür ist zusätzliche Absicherung und
+   nicht mehr der Schutz selbst.
 3. **Eine Installation pro Schutzbedarfsklasse**, nicht Mischbetrieb — solange es
    keine Mandantentrennung gibt, ist die Installationsgrenze die einzige
    verlässliche Trennlinie.
@@ -310,7 +312,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | **HTTP-API** (`/api/v1/…`) | vollständige Steuerfläche, OpenAPI-spezifiziert; Explorer unter `/api/docs` (abschaltbar) | einziger Zugangsweg für UI, Worker und Agenten |
 | **Web-UI** | Modeler, Operations (Live-Tokens, Replay), Tasks-Inbox, Console, Handbuch — im Binary eingebettet | zeigt Prozessvariablen und damit potenziell Personendaten |
 | **Worker-Prozess** (`atlas worker`) | führt Connector-/Service-Task-Arbeit aus, least Jobs über die HTTP-API | hält die Credentials der Fachsysteme; läuft idealerweise in der Zone des Zielsystems (ADR-0164/0168) |
-| **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` ist **transportseitig nicht authentisiert** (ADR-0016) — am Proxy sperren |
+| **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-draft-authenticated-mcp-transport). Der stdio-Adapter kann noch kein Credential halten |
 | **Vault** | AES-256-GCM-verschlüsselte Ablage der Connector-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
 | **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | TLS-Terminierung, Zugriffssteuerung, Access-Log, Rate-Limiting | **zwingend** — Atlas selbst kann kein TLS |
 
@@ -332,6 +334,15 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   Standardzugangsdaten**.
 - **Wiederherstellung:** `atlas reset-password --data-dir …` arbeitet direkt gegen
   das Datenverzeichnis, mit oder ohne laufenden Server.
+- **Schnittstellen:** welche Route ohne Anmeldung erreichbar ist, ist je Route
+  deklariert und fail-closed aufgelöst — eine nicht deklarierte Route ist
+  geschützt (ADR-draft-route-access-classes). Die vollständige Liste der offenen
+  Routen ist im Code niedergeschrieben und durch einen Test gegen die tatsächlich
+  bediente Oberfläche gehalten (`api/access.go`,
+  `TestPublicRoutesAreExactlyTheAllowlist`). Offen bleiben: `/healthz`, `/readyz`,
+  `/metrics`, was die Anmeldemaske selbst liest (Login, Produktinfo, Branding,
+  Registrierungslink), der API-Explorer, die tokenbasierten öffentlichen Links und
+  die statische Oberfläche. **`/mcp` gehört nicht mehr dazu.**
 - **Nicht vorhanden:** SSO/Föderation (eIAM, OIDC, SAML, LDAP-Login), MFA,
   Kontosperre nach Fehlversuchen, Passwortablauf, Wiederverwendungssperre. Die
   Datenmodell-Haken für externe Identitäten (`Source`, `ExternalID`) existieren,
@@ -346,7 +357,8 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | Benutzer (Rolle `user`) | lokales Konto | alles, was nicht ausdrücklich admin-geschützt ist: Modelle deployen, Instanzen starten/abbrechen, Laufzeitdaten und Prozessvariablen lesen, Tasks bearbeiten |
 | Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Connectoren, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
 | Projektmitglied | Projekt-Sichtbarkeit `private`/`shared` mit Rollen `viewer`/`editor` (ADR-0071, Gruppen ADR-0180) | Zugriff auf die Design-Time-Artefakte des Projekts |
-| `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049) | wie ein Benutzer, **nie** admin |
+| `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | wie ein Benutzer, **nie** admin |
+| MCP-Aufrufer | das Credential, mit dem der Aufrufer `/mcp` erreicht hat (Session-Cookie oder Bearer), unverändert an die API weitergereicht | genau die Rechte dieses Prinzipals — nicht mehr und nicht weniger (ADR-draft-authenticated-mcp-transport) |
 | `deploy-agent` | Deploy-Token eines Peer-Servers (ADR-0129), SHA-256-gehasht abgelegt | fail-closed-Allowlist aus genau zwei Operationen (Bundle importieren, eigene Deployments lesen) |
 | anonym | öffentliche Start-Links (ADR-0029), Selbstregistrierungs-Link (ADR-0126) | nur die freigegebene Startformular-Route, ratenbegrenzt |
 
@@ -463,7 +475,7 @@ flowchart LR
     P["Prometheus / Log-Shipper"]
   end
   subgraph PEZ["Zugriffszone (PEZ)"]
-    RP["Reverse Proxy<br/>TLS-Terminierung · AuthN · Access-Log<br/>blockiert /mcp und /metrics"]
+    RP["Reverse Proxy<br/>TLS-Terminierung · AuthN · Access-Log<br/>blockiert /metrics"]
   end
   subgraph SZ["Server-Zone (SZ)"]
     A["atlas serve<br/>Engine · API · UI<br/>HTTP 8080, kein TLS"]
@@ -515,7 +527,7 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-11 | Atlas-Server | OTLP-Collector | HTTP / 4318 | Traces, optional, standardmässig aus | ⟨TLS⟩ | ⟨Collector-Regel⟩ |
 | K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape | keine | **keine** — am Proxy/FW einschränken |
 | K-13 | Atlas-Server ↔ Peer-Atlas ⟨andere Umgebung⟩ | je nach Richtung | HTTPS / 443 | Applikations-Promotion zwischen Umgebungen (ADR-0129); nur falls genutzt | TLS, **Verifikation nicht abschaltbar** (kein «skip verify») | Deploy-Token (Bearer, als SHA-256-Hash abgelegt, fail-closed-Allowlist auf 2 Operationen); Zieladresse und Credential-Referenz sind admin-verwaltet |
-| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | **keine** — standardmässig am Proxy sperren |
+| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-draft-authenticated-mcp-transport) |
 | K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
 
@@ -564,7 +576,7 @@ zu bestätigen.
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets; wer Dateisystemzugriff hat, liest alle Geschäftsdaten | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, minimaler Admin-Kreis) | gelb → **grün** mit M-04 |
 | R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots | Datenschutz (Art. 6 DSG) | M-08, Modellierungsrichtlinie «Referenz statt Inhalt» | **gelb**, grün bei konsistent konfigurierten Fristen |
 | R-07 | **Keine Hochverfügbarkeit.** Single-Writer, genau ein Prozess pro Datenverzeichnis; Ausfall = Ausfall bis Restore/Neustart; Replikation erst geplant (ADR-0175, *Proposed*) | Verfügbarkeit | M-11, M-12, M-17, ⟨VM-/Storage-HA⟩ | **gelb**, abhängig von der Verfügbarkeitsanforderung |
-| R-08 | **Unauthentisierte Endpunkte.** `/mcp` (volle Steuerfläche!), `/metrics`, `/healthz`, `/readyz`, öffentliche Start-Links | Vertraulichkeit, Integrität | M-01 (sperren), M-13 | grün bei gesperrtem `/mcp`; **rot**, falls `/mcp` erreichbar bleibt |
+| R-08 | **Unauthentisierte Endpunkte.** Offen bleiben `/metrics`, `/healthz`, `/readyz`, der API-Explorer und die öffentlichen Start-Links. `/mcp` ist geschlossen (ADR-draft-authenticated-mcp-transport); welche Route offen ist, ist deklariert und per Test belegt (ADR-draft-route-access-classes) | Vertraulichkeit, Integrität | M-01 (`/metrics` sperren), M-13 | **gelb** — `/metrics` hängt noch an der Proxy-Regel; grün, sobald es einen eigenen Listener bzw. eine eigene Zugriffsklasse hat (O-07) |
 | R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, systemd-Härtung | **gelb** |
 | R-10 | **Ausgehende Connector-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
@@ -584,7 +596,10 @@ zu bestätigen.
     bereinigen, Passwort ändern, `ATLAS_ADMIN_PASSWORD` aus der
     Environment-Datei entfernen.
   - `system:mcp`: prozessinterner Dienstprinzipal, nie Admin, Token nie über
-    einen Endpunkt abrufbar (ADR-0049).
+    einen Endpunkt abrufbar (ADR-0049). Heute hält ihn nur noch ein von Atlas
+    gestarteter Worker; der MCP-Adapter reicht stattdessen das Credential seines
+    Aufrufers weiter. Der Name ist historisch und bleibt, weil er in der
+    Auftragszuordnung und in Betriebslogs bereits steht.
   - Deploy-Tokens (`deploy-agent`): Maschinen-Credential eines Peer-Servers,
     fail-closed auf zwei Operationen begrenzt (ADR-0129); Bestand regelmässig
     prüfen und nicht mehr benötigte löschen.
@@ -620,7 +635,7 @@ BIT-Dienstleistung «Analyse/Monitoring» prüfen.⟩
 | 02 | Massen-Export | Aufruf des Backup-Endpunkts, viele Instanz-Snapshots oder auffällig viele Laufzeitabfragen in kurzer Zeit | Proxy-Access-Log |
 | 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Connector-Ziel | Deployment-Historie, Proxy-Log |
 | 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | gehäufte `401` auf `/api/v1/auth/login` von einer Quelle | Proxy-Access-Log (Atlas protokolliert Logins nicht, R-13) |
-| 05 | Zugriff auf `/mcp` von aussen | jeder Treffer auf `/mcp`, der nicht von der lokalen Adapter-Instanz stammt | Proxy-Log / Firewall |
+| 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-draft-authenticated-mcp-transport dem handelnden Benutzer zugeordnet |
 | 06 | Auffällige Connector-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Connector; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
 | 07 | Externe Änderung von Prozessvariablen | Variablen einer laufenden Instanz von aussen gesetzt — mit handelndem Benutzer attribuiert | Variablen-Audit (ADR-0098) |
 | 08 | Vault-Schlüssel-Abweichung | Secrets lassen sich nicht mehr öffnen (`keyId`-Mismatch) → Schlüsseltausch oder Manipulation | Startup-/Fehlerlog |
@@ -638,7 +653,7 @@ mit dem ISBO BIT.
 
 | Nr. | Massnahme | Verantwortlichkeit | Umsetzung / Nachweis |
 |-----|-----------|--------------------|----------------------|
-| M-01 | Reverse Proxy mit TLS vorschalten; `/mcp` und `/metrics` sperren; Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ aktivieren | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
+| M-01 | Reverse Proxy mit TLS vorschalten; `/metrics` sperren (`/mcp` ist durch `--auth` geschützt, eine Sperre dort ist zusätzliche Absicherung); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ aktivieren | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
 | M-02 | `--auth` aktiv; Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung |
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |

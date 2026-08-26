@@ -47,7 +47,7 @@ kubectl port-forward svc/atlas 8080:8080
 ## Enable authentication
 
 Auth is **off by default** — the API, UI and `/mcp` are open to anyone who can
-reach the Service. Turn it on before exposing Atlas:
+reach the Service. Turn it on before exposing Atlas (it gates `/mcp` too):
 
 ```bash
 # Simplest (password stored in a chart-managed Secret):
@@ -112,8 +112,9 @@ helm install atlas ./deploy/helm/atlas \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly —
-the `/mcp` endpoint is unauthenticated at the transport level by design.
+Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly.
+Atlas speaks plain HTTP, so the proxy is what terminates TLS; `/mcp` itself is
+gated by `--auth` like every other route and no longer depends on a proxy rule.
 
 ## Values
 

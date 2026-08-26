@@ -454,8 +454,10 @@ func splitConnectorList(v string) []string {
 // into "Atlas starts a worker that cannot do anything" on every authenticated
 // server, which is the worst kind of default.
 //
-// It is this server's own internal token (ADR-0049), the same one the MCP adapter
-// uses over loopback. That is the right credential for the same reason the mail
+// It is this server's own internal token (ADR-0049). The MCP adapter used to share
+// it and no longer does — it forwards its caller's credential instead — so a
+// supervised worker is now the only holder. That is the right credential for the
+// same reason the mail
 // configuration is: a supervised worker is this process's own child on this host,
 // not a third party, and the token reaches it through its environment rather than
 // argv. The principal it resolves to is deliberately not an admin, and a job is

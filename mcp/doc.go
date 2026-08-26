@@ -12,8 +12,12 @@
 //   - stdio (Serve) — newline-delimited JSON, one message per line. This is the
 //     MCP stdio transport a local client (Claude Desktop, Claude Code) spawns.
 //   - Streamable HTTP (ServeHTTP) — the remote transport. Mount it at a path
-//     such as /mcp and a remote client can reach the same tools. It performs no
-//     authentication; front it with a reverse proxy before exposing it publicly.
+//     such as /mcp and a remote client can reach the same tools. Mounted through
+//     api.WithMCP it sits inside the Atlas server's own access boundary, so under
+//     --auth a request without a credential is refused there; the transport then
+//     forwards whatever authenticated the caller to the API, so a tool call is
+//     exactly as privileged as whoever made it and no more
+//     (ADR-draft-authenticated-mcp-transport).
 //
 // This is deliberate. The engine is a single-writer partition (invariant I3):
 // exactly one goroutine may touch a partition's processor and state, a

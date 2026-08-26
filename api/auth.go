@@ -269,15 +269,19 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// InternalToken returns the internal service token used by the in-process MCP
-// adapter to authenticate its loopback calls (ADR-0049). It is empty unless auth
-// is enabled. It is never served over any endpoint; only the constructing process
-// reads it, to hand to its own MCP client.
+// InternalToken returns the internal service token a process this server started
+// itself authenticates with (ADR-0049) — the supervised workers, which are handed
+// it at spawn. It is empty unless auth is enabled, and is never served over any
+// endpoint; only the constructing process reads it.
 func (s *Server) InternalToken() string { return s.internalToken }
 
 // servicePrincipalName is the identity a valid internal token resolves to. It is
-// deliberately not an admin: the MCP adapter drives deploy/run/query, never user
-// administration, so a leaked token cannot manage accounts.
+// deliberately not an admin: what holds this token leases and settles jobs, never
+// administers users, so a leaked token cannot manage accounts.
+//
+// The name is historical — the MCP adapter was the first holder — and is left
+// alone because it is a wire value: it appears in job attribution and in an
+// operator's logs, so renaming it would rewrite records that already exist.
 const servicePrincipalName = "system:mcp"
 
 // RoleDeployAgent marks the principal a deploy token resolves to: a peer Atlas
@@ -327,13 +331,18 @@ func deployAgentMayReach(r *http.Request) bool {
 }
 
 // isDeployAgent reports whether a principal is a peer authenticated by a deploy
-// token rather than a person or the in-process MCP adapter.
+// token rather than a person or an internal service.
 func isDeployAgent(p *httpapi.Principal) bool { return p != nil && p.HasRole(RoleDeployAgent) }
 
 // principalFor resolves a request to a Principal, or nil. It first honors a valid
-// internal bearer token (the MCP adapter's service identity), then a session
-// cookie. It reads only the session store and the in-memory token (never the user
-// store), so it is safe to call from a handler goroutine.
+// internal bearer token (the service identity of a process this server started),
+// then a deploy token, then a session cookie. It reads only the session store and
+// the in-memory token indexes (never the user store), so it is safe to call from a
+// handler goroutine.
+//
+// Every credential Atlas accepts is resolved here and nowhere else, which is what
+// lets the MCP transport forward a caller's bearer or cookie without knowing
+// anything about either.
 func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if tok, ok := bearerToken(r); ok {
 		if s.internalToken != "" &&
@@ -373,38 +382,28 @@ func bearerToken(r *http.Request) (string, bool) {
 	return h[len(prefix):], true
 }
 
-// requiresAuth reports whether enforcement gates a path when auth is enabled.
-// Only /api/v1 is gated, minus the endpoints that must work before login: the
-// login call itself, product info (the UI reads it on the login screen), and the
-// OpenAPI document. The static UI, /healthz and /readyz are never gated so the
-// login screen can load at all and a probe that carries no session still works.
-func requiresAuth(path string) bool {
-	if path != "/api/v1" && !strings.HasPrefix(path, "/api/v1/") {
-		return false
-	}
-	switch path {
-	case "/api/v1/auth/login", "/api/v1/info", "/api/v1/openapi.json":
-		return false
-	case "/api/v1/settings/theme", "/api/v1/settings/logo", "/api/v1/settings/registration":
-		// The brand accent (theme), the brand logo (ADR-0148) and the self-service
-		// registration link (ADR-0126) are all read by the login screen before
-		// authentication. Only GET is served pre-auth; PUT/DELETE re-check the admin
-		// role in the handler, so writes stay gated even though the path is public here.
-		return false
-	}
-	return true
-}
-
 // withAuth is the middleware that resolves a Principal for every request and, when
 // enforcement is on, rejects a gated request that carries none. Resolution is
 // best-effort and unconditional so that even public endpoints (e.g. /auth/me) can
 // see who is calling.
-func (s *Server) withAuth(next http.Handler) http.Handler {
+//
+// Which requests are gated is the policy's answer, not a rule written here. It
+// used to be a path-prefix test — gated iff the path started with /api/v1 — which
+// meant a route mounted anywhere else was public because of where it sat rather
+// than because anyone decided it should be. access.go carries the replacement and
+// the reasoning.
+func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p := s.principalFor(r); p != nil {
 			r = r.WithContext(httpapi.WithPrincipal(r.Context(), p))
 		}
-		if s.authEnabled && requiresAuth(r.URL.Path) && httpapi.PrincipalFrom(r.Context()) == nil {
+		if s.authEnabled && policy.classify(r) != accessPublic && httpapi.PrincipalFrom(r.Context()) == nil {
+			// Name the scheme, so a client that holds a token knows to send it rather
+			// than reading the 401 as "this endpoint is broken" — an MCP client above
+			// all, now that /mcp is gated like everything else. Bearer and not Basic
+			// on purpose: Basic is what makes a browser open its own credential
+			// dialog over the top of the login screen.
+			w.Header().Set("WWW-Authenticate", `Bearer realm="atlas"`)
 			httpapi.Error(w, http.StatusUnauthorized, "authentication required")
 			return
 		}

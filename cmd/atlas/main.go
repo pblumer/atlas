@@ -509,31 +509,32 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if strings.TrimSpace(historyConnector) != "" {
 		apiOpts = append(apiOpts, api.WithWorkerHistory(historyConnector, historyScope))
 	}
+	// The MCP "Streamable HTTP" transport, so a remote MCP client (e.g. a claude.ai
+	// custom connector) can reach the same tools the stdio adapter exposes. It stays
+	// a pure adapter (ADR-0016): it proxies to this server's own HTTP API over
+	// loopback rather than touching the engine, so the single-writer invariant is
+	// untouched.
+	//
+	// It is handed to the api server rather than mounted beside it, so /mcp passes
+	// the same access boundary as every other route. Two things follow, and they are
+	// the point (ADR-draft-authenticated-mcp-transport): under --auth a request that
+	// carries no credential is refused at /mcp before the adapter sees it, and the
+	// adapter is given no credential of its own to make up the difference — it
+	// forwards whatever authenticated the caller, so a tool call is exactly as
+	// privileged as whoever made it.
+	//
+	// This used to be a second mux out here, with the server's internal service
+	// token attached to every loopback call (ADR-0049). withAuth never saw those
+	// requests, so anything that could reach the port drove the whole API.
+	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(loopbackURL(addr)))))
+
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
 		return err
 	}
 	defer srv.Close()
 
-	// Mount the MCP "Streamable HTTP" transport at /mcp alongside the API and UI,
-	// so a remote MCP client (e.g. a claude.ai custom connector) can reach the
-	// same tools the stdio adapter exposes. It stays a pure adapter (ADR-0016):
-	// it proxies to this server's own HTTP API over loopback rather than touching
-	// the engine, so the single-writer invariant is untouched.
-	//
-	// Under --auth the adapter authenticates its loopback calls with the server's
-	// internal service token (ADR-0049), so enabling auth no longer breaks MCP.
-	// The token is empty when auth is off, in which case WithBearer is a no-op.
-	//
-	// The /mcp transport itself is still UNAUTHENTICATED for external callers: put
-	// auth in front of it (reverse proxy) before exposing it publicly.
-	mcpSrv := mcp.NewServer(mcp.NewClient(loopbackURL(addr), mcp.WithBearer(srv.InternalToken())))
-	root := http.NewServeMux()
-	root.Handle("/mcp", mcpSrv)
-	root.Handle("/mcp/", mcpSrv)
-	root.Handle("/", srv.Handler())
-
-	httpSrv := &http.Server{Addr: addr, Handler: root}
+	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler()}
 
 	// Shut down cleanly on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -918,8 +919,9 @@ func runMockRemedy(args []string) error {
 // runResetPassword sets a local user's password directly against the on-disk user
 // store, without a running server or a login. It is the operator recovery path
 // for a self-hosted, admin-managed instance whose admin is locked out — there is
-// no self-service reset and the MCP adapter is not an admin (ADR-0044/0049), so
-// recovery has to be reachable from a shell (e.g. `docker exec … reset-password`).
+// no self-service reset, and MCP is gated too (ADR-0044,
+// ADR-draft-authenticated-mcp-transport), so recovery has to be reachable from a
+// shell (e.g. `docker exec … reset-password`).
 //
 // By default it generates a strong password and prints it once; --password-stdin
 // reads one from stdin instead, keeping the secret out of the process arguments

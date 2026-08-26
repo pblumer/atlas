@@ -12,6 +12,56 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Security
+
+- **`/mcp` is behind the login, and acts as its caller.** The Model Context Protocol
+  transport was mounted on a mux *beside* the API server, so the authentication
+  middleware never saw it — while the adapter attached the server's internal service
+  token to every loopback call it made
+  ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)). `--auth` therefore did
+  not close `/mcp`; it supplied it with a working credential. Anything that could reach
+  the port drove 71 tools as the `system:mcp` principal, `atlas_deploy` among them — and
+  deploying runs script tasks as the service user, so an exposed `/mcp` was code
+  execution with no authentication at all.
+
+  It is now mounted by the API server itself (`api.WithMCP`) and gated like every other
+  route: without a credential, `401` and a `WWW-Authenticate: Bearer` header. The adapter
+  carries no identity of its own over HTTP — it forwards the `Authorization` or `Cookie`
+  the request arrived with, so a tool call is exactly as privileged as whoever made it,
+  is attributed to them, and inherits every authorization rule the API has. An admin over
+  MCP can now reach an admin-gated tool; a signed-in non-admin cannot; and a deploy
+  token presented there is refused outright, because the transport is not one of the
+  two operations that credential is confined to
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
+
+  **Breaking, on servers running `--auth`.** An MCP client that reached `/mcp` without
+  presenting anything now gets `401` and must send the session cookie or a bearer token.
+  A server without `--auth` is unchanged — and is still open, `/mcp` included. The stdio
+  adapter (`atlas mcp --server …`) is unchanged and still has no way to hold a
+  credential; giving it one is the next step.
+
+- **Every mounted route declares who may reach it.** Which requests the boundary gated
+  used to be a path-prefix test — gated if and only if the path started with `/api/v1` —
+  so a route was public by *omission*: anything registered elsewhere was open because of
+  where it sat, not because anyone decided it should be. That is how `/mcp` and
+  `/metrics` came to be reachable without a login.
+
+  Each route now states an access class where it is mounted, and a request is classified
+  by the pattern that will actually serve it; an undeclared pattern is gated, so mounting
+  a route off to the side fails safe instead of inheriting the UI catch-all. The
+  resulting public set — probes, metrics, the login screen's own reads, the API explorer,
+  the share links and the UI — is held against a written-out list by a test, so opening a
+  route is a reviewable diff rather than a side effect
+  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)).
+
+  Because patterns carry methods, so does the class: `GET /api/v1/settings/theme`,
+  `/logo` and `/registration` stay public for the login screen, while `PUT` and `DELETE`
+  of those paths are now refused at the boundary rather than only by the admin check
+  inside each handler. **Minor behaviour change:** an anonymous write to one of them
+  answers `401` instead of `403` — nothing was presented, which is what `401` means.
+  Which routes are public is otherwise unchanged; `/metrics` in particular is still
+  served without a credential, now by declaration rather than by accident.
+
 ### Added
 
 - **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job

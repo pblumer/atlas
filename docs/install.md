@@ -271,10 +271,16 @@ server {
 }
 ```
 
-One endpoint needs a decision from you: **`/mcp` is not authenticated at the
-transport level**, by design ([ADR-0016](adr/0016-mcp-server-over-http-api.md)). It is how an
-AI agent drives the server. If you do not want that exposed, block it at the
-proxy:
+`/mcp` — the endpoint an AI agent drives the server through — is gated by
+`--auth` like the rest of the API
+([ADR-draft-authenticated-mcp-transport](adr/draft-authenticated-mcp-transport.md)).
+A request that carries no credential is answered with `401`, and a tool call acts
+as whoever made it, with exactly their permissions. It used to be open at the
+transport level whatever `--auth` said, so a proxy rule was the only thing in
+front of it; if you are upgrading, that rule is now belt and braces rather than
+the protection itself.
+
+If you do not want an agent surface at all, block it at the proxy:
 
 ```nginx
 location /mcp { deny all; }
@@ -443,7 +449,7 @@ history.
 | `/api/docs` | API explorer (disable with `--docs=false`) |
 | `/healthz` | Liveness — is the process alive. Unconditional; never gated by `--auth` |
 | `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
-| `/mcp` | Model Context Protocol endpoint — **not authenticated at the transport level** |
+| `/mcp` | Model Context Protocol endpoint — gated by `--auth`; a tool call acts as the caller |
 
 An external worker leases a job with `POST /api/v1/jobs/{key}/activate` and reports the
 outcome with `.../complete` or `.../fail` ([ADR-0007](adr/0007-job-worker-protocol.md)).
