@@ -2,6 +2,47 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-bmc-remedy-connector-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Remedy tickets can be filed beside the engine",
+        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
+      },
+      "summary": {
+        "en": "A task that opens a Remedy incident talks to your ITSM system over the network — a login, the create, a logout — and Atlas did all three on the same thread that moves every process forward. That work can now go to a worker instead: start Atlas with --supervise-connector remedy and it runs one for you, configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model. And because the worker holds those credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und Atlas erledigte alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Diese Arbeit kann jetzt ein Worker übernehmen: Starten Sie Atlas mit --supervise-connector remedy, und es betreibt einen für Sie, eingerichtet aus der Helix-Instanz, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts. Und weil der Worker diese Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
+      },
+      "link": {
+        "label": "ADR-0106",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+          "Start Atlas with --supervise-connector remedy — Operations › Workers then shows a worker named remedy, started by Atlas itself.",
+          "That view also lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
+        ],
+        "de": [
+          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+          "Starten Sie Atlas mit --supervise-connector remedy — unter Betrieb › Workers erscheint dann ein Worker namens remedy, von Atlas selbst gestartet.",
+          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -314,49 +355,6 @@
       "tags": [
         "Operations"
       ]
-    },
-    {
-      "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Fixed",
-      "title": {
-        "en": "Every task now says where its work will run",
-        "de": "Jede Aufgabe sagt jetzt, wo ihre Arbeit läuft"
-      },
-      "summary": {
-        "en": "The type list on a service task marked every connector as running inside the engine, and that had quietly stopped being true: e-mail, text files, scripts and web scraping are handed to a worker Atlas starts for you, and the database and Entra ID connectors never ran in the engine at all. The mark now comes from the server you are connected to, so it also follows however that server was started. It has also appeared in the two places that said nothing at all — the language of a script task, and a business rule task's choice between the built-in decision engine and an external service. What each one tells you differs, because what a worker holds differs: a connector's credentials, a script's interpreter, a decision service's address.",
-        "de": "Die Typ-Liste einer Service-Aufgabe wies jeden Konnektor als „in der Engine laufend“ aus — und das stimmte längst nicht mehr: E-Mail, Textdateien, Skripte und Web-Scraping übergibt Atlas an einen Worker, den es selbst für Sie startet, und die Datenbank- und Entra-ID-Konnektoren liefen nie in der Engine. Die Kennzeichnung kommt jetzt von dem Server, mit dem Sie verbunden sind, und folgt damit auch dem, womit dieser Server gestartet wurde. Und sie ist an den beiden Stellen aufgetaucht, die bisher gar nichts sagten: bei der Sprache einer Skript-Aufgabe und bei der Wahl einer Business-Rule-Aufgabe zwischen der eingebauten Entscheidungs-Engine und einem externen Dienst. Was dort jeweils steht, unterscheidet sich — weil sich unterscheidet, was ein Worker hält: die Zugangsdaten eines Konnektors, den Interpreter eines Skripts, die Adresse eines Entscheidungsdienstes."
-      },
-      "link": {
-        "label": "ADR-0164",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and drop a service task on the canvas.",
-          "In the properties panel, open Type: every connector now carries a mark — in-engine, on a worker, or worker only.",
-          "Pick the E-Mail connector: on a standard install it reads on a worker, and the note underneath says where that connector is configured.",
-          "Change the task into a script task and choose PowerShell: the same mark sits beside the language, and says something a connector would not."
-        ],
-        "de": [
-          "Modeler öffnen und eine Service-Aufgabe auf die Fläche ziehen.",
-          "Im Eigenschaften-Panel „Type“ aufklappen: Jeder Konnektor trägt jetzt eine Kennzeichnung — in-engine, on a worker oder worker only.",
-          "Den E-Mail-Konnektor wählen: Bei einer Standardinstallation steht dort „on a worker“, und der Hinweis darunter sagt, wo dieser Konnektor konfiguriert wird.",
-          "Die Aufgabe in eine Skript-Aufgabe umwandeln und PowerShell wählen: Dieselbe Kennzeichnung steht neben der Sprache — mit einem Hinweis, den ein Konnektor so nicht bekommt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
