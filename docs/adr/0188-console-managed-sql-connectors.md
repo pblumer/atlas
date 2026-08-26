@@ -1,4 +1,4 @@
-# ADR-DRAFT: A database is a Console entry, not a start parameter — and a worker is never a thing you create
+# ADR-0188: A database is a Console entry, not a start parameter — and a worker is never a thing you create
 
 - **Status:** Proposed
 - **Date:** 2026-08-26

@@ -20,7 +20,7 @@ import (
 // worker still reads its own environment and is handed nothing from here. What this
 // adds is the *supervised* case, where the engine is also the operator: the same
 // argument mail and Entra already won (see superviseEnv), applied to the kind whose
-// credential is the most valuable one Atlas touches. ADR-draft-console-managed-sql-connectors
+// credential is the most valuable one Atlas touches. ADR-0188
 // states the cost that buys.
 //
 // The credential is the WHOLE connection string, not a password spliced into an

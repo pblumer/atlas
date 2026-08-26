@@ -470,7 +470,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	// at the request, so every path below — validation, the record, the response —
 	// sees a reference and never the secret. The endpoint becomes a redacted label so
 	// the Console can say which database this is without being able to show the
-	// credential (ADR-draft-console-managed-sql-connectors).
+	// credential (ADR-0188).
 	dsn := strings.TrimSpace(p.ConnectionString)
 	p.ConnectionString = ""
 	if dsn != "" {

@@ -162,7 +162,7 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else
-		// (ADR-draft-console-managed-sql-connectors).
+		// (ADR-0188).
 		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
 		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
 		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },

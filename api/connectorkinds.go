@@ -255,7 +255,7 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateEntraConnector,
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
-	// The three SQL products (ADR-0173, ADR-draft-console-managed-sql-connectors). Each
+	// The three SQL products (ADR-0173, ADR-0188). Each
 	// is worker-only for the same reason Entra is, and more strongly: a DSN *is* a
 	// credential, so the engine builds no client and registers no handler. The store
 	// entry exists so an operator can add a database in the Console instead of on a

@@ -17,7 +17,7 @@ import (
 // These kinds are worker-only for a stronger reason than Entra: a DSN *is* a
 // credential, so there is no public half to inherit and nothing to bridge — the whole
 // connection string is rendered out of the vault or not at all
-// (ADR-draft-console-managed-sql-connectors).
+// (ADR-0188).
 
 // A database an operator added in the Console: the worker is handed its connection
 // string under the name it reads, plus the CONNECTORS list naming it.

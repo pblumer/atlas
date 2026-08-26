@@ -224,6 +224,7 @@ comment safe to write.
 | [0185](0185-live-group-membership.md) | Live group membership | Proposed |
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Proposed |
 | [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed |
+| [0188](0188-console-managed-sql-connectors.md) | A database is a Console entry, not a start parameter — and a worker is never a thing you create | Proposed |
 
 ## Status values
 
