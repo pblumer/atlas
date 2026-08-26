@@ -2351,18 +2351,17 @@ type xmlRemedyConnector struct {
 }
 
 // A web-scraping connector task's parameters, carried on a service task as an
-// <atlas:webscrapeConnector url="..." selector="..." attribute="..."
-// resultVariable="..."/> extension element (ADR-0118). url (required) is the page to
-// fetch and selector (required) the CSS selector whose matches are extracted; both
-// live in the model (unlike a registry endpoint), and credentials never do. attribute,
-// when set, names the HTML attribute read from each match (omit to read each match's
-// text). resultVariable (required) receives the extracted values as a JSON array. url
-// and selector are literal or, with a leading '=', a FEEL expression over the instance's
-// variables at call time (the fx toggle, ADR-0067); attribute is a structural literal.
+// <atlas:webscrapeConnector> extension (ADR-0118/0190). url and resultVariable are
+// always required. format is a structural literal (html by default, rss, or atom);
+// maxItems is an optional non-negative structural bound. HTML requires selector and
+// may name attribute; RSS/Atom prohibit both. url and the HTML selector may be
+// literal-or-FEEL; format, maxItems, and attribute are compiled structure.
 type xmlWebScrapeConnector struct {
 	Url            string `xml:"url,attr"`
 	Selector       string `xml:"selector,attr"`
 	Attribute      string `xml:"attribute,attr"`
+	Format         string `xml:"format,attr"`
+	MaxItems       string `xml:"maxItems,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	Retries        string `xml:"retries,attr"`
 }

@@ -546,14 +546,17 @@ type ConnectorTaskDetail struct {
 	// over the instance's variables at call time (nil for a non-remedy task).
 	RemedyForm   RestExpr
 	RemedyFields []RestKV
-	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118). Url (above)
-	// is the model-authored page to fetch; ScrapeSelector is the CSS selector whose
-	// matches are extracted (literal-or-FEEL, the zero RestExpr for a non-scrape task);
-	// ScrapeAttribute is the interned HTML attribute read from each match (-1 → each
-	// match's text content). ResultVar (above) receives the extracted values as a JSON
-	// array. Read only by the in-process web-scraping worker.
+	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118/0190).
+	// Url (above) is the model-authored document to fetch. HTML uses ScrapeSelector
+	// (literal-or-FEEL) and optional ScrapeAttribute. ScrapeFormat is compiled from
+	// format=html|rss|atom; its zero value is HTML so models compiled before ADR-0190
+	// keep their semantics. ScrapeMaxItems is the deterministic first-N bound (0 =
+	// unlimited). Feed modes return structured entries and never inspect selector or
+	// attribute at runtime.
 	ScrapeSelector  RestExpr
 	ScrapeAttribute int32
+	ScrapeFormat    WebScrapeFormat
+	ScrapeMaxItems  int32
 	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
 	// UserOp is the interned operation ("create" | "set-password" | "disable").
 	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword

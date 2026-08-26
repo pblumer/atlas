@@ -1296,35 +1296,87 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 	}), nil
 }
 
-// compileWebScrapeConnectorTask compiles an <atlas:webscrapeConnector> task: it
-// fetches the model-authored URL and extracts the elements matching a CSS selector
-// via the job path (ADR-0118), not an external service-task worker. The URL and
-// selector live in the model (like REST's endpoint, ADR-0067); the extracted values
-// are written back into the required result variable as a JSON array.
+// compileWebScrapeConnectorTask compiles an <atlas:webscrapeConnector> task.
+// HTML preserves ADR-0118's selector-to-string-array behavior. ADR-0190 adds RSS
+// and Atom as explicit deploy-time formats whose worker output is a structured feed
+// array. No response inspection chooses the mode at runtime (I5).
 func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.WebScrape
 	if strings.TrimSpace(cn.Url) == "" {
 		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a url", st.Id)
 	}
-	if strings.TrimSpace(cn.Selector) == "" {
-		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a selector", st.Id)
-	}
 	if strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a resultVariable", st.Id)
+	}
+	format, err := webScrapeFormat(st.Id, cn.Format)
+	if err != nil {
+		return 0, err
+	}
+	maxItems, err := webScrapeMaxItems(st.Id, cn.MaxItems)
+	if err != nil {
+		return 0, err
+	}
+	hasSelector := strings.TrimSpace(cn.Selector) != ""
+	hasAttribute := strings.TrimSpace(cn.Attribute) != ""
+	switch format {
+	case WebScrapeFormatHTML:
+		if !hasSelector {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q needs a selector for html format", st.Id)
+		}
+	case WebScrapeFormatRSS, WebScrapeFormatAtom:
+		if hasSelector {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use a selector", st.Id, format.String())
+		}
+		if hasAttribute {
+			return 0, fmt.Errorf("compiler: webscrape connector task %q format %q does not use an attribute", st.Id, format.String())
+		}
 	}
 	url, err := restValue(st.Id, "url", cn.Url)
 	if err != nil {
 		return 0, err
 	}
-	selector, err := restValue(st.Id, "selector", cn.Selector)
-	if err != nil {
-		return 0, err
+	var selector RestExpr
+	if format == WebScrapeFormatHTML {
+		selector, err = restValue(st.Id, "selector", cn.Selector)
+		if err != nil {
+			return 0, err
+		}
 	}
-	return b.AddWebScrapeConnectorTask(WebScrapeConfig{
+	return b.AddWebScrapeExtractionTask(WebScrapeExtractionConfig{
 		Url:       url,
 		Selector:  selector,
 		Attribute: strings.TrimSpace(cn.Attribute),
+		Format:    format,
+		MaxItems:  maxItems,
 		Result:    strings.TrimSpace(cn.ResultVariable),
 		Retries:   retries,
 	}), nil
+}
+
+func webScrapeFormat(taskID, raw string) (WebScrapeFormat, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "html":
+		return WebScrapeFormatHTML, nil
+	case "rss":
+		return WebScrapeFormatRSS, nil
+	case "atom":
+		return WebScrapeFormatAtom, nil
+	default:
+		return WebScrapeFormatHTML, fmt.Errorf("compiler: webscrape connector task %q has an unknown format %q (want html, rss, or atom)", taskID, raw)
+	}
+}
+
+func webScrapeMaxItems(taskID, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: webscrape connector task %q has a non-numeric maxItems %q", taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: webscrape connector task %q has a negative maxItems %d", taskID, n)
+	}
+	return int32(n), nil
 }
