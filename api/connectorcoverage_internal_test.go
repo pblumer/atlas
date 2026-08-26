@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -198,6 +199,57 @@ func TestAnUnreadableOverrideSidecarFailsTheWorkersView(t *testing.T) {
 		t.Fatalf("GET /workers: status=%d body=%s, want 500", code, raw)
 	}
 }
+
+// A connector authored as a FEEL expression (entra, ADR-0172) names no fixed
+// connector to check against what workers hold — the tenant is resolved from the
+// instance's variables at call time. It must not be listed as unserved (that would be
+// a false "= tenant" alarm), while a static name that nothing serves still is.
+func TestADynamicConnectorNameIsNotReportedUnserved(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", entraCoverageModel, "application/xml")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("deploy: status=%d body=%s", code, raw)
+	}
+	got := coverage(t, srv)
+	// entra is worker-only and no worker holds anything here, so the static name is
+	// unserved; the dynamic "=tenant" is skipped.
+	names := map[string]bool{}
+	for _, u := range got.Unserved {
+		names[u.Name] = true
+	}
+	if !names["contoso"] {
+		t.Errorf("static entra connector 'contoso' should be reported unserved; got %+v", got.Unserved)
+	}
+	for n := range names {
+		if strings.HasPrefix(n, "=") {
+			t.Errorf("a dynamic (FEEL) connector name %q was reported unserved; it should be skipped", n)
+		}
+	}
+}
+
+// entraCoverageModel references the worker-only Entra kind twice: once with a static
+// tenant name and once with a FEEL expression for it.
+const entraCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="jml" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t1">
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="list-users" resultVariable="a"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="t2">
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="=tenant" operation="list-users" resultVariable="b"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t1"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t1" targetRef="t2"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="t2" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
 
 // mailPullSrv is a server that has offloaded mail and has the notify model deployed,
 // so its one mail connector task is leasable by an external worker.
