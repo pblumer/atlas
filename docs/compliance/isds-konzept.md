@@ -352,6 +352,13 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   die Anbindung selbst nicht (R-03).
 - **Login-Fehler** liefern eine einheitliche Meldung ohne Benutzer-Enumeration;
   deaktivierte Konten (`Disabled`) werden abgewiesen.
+- **Anmeldeversuche sind begrenzt** (ADR-draft-login-throttle-and-audit-log): je
+  Absenderadresse 20 Versuche am Stück, danach einer alle zwei Sekunden; je Konto
+  5 Versuche, danach Auffüllung über 15 Minuten. Gezählt wird **vor** dem
+  Kontolookup und unabhängig davon, ob das Konto existiert — die Drosselung
+  beantwortet also nicht die Frage, die die einheitliche Fehlermeldung offenlässt.
+  Eine erfolgreiche Anmeldung setzt das Kontobudget zurück. Die Sperre läuft von
+  selbst ab; es gibt keine, die ein Administrator aufheben müsste.
 
 ### 5.2.3 Autorisierung / Rollenkonzept
 
@@ -384,9 +391,12 @@ Produktion sind deshalb Pflicht (M-05).
 | Metriken | Prometheus-Exposition unter `/metrics` (ADR-0142) | Monitoring |
 | Traces | OpenTelemetry/OTLP, nur `/api/v1`, ohne Query-String, standardmässig aus | Collector |
 
-**Lücke:** Atlas schreibt **kein Zugriffs-/Sicherheits-Audit-Log** für
-An-/Abmeldungen, Fehlanmeldungen und Administrationsaktionen, und keinen
-HTTP-Access-Log. Diese Spur muss der Reverse Proxy liefern (M-06, R-13).
+| Sicherheits-Audit | An-/Abmeldung, Fehlanmeldung mit Grund, Drosselung, Autorisierungsverweigerung, Konto- und Deploy-Token-Lebenszyklus — je Zeile mit handelndem Prinzipal und Absenderadresse, ohne Passwort, Hash oder Token (ADR-draft-login-throttle-and-audit-log) | Anwendungslog, stabile `event=`-Namen `auth.*`, mit `--log-format=json` maschinenlesbar |
+
+**Verbleibende Lücke:** einen **HTTP-Access-Log** schreibt Atlas weiterhin nicht;
+den muss der Reverse Proxy liefern (M-06). Die sicherheitsrelevanten Ereignisse
+selbst kommen jetzt aus dem Produkt und benennen das betroffene *Konto*, was ein
+Proxy-Log nicht kann.
 
 ### 5.2.5 Datensicherung und Wartung
 
@@ -583,8 +593,8 @@ zu bestätigen.
 | R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, systemd-Härtung | **gelb** |
 | R-10 | **Ausgehende Connector-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
-| R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
-| R-13 | **Kein Sicherheits-Audit-Log** für An-/Abmeldungen, Fehlversuche und Administrationsaktionen; kein HTTP-Access-Log im Produkt | Nachvollziehbarkeit | M-06 (Proxy-Logs, ⟨SIEM⟩) | **gelb** → grün mit M-06 |
+| R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht. Anmeldeversuche sind seit ADR-draft-login-throttle-and-audit-log je Adresse und je Konto begrenzt | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
+| R-13 | Sicherheits-Audit-Log für An-/Abmeldungen, Fehlversuche, Drosselung, Autorisierungsverweigerungen und den Konto-/Credential-Lebenszyklus ist vorhanden (`auth.*`, ADR-draft-login-throttle-and-audit-log). **Kein HTTP-Access-Log im Produkt**, und die Aufbewahrung ist die des Anwendungslogs | Nachvollziehbarkeit | M-06 (Access-Log am Proxy, Weiterleitung an ⟨SIEM⟩) | **grün**, sofern das Anwendungslog nach ⟨SIEM⟩ geliefert wird |
 | R-14 | **KI-Funktionen.** Modeler-Copilot und Agent-Task rufen einen vom Betreiber registrierten Endpunkt auf; falsch konfiguriert fliessen Prozessdaten an einen externen Dienst | Vertraulichkeit | M-18 (nicht registrieren bzw. nur bundesinterne Endpunkte) | **grün** bei Nichtregistrierung |
 | R-15 | **Selbstregistrierung / öffentliche Links.** Ein Registrierungs-Link kann beim Bootstrap aktiv sein; Anträge landen als Genehmigungsaufgabe, die Rolle vergibt erst der Admin | Vertraulichkeit | M-13 (bewusst konfigurieren oder abschalten) | **grün** bei bewusster Konfiguration |
 | R-16 | **Datenverzeichnis doppelt geöffnet.** Zwei `atlas serve` auf demselben Verzeichnis korrumpieren es (z. B. durch versehentliche zweite Replika) | Integrität, Verfügbarkeit | Helm-Chart als StatefulSet mit 1 Replika, Betriebsanweisung, M-12 | **grün** bei eingehaltener Betriebsanweisung |
@@ -638,7 +648,8 @@ BIT-Dienstleistung «Analyse/Monitoring» prüfen.⟩
 | 01 | Unverhältnismässige Erweiterung der Zugriffsrechte | Konto erhält `admin` oder wird auffällig vielen Gruppen/Projekten zugeordnet | Benutzer-/Gruppen-Ablage, ⟨Rezertifizierung⟩ |
 | 02 | Massen-Export | Aufruf des Backup-Endpunkts, viele Instanz-Snapshots oder auffällig viele Laufzeitabfragen in kurzer Zeit | Proxy-Access-Log |
 | 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Connector-Ziel | Deployment-Historie, Proxy-Log |
-| 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | gehäufte `401` auf `/api/v1/auth/login` von einer Quelle | Proxy-Access-Log (Atlas protokolliert Logins nicht, R-13) |
+| 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | Häufung von `auth.login_failed`, und `auth.login_throttled` überhaupt — letzteres heisst, dass ein Budget aufgebraucht wurde | Anwendungslog (`--log-format=json`), Alarm auf beide Ereignisse |
+| 04b | Rechteanmassung | `auth.denied`: ein angemeldeter Benutzer greift auf eine admin-geschützte Operation zu | Anwendungslog, mit `actor` und `path` |
 | 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-draft-authenticated-mcp-transport dem handelnden Benutzer zugeordnet |
 | 06 | Auffällige Connector-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Connector; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
 | 07 | Externe Änderung von Prozessvariablen | Variablen einer laufenden Instanz von aussen gesetzt — mit handelndem Benutzer attribuiert | Variablen-Audit (ADR-0098) |
@@ -662,7 +673,7 @@ mit dem ISBO BIT.
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |
 | M-05 | Getrennte Umgebungen (DEV/TEST/PROD); Deploy-Berechtigung auf einen definierten Kreis; Change-Verfahren für Modelländerungen | ⟨AV + Betrieb⟩ | Berechtigungskonzept, Change-Records |
-| M-06 | Access- und Sicherheitsprotokollierung am Proxy, Weiterleitung an ⟨Log-Plattform/SIEM⟩; Alarme auf `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | Monitoring-Konfiguration |
+| M-06 | Anwendungslog mit `--log-format=json` an ⟨Log-Plattform/SIEM⟩ liefern (es trägt die `auth.*`-Sicherheitsspur); Access-Log am Proxy ergänzen; Alarme auf `auth.login_throttled`, `auth.denied`, `auth.disabled`, `checkpoint.failed`, `wal_compaction.failed`, `exporter.tick_failed`, `command.failed`, `auth.admin_seeded` | ⟨Betrieb LE⟩ | Monitoring-Konfiguration |
 | M-07 | Benutzer-/Berechtigungslebenszyklus: Eintritt, Mutation, Austritt (`Disabled`), jährliche Rezertifizierung | ⟨AV⟩ | Rezertifizierungsprotokoll (Kap. 8.3) |
 | M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
 | M-09 | Nicht benötigte Skriptsprachen abschalten (`--powershell=false --python=false --javascript=false`); `--script-timeout` prüfen | ⟨Betrieb LE⟩ | Startparameter |

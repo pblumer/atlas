@@ -211,6 +211,7 @@ type Server struct {
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
+	logins           *loginGuard       // throttles authentication attempts (see loginguard.go)
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
@@ -943,6 +944,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate:        newRateLimiter(20, 1),
+		logins:            newLoginGuard(),
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,

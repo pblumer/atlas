@@ -384,7 +384,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 |------|---------|--------------|
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
-| `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup |
+| `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for connector credentials |
@@ -529,6 +529,22 @@ Event names an operator is most likely to alert on:
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
+| `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
+
+**The security audit trail.** Every line below carries the acting principal
+(`actor`, `actor_id`) where the request has one, and the `client_ip` always. None
+of them carries a password, a hash or a token. Ship them with `--log-format=json`.
+
+| Event | Level | Meaning |
+|-------|-------|---------|
+| `auth.login` | INFO | A successful sign-in, with `username` and `user_id` |
+| `auth.login_failed` | WARN | A refused sign-in, with the `username` attempted and a `reason` (`no such account`, `account disabled`, `wrong password`). The response says only "invalid credentials" — the reason is for you, not for the caller |
+| `auth.login_throttled` | WARN | An attempt refused before any password check, because the address or the account had spent its budget |
+| `auth.logout` | INFO | A session was ended by its owner |
+| `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
+| `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
+| `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `auth.token_minted`, `auth.token_revoked` | INFO | A deploy token was issued or revoked, by `token_id` and `token_name` |
 
 Event names are treated as an API: renaming one is a breaking change and appears under
 _Changed_ in the [changelog](../CHANGELOG.md). Secrets never become fields — the seeded

@@ -34,7 +34,9 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-draft-authenticated-mcp-transport`](../adr/draft-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
 | **M4** — `atlas mcp --token` / `ATLAS_TOKEN` | ✅ umgesetzt — im selben Entscheid, `cmd/atlas/main.go` |
 | **M5** — `--auth` standardmässig an | ✅ umgesetzt — [`ADR-draft-auth-on-by-default`](../adr/draft-auth-on-by-default.md) |
-| M3, M6–M8 | offen |
+| **M7** — Anmelde-Härtung | ✅ umgesetzt — [`ADR-draft-login-throttle-and-audit-log`](../adr/draft-login-throttle-and-audit-log.md), `api/loginguard.go` |
+| **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
+| M3, M6 | offen |
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -148,8 +150,8 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M4 ✅ | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
 | M5 ✅ | `--auth` standardmässig an | S | R-08, R-03 | G5 |
 | M6 | `/metrics` auf eigenen Listener bzw. Zugriffsklasse | S | R-08, O-07 | G1 |
-| M7 | Anmelde-Härtung: Rate-Limit und Sperre am Login | S | O-04, R-12 | — |
-| M8 | Sicherheits-Audit-Log | S | O-03, R-13 | — |
+| M7 ✅ | Anmelde-Härtung: Drosselung je Adresse *und* je Konto | S | O-04, R-12 | — |
+| M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
@@ -273,21 +275,46 @@ dann in der Zugriffsklasse `operator` (Token nötig). `/healthz` und `/readyz`
 bleiben offen und inhaltslos — eine Bereitschaftssonde, die ein Credential
 braucht, ist eine Sonde, die im Ernstfall nicht funktioniert.
 
-### M7 — Anmelde-Härtung
+### M7 — Anmelde-Härtung ✅
 
-Der Token-Bucket in `api/ratelimit.go` existiert und schützt heute nur die
-öffentlichen Formularrouten. Er wird zusätzlich auf `POST /api/v1/auth/login`
-angewendet (Schlüssel: Client-IP, die `httpapi` bereits auflöst), ergänzt um einen
-Fehlversuchszähler je Konto mit kurzer Sperre. Konfigurierbare Passwortregeln als
-Zugabe, kein Muss.
+Zwei Schlüssel in denselben Token-Bucket: **je Absenderadresse** 20 Versuche am
+Stück, danach einer alle zwei Sekunden (grosszügig, weil ein ganzes Büro hinter
+einer NAT-Adresse ein normaler Betriebsfall ist); **je Konto** 5 Versuche, danach
+Auffüllung über 15 Minuten.
 
-### M8 — Sicherheits-Audit-Log
+Drei Details tragen den Entwurf. Gezählt wird **vor** dem Kontolookup und
+unabhängig davon, ob das Konto existiert — sonst wäre die Drosselung genau das
+Enumerationsorakel, das die einheitliche Fehlermeldung vermeidet, und ein Flood
+würde weiterhin bcrypt-Zeit kosten statt einen Map-Lookup. **Beide** Budgets
+werden belastet, auch wenn eines schon abgewiesen hat, sodass Adresswechsel kein
+Kontobudget schont und umgekehrt. Und eine **erfolgreiche Anmeldung setzt das
+Kontobudget zurück** — wer sich zweimal vertippt und dann richtig liegt, steht
+nicht am Rand einer Sperre.
 
-Stabile `event=`-Namen für `auth.login`, `auth.login_failed`, `auth.logout`,
-`auth.denied`, `auth.token_minted`, `auth.token_revoked`, `auth.token_used`, dazu
-der handelnde Prinzipal auf jeder Administrationsaktion. Das `logging`-Paket führt
-solche Namen bereits (`logging.AuthAdminSeeded`), `--log-format=json` liefert sie
-maschinenlesbar.
+Der Preis dieses Entwurfs ist ausdrücklich: wer an einem fremden Namen rät, kann
+dessen Inhaber sperren. Genau deshalb läuft die Sperre von selbst ab und braucht
+keinen Administrator.
+
+### M8 — Sicherheits-Audit-Log ✅
+
+Elf stabile `auth.*`-Ereignisse auf dem bestehenden Log-Strom: `login`,
+`login_failed` (mit Grund), `login_throttled`, `logout`, `denied`,
+`user_created`/`updated`/`deleted`, `password_set`, `token_minted`,
+`token_revoked`. Jede Zeile trägt den handelnden Prinzipal und die
+Absenderadresse; keine trägt ein Secret.
+
+Zwei bewusste Entscheide darin. **Anonyme `401` werden nicht protokolliert** —
+sie würden die seltene, aussagekräftige Zeile unter jedem Scan begraben, der den
+Port findet; protokolliert wird die *Autorisierungs*verweigerung (`auth.denied`),
+also der angemeldete Benutzer, der nach etwas greift, das ihm nicht zusteht. Und
+eine fehlgeschlagene Anmeldung nennt den **Grund im Log, nicht auf der Leitung**:
+das Log ist für den Betrieb, die Antwort ist das, was ein Angreifer lesen darf.
+
+Kein eigener Sink: ein zweiter wäre eine zweite Sache zum Konfigurieren, Sichern
+und Vergessen — `--log-format=json` liefert den bestehenden Strom SIEM-fähig.
+`TestAuditTrailNeverCarriesASecret` treibt echte Passwörter und einen frisch
+ausgestellten Deploy-Token durch die Handler und prüft, dass keiner davon — und
+kein bcrypt-Präfix — im Log landet.
 
 Diese Massnahme ist nicht nur O-03 — sie ist **der Nachweis, dass M1 bis M7
 wirken**. Ohne sie bleibt die Antwort an eine Prüfstelle eine Behauptung.
@@ -323,9 +350,9 @@ nicht bemerkt. Genau das ist der Grund für Stufe 1.
 
 ### Stufe 1 — PoC-produktivtauglich
 
-~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → ~~M5~~ → M7 + M8 → M6. **M1, M2, M4 und M5
-sind umgesetzt.** Offen: M3 (API-Tokens), M6 (`/metrics`), M7 (Anmelde-Härtung),
-M8 (Sicherheits-Audit-Log).
+~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → ~~M5~~ → ~~M7 + M8~~ → M6. **M1, M2, M4, M5,
+M7 und M8 sind umgesetzt.** Offen: **M3** (API-Tokens) und **M6** (`/metrics`) —
+M6 ist das letzte Stück, das R-08 von gelb auf grün bringt.
 
 Danach gilt: **keine Schnittstelle ohne Login**, per Test belegbar, und die
 Absicherung überlebt eine vergessene Proxy-Regel. R-08 geht von rot auf grün, O-07
@@ -378,9 +405,17 @@ Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
    `/api/v1/processes`, `/api/v1/users`, `/api/v1/openapi.json`, `/api/docs` und
    `POST /mcp`, `200` auf `/healthz`, `/readyz`, `/metrics` und `/api/v1/info`;
    nach Anmeldung `200` auf allen. *(M5)*
-6. Nach *n* Fehlanmeldungen antwortet der Login mit `429`/Sperre. *(M7)*
-7. Login, Fehlanmeldung, Token-Vergabe und -Nutzung erscheinen als
-   maschinenlesbare Log-Ereignisse mit Akteur. *(M8)*
+6. ✅ Nach fünf Fehlanmeldungen je Konto antwortet der Login mit `429`, und ein
+   reales und ein erfundenes Konto werden gleich behandelt.
+   `TestLoginThrottleRefusesAFlood`,
+   `TestLoginThrottleDoesNotRevealWhetherAnAccountExists`,
+   `TestSuccessfulLoginClearsTheFailureBudget`, dazu die Einheitentests in
+   `api/loginguard_internal_test.go`. *(M7)*
+7. ✅ An-/Abmeldung, Fehlanmeldung, Drosselung, Autorisierungsverweigerung sowie
+   Konto- und Deploy-Token-Lebenszyklus erscheinen als maschinenlesbare
+   Log-Ereignisse mit Akteur — und **kein** Secret im Log.
+   `TestAuditTrailRecordsTheAccountLifecycle`,
+   `TestAuditTrailNeverCarriesASecret`. *(M8)*
 8. `docs/compliance/isds-konzept.md` (Kap. 5.2.2, 5.2.3, 5.4.2, 6.1) und
    `isds-offene-punkte.md` (O-03, O-04, O-07) sind in derselben Änderung
    nachgeführt — so verlangt es die Pflegeregel in [`README.md`](README.md).
@@ -411,6 +446,10 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
   ADR-0049
 - `draft-api-tokens.md` — M3, offen
 - ✅ [`draft-auth-on-by-default.md`](../adr/draft-auth-on-by-default.md) — M5
+- ✅ [`draft-login-throttle-and-audit-log.md`](../adr/draft-login-throttle-and-audit-log.md)
+  — M7 und M8 zusammen: eine Drosselung, deren Verweigerungen unsichtbar sind,
+  lässt sich weder abstimmen noch belegen, und eine Spur ohne Fehlanmeldungen
+  lässt genau den Eintrag aus, mit dem jede Prüfung beginnt
 
 M4 hat keinen eigenen Entscheid: es vervollständigt
 `draft-authenticated-mcp-transport` und steht dort.

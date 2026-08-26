@@ -429,6 +429,11 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	}
 	p := httpapi.PrincipalFrom(r.Context())
 	if p == nil || !p.HasRole(RoleAdmin) {
+		// Somebody who is signed in reaching for something they may not have is worth
+		// a line; an anonymous request being asked to log in is not, or the signal
+		// drowns in every unauthenticated probe that finds the port.
+		auditRefusal(r, logging.AuthDenied, "refused: admin role required",
+			slog.String("method", r.Method), slog.String("path", r.URL.Path))
 		httpapi.Error(w, http.StatusForbidden, "admin role required")
 		return false
 	}

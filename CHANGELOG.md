@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **The login is throttled, and there is a security audit trail.** Two gaps that
+  mattered more the moment a login became the default. `/api/v1/auth/login` had
+  nothing in front of it — the token bucket existed but guarded only the public form
+  routes, so password guessing was bounded by nothing but how fast bcrypt would
+  answer, which is backwards: each attempt cost the server ~100ms of CPU and the
+  caller one request. And who signed in, who failed to, and who changed an account
+  appeared in no log at all, so the compliance answer for that had to be "the reverse
+  proxy supplies it" — an answer about somebody else's software, and one that cannot
+  name the *account* an attempt was against.
+
+  Attempts are now throttled on two keys into the same token bucket: 20 per address
+  back to back (refilling every two seconds — a whole office behind one NAT address
+  is an ordinary deployment), and 5 per account (refilling over 15 minutes). It is
+  charged **before** the account is looked up and whether or not that account exists,
+  so the throttle does not answer the question the uniform "invalid credentials"
+  message is careful to leave open, and a flood costs the server a map lookup rather
+  than a bcrypt verification. A successful login clears the account's budget, so two
+  mistyped passwords are not carried around for a quarter of an hour, and the lockout
+  always heals on its own — no operator has to lift one.
+
+  Eleven stable `auth.*` events now record sign-ins, refused sign-ins with the reason,
+  throttling, sign-outs, authorization refusals, the account lifecycle, password sets
+  and deploy-token mint/revoke. Each carries the acting principal and the client
+  address; none carries a password, a hash or a token, and a test drives real secrets
+  through the handlers and asserts none of them reaches the log. Anonymous `401`s are
+  deliberately not recorded — they would bury the meaningful lines under every probe
+  that finds the port. Ship them with `--log-format=json`
+  ([ADR-draft-login-throttle-and-audit-log](docs/adr/draft-login-throttle-and-audit-log.md)).
+
+  **Minor behaviour change:** a burst of failed logins now answers `429` rather than
+  continuing to answer `401`.
+
 - **`atlas serve` requires a login by default.** `--auth` was opt-in, mirroring
   `--docs` ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) —
   a reasonable call when authentication first landed and turning it on broke MCP, the

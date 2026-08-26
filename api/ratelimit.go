@@ -35,6 +35,16 @@ func newRateLimiter(capacity, refillPerSec float64) *rateLimiter {
 	}
 }
 
+// clear drops a key's bucket, so it starts full again on the next call. The login
+// throttle uses it to forgive an account's failed attempts once somebody proves
+// they are that account (see loginguard.go). Clearing an unknown key is a no-op.
+func (l *rateLimiter) clear(key string) {
+	l.mu.Lock()
+	delete(l.tokens, key)
+	delete(l.last, key)
+	l.mu.Unlock()
+}
+
 // allow reports whether a request keyed by key may proceed, consuming a token if
 // so. Unknown keys start full.
 func (l *rateLimiter) allow(key string) bool {
