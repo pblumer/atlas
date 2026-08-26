@@ -102,8 +102,20 @@ transport used to hand out for free.
 `Server.handle` becomes `handleWith(client, req)`, taking the client as a
 parameter. That is the only structural change dispatch needed, and it is where the
 two transports legitimately differ: stdio is a per-agent process with one identity
-for its whole life, so it passes the client it was built with (`WithBearer`, for
-`atlas mcp --token`), while HTTP binds a client per request.
+for its whole life, so it passes the client it was built with, while HTTP binds a
+client per request.
+
+That difference is why the stdio adapter gets a credential of its own:
+`atlas mcp --token` (or `ATLAS_TOKEN`), the shape `atlas worker` has had for some
+time, because it is the same need. It had none and no way to be given one, so it
+could not work against a server running `--auth` at all — a gap that only becomes
+more visible once the HTTP transport is gated, and one this record would be
+incomplete without. The token is trimmed on the way in, because one exported from
+a shell profile routinely carries a trailing newline and a bearer sent with one is
+refused for a reason nothing in the `401` explains. `runMCP` is split so its
+streams can be supplied, which puts the credential's whole path — flag or
+environment, into the client, onto the request — under test; it is wiring, and
+wiring is exactly what a unit test of the `mcp` package cannot reach.
 
 Four consequences worth stating as behaviour: an MCP call now appears in every
 audit trail under the caller's own name; an admin over MCP can reach an
@@ -138,12 +150,11 @@ credential to use, and minting a second one adds a lifecycle to get wrong.
   but it will be noticed. A static bearer is also only the pragmatic subset of the
   MCP authorization spec, which prescribes OAuth 2.1 with protected-resource
   metadata for remote servers.
-- **Follow-ups / risks to watch:** `atlas mcp --token` / `ATLAS_TOKEN`, so the
-  stdio adapter can hold a credential the way `atlas worker` already does — it is
-  three lines and it is what a remote stdio client needs against an authenticated
-  server. First-class API tokens (named, scoped, revocable, expiring) to replace
-  the ambient internal token, which after this record is held only by the
-  supervised workers. OAuth 2.1 protected-resource metadata on the transport, once
+- **Follow-ups / risks to watch:** first-class API tokens (named, scoped,
+  revocable, expiring) to replace the ambient internal token, which after this
+  record is held only by the supervised workers — and which is also what
+  `atlas mcp --token` has to be handed today, since there is no better credential
+  to give it yet. OAuth 2.1 protected-resource metadata on the transport, once
   a client should fetch its own token rather than be configured with one. The
   `system:mcp` principal name is now historical and deliberately left alone: it is
   a wire value that appears in job attribution and in operators' logs.

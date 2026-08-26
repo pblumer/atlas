@@ -36,9 +36,16 @@ _Changed_ / _Removed_ for each version.
 
   **Breaking, on servers running `--auth`.** An MCP client that reached `/mcp` without
   presenting anything now gets `401` and must send the session cookie or a bearer token.
-  A server without `--auth` is unchanged — and is still open, `/mcp` included. The stdio
-  adapter (`atlas mcp --server …`) is unchanged and still has no way to hold a
-  credential; giving it one is the next step.
+  A server without `--auth` is unchanged — and is still open, `/mcp` included.
+
+- **`atlas mcp --token`.** The stdio adapter had no way to present a credential, so it
+  could not work against a server running `--auth` at all: every tool call came back
+  `401`, while `atlas worker` has had `--token` for some time. It now takes the same
+  flag, defaulting to `ATLAS_TOKEN`, and trims it — a token exported from a shell
+  profile routinely carries a trailing newline, and a bearer sent with one is refused
+  for a reason nothing in the `401` explains. Startup logs whether a credential is
+  configured (never the credential), because "every tool returns 401" and "no token was
+  set" are the same incident.
 
 - **Every mounted route declares who may reach it.** Which requests the boundary gated
   used to be a path-prefix test — gated if and only if the path started with `/api/v1` —

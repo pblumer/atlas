@@ -573,22 +573,49 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls
-// to the Atlas server at --server. Protocol traffic uses stdin/stdout; all logs
+// to the Atlas server at --server, authenticating with --token (or ATLAS_TOKEN)
+// where that server requires a login. Protocol traffic uses stdin/stdout; all logs
 // go to stderr so they never corrupt the JSON-RPC stream.
 func runMCP(args []string) error {
-	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to proxy to")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
 	// Protocol traffic owns stdout, so logs go to stderr and nothing else.
 	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
 		return err
 	}
-	logging.Info(logging.MCPProxying, "proxying MCP over stdio", slog.String("server", *server))
+	return runMCPOn(args, os.Stdin, os.Stdout)
+}
 
-	s := mcp.NewServer(mcp.NewClient(*server))
-	return s.Serve(os.Stdin, os.Stdout)
+// runMCPOn is runMCP with its streams supplied, so a test can drive a JSON-RPC
+// message through the real flag parsing, client construction and dispatch — the
+// credential's path in particular, which is wiring and therefore exactly the part
+// a unit test of the mcp package cannot reach.
+func runMCPOn(args []string, in io.Reader, out io.Writer) error {
+	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
+	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to proxy to")
+	// The adapter is a per-agent process with one identity for its whole life, so
+	// unlike the HTTP transport — which forwards each request's own caller — it
+	// authenticates with a credential given here. Without one it cannot work against
+	// a server running --auth at all: every tool call comes back 401
+	// (ADR-draft-authenticated-mcp-transport). The shape is `atlas worker --token`'s,
+	// because it is the same need.
+	token := fs.String("token", os.Getenv("ATLAS_TOKEN"),
+		"bearer token, when the server requires authentication (or ATLAS_TOKEN)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Trimmed because a token exported from a shell profile or read out of a file
+	// routinely carries a trailing newline, and a bearer sent with one is refused
+	// for a reason nothing in the 401 explains.
+	bearer := strings.TrimSpace(*token)
+
+	// Whether a credential is configured, never the credential itself: an attribute
+	// is what a log shipper extracts, indexes and keeps. It is here because "every
+	// tool returns 401" and "no token was set" are the same incident, and an
+	// operator should not have to guess that.
+	logging.Info(logging.MCPProxying, "proxying MCP over stdio",
+		slog.String("server", *server), slog.Bool("authenticated", bearer != ""))
+
+	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer)))
+	return s.Serve(in, out)
 }
 
 // splitList parses a comma-separated flag into trimmed, non-empty entries.

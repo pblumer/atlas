@@ -52,6 +52,12 @@
 // Local (stdio) — a per-agent, short-lived adapter an MCP client spawns:
 //
 //	atlas mcp --server http://localhost:8080
+//	atlas mcp --server https://atlas.example.com --token "$ATLAS_TOKEN"
+//
+// The token is what a stdio adapter authenticates with against a server running
+// --auth, and is needed there: unlike the HTTP transport, which forwards each
+// request's own caller, a stdio adapter is one process with one identity for its
+// whole life. Without it every tool call comes back 401.
 //
 // For stdio, diagnostics go to stderr; stdout carries protocol traffic only.
 package mcp

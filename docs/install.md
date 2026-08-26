@@ -411,7 +411,7 @@ explicit `=false` — `--vault=false`, not `--no-vault`.
 | Command | Purpose |
 |---------|---------|
 | `atlas serve [flags]` | Run the engine, API, and UI. This is the default when no subcommand is given. |
-| `atlas mcp [--server URL]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`) |
+| `atlas mcp [--server URL] [--token TOKEN]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth` |
 | `atlas reset-password [--data-dir DIR] [--create-admin] [--password-stdin] USERNAME` | Reset a local user's password straight against the data directory |
 | `atlas version` | Version, git revision, and Go toolchain |
 | `atlas help` | Usage |

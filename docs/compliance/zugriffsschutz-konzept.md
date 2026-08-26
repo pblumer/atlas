@@ -32,7 +32,8 @@ Verhältnis zu den bestehenden Unterlagen:
 |-----------|-------|
 | **M1** — Zugriffsklassen je Route + Inventar-Test | ✅ umgesetzt — [`ADR-draft-route-access-classes`](../adr/draft-route-access-classes.md), `api/access.go` |
 | **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-draft-authenticated-mcp-transport`](../adr/draft-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
-| M3–M8 | offen |
+| **M4** — `atlas mcp --token` / `ATLAS_TOKEN` | ✅ umgesetzt — im selben Entscheid, `cmd/atlas/main.go` |
+| M3, M5–M8 | offen |
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -143,7 +144,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M1 ✅ | Zugriffsklassen je Route + Inventar-Test | S | Ursache aus 1.1/1.4 | G2 |
 | M2 ✅ | `/mcp` hinter dieselbe Grenze, Identität durchreichen | M | R-08, O-07 | G1, G4 |
 | M3 | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
-| M4 | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
+| M4 ✅ | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
 | M5 | `--auth` standardmässig an | S | R-08, R-03 | G5 |
 | M6 | `/metrics` auf eigenen Listener bzw. Zugriffsklasse | S | R-08, O-07 | G1 |
 | M7 | Anmelde-Härtung: Rate-Limit und Sperre am Login | S | O-04, R-12 | — |
@@ -225,12 +226,16 @@ Bootstrap.
 **Berührt:** neue Datei nach dem Vorbild von `api/deploytokenstore.go`,
 `api/auth.go`, Console-UI (Minimalansicht: anlegen, auflisten, widerrufen).
 
-### M4 — `atlas mcp --token`
+### M4 — `atlas mcp --token` ✅
 
-`runMCP` bekommt die Option, die `atlas worker` längst hat. Ohne sie bricht der
-stdio-Adapter in dem Moment, in dem M2 oder M5 landet — genau der Fehler, den
-`workerTokenEnv` für die Worker bereits einmal reparieren musste. **XS, aber
-zwingend im selben Schritt.**
+`runMCP` hat die Option bekommen, die `atlas worker` längst hatte, samt Rückfall
+auf `ATLAS_TOKEN` und Trimmen des Werts (ein aus einem Shell-Profil exportierter
+Token trägt regelmässig ein Zeilenende, und ein damit gesendeter Bearer wird aus
+einem Grund abgewiesen, den die `401` nicht nennt). Der Start protokolliert, *ob*
+ein Credential konfiguriert ist — nie das Credential —, weil «jedes Werkzeug
+antwortet 401» und «es wurde kein Token gesetzt» derselbe Vorfall sind. `runMCP`
+ist so aufgeteilt, dass seine Ströme übergeben werden können; damit steht der
+ganze Weg des Credentials unter Test.
 
 ### M5 — `--auth` standardmässig an
 
@@ -305,7 +310,8 @@ nicht bemerkt. Genau das ist der Grund für Stufe 1.
 
 ### Stufe 1 — PoC-produktivtauglich
 
-M1 → (M2 + M3 + M4) → M5 → M7 + M8 → M6.
+~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → M5 → M7 + M8 → M6. **M1, M2 und M4 sind
+umgesetzt.**
 
 Danach gilt: **keine Schnittstelle ohne Login**, per Test belegbar, und die
 Absicherung überlebt eine vergessene Proxy-Regel. R-08 geht von rot auf grün, O-07
@@ -388,6 +394,9 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
   ADR-0049
 - `draft-api-tokens.md` — M3, offen
 - `draft-auth-on-by-default.md` — M5, offen
+
+M4 hat keinen eigenen Entscheid: es vervollständigt
+`draft-authenticated-mcp-transport` und steht dort.
 
 ---
 
