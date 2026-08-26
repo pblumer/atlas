@@ -133,9 +133,10 @@ func extract(body io.Reader, selector, attribute string) ([]string, error) {
 	return extractHTML(body, selector, attribute, 0)
 }
 
-// extractHTML parses HTML from body and returns the values of every element matching
-// selector, optionally bounded to the first maxItems matches. Each match contributes
-// trimmed text when attribute is empty, otherwise the named attribute's value.
+// extractHTML parses HTML from body and returns values from the first maxItems
+// selector matches (or all matches when maxItems is zero). A match without the
+// requested attribute contributes no value, but still counts toward the authored
+// first-N bound: maxItems limits selector matches, not successful attribute reads.
 func extractHTML(body io.Reader, selector, attribute string, maxItems int32) ([]string, error) {
 	sel, err := cascadia.Compile(selector)
 	if err != nil {
@@ -148,10 +149,12 @@ func extractHTML(body io.Reader, selector, attribute string, maxItems int32) ([]
 	matches := doc.FindMatcher(sel)
 	capacity := boundedLen(matches.Length(), maxItems)
 	out := make([]string, 0, capacity)
+	var seen int32
 	matches.EachWithBreak(func(_ int, s *goquery.Selection) bool {
-		if maxItems > 0 && int32(len(out)) >= maxItems {
+		if maxItems > 0 && seen >= maxItems {
 			return false
 		}
+		seen++
 		if attribute == "" {
 			out = append(out, strings.TrimSpace(s.Text()))
 			return true
