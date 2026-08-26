@@ -225,6 +225,8 @@ comment safe to write.
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Proposed |
 | [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed |
 | [0188](0188-console-managed-sql-connectors.md) | A database is a Console entry, not a start parameter — and a worker is never a thing you create | Proposed |
+| [0189](0189-panorama-architecture-modeling-and-live-overlays.md) | Panorama architecture modeling and live operational overlays | Proposed |
+| [0190](0190-webscrape-feed-extraction.md) | Add explicit RSS and Atom extraction to the web-scraping connector | Proposed |
 
 ## Status values
 

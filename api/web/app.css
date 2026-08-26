@@ -1141,7 +1141,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .vars .vf-head .vcopy { margin-left: auto; width: 20px; height: 20px; opacity: 0; }
 .vars .vfield:hover .vf-head .vcopy, .vars .vf-head .vcopy:focus-visible { opacity: 1; }
 .vars .vk { font: 600 12px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
-.vars .vtag {
+/* The type badge. One rule for both surfaces that carry one — the replay's variables
+   table, and the Modeler's Variables panel, which says the same thing about the same
+   variable before anything has run. */
+.vars .vtag, .vars-panel .vtag {
   font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
   padding: 0 5px; border-radius: 4px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap;
@@ -2253,8 +2256,56 @@ tr[hidden] { display: none; }
 .vars-list { overflow: auto; padding: 0 6px 12px; }
 .var-row { padding: 8px; border-radius: 6px; }
 .var-row:hover { background: var(--bg); }
-.var-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--text); }
+.var-row.open { background: var(--bg); }
+/* Name left, type badge right — a column of badges reads down, where a badge after a
+   name of unpredictable length has to be hunted for on every row. */
+.var-head { display: flex; align-items: center; gap: 6px; }
+.var-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--text); min-width: 0; word-break: break-word; }
+.var-head .vtag { flex: 0 0 auto; margin-left: auto; }
 .var-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+/* What the variable held on the run named above the list. A scalar shows as it is; a
+   structure gets the same collapsed summary the replay uses — the brackets carry the
+   difference between a list and one of its elements, which truncated text does not. */
+.var-val {
+  margin-top: 4px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.var-peek {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 4px;
+  padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer; text-align: left;
+}
+.var-peek:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.var-peek .vp-chev { flex: none; font-size: 10px; color: var(--muted); transition: transform .12s ease; }
+.var-peek[aria-expanded="true"] .vp-chev { transform: rotate(90deg); }
+.var-peek:hover .vp-chev { color: var(--accent); }
+.var-peek .vp-sum { flex: none; font: 600 11px/1.5 system-ui, sans-serif; white-space: nowrap; }
+.var-peek .vp-peek {
+  min-width: 0; color: var(--muted); font: 12px/1.4 ui-monospace, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.var-peek:hover .vp-peek { color: var(--accent); }
+.var-json {
+  margin: 4px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
+}
+/* Which run the values came from. A value with no run named beside it reads as "what
+   this is", when it is "what this was, once". */
+.vars-sample {
+  display: flex; align-items: flex-start; gap: 6px; margin: 0 12px 8px;
+  font-size: 11.5px; color: var(--muted); line-height: 1.5;
+}
+/* The line is one flex item, not four: an instance key is fifteen digits, and as bare
+   inline content each run of it became its own item and broke where it liked. */
+.vars-sample .vs-text { min-width: 0; flex: 1; word-break: break-word; }
+.vars-sample b { color: var(--text); font-weight: 600; }
+.vars-reload {
+  margin-left: auto; flex: none; width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1;
+}
+.vars-reload:hover { border-color: var(--accent); color: var(--accent); }
 .var-origin { color: var(--accent); cursor: pointer; }
 .var-origin:hover { text-decoration: underline; }
 .vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
@@ -2297,6 +2348,18 @@ tr[hidden] { display: none; }
 .modal-head h2 { margin: 0; font-size: 16px; }
 .modal-body { overflow-y: auto; overflow-x: hidden; padding: 4px 16px 14px; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+/* The process's own start form, opened by Deploy & run (ADR-0028). Wider than a confirm
+   dialog because it is a real form somebody laid out — a two-column layout squeezed into
+   520px is a worse form than the Tasks app shows for the same schema. */
+.startform-modal { width: min(680px, 100%); }
+.startform-modal .modal-foot { justify-content: flex-end; }
+.startform-host { padding-top: 8px; }
+/* form-js paints its own white; inside a themed dialog it has to take the dialog's. */
+.startform-host .fjs-container { background: transparent; }
+/* Its attribution mark lands mid-dialog, between the last field and the buttons, where
+   it reads as part of the form. The canvas already carries one for the page. */
+.startform-host .fjs-powered-by { display: none; }
 
 .share-sec { margin-top: 16px; }
 .share-sec .mlabel { margin: 0 0 8px; font-weight: 600; color: var(--text); font-size: 13px; }

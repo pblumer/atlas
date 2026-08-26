@@ -231,6 +231,42 @@
       }
     },
     {
+      "id": "deploy-run-opens-the-process-s-start-form",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Changed",
+      "title": {
+        "en": "Deploy & run opens the process's start form.",
+        "de": "Deploy & run opens the process's start form."
+      },
+      "summary": {
+        "en": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all.",
+        "de": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      }
+    },
+    {
+      "id": "the-modeler-s-variables-panel-says-what-a-variable-holds-not",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Changed",
+      "title": {
+        "en": "The Modeler's Variables panel says what a variable holds, not just that it exists.",
+        "de": "The Modeler's Variables panel says what a variable holds, not just that it exists."
+      },
+      "summary": {
+        "en": "It listed a name and who writes it.",
+        "de": "It listed a name and who writes it."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      }
+    },
+    {
       "id": "connectors-are-their-own-page-in-the-console",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -263,7 +299,7 @@
       },
       "link": {
         "label": "ADR-0067",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-connector-kind-catalog.md"
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
       }
     },
     {
@@ -306,55 +342,6 @@
         },
         "route": "#/operations/workers"
       }
-    },
-    {
-      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "A dot in a variable name is caught at deploy",
-        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
-      },
-      "summary": {
-        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
-        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-server-that-requires-a-login-no-longer-calls-itself-single",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Fixed",
-      "title": {
-        "en": "The account menu stops claiming there is no login",
-        "de": "Das Konto-Menü behauptet nicht mehr, es gäbe keinen Login"
-      },
-      "summary": {
-        "en": "On an instance that requires a login, the account menu said \"Single-user mode\" — the label for a server that has no login at all — whenever nobody was signed in, including on the login screen itself. It now says \"Not signed in\" there, and keeps the old label where it is actually true.",
-        "de": "Auf einer Instanz mit Anmeldepflicht stand im Konto-Menü \"Single-user mode\" — die Bezeichnung für einen Server ganz ohne Login —, sobald niemand angemeldet war, also auch auf dem Login-Bildschirm selbst. Dort steht jetzt \"Nicht angemeldet\"; wo die alte Bezeichnung zutrifft, bleibt sie."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }
