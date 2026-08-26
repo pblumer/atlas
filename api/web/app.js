@@ -4582,6 +4582,11 @@ async function viewWorkers() {
     // engine knows which names models ask for and the workers report which they hold;
     // only here do the two halves meet, which is why this is worth a card of its own
     // rather than a column somewhere.
+    //
+    // Every row names its version, because the deployment behind it need not be the
+    // process's current one: an instance can still be running on a superseded version,
+    // and a call activity can be pinned to one. Without the version the row reads as
+    // "your current model is broken" about a model whose current version is fine.
     const missing = (data && data.unservedConnectors) || [];
     if (missing.length) {
       gaps.hidden = false;
@@ -4594,14 +4599,16 @@ async function viewWorkers() {
             <td><b>${esc(m.name)}</b></td>
             <td><span class="pill-kv">${esc(m.jobType)}</span></td>
             <td>${(m.processes || []).map((p) => `<a href="#/operations/p/${p.processDefKey}" title="${
-              esc(`${p.processId} v${p.version}`)}">${esc(p.name || p.processId)}</a>`).join(", ")
+              esc(`${p.processId} v${p.version}`)}">${esc(p.name || p.processId)} <span class="ver-of">v${p.version}</span></a>`).join(", ")
               || `<span class="muted">&mdash;</span>`}</td>
           </tr>`).join("")}</tbody>
         </table>
         <p class="wk-note">These models name a connector, and neither Atlas nor any worker seen this run
           holds a configuration for it &mdash; so their tasks will park. Configure the name on a worker
           that serves this kind, or point the model at one that is configured. A worker that has not
-          polled yet reports nothing, so a name may clear itself on its first poll.</p>`;
+          polled yet reports nothing, so a name may clear itself on its first poll. Only versions that
+          can still create a job are counted: each process&rsquo;s current one, plus any an instance is
+          running on or a call activity is pinned to &mdash; a version you superseded is not one of them.</p>`;
     } else {
       gaps.hidden = true;
       gaps.innerHTML = "";

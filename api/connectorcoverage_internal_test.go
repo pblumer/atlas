@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"testing"
 )
 
@@ -106,6 +107,98 @@ func TestAKindTheEngineStillServesIsNotReportedMissing(t *testing.T) {
 	}
 }
 
+// Every deploy keeps its predecessor, so the deployment registry is the whole
+// history, not the current state of the models. Answering coverage over all of it is
+// how a name an author corrected two versions ago stays in the card forever, under
+// the process's *current* name — which reads as "the model you are looking at is
+// broken" about a model that is fine. The next four tests pin which versions count.
+
+// A superseded version nothing is running on cannot create a job, so it has no
+// connector left to serve.
+func TestASupersededVersionWithNothingRunningIsNotReported(t *testing.T) {
+	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
+	deployNotify(t, srv, "office365")      // v1: the name nothing holds
+	deployNotify(t, srv, "internal-relay") // v2: corrected
+	pollWorker(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+
+	if got := coverage(t, srv); len(got.Unserved) != 0 {
+		t.Errorf("unserved = %+v, want none: only the superseded v1 still names office365", got.Unserved)
+	}
+}
+
+// A superseded version an instance is still running on is reported, at its own
+// version. That instance's token reaches the connector task the old model wrote, so
+// the gap is real and the version is the part that makes it findable.
+func TestASupersededVersionWithALiveInstanceIsReportedAtItsVersion(t *testing.T) {
+	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
+	deployNotify(t, srv, "office365")
+	startNotify(t, srv, 1) // parks on the mail task: nothing completes it here
+	deployNotify(t, srv, "internal-relay")
+	pollWorker(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+
+	got := coverage(t, srv)
+	if len(got.Unserved) != 1 {
+		t.Fatalf("unserved = %+v, want the name the running v1 asks for", got.Unserved)
+	}
+	u := got.Unserved[0]
+	if u.Name != "office365" {
+		t.Errorf("name = %q, want office365", u.Name)
+	}
+	if len(u.Processes) != 1 || u.Processes[0].Version != 1 {
+		t.Errorf("processes = %+v, want v1 — the version that names it, not the current one", u.Processes)
+	}
+}
+
+// An operator can pin a call activity to an exact version (ADR-0105), which makes
+// that version the live target of every call to the process id. It is not
+// superseded in any sense that matters, so its connectors still have to be served.
+func TestAVersionPinnedAsACallTargetIsReported(t *testing.T) {
+	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds([]string{"mail"}))
+	deployNotify(t, srv, "office365")
+	deployNotify(t, srv, "internal-relay")
+	if err := srv.callOverrides.Save(callOverride{
+		CalledProcessID: "notify", Action: overridePin, TargetVersion: 1,
+	}); err != nil {
+		t.Fatalf("pin v1: %v", err)
+	}
+	pollWorker(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+
+	got := coverage(t, srv)
+	if len(got.Unserved) != 1 || got.Unserved[0].Name != "office365" {
+		t.Fatalf("unserved = %+v, want office365: every call to notify resolves to the pinned v1", got.Unserved)
+	}
+}
+
+// The current version is reported with its version too, so the card never leaves a
+// reader guessing which of a process's versions it means.
+func TestTheReportCarriesTheVersionThatNamesTheConnector(t *testing.T) {
+	srv := mailPullSrv(t)
+	pullMail(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+
+	got := coverage(t, srv)
+	if len(got.Unserved) != 1 || len(got.Unserved[0].Processes) != 1 {
+		t.Fatalf("unserved = %+v, want the one model that references it", got.Unserved)
+	}
+	if p := got.Unserved[0].Processes[0]; p.Version != 1 || p.ProcessDefKey != 1 {
+		t.Errorf("process = %+v, want v1 at key 1", p)
+	}
+}
+
+// The reachability question reads the override sidecar, so a sidecar it cannot read
+// has to fail the request rather than quietly answer over the wrong set of versions —
+// an unreadable pin would drop a version that is in fact the live call target.
+func TestAnUnreadableOverrideSidecarFailsTheWorkersView(t *testing.T) {
+	srv := mailPullSrv(t)
+	srv.do(func() {
+		srv.callOverrides = brokenStore(newCallOverrideStore(filepath.Join(t.TempDir(), "gone")))
+	})
+
+	code, raw := serveInternal(t, srv, http.MethodGet, "/api/v1/workers", "", "")
+	if code != http.StatusInternalServerError {
+		t.Fatalf("GET /workers: status=%d body=%s, want 500", code, raw)
+	}
+}
+
 // mailPullSrv is a server that has offloaded mail and has the notify model deployed,
 // so its one mail connector task is leasable by an external worker.
 func mailPullSrv(t *testing.T) *Server {
@@ -117,14 +210,38 @@ func mailPullSrv(t *testing.T) *Server {
 
 func deployMailModel(t *testing.T, srv *Server) {
 	t.Helper()
-	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", mailCoverageModel, "application/xml")
+	deployNotify(t, srv, "office365")
+	startNotify(t, srv, 1)
+}
+
+// deployNotify deploys one version of the notify model naming the given connector.
+func deployNotify(t *testing.T, srv *Server, connector string) {
+	t.Helper()
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments",
+		fmt.Sprintf(mailCoverageModel, connector), "application/xml")
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("deploy: status=%d body=%s", code, raw)
 	}
-	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+}
+
+// startNotify starts an instance of one definition *by key*, so a test can put a
+// live instance on a version that is no longer the current one.
+func startNotify(t *testing.T, srv *Server, defKey uint64) {
+	t.Helper()
+	code, raw := serveInternal(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", defKey),
 		`{"variables":{"customer":"ada@example.com"}}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("create instance: status=%d body=%s", code, raw)
+	}
+}
+
+// pollWorker is a poll that need not come back with work: an idle worker still
+// reports the connectors it holds, and that is the half the coverage answer needs.
+func pollWorker(t *testing.T, srv *Server, body string) {
+	t.Helper()
+	if code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/activate", body, "application/json"); code != http.StatusOK {
+		t.Fatalf("poll: status=%d body=%s", code, raw)
 	}
 }
 
@@ -145,6 +262,9 @@ func pullMail(t *testing.T, srv *Server, body string) {
 	}
 }
 
+// mailCoverageModel is the notify model, parameterized on the connector name so a
+// test can deploy a second version that points somewhere else — which is what a
+// corrected connector name looks like on a server that keeps every version.
 const mailCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
@@ -152,7 +272,7 @@ const mailCoverageModel = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
       <bpmn:extensionElements>
-        <atlas:mailConnector connector="office365" to="=customer" subject="Order shipped" body="On its way."/>
+        <atlas:mailConnector connector="%s" to="=customer" subject="Order shipped" body="On its way."/>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:endEvent id="e"/>
