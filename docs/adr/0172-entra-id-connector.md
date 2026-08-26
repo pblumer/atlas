@@ -407,3 +407,5 @@ move did not alter behaviour.
   model never carries a secret — here by keeping the credential out of the engine
 - rides the connector seam of [ADR-0007](0007-job-worker-protocol.md)/[ADR-0067](0067-service-task-connector-catalog.md)
 - answers the second gap named in [`docs/comparisons/mim.md`](../comparisons/mim.md)
+- the least-privilege Graph permissions each operation needs are tabulated in
+  [`docs/entra-permissions.md`](../entra-permissions.md)
