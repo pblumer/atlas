@@ -16,8 +16,8 @@ import (
 )
 
 type feedRecordingClient struct {
-	requests []webscrape.Request
-	entries  []webscrape.FeedEntry
+	requests  []webscrape.Request
+	entries   []webscrape.FeedEntry
 	feedCalls int
 }
 
