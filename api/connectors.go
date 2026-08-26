@@ -458,15 +458,37 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, managedConnectorKindsError())
 		return
 	}
+	// The id is generated before validation because a SQL connector's credential
+	// reference is derived from it: the operator pastes a connection string, and what
+	// the record stores is a vault key named after the record itself.
+	id, err := newID()
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		return
+	}
+	// A pasted connection string becomes a vault reference before anything else looks
+	// at the request, so every path below — validation, the record, the response —
+	// sees a reference and never the secret. The endpoint becomes a redacted label so
+	// the Console can say which database this is without being able to show the
+	// credential (ADR-draft-console-managed-sql-connectors).
+	dsn := strings.TrimSpace(p.ConnectionString)
+	p.ConnectionString = ""
+	if dsn != "" {
+		if !isSQLConnectorKind(p.Kind) {
+			httpapi.Error(w, http.StatusBadRequest, "connectionString applies only to a SQL connector ("+strings.Join(sqlConnectorKinds(), ", ")+")")
+			return
+		}
+		if s.vault == nil {
+			httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured; a connection string cannot be stored without one")
+			return
+		}
+		p.CredentialsRef = sqlDSNRef(id)
+		p.Endpoint = redactedSQLTarget(dsn)
+	}
 	// The kind's validator applies its own rules and normalizes p (defaulting a mail
 	// provider, clearing mail-only fields for kinds that don't use them).
 	if msg := kind.validateCreate(&p); msg != "" {
 		httpapi.Error(w, http.StatusBadRequest, msg)
-		return
-	}
-	id, err := newID()
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	enabled := true
@@ -493,6 +515,15 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		for _, c := range existing {
 			if strings.EqualFold(c.Name, p.Name) {
 				dupErr = true
+				return
+			}
+		}
+		// Seal the connection string before the record that references it exists, so a
+		// failure here leaves nothing behind: no record pointing at a key that was
+		// never written. The value is sealed by the vault (ADR-0069) and is never
+		// persisted in the clear, logged, or echoed back.
+		if dsn != "" {
+			if _, saveErr = s.vault.Set(rec.CredentialsRef, dsn); saveErr != nil {
 				return
 			}
 		}

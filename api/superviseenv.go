@@ -159,6 +159,13 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// engine renders its client secret out of the vault. Only the secret — tenant and
 		// client id are not secret and are inherited from this process's own environment.
 		"entra": s.entraWorkerEnv,
+		// The three SQL products. Unlike every kind above them the *whole* configuration
+		// is the secret — a DSN has no public half — so what is rendered here is one
+		// connection string per configured database and nothing else
+		// (ADR-draft-console-managed-sql-connectors).
+		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
+		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
+		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
 	}
 }
 

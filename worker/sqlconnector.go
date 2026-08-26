@@ -32,7 +32,13 @@ func sqlRegistryFromEnv(env func(string) string, p sqldb.Product) (*sqldb.Regist
 	prefix := "ATLAS_" + envFold(p.Name) + "_"
 	names := splitAndTrim(env(prefix + "CONNECTORS"))
 	if len(names) == 0 {
-		return nil, nil, fmt.Errorf("worker: --connector %s needs at least one connector: set %sCONNECTORS to the database names this worker serves", p.Name, prefix)
+		// Unconfigured, not misconfigured — a nil registry and no error, which the
+		// caller reports as a kind this worker does not serve. The two must not be
+		// conflated: this kind is supervised by default, so every server that has not
+		// configured a database yet starts one of these, and failing here would be a
+		// backoff loop that never converges (exitNothingToServe exists for exactly
+		// that). A *named* connector missing its DSN, below, is still an error.
+		return nil, nil, nil
 	}
 	reg := sqldb.NewRegistry()
 	for _, name := range names {
