@@ -12,6 +12,36 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-26
+
+This release is about connectors you can actually run. `--supervise-connector` gives
+any connector kind the pairing the four Atlas offloads had by default — its own worker,
+started by the server, handed the server's token at spawn — so a kind that was reachable
+only by running `atlas worker` yourself now takes one flag, on an authenticated server
+included. **Active Directory runs on a worker by default**, with the engine rendering the
+bind passwords its *deployed* models name into that worker's environment, and
+`ATLAS_AD_MOCK=1` serves the whole joiner/mover/leaver lifecycle against a directory in
+memory that refuses what a real domain controller refuses — so an identity process can be
+run before anybody goes near a real forest. Entra ID can now be asked a question, not only
+told what to do. In the Console the catalog, the configured connectors and the vault leave
+Organization for a **page of their own** at `#/console/connectors`, and the Modeler's Type
+picker is one line per kind rather than four screens of cards.
+
+**Multi-instance loops got the pass they were owed.** A loop inside an ad-hoc subprocess
+and a loop a gateway routes into both keep their results; a loop that also has an I/O
+mapping no longer runs past its maximum; a loop body no longer writes a null over the
+process; the badge counts rounds rather than activations; and a finished round no longer
+leaves a token behind on the replay. A loop also **says what it was told to repeat while**
+and what it decided each round, so one that ends early is readable rather than guessed at.
+
+**Two silent modelling mistakes are now refused at deploy** instead of doing something
+plausible and wrong: a dotted write target (`variable.dotted-target`), which used to create
+a variable with a dot in its name beside the structure it was meant to extend, and a mapping
+onto `loopCounter` (`loop.counter-mapping`), which overwrote the count the engine reads back
+to know which round finished. **Both refuse models that deployed before**; each entry names
+the element and the way to write what was meant. Running instances are unaffected — both
+rules run at deploy.
+
 ### Added
 
 - **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
@@ -2163,7 +2193,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pblumer/atlas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pblumer/atlas/releases/tag/v0.1.0
