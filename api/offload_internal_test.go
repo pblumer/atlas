@@ -215,6 +215,34 @@ func TestActiveDirectoryIsOffloadedByDefaultAndItsBindSecretsAreHandedOver(t *te
 	}
 }
 
+// BMC Remedy is offloaded by default (ADR-draft-remedy-default-offload), and unlike AD
+// above it *is* a managed kind — so the property two tests up already proves a
+// supervised worker can serve it. What that property cannot say is that the kind is in
+// the default set at all, which is the whole of this decision: an ITSM create is three
+// round trips to somebody else's host, and leaving it opt-in is what kept it on the
+// engine's loop.
+//
+// The in-process handler stays, deliberately: --in-process-connectors must still return
+// the old arrangement, so a Remedy job type an operator opted out of is served here
+// again rather than by nobody.
+func TestRemedyIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
+	if !slices.Contains(DefaultOffloadedKinds(), connectorKindRemedy) {
+		t.Error("remedy is not offloaded by default; a ticket create runs on the engine's own loop")
+	}
+	if _, handed := (&Server{}).provisionedConnectorKinds()[connectorKindRemedy]; !handed {
+		t.Error("remedy is defaulted but its endpoint and service account are not handed to the " +
+			"supervised worker; every Remedy task would park on a worker holding no instance")
+	}
+	// Opting out puts it back in the engine, which is what makes the default reversible.
+	srv := newServerWithOptions(t)
+	srv.do(func() {
+		if !srv.jobRunner.Handles(compiler.RemedyJobTypeIndex) {
+			t.Error("a server that was not told to offload remedy has no in-process handler for it, " +
+				"so --in-process-connectors would leave the kind served by nobody")
+		}
+	})
+}
+
 // The check above is only worth anything if it could fail, and it could not if every
 // managed kind were provisioned. Naming the ones that are not is what keeps it a
 // real constraint rather than a tautology that grew one.
