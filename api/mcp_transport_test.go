@@ -252,6 +252,39 @@ func TestMCPRefusesADeployToken(t *testing.T) {
 	}
 }
 
+// TestDocsSurfaceIsBehindTheLogin: the API description and the explorer are a
+// developer surface, not something the login screen reads, and the explorer drives
+// the same mutating API a session is required for. Both are refused without one and
+// served with one (ADR-draft-auth-on-by-default).
+//
+// They are gated together on purpose: an explorer that renders and then cannot load
+// its own document would be worse than one that says plainly it needs a login.
+func TestDocsSurfaceIsBehindTheLogin(t *testing.T) {
+	ts := newMCPServer(t) // an --auth server; --docs is on by default
+
+	for _, path := range []string{"/api/v1/openapi.json", "/api/docs"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("anonymous GET %s: status=%d, want 401", path, resp.StatusCode)
+		}
+	}
+
+	c := mcpClient(t)
+	if code := login(t, c, ts, "root", "rootpassword"); code != http.StatusOK {
+		t.Fatalf("login: got %d", code)
+	}
+	for _, path := range []string{"/api/v1/openapi.json", "/api/docs"} {
+		code, _ := cReq(t, c, ts, http.MethodGet, path, "")
+		if code != http.StatusOK {
+			t.Errorf("signed-in GET %s: status=%d, want 200", path, code)
+		}
+	}
+}
+
 // mcpClient is a cookie-keeping client, so a login sticks for the /mcp calls that
 // follow it.
 func mcpClient(t *testing.T) *http.Client {

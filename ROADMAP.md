@@ -773,8 +773,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   stable opaque id, a **role list** (RBAC-ready, only `admin` enforced today),
   `Disabled` for deactivation, and `Source`/`ExternalID` hooks for external
   identity providers. Passwords are bcrypt-hashed and never leave the server.
-  Enforcement is **opt-in** (`--auth` / `WithAuth()`, off by default, mirroring
-  `--docs`): with it on, `/api/v1` requires a session (opaque HttpOnly cookie),
+  Enforcement is **on by default** for `atlas serve` — `--auth=false` runs the
+  server open and says so loudly at startup
+  ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md); it was
+  opt-in under ADR-0044, mirroring `--docs`). With it on, `/api/v1`, `/mcp` and the
+  API explorer require a session (opaque HttpOnly cookie),
   managing users requires `admin`, and a fresh instance seeds an admin from
   `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD` (a generated password is logged
   once — no hardcoded credential). The Console's **Organization** page is now a

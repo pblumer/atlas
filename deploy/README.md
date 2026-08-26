@@ -17,8 +17,14 @@ A published image is at `ghcr.io/pblumer/atlas` (built by
 ```bash
 make docker                      # local arch, tags ghcr.io/pblumer/atlas:dev
 docker run --rm -p 8080:8080 -v atlas-data:/data ghcr.io/pblumer/atlas:dev
-# open http://127.0.0.1:8080/
+# open http://127.0.0.1:8080/ and sign in
 ```
+
+A login is required by default. The first start seeds an administrator and logs a
+generated password **once** — read it out of the container output, or set your own
+with `-e ATLAS_ADMIN_PASSWORD=…` before that first start. For a throwaway container
+you just want to click around in, append `--auth=false`; it runs open and says so at
+startup.
 
 The image is a Debian-slim build running as nonroot (uid 65532), storing durable
 state under `/data` — mount a volume there. It bundles the **python3** and

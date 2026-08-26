@@ -2109,10 +2109,17 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// the explorer's "Try it out" exercises the same mutating surface as the API,
 	// so an operator opts in explicitly (ADR-0043). The vendored Scalar asset is
 	// served by the file server below at /vendor/scalar/.
+	//
+	// They are also behind the login. Nothing on the login screen reads either, and
+	// the explorer is a developer surface that drives the whole API — the same
+	// argument --docs already makes, one step further, now that requiring a login is
+	// the default rather than the exception (ADR-draft-auth-on-by-default). Gating
+	// them together matters: an explorer whose document is refused is a page that
+	// renders and then cannot load what it is for.
 	if s.docsEnabled {
-		mountFunc(accessPublic, "GET /api/v1/openapi.json", s.handleOpenAPI)
-		mountFunc(accessPublic, "GET /api/docs", s.handleDocs)
-		mountFunc(accessPublic, "GET /api/docs/", s.handleDocs)
+		mountFunc(accessAuthenticated, "GET /api/v1/openapi.json", s.handleOpenAPI)
+		mountFunc(accessAuthenticated, "GET /api/docs", s.handleDocs)
+		mountFunc(accessAuthenticated, "GET /api/docs/", s.handleDocs)
 	}
 
 	// Public, unauthenticated share links (ADR-0029/0143). These expose exactly one

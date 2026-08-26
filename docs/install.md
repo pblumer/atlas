@@ -142,8 +142,10 @@ Check it from another shell, then stop it with `Ctrl-C`:
 curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-Binding to `127.0.0.1` on the first run is on purpose: authentication is still
-off, and until step 6 anyone who can reach the port is an administrator.
+Binding to `127.0.0.1` on the first run is on purpose. A login is required by
+default, so the first start also seeds an administrator and logs a generated
+password once (step 6) — binding to loopback means that window is not reachable
+from anywhere else while you collect it.
 
 ### 5. Run it as a systemd service
 
@@ -197,10 +199,11 @@ journalctl -u atlas -f
 > apply to the interpreters Atlas spawns. Loosen them only as far as your scripts
 > actually need.
 
-### 6. Turn on authentication
+### 6. The administrator account
 
-The unit above already passes `--auth`. On the **first** start with `--auth` and
-an empty user store, Atlas seeds one administrator:
+Authentication is **on by default**; the unit above passes `--auth` explicitly so
+the file says what it relies on. On the **first** start with an empty user store,
+Atlas seeds one administrator:
 
 ```bash
 sudo mkdir -p /etc/atlas
@@ -381,7 +384,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 |------|---------|--------------|
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
-| `--auth` | `false` | Require login for the API and UI |
+| `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for connector credentials |
@@ -450,6 +453,7 @@ history.
 | `/healthz` | Liveness — is the process alive. Unconditional; never gated by `--auth` |
 | `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
 | `/mcp` | Model Context Protocol endpoint — gated by `--auth`; a tool call acts as the caller |
+| `/api/v1/openapi.json`, `/api/docs` | The API description and explorer — served with `--docs`, and gated by `--auth` like the rest of the API |
 
 An external worker leases a job with `POST /api/v1/jobs/{key}/activate` and reports the
 outcome with `.../complete` or `.../fail` ([ADR-0007](adr/0007-job-worker-protocol.md)).
@@ -652,7 +656,7 @@ another `atlas serve` already owns that directory. Only one may.
 exactly what it says. Install the interpreter, or start with `--python=false`.
 Tasks in that language park until it is available; nothing is lost.
 
-**No login prompt appears** — `--auth` is off. Nothing is protected in that mode;
+**No login prompt appears** — the server was started with `--auth=false`. Nothing is protected in that mode;
 add the flag and restart.
 
 **You cannot log in** — use `atlas reset-password` against the data directory

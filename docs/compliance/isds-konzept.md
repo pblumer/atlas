@@ -318,8 +318,11 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 
 ### 5.2.2 Authentisierung
 
-- **Opt-in:** ohne `--auth` ist der Server vollständig offen (Einzelbenutzer-
-  Modus). Für jeden Bundesbetrieb ist `--auth` **obligatorisch** (M-02).
+- **Standardmässig an** (ADR-draft-auth-on-by-default): `atlas serve` verlangt
+  eine Anmeldung, ohne dass etwas konfiguriert werden muss. `--auth=false` schaltet
+  sie ab und protokolliert das beim Start als Warnung (`auth.disabled`) — für
+  Entwicklung und Demos, nie für einen Bundesbetrieb. M-02 prüft deshalb, dass
+  `--auth=false` **nicht** gesetzt ist, statt dass `--auth` gesetzt ist.
 - **Verfahren:** lokale Benutzernamen/Passwörter; Hash mit **bcrypt**
   (`bcrypt.DefaultCost`), Salt und Kostenfaktor im Digest. Mindestlänge 8 Zeichen
   — bewusst ein Minimum, **keine Passwort-Policy-Engine** (`api/auth.go`).
@@ -609,8 +612,9 @@ zu bestätigen.
   System-Projekts dürfen Atlas-Logins anlegen, Passwörter setzen und Konten
   deaktivieren (ADR-0122/0123). Bewusst entscheiden; wenn nicht benötigt, mit
   `--user-provisioning=false` abschalten.
-- **`--docs` (Standard: an):** API-Explorer unter `/api/docs`; auf der Produktion
-  abschalten.
+- **`--docs` (Standard: an):** API-Explorer unter `/api/docs`. Er und die
+  OpenAPI-Beschreibung liegen seit ADR-draft-auth-on-by-default hinter der
+  Anmeldung; wo er nicht gebraucht wird, trotzdem abschalten.
 - **`vault.key`:** ohne Schlüssel ist ein Datenverzeichnis nicht wiederherstellbar
   (die Secrets sind unlesbar). Getrennt vom Backup aufbewahren oder — besser —
   den Schlüssel per `ATLAS_VAULT_KEY_FILE` bereitstellen, dann schreibt Atlas ihn
@@ -654,7 +658,7 @@ mit dem ISBO BIT.
 | Nr. | Massnahme | Verantwortlichkeit | Umsetzung / Nachweis |
 |-----|-----------|--------------------|----------------------|
 | M-01 | Reverse Proxy mit TLS vorschalten; `/metrics` sperren (`/mcp` ist durch `--auth` geschützt, eine Sperre dort ist zusätzliche Absicherung); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ aktivieren | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
-| M-02 | `--auth` aktiv; Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung |
+| M-02 | `--auth=false` **nicht** gesetzt (Standard ist an); Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung, Startlog ohne `auth.disabled` |
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |
 | M-05 | Getrennte Umgebungen (DEV/TEST/PROD); Deploy-Berechtigung auf einen definierten Kreis; Change-Verfahren für Modelländerungen | ⟨AV + Betrieb⟩ | Berechtigungskonzept, Change-Records |

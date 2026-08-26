@@ -33,10 +33,12 @@ Atlas is a single self-contained binary — engine, HTTP API, and the whole web 
 ```bash
 tar -xzf atlas_0.4.0_linux_amd64.tar.gz
 ./atlas_0.4.0_linux_amd64/atlas serve --data-dir ./atlas-data
-# open http://127.0.0.1:8080/
+# open http://127.0.0.1:8080/ and sign in
 ```
 
 That's the whole setup. No SQL schema to migrate, no broker to provision, no sidecar.
+
+**A login is required by default.** On the first start Atlas creates one administrator and logs a generated password **once** — copy it out of the startup output, or set `ATLAS_ADMIN_PASSWORD` beforehand to choose your own. To poke around without any of that, `--auth=false` runs the server open; it says so loudly at startup, and it is for a laptop, not for anything reachable by anyone else.
 
 **[Installation guide](docs/install.md)** — the step-by-step version: Linux with a systemd unit, Windows Server, macOS, turning on authentication, TLS, backups, upgrades, and the full flag and environment-variable reference. For containers and Kubernetes see **[Deploying Atlas](deploy/)**.
 

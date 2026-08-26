@@ -81,6 +81,11 @@ var (
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
 	DataDirOpened      = newEvent("server.data_dir_opened")
+	// AuthDisabled is a server started with --auth=false: no login is required for
+	// anything. It is a WARN and it is loud because it is now the deliberate
+	// exception rather than the default — the one line that says this instance is
+	// open to whoever can reach the port (ADR-draft-auth-on-by-default).
+	AuthDisabled = newEvent("auth.disabled")
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")

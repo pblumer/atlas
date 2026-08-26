@@ -14,6 +14,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **`atlas serve` requires a login by default.** `--auth` was opt-in, mirroring
+  `--docs` ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) —
+  a reasonable call when authentication first landed and turning it on broke MCP, the
+  explorer and the tests at once. Those reasons are worked through, and what was left
+  was a default that every document about Atlas told you to change: the install guide,
+  the Helm chart and the compliance concept all opened with "turn on `--auth`". A
+  default everything tells you to change is not a default, it is a trap with
+  documentation around it.
+
+  It is now on. `--auth=false` still runs the server fully open and writes one WARN
+  line at startup (`auth.disabled`) naming what that means — the API, the UI, and
+  `/mcp`, which can deploy and run processes. The first start with an empty user store
+  seeds one administrator from `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD`, or
+  generates a password and logs it **once**; that path was always there, it is just no
+  longer step 6 of the install guide. The Helm chart follows, defaulting
+  `atlas.auth.enabled` to `true` and no longer refusing to render without an admin
+  password source — set `atlas.auth.existingSecret` for anything beyond a scratch
+  install ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md)).
+
+  **Breaking.** `atlas serve` with no flags now requires a login. Pass `--auth=false`
+  for the old behaviour.
+
+- **The API description and the explorer are behind the login.** `GET
+  /api/v1/openapi.json` and `/api/docs` were public. Nothing on the login screen reads
+  either, and the explorer's "Try it out" drives the same mutating API a session is
+  required for — the argument `--docs` already makes, one step further. `--docs` still
+  decides whether they are served at all; a login now decides who reads them. They moved
+  together on purpose: an explorer that renders and then cannot fetch its own document
+  is worse than one that says plainly it needs a login.
+
 - **`/mcp` is behind the login, and acts as its caller.** The Model Context Protocol
   transport was mounted on a mux *beside* the API server, so the authentication
   middleware never saw it — while the adapter attached the server's internal service

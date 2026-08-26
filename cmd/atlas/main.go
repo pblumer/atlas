@@ -174,7 +174,7 @@ func runServe(args []string) error {
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
-	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
+	auth := fs.Bool("auth", true, "require login for the API, the UI and /mcp; on by default (opt-out) — pass --auth=false to run open, which is for development and demos only. On the first start with an empty user store it seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD, generating and logging a password once if none is set")
 	publicFormsCORS := fs.String("public-forms-cors", os.Getenv("ATLAS_PUBLIC_FORMS_CORS_ORIGINS"), "comma-separated web origins allowed to embed a public start form cross-origin (ADR-0186); empty (default) blocks cross-origin access, \"*\" allows any origin. Opens only the cookieless /public/forms endpoints, never /api/v1 (or ATLAS_PUBLIC_FORMS_CORS_ORIGINS)")
 	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
@@ -409,6 +409,15 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
+	} else {
+		// The one line that says this instance is open. Running without a login is a
+		// legitimate thing to want — a laptop, a demo, a throwaway container — but it
+		// is now the deliberate exception, and an exception nobody is told about is
+		// how a demo becomes a deployment (ADR-draft-auth-on-by-default).
+		logging.Warn(logging.AuthDisabled,
+			"running WITHOUT authentication: the API, the web UI and /mcp are open to "+
+				"anyone who can reach this port, and /mcp can deploy and run processes. "+
+				"Drop --auth=false to require a login")
 	}
 	if strings.TrimSpace(publicFormsCORS) != "" {
 		apiOpts = append(apiOpts, api.WithPublicFormsCORS(strings.Split(publicFormsCORS, ",")))

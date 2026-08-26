@@ -33,7 +33,8 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M1** — Zugriffsklassen je Route + Inventar-Test | ✅ umgesetzt — [`ADR-draft-route-access-classes`](../adr/draft-route-access-classes.md), `api/access.go` |
 | **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-draft-authenticated-mcp-transport`](../adr/draft-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
 | **M4** — `atlas mcp --token` / `ATLAS_TOKEN` | ✅ umgesetzt — im selben Entscheid, `cmd/atlas/main.go` |
-| M3, M5–M8 | offen |
+| **M5** — `--auth` standardmässig an | ✅ umgesetzt — [`ADR-draft-auth-on-by-default`](../adr/draft-auth-on-by-default.md) |
+| M3, M6–M8 | offen |
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -145,7 +146,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M2 ✅ | `/mcp` hinter dieselbe Grenze, Identität durchreichen | M | R-08, O-07 | G1, G4 |
 | M3 | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
 | M4 ✅ | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
-| M5 | `--auth` standardmässig an | S | R-08, R-03 | G5 |
+| M5 ✅ | `--auth` standardmässig an | S | R-08, R-03 | G5 |
 | M6 | `/metrics` auf eigenen Listener bzw. Zugriffsklasse | S | R-08, O-07 | G1 |
 | M7 | Anmelde-Härtung: Rate-Limit und Sperre am Login | S | O-04, R-12 | — |
 | M8 | Sicherheits-Audit-Log | S | O-03, R-13 | — |
@@ -237,20 +238,32 @@ antwortet 401» und «es wurde kein Token gesetzt» derselbe Vorfall sind. `runM
 ist so aufgeteilt, dass seine Ströme übergeben werden können; damit steht der
 ganze Weg des Credentials unter Test.
 
-### M5 — `--auth` standardmässig an
+### M5 — `--auth` standardmässig an ✅
 
-`--auth` wird `true`. `--auth=false` bleibt möglich (Entwicklung, Demo), schreibt
-aber beim Start eine deutliche Warnzeile mit stabilem `event=`-Namen. In derselben
-Änderung wandert `/api/v1/openapi.json` hinter die Schranke, sobald Auth aktiv ist
-— die Login-Maske braucht die Beschreibung nicht.
+`--auth` ist `true`. `--auth=false` bleibt möglich (Entwicklung, Demo) und
+schreibt beim Start eine deutliche Warnzeile unter dem stabilen Ereignisnamen
+`auth.disabled`, die benennt, was offen ist. `/api/v1/openapi.json` **und** der
+API-Explorer `/api/docs` liegen hinter der Schranke — die Login-Maske liest
+beides nicht, und «Try it out» fährt dieselbe verändernde API. Beide zusammen,
+weil ein Explorer, der lädt und dann sein eigenes Dokument nicht holen kann,
+schlechter ist als einer, der sagt, dass er eine Anmeldung braucht.
+
+Der erste Start legt weiter genau einen Administrator an
+(`ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD`, sonst generiert und **einmalig**
+protokolliert). Das Helm-Chart zieht nach: `atlas.auth.enabled` steht auf `true`,
+und die Render-Verweigerung ohne Passwortquelle ist weg — sie stammte aus der
+Zeit, als Auth opt-in war, und hätte als Standard genau den Standardweg brechen
+lassen.
 
 ADR-0044 hat die Erzwingung bewusst als opt-in gewählt, um bestehende
-Installationen nicht zu brechen. Für ein `0.x`-Preview ist die Umkehr ein
-Änderungseintrag mit klarer Release-Notiz — und sie ist der Unterschied zwischen
-«kann sicher betrieben werden» und «ist sicher, wenn man alles richtig macht».
+Installationen nicht zu brechen. Die Umkehr ist der Unterschied zwischen «kann
+sicher betrieben werden» und «ist sicher, wenn man alles richtig macht» — und
+M-02 im ISDS-Konzept prüft jetzt, dass `--auth=false` *nicht* gesetzt ist, was am
+Startlog ablesbar ist statt an einer Argumentliste.
 
-**Reihenfolge beachten:** M5 erst *nach* M2/M3/M4. Sonst steht der Standard auf
-«geschützt», während der MCP-Adapter noch kein Credential halten kann.
+**Reihenfolge war wichtig:** M5 kam nach M2 und M4. Andernfalls hätte der
+Standard auf «geschützt» gestanden, während die MCP-Pfade noch kein Credential
+halten konnten.
 
 ### M6 — `/metrics` trennen
 
@@ -310,8 +323,9 @@ nicht bemerkt. Genau das ist der Grund für Stufe 1.
 
 ### Stufe 1 — PoC-produktivtauglich
 
-~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → M5 → M7 + M8 → M6. **M1, M2 und M4 sind
-umgesetzt.**
+~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → ~~M5~~ → M7 + M8 → M6. **M1, M2, M4 und M5
+sind umgesetzt.** Offen: M3 (API-Tokens), M6 (`/metrics`), M7 (Anmelde-Härtung),
+M8 (Sicherheits-Audit-Log).
 
 Danach gilt: **keine Schnittstelle ohne Login**, per Test belegbar, und die
 Absicherung überlebt eine vergessene Proxy-Regel. R-08 geht von rot auf grün, O-07
@@ -359,8 +373,11 @@ Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
    `TestHTTPCallerCredentialBeatsTheAdapters` im `mcp`-Paket. *(M2b)*
 4. Ein widerrufenes und ein abgelaufenes API-Token werden abgewiesen; das
    Geheimnis ist über keinen Endpunkt erneut abrufbar. *(M3)*
-5. Ein Server ohne Flags verlangt einen Login; `--auth=false` erzeugt eine
-   Warnzeile mit stabilem `event=`-Namen. *(M5)*
+5. ✅ Ein Server ohne Flags verlangt einen Login; `--auth=false` erzeugt eine
+   Warnzeile unter `auth.disabled`. Am gebauten Binary geprüft: anonym `401` auf
+   `/api/v1/processes`, `/api/v1/users`, `/api/v1/openapi.json`, `/api/docs` und
+   `POST /mcp`, `200` auf `/healthz`, `/readyz`, `/metrics` und `/api/v1/info`;
+   nach Anmeldung `200` auf allen. *(M5)*
 6. Nach *n* Fehlanmeldungen antwortet der Login mit `429`/Sperre. *(M7)*
 7. Login, Fehlanmeldung, Token-Vergabe und -Nutzung erscheinen als
    maschinenlesbare Log-Ereignisse mit Akteur. *(M8)*
@@ -393,7 +410,7 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
   — M2, ersetzt die `/mcp`-Aussage aus ADR-0016 und erledigt die Folgearbeit aus
   ADR-0049
 - `draft-api-tokens.md` — M3, offen
-- `draft-auth-on-by-default.md` — M5, offen
+- ✅ [`draft-auth-on-by-default.md`](../adr/draft-auth-on-by-default.md) — M5
 
 M4 hat keinen eigenen Entscheid: es vervollständigt
 `draft-authenticated-mcp-transport` und steht dort.

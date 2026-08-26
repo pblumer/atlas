@@ -36,11 +36,6 @@ var wantPublicRoutes = []string{
 	"GET /api/v1/settings/logo",
 	"GET /api/v1/settings/registration",
 
-	// The API description and the explorer, both served only with --docs.
-	"GET /api/v1/openapi.json",
-	"GET /api/docs",
-	"GET /api/docs/",
-
 	// Share links, where the token in the URL is the whole authorization
 	// (ADR-0029/0143). Rate-limited in their handlers.
 	"GET /public/process-docs/{token}",
@@ -175,8 +170,14 @@ func TestAccessClassification(t *testing.T) {
 		{"ui asset", "GET", "/assets/app.js", accessPublic},
 		{"ui page", "GET", "/index.html", accessPublic},
 
-		// Carried over from the path-prefix rule this replaced.
-		{"openapi document", "GET", "/api/v1/openapi.json", accessPublic},
+		// The API description and the explorer are a developer surface, not something
+		// the login screen reads, and the explorer's "Try it out" drives the same
+		// mutating API. Both moved behind the boundary when --auth became the default
+		// (ADR-draft-auth-on-by-default).
+		{"openapi document", "GET", "/api/v1/openapi.json", accessAuthenticated},
+		{"api explorer", "GET", "/api/docs", accessAuthenticated},
+		{"api explorer asset path", "GET", "/api/docs/", accessAuthenticated},
+
 		{"user administration", "GET", "/api/v1/users", accessAuthenticated},
 	}
 	for _, c := range cases {
