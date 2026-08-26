@@ -30,12 +30,29 @@ func TestBuiltinConnectorsRegistersEntra(t *testing.T) {
 	}
 }
 
-// With no in-process fallback, a broken configuration must be refused while the
-// operator is still watching — and the message must quote the exact variable.
-func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
-	if _, err := BuiltinConnectors(envMap(nil), "entra"); err == nil {
-		t.Error("no ATLAS_ENTRA_CONNECTORS must fail at startup")
+// An Entra worker holding no tenant yet is unconfigured, not misconfigured. Entra is
+// supervised by default (ADR-0172), so a server with no tenant configured starts one
+// of these on every boot: failing here is a restart loop with a growing backoff that
+// never converges, which is exactly what exitNothingToServe exists to avoid. It parks
+// instead, and the Console entry that configures a tenant brings it back.
+func TestAnEntraWorkerWithNoConfiguredTenantParksInsteadOfFailing(t *testing.T) {
+	built, err := BuiltinConnectors(envMap(nil), "entra")
+	if err != nil {
+		t.Fatalf("an unconfigured entra worker must not fail at startup: %v", err)
 	}
+	if len(built.Handlers) != 0 {
+		t.Errorf("handlers = %v, want none — it holds no tenant credential", built.Handlers)
+	}
+	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "entra" {
+		t.Errorf("unconfigured = %v, want [entra] so the startup line can say it", built.Unconfigured)
+	}
+}
+
+// With no in-process fallback, a broken configuration must be refused while the
+// operator is still watching — and the message must quote the exact variable. A
+// *named* tenant missing a field is that; naming no tenant at all is the parked case
+// above.
+func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
 	for _, missing := range []string{"TENANT_ID", "CLIENT_ID", "CLIENT_SECRET"} {
 		env := map[string]string{
 			"ATLAS_ENTRA_CONNECTORS":            "contoso",
@@ -143,6 +160,83 @@ func TestRunEntraJobCarriesAdvancedQueryOnItsOwn(t *testing.T) {
 	if !strings.Contains(spy.path, "$count=true") {
 		t.Errorf("path = %q, want $count=true, the other half Graph insists on", spy.path)
 	}
+}
+
+// deltaLink has to survive the engine→worker hop too, and its loss is the same silent,
+// unsafe kind as a dropped bound: a resume cursor decoding to "" turns a change-tracking
+// read into a full re-enumeration without a word. So it is asserted through what it does
+// — the first request the connector makes is the resume link verbatim, not a fresh
+// /delta — which only holds if deltaLink crossed the wire.
+func TestRunEntraJobCarriesTheDeltaCursor(t *testing.T) {
+	spy := &deltaSpy{}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", spy)
+
+	const resume = "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z"
+	if _, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "delta-users",
+			"deltaLink": resume, "resultVariable": "aenderungen",
+		},
+	}}, reg); err != nil {
+		t.Fatalf("RunEntraJob: %v", err)
+	}
+	if spy.path != resume {
+		t.Errorf("first request = %q, want the resume deltaLink verbatim (it was dropped on the hop otherwise)", spy.path)
+	}
+}
+
+// newPassword has to survive the hop as well: it is the whole of a reset-password, and a
+// dropped one decodes to "" — which the connector's checkRequired then refuses, so a
+// reset would fail with "resolved no newPassword" though the model authored one. Asserted
+// through the body the connector built.
+func TestRunEntraJobCarriesTheNewPassword(t *testing.T) {
+	spy := &bodySpy{res: map[string]any{"id": "u1"}}
+	reg := entra.NewRegistry()
+	reg.Register("contoso", spy)
+
+	if _, err := RunEntraJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "entra",
+		Fields: map[string]any{
+			"connector": "contoso", "operation": "reset-password",
+			"userId": "u1", "newPassword": "S3cret!",
+		},
+	}}, reg); err != nil {
+		t.Fatalf("RunEntraJob: %v", err)
+	}
+	pp, _ := spy.body.(map[string]any)
+	prof, _ := pp["passwordProfile"].(map[string]any)
+	if prof["password"] != "S3cret!" {
+		t.Errorf("password body = %#v, want the newPassword that crossed the wire", spy.body)
+	}
+}
+
+// deltaSpy answers a completed delta (one page carrying a deltaLink) and records the path
+// it was asked for, where the decoded resume cursor becomes observable.
+type deltaSpy struct{ path string }
+
+func (deltaSpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
+
+func (s *deltaSpy) Call(_ context.Context, r entra.Request) (any, error) {
+	s.path = r.Path
+	return map[string]any{
+		"value":            []any{},
+		"@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z2",
+	}, nil
+}
+
+// bodySpy records the request body, where a decoded write field becomes observable.
+type bodySpy struct {
+	body any
+	res  any
+}
+
+func (bodySpy) BaseURL() string { return "https://graph.microsoft.com/v1.0" }
+
+func (s *bodySpy) Call(_ context.Context, r entra.Request) (any, error) {
+	s.body = r.Body
+	return s.res, nil
 }
 
 // listingSpy answers one page of a given size and records the path it was asked for,

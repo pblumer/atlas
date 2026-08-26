@@ -144,9 +144,35 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
+			if reg == nil {
+				// Told to serve Entra, holding no tenant. Not an error, for the reason
+				// mail's identical branch above is not: this worker may serve other
+				// kinds, and a kind supervised by default must park rather than fail
+				// on a server where nobody has configured a tenant yet.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
+			})
+		case "remedy":
+			reg, names, err := remedyRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Remedy, holding no AR System to file against. Not an
+				// error, for the reason mail's and Entra's identical branches above are
+				// not: this worker very likely serves other kinds, and an ITSM instance
+				// nobody has configured yet must park its tasks rather than take down
+				// the kinds that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.RemedyJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunRemedyJob(ctx, j, reg)
 			})
 		case "mssql", "mariadb", "postgres":
 			// The three SQL products (ADR-0173). Unlike the
@@ -161,6 +187,13 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			reg, names, err := sqlRegistryFromEnv(env, p)
 			if err != nil {
 				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve this product, holding no database — the state every
+				// server starts in. Parks like mail and Entra above rather than
+				// failing; a connector configured in the Console brings it back.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
 			}
 			built.Names = append(built.Names, names...)
 			built.Handlers[p.JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
@@ -198,7 +231,7 @@ type Connectors struct {
 // misspelling produces. A kind may serve several job types — script serves one per
 // language — which is why a caller must not check this by counting handlers.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "csv", "entra", "ldif", "mail", "mariadb", "mssql", "postgres", "rest", "script", "webscrape"}
+	return []string{"ad", "csv", "entra", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "script", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

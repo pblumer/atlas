@@ -258,7 +258,15 @@ The control-flow basics most real models use.
   is wired into the single-binary server run loop under the reserved Remedy job type and
   authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
-  a Remedy-side dedup field are follow-ups. For local development without a real
+  a Remedy-side dedup field are follow-ups.
+  Since the 2026-08-26 amendment the work also **runs on a worker** (ADR-0164/0168): the
+  engine resolves the task into plain values and `atlas worker --connector remedy` creates
+  the entry, holding the AR System base URL and the service account in its own environment
+  (`ATLAS_REMEDY_CONNECTORS` plus per name `_ENDPOINT`, `_USERNAME`, `_PASSWORD`) — handed
+  to a supervised worker out of the connector store and the vault at spawn, exactly as mail
+  is. A Helix instance reachable only from the worker's network is thereby serviceable. The
+  in-process handler remains the default; `--offload-connectors remedy` or
+  `--supervise-connector remedy` moves the kind. For local development without a real
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   connector runs against unmodified (package `connector/remedy/mock`).
@@ -804,6 +812,40 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
   Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
+
+## Milestone P — Panorama architecture & live landscape 🔲
+
+A parallel track alongside Milestone S: turn Panorama from a placeholder into a
+standards-based architecture workspace that relates declared ArchiMate 3.2 models
+to current Atlas resources without mixing runtime observations into the model. See
+[ADR-DRAFT: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
+
+- 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
+  design-time sidecar store; import, validate, preserve, and export Open Group
+  ArchiMate Model Exchange XML; keep reusable elements/relationships separate from
+  their views; use optimistic revisions, bounded XML parsing, backup/restore, and
+  interoperability fixtures.
+- 🔲 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
+  `diagram-js` bundle with an Atlas-owned ArchiMate palette, semantic connection
+  rules, property panel, multi-view canvas, undo/redo, save/reload, and browser E2E
+  coverage. Start with Capability, Business Process, the core Application layer,
+  and the Technology elements needed to model artifacts, nodes, services, and
+  networks; state the supported subset explicitly.
+- 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+  ArchiMate elements to Atlas process applications, BPMN process ids,
+  connectors/job types, releases, local runtimes, and deployment targets. Preserve
+  the distinction between an ArchiMate Application Component and an Atlas process
+  application, including many-to-many mappings.
+- 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
+  a separate observation projection for readiness, health, version, deployments,
+  instances, jobs, and incidents. Resolve remote target status server-side with
+  bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
+  stale/unbound states; show status as borders and badges without overwriting
+  ArchiMate layer colors.
+- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments,
+  surface discovered-but-unmodeled resources, provide dependency and impact
+  analysis, and optionally query Prometheus/OpenSearch for historical context.
+  Panorama remains a correlation surface, not a time-series or log database.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

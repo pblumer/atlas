@@ -17,7 +17,7 @@
 //
 //     node scripts/whats-new/gen.mjs        (or: make whats-new)
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +26,7 @@ const ROOT = resolve(HERE, "..", "..");
 const CHANGELOG = resolve(ROOT, "CHANGELOG.md");
 const OVERRIDES = resolve(HERE, "overrides.json");
 const OUT = resolve(ROOT, "api", "web", "whats-new.json");
+const ADR_DIR = resolve(ROOT, "docs", "adr");
 
 const REPO = "https://github.com/pblumer/atlas";
 const BLOB = `${REPO}/blob/main`;
@@ -65,6 +66,22 @@ function collectAdrPaths(text) {
   return paths;
 }
 
+// Build the same ADR-number -> path lookup from docs/adr itself. A bare "(ADR-0058)"
+// resolved only when some *other* bullet happened to link that ADR with a path; when
+// none did, the entry pointed at the directory listing instead of the record it names
+// — a link that opens the whole index and answers nothing. The files are right there,
+// so read them: every numbered ADR resolves whether or not the CHANGELOG spells out
+// its path. The markdown links stay authoritative over this (see parseChangelog),
+// since an author who writes the path has said which file they mean.
+function collectAdrFiles() {
+  const paths = {};
+  for (const name of readdirSync(ADR_DIR)) {
+    const m = name.match(/^(\d+)-.+\.md$/);
+    if (m) paths[m[1]] = `docs/adr/${name}`;
+  }
+  return paths;
+}
+
 // linkFor resolves the best PR/ADR reference in a bullet to a {label, url}. A PR/
 // issue number wins (it is the most user-facing); then an ADR (markdown or bare);
 // otherwise a link to the version's CHANGELOG section, so every entry has a target.
@@ -88,7 +105,7 @@ function linkFor(block, adrPaths, versionAnchor) {
 // record per "- **Title**" bullet, carrying its version, date, category and the raw
 // block text (first paragraph) for reference/summary extraction.
 function parseChangelog(text) {
-  const adrPaths = collectAdrPaths(text);
+  const adrPaths = { ...collectAdrFiles(), ...collectAdrPaths(text) };
   const lines = text.split("\n");
   const out = [];
   let version = null;

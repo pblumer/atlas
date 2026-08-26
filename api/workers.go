@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -398,6 +399,14 @@ func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnect
 		}
 		for _, ref := range d.cp.ConnectorRefs() {
 			if ref.Connector == "" || held[ref.Connector] {
+				continue
+			}
+			if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
+				// A connector authored as a FEEL expression (entra, ADR-0172) names no
+				// fixed connector to match against what workers hold — the tenant is
+				// resolved from the instance's variables at call time. Listing "= tenant"
+				// as unserved would be a false alarm; the runtime unresolved-connector
+				// incident stands in for it, exactly as the deploy-time preflight does.
 				continue
 			}
 			if s.jobRunner.Handles(ref.JobType) {

@@ -59,3 +59,20 @@ test("variable rows are drag sources carrying the variable name", async ({ page 
   expect(payload).toBe("filename");
   expect(page.__errors).toEqual([]);
 });
+
+test("a form field's component type is the variable's type", async ({ page }) => {
+  // A form is the one design-time source that knows the type of what it writes before
+  // anything has run: a checkbox writes a boolean whatever it is labelled, a dynamic
+  // list binds an array under its path. The panel says so, per field.
+  const list = page.locator("#vars-list");
+  await expect(list.locator('.var-row[data-var="filename"]')).toBeVisible();
+  const typeOf = async (name) =>
+    (await list.locator(`.var-row[data-var="${name}"] .vtag`).innerText()).toLowerCase();
+
+  expect(await typeOf("filename")).toBe("string");   // textfield
+  expect(await typeOf("delimiter")).toBe("number");  // number
+  expect(await typeOf("header")).toBe("boolean");    // checkbox, inside a layout group
+  expect(await typeOf("rows")).toBe("array");        // dynamic list, bound under its path
+  expect(await typeOf("orderId")).toBe("string");    // the process's own start variable
+  expect(page.__errors).toEqual([]);
+});

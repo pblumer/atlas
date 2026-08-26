@@ -81,6 +81,9 @@ export function entraResultShape(operation) {
       return "Bei dieser Operation das Gruppen-Objekt (id, displayName, mailNickname, …).";
     case "list-groups":
       return "Bei List groups ein JSON-Array aller passenden Gruppen (erforderlich).";
+    case "delta-users":
+    case "delta-groups":
+      return "Bei einer Delta-Abfrage ein Objekt { value: [Änderungen], deltaLink: \"…\" } — value die geänderten Objekte (gelöschte mit @removed markiert), deltaLink der Cursor für den nächsten Lauf (erforderlich).";
     case "create-team":
       return "Bei Create team das Team-Objekt — seine id ist die der zugrunde liegenden Gruppe.";
     case "create-channel":
@@ -102,6 +105,36 @@ export function entraResultShape(operation) {
       return "Diese Operation gibt nichts zurück — Graph antwortet ohne Inhalt (204), die Variable bleibt leer.";
     default:
       return "Das Antwort-Objekt der Operation.";
+  }
+}
+
+// entraResultType is entraResultShape's machine-readable half: the *type* the result
+// variable receives, for the Modeler's Variables panel, where the prose above would not
+// fit and a badge does. An operation Graph answers 204 to writes nothing, so it gets no
+// type rather than a wrong one — the same reason the placement badge stays silent when
+// the server says nothing.
+export function entraResultType(operation) {
+  switch (operation) {
+    case "list-users":
+    case "list-groups":
+      return "array";
+    case "assign-license":
+    case "assign-role":
+    case "enable":
+    case "disable":
+    case "delete-user":
+    case "delete-group":
+    case "reset-password":
+    case "add-group-member":
+    case "remove-group-member":
+    case "add-group-owner":
+    case "remove-group-owner":
+    case "add-team-member":
+    case "add-team-owner":
+    case "archive-team":
+      return "";
+    default:
+      return "object";
   }
 }
 

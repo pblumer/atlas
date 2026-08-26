@@ -219,6 +219,11 @@
           "type": "String",
           "isAttr": true
         },
+        {
+          "name": "deltaLink",
+          "type": "String",
+          "isAttr": true
+        },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]

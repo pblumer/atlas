@@ -14,6 +14,80 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job
+  handler only ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)), which is the
+  arrangement [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) exists to end: a
+  login, a create and a logout against somebody else's ITSM host, on the engine's
+  single-writer loop. It now has the same split every offloaded kind has
+  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)) — the engine resolves the task,
+  because only it has the compiled process and the scope chain, and what travels is the
+  connector's *name*, the form and the evaluated field values. There is nowhere in that
+  payload to put a base URL or a password.
+
+  `atlas worker --connector remedy` serves the kind from its own environment
+  (`ATLAS_REMEDY_CONNECTORS`, plus `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and
+  `_PASSWORD`), and a worker Atlas supervises is handed that configuration at spawn out of
+  the connector store and the vault — so a Helix instance added in the Console is served
+  without anything set by hand. A connector with no endpoint, or whose credential bundle is
+  missing or half-filled, is left out rather than handed over incomplete: a named instance
+  missing a field makes the worker refuse at startup, which would take down every other
+  kind it serves. A worker holding no instance at all parks Remedy tasks instead of leasing
+  and failing them.
+
+  **Nothing needs to be done to upgrade**, and nothing changes in any model. The
+  in-process handler remains and is still what a default server runs; the kind moves with
+  `--offload-connectors remedy` (a worker you run) or `--supervise-connector remedy` (one
+  Atlas starts for you). The payoff is an AR System reachable only from inside a customer's
+  network: a worker sitting there can now serve it, and the service account can live only
+  in that worker.
+
+## [0.4.0] — 2026-08-26
+
+This release is about connectors you can actually run. `--supervise-connector` gives
+any connector kind the pairing the four Atlas offloads had by default — its own worker,
+started by the server, handed the server's token at spawn — so a kind that was reachable
+only by running `atlas worker` yourself now takes one flag, on an authenticated server
+included. **Active Directory runs on a worker by default**, with the engine rendering the
+bind passwords its *deployed* models name into that worker's environment, and
+`ATLAS_AD_MOCK=1` serves the whole joiner/mover/leaver lifecycle against a directory in
+memory that refuses what a real domain controller refuses — so an identity process can be
+run before anybody goes near a real forest. Entra ID can now be asked a question, not only
+told what to do. In the Console the catalog, the configured connectors and the vault leave
+Organization for a **page of their own** at `#/console/connectors`, and the Modeler's Type
+picker is one line per kind rather than four screens of cards.
+
+**Multi-instance loops got the pass they were owed.** A loop inside an ad-hoc subprocess
+and a loop a gateway routes into both keep their results; a loop that also has an I/O
+mapping no longer runs past its maximum; a loop body no longer writes a null over the
+process; the badge counts rounds rather than activations; and a finished round no longer
+leaves a token behind on the replay. A loop also **says what it was told to repeat while**
+and what it decided each round, so one that ends early is readable rather than guessed at.
+
+**Two silent modelling mistakes are now refused at deploy** instead of doing something
+plausible and wrong: a dotted write target (`variable.dotted-target`), which used to create
+a variable with a dot in its name beside the structure it was meant to extend, and a mapping
+onto `loopCounter` (`loop.counter-mapping`), which overwrote the count the engine reads back
+to know which round finished. **Both refuse models that deployed before**; each entry names
+the element and the way to write what was meant. Running instances are unaffected — both
+rules run at deploy.
+
+### Added
+
+- **Entra ID delta queries — `delta-users` and `delta-groups`**
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Change detection instead of
+  a full compare: a delta operation enumerates the directory the first run and returns
+  only what changed on every run after, which is what makes an hourly identity sync
+  affordable. The `@odata.deltaLink` cursor round-trips through the process — the
+  operation takes an optional `deltaLink` (empty on the first run, the previous run's
+  cursor thereafter) and returns `{ value, deltaLink }` so a model persists the cursor
+  and hands it back next time. Deletions arrive in `value` marked `@removed`; `$select`,
+  `$top` and the `maxUsers` cap apply, while `$filter`/`$search`/advanced query do not
+  (Graph's delta endpoint runs none of them, and the compiler refuses them at deploy).
+  This closes the third Entra capability tracked in [issue #433](https://github.com/pblumer/atlas/issues/433).
+  Fixed alongside: `newPassword` and `deltaLink` were being dropped from the job payload
+  the engine hands the worker, so `reset-password` resolved an empty secret — both now
+  cross the wire and are covered by a worker round-trip test.
+
 - **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
   [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
@@ -186,8 +260,64 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Deploy & run opens the process's start form.** A process whose start event links a
+  form ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) already says what it starts
+  with, in a form somebody laid out — labels, required marks, field types and all. Deploy
+  & run ignored it and offered the free-form JSON textarea it offers a process with no
+  declaration, so the author had to retype, as untyped JSON, exactly the values the form
+  existed to collect. The deploy panel now names the form, and Deploy & run renders it in
+  a modal with **Send** and **Cancel**, through the same viewer the Tasks app uses; what
+  Send submits becomes the instance's start variables, and the form's own validation
+  stands between an empty required field and a started instance. The form is asked
+  *before* anything is deployed, so Cancel (or Escape) leaves the server exactly as it
+  was — "Deploy & run" is one action, and backing out of it should not leave a deployed
+  version behind. Deploy only never opens it: nothing is being started, so there are no
+  start values to collect.
+
+- **The Modeler's Variables panel says what a variable holds, not just that it exists.**
+  It listed a name and who writes it. That answers "does this variable exist"; in front of
+  a connector result it does not answer the two questions an author actually has — what
+  type is this, and what is inside it. Each row now carries a type badge, and where a
+  value can be shown it is shown:
+  - **The type, where the model declares one.** A start variable states its own (it used
+    to be a word inside the origin line, "start variable · number"; it is a badge like
+    every other type now). A form field's component type *is* a type — a checkbox writes a
+    boolean whatever it is labelled, a dynamic list binds an array under its path
+    ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)). And what a connector kind writes is a fact about
+    the kind, known before anything runs: fifteen of the catalog's kinds
+    ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)) now declare their result type
+    machine-readably, several of them per operation — a SQL `query` returns rows, `query
+    one` a row, an `execute` a count. Where nothing declares a type — a FEEL script's
+    result is whatever its expression evaluates to — the row carries **no badge**: a badge
+    reads as knowledge, and a guessed one is worse than the blank it replaces.
+  - **The value it last actually held**, read from a real instance of this process, with a
+    line above the list naming which run it was and its state. A structure opens where it
+    stands, with the same collapsed summary the replay's Variables tab uses (the brackets
+    carry the difference between a list and one of its elements, which truncated text
+    does not) — and opening it is the only way at design time to see that a row carries
+    `kundennr` and not `id`. An observed type wins over a declared one, and the badge's
+    tooltip names both, so a run that contradicts the model is visible rather than quietly
+    overwritten. A diagram that was never deployed — the state of most diagrams being
+    written — shows its declarations and no values, which is the honest answer, not an
+    error.
+
+- **Connectors are their own page in the Console.** They live at `#/console/connectors`,
+  beside Organization in the navigation. The connector catalog, the connectors this instance has
+  actually configured ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)) and the encrypted
+  vault their credentials resolve from ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md))
+  were the last three cards of Organization — below the user roster, the groups and the
+  brand-colour picker. Organization answers "who uses this instance and what does it look
+  like"; a connector is not a person, and as the catalog grew past a dozen kinds the page
+  had become mostly integrations with the people at the top. The three move together and in
+  the order the work happens — pick a kind, point it somewhere, give it a credential —
+  because a token *reference* and the vault secret it resolves to are one setting entered in
+  two places. Organization keeps users, groups and appearance. The deep links follow: an
+  incident whose model names a connector nobody configured, the incident table's
+  "Configure connector ↗", and the handbook's note on where credentials live all point at
+  the new page, and the contextual help button on it opens the connector chapter.
+
 - **The connector picker is one line per kind.** The Modeler's Type picker lists nineteen
-  kinds ([ADR-0067](docs/adr/0067-connector-kind-catalog.md)), and each was a two-line card:
+  kinds ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)), and each was a two-line card:
   name, then the catalog's one-sentence description underneath. That put a single choice
   across roughly four screens of scrolling — the list stood 2015px tall, and the tallest
   entry alone took 211px — so the way to find a kind was to search for it, and the way to
@@ -2148,7 +2278,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pblumer/atlas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pblumer/atlas/releases/tag/v0.1.0
