@@ -103,3 +103,21 @@ func TestNoKindsAsksForNothing(t *testing.T) {
 		t.Fatalf("superviseConnectorSpecs(nil) = %v, %v, %v; want nothing at all", specIDs(specs), offload, err)
 	}
 }
+
+// TestSupervisingRemedyPairsTheWorkerWithTheOffload is the operator-facing half of
+// moving the Remedy connector onto a worker (ADR-0106 amended / ADR-0168). Unlike
+// entra, Remedy still has an in-process handler — so asking for its worker must also
+// take the kind off the engine, or the two would race for the same jobs.
+func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
+	specs, offload, err := superviseConnectorSpecs([]string{"remedy"}, nil)
+	if err != nil {
+		t.Fatalf("superviseConnectorSpecs: %v", err)
+	}
+	if len(specs) != 1 || specs[0].ID != "remedy" ||
+		len(specs[0].Connectors) != 1 || specs[0].Connectors[0] != "remedy" {
+		t.Fatalf("specs = %v, want a worker configured for the remedy connector", specIDs(specs))
+	}
+	if len(offload) != 1 || offload[0] != "remedy" {
+		t.Fatalf("offload = %v, want [remedy] so the engine stops filing the tickets itself", offload)
+	}
+}

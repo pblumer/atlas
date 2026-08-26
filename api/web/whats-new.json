@@ -2,6 +2,47 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-bmc-remedy-connector-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Remedy tickets can be filed beside the engine",
+        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
+      },
+      "summary": {
+        "en": "A task that opens a Remedy incident talks to your ITSM system over the network — a login, the create, a logout — and Atlas did all three on the same thread that moves every process forward. That work can now go to a worker instead: start Atlas with --supervise-connector remedy and it runs one for you, configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model. And because the worker holds those credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und Atlas erledigte alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Diese Arbeit kann jetzt ein Worker übernehmen: Starten Sie Atlas mit --supervise-connector remedy, und es betreibt einen für Sie, eingerichtet aus der Helix-Instanz, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts. Und weil der Worker diese Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
+      },
+      "link": {
+        "label": "ADR-0106",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+          "Start Atlas with --supervise-connector remedy — Operations › Workers then shows a worker named remedy, started by Atlas itself.",
+          "That view also lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
+        ],
+        "de": [
+          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+          "Starten Sie Atlas mit --supervise-connector remedy — unter Betrieb › Workers erscheint dann ein Worker namens remedy, von Atlas selbst gestartet.",
+          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -300,34 +341,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "A dot in a variable name is caught at deploy",
-        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
-      },
-      "summary": {
-        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
-        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
