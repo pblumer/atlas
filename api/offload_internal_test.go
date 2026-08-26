@@ -215,6 +215,77 @@ func TestActiveDirectoryIsOffloadedByDefaultAndItsBindSecretsAreHandedOver(t *te
 	}
 }
 
+// TestPullingAnEntraDeltaJobResolvesTheCursorAndTheOperation covers the engine's half
+// of the Entra delta query (ADR-0172, amended): what a leased job carries.
+//
+// A delta read is the one operation whose payload has state in it — the `deltaLink`
+// cursor a previous run persisted, which the engine resolves out of the instance's
+// variables and hands over so the worker resumes rather than re-enumerating the whole
+// directory. Entra is worker-only, so this payload is the *only* description of the
+// task that exists outside the compiled process; nothing else would notice if a field
+// stopped being resolved.
+func TestPullingAnEntraDeltaJobResolvesTheCursorAndTheOperation(t *testing.T) {
+	srv := newServerWithOptions(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", entraDeltaBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"cursor":"https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+
+	code, got := pull(t, srv, fmt.Sprintf(`{"type":%q,"worker":"w1"}`, compiler.EntraJobType))
+	if code != http.StatusOK {
+		t.Fatalf("pull: status=%d", code)
+	}
+	if len(got.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want the one Entra task", len(got.Jobs))
+	}
+	j := got.Jobs[0]
+	if j.Connector == nil {
+		t.Fatal("the leased job carries no resolved connector detail; a worker-only kind would have nothing to act on")
+	}
+	f := j.Connector.Fields
+	if j.Connector.Kind != connectorKindEntra || f["operation"] != "delta-users" {
+		t.Errorf("kind/operation = %v/%v, want entra/delta-users", j.Connector.Kind, f["operation"])
+	}
+	if f["connector"] != "contoso" {
+		t.Errorf("connector = %v, want the tenant the model names", f["connector"])
+	}
+	if f["resultVariable"] != "aenderungen" {
+		t.Errorf("resultVariable = %v, want the model's result variable", f["resultVariable"])
+	}
+	// The cursor came out of the instance, not out of the model: this is a second run.
+	if f["deltaLink"] != "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=Z" {
+		t.Errorf("deltaLink = %v, want the cursor the previous run persisted", f["deltaLink"])
+	}
+	// And no tenant credential rides along: Entra is worker-only, and the engine holds
+	// no client secret to leak into a payload even if there were a field for it.
+	for _, k := range []string{"clientSecret", "tenantId", "secret"} {
+		if _, present := f[k]; present {
+			t.Errorf("the payload carries %q", k)
+		}
+	}
+}
+
+// entraDeltaBPMN is a delta-users task resuming from a cursor held in a variable — the
+// shape a reconciliation loop deploys (sync → handle → wait → sync).
+const entraDeltaBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="reconcile" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-users" deltaLink="=cursor" resultVariable="aenderungen"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
 // The check above is only worth anything if it could fail, and it could not if every
 // managed kind were provisioned. Naming the ones that are not is what keeps it a
 // real constraint rather than a tautology that grew one.
