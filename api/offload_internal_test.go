@@ -216,7 +216,7 @@ func TestActiveDirectoryIsOffloadedByDefaultAndItsBindSecretsAreHandedOver(t *te
 	}
 }
 
-// BMC Remedy is offloaded by default (ADR-draft-remedy-default-offload), and unlike AD
+// BMC Remedy is offloaded by default (ADR-0192), and unlike AD
 // above it *is* a managed kind — so the property two tests up already proves a
 // supervised worker can serve it. What that property cannot say is that the kind is in
 // the default set at all, which is the whole of this decision: an ITSM create is three

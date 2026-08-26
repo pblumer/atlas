@@ -265,7 +265,7 @@ The control-flow basics most real models use.
   (`ATLAS_REMEDY_CONNECTORS` plus per name `_ENDPOINT`, `_USERNAME`, `_PASSWORD`) — handed
   to a supervised worker out of the connector store and the vault at spawn, exactly as mail
   is. A Helix instance reachable only from the worker's network is thereby serviceable.
-  Atlas supervises that worker **by default** (ADR-draft-remedy-default-offload), so a
+  Atlas supervises that worker **by default** (ADR-0192), so a
   ticket create leaves the loop with nothing to configure; the in-process handler remains
   as the fallback `--in-process-connectors` returns to. For local development without a real
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock

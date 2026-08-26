@@ -37,7 +37,7 @@
 >   written the default offload set was left untouched, because whether Remedy should be
 >   offloaded *by default* was a separate decision, as it was for AD
 >   ([ADR-0182](0182-ad-default-offload.md)). That decision has since been taken in
->   [the record on defaulting this kind](draft-remedy-default-offload.md): Remedy is now
+>   [the record on defaulting this kind](0192-remedy-default-offload.md): Remedy is now
 >   in `DefaultOffloadedKinds()`, so Atlas supervises the worker itself unless an
 >   operator opts out.
 >

@@ -371,7 +371,7 @@ var offloadableKinds = map[string][]int32{
 // because the credential is worth less to an attacker in a worker than in the engine
 // (ADR-0166's own argument for offloading it at all).
 //
-// BMC Remedy is the fourth way in, and it is mail's way exactly (ADR-draft-remedy-default-offload).
+// BMC Remedy is the fourth way in, and it is mail's way exactly (ADR-0192).
 // It is a managed kind whose AR System address and service account live in the connector
 // store and the vault, so it was excluded for as long as the engine had no worker to
 // hand them to — not as a judgement about the kind. ADR-0106's amendment built that

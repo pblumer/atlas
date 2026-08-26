@@ -1,4 +1,4 @@
-# ADR-DRAFT: BMC Remedy runs on a worker by default
+# ADR-0192: BMC Remedy runs on a worker by default
 
 - **Status:** Proposed
 - **Date:** 2026-08-26

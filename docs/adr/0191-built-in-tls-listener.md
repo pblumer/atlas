@@ -1,4 +1,4 @@
-# ADR-DRAFT: TLS 1.3 in the binary — an optional listener with operator-supplied certificates
+# ADR-0191: TLS 1.3 in the binary — an optional listener with operator-supplied certificates
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
