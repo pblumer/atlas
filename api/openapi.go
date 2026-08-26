@@ -724,6 +724,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Add a user to a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
 		{"DELETE", "/api/v1/groups/{id}/members/{userId}", s.handleRemoveGroupMember, apiOp{
 			summary: "Remove a user from a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
+
+		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
+			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", resp: jsonBody("Grant audit events", tArray())}},
 	}
 }
 

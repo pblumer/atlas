@@ -215,6 +215,7 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
+	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each connector kind: the Modeler's picker reads it to
