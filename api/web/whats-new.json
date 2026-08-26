@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-21",
   "entries": [
     {
+      "id": "entra-id-delta-queries-delta-users-and-delta-groups",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Read only what changed in Entra ID",
+        "de": "Nur Änderungen aus Entra ID lesen"
+      },
+      "summary": {
+        "en": "Two new Entra operations — delta-users and delta-groups — read the whole directory the first time and only what changed on every run after, which is what makes an hourly identity sync affordable rather than re-listing everyone each time. The cursor Microsoft Graph hands back travels through the process, not the connector: the task takes it as an optional input (empty on the first run) and returns it beside the changes, so a model saves it and passes it back next run. Deleted accounts arrive marked as removed, so a leaver flow sees them instead of losing them.",
+        "de": "Zwei neue Entra-Operationen — delta-users und delta-groups — lesen das Verzeichnis beim ersten Mal vollständig und danach bei jedem Lauf nur noch, was sich geändert hat; erst das macht einen stündlichen Identity-Sync bezahlbar, statt jedes Mal alle neu aufzulisten. Der Cursor, den Microsoft Graph zurückgibt, reist durch den Prozess, nicht durch den Konnektor: Die Aufgabe nimmt ihn als optionale Eingabe (beim ersten Lauf leer) und gibt ihn neben den Änderungen zurück, sodass ein Modell ihn speichert und beim nächsten Lauf wieder hereinreicht. Gelöschte Konten kommen als entfernt markiert mit — ein Leaver-Flow sieht sie, statt sie zu verlieren."
+      },
+      "link": {
+        "label": "ADR-0172",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
       "version": "Unreleased",
       "date": null,
@@ -338,34 +367,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-contained-in-an-ad-hoc-subprocess-keeps-its-result-to",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A repeated step inside an ad-hoc subprocess keeps its collected results",
-        "de": "Ein wiederholter Schritt in einem Ad-hoc-Subprozess behält seine gesammelten Ergebnisse"
-      },
-      "summary": {
-        "en": "The companion to the gateway fix in this release. An activity that repeats once per list entry collects what each round produced into a list. Inside an ad-hoc subprocess — where the steps are not wired in a sequence and all start at once — every round still ran and produced its result, but the collected list was dropped as the activity finished, so anything reading it afterwards found nothing. It is kept now, including after a restart mid-run.",
-        "de": "Das Gegenstück zur Gateway-Korrektur in dieser Version. Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe in einer Liste. In einem Ad-hoc-Subprozess — dessen Schritte nicht in einer Reihenfolge verdrahtet sind, sondern gemeinsam starten — liefen zwar alle Durchläufe und lieferten ihr Ergebnis, die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen; wer sie danach las, fand nichts vor. Sie bleibt jetzt erhalten, auch nach einem Neustart mitten im Lauf."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
