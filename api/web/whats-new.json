@@ -190,6 +190,24 @@
       }
     },
     {
+      "id": "connectors-are-their-own-page-in-the-console",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Connectors are their own page in the Console.",
+        "de": "Connectors are their own page in the Console."
+      },
+      "summary": {
+        "en": "They live at #/console/connectors, beside Organization in the navigation.",
+        "de": "They live at #/console/connectors, beside Organization in the navigation."
+      },
+      "link": {
+        "label": "ADR-0041",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0041-connector-management-and-secret-store.md"
+      }
+    },
+    {
       "id": "the-connector-picker-is-one-line-per-kind",
       "version": "Unreleased",
       "date": null,
@@ -338,34 +356,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-contained-in-an-ad-hoc-subprocess-keeps-its-result-to",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A repeated step inside an ad-hoc subprocess keeps its collected results",
-        "de": "Ein wiederholter Schritt in einem Ad-hoc-Subprozess behält seine gesammelten Ergebnisse"
-      },
-      "summary": {
-        "en": "The companion to the gateway fix in this release. An activity that repeats once per list entry collects what each round produced into a list. Inside an ad-hoc subprocess — where the steps are not wired in a sequence and all start at once — every round still ran and produced its result, but the collected list was dropped as the activity finished, so anything reading it afterwards found nothing. It is kept now, including after a restart mid-run.",
-        "de": "Das Gegenstück zur Gateway-Korrektur in dieser Version. Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe in einer Liste. In einem Ad-hoc-Subprozess — dessen Schritte nicht in einer Reihenfolge verdrahtet sind, sondern gemeinsam starten — liefen zwar alle Durchläufe und lieferten ihr Ergebnis, die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen; wer sie danach las, fand nichts vor. Sie bleibt jetzt erhalten, auch nach einem Neustart mitten im Lauf."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
