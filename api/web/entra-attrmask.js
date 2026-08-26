@@ -105,6 +105,36 @@ export function entraResultShape(operation) {
   }
 }
 
+// entraResultType is entraResultShape's machine-readable half: the *type* the result
+// variable receives, for the Modeler's Variables panel, where the prose above would not
+// fit and a badge does. An operation Graph answers 204 to writes nothing, so it gets no
+// type rather than a wrong one — the same reason the placement badge stays silent when
+// the server says nothing.
+export function entraResultType(operation) {
+  switch (operation) {
+    case "list-users":
+    case "list-groups":
+      return "array";
+    case "assign-license":
+    case "assign-role":
+    case "enable":
+    case "disable":
+    case "delete-user":
+    case "delete-group":
+    case "reset-password":
+    case "add-group-member":
+    case "remove-group-member":
+    case "add-group-owner":
+    case "remove-group-owner":
+    case "add-team-member":
+    case "add-team-owner":
+    case "archive-team":
+      return "";
+    default:
+      return "object";
+  }
+}
+
 // specKeys returns the set of top-level JSON keys a spec manages, so parse can split
 // the object into mask-owned keys and the "extra" remainder shown in the escape hatch.
 function specKeys(spec) {

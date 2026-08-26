@@ -216,6 +216,47 @@ rules run at deploy.
 
 ### Changed
 
+- **Deploy & run opens the process's start form.** A process whose start event links a
+  form ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) already says what it starts
+  with, in a form somebody laid out — labels, required marks, field types and all. Deploy
+  & run ignored it and offered the free-form JSON textarea it offers a process with no
+  declaration, so the author had to retype, as untyped JSON, exactly the values the form
+  existed to collect. The deploy panel now names the form, and Deploy & run renders it in
+  a modal with **Send** and **Cancel**, through the same viewer the Tasks app uses; what
+  Send submits becomes the instance's start variables, and the form's own validation
+  stands between an empty required field and a started instance. The form is asked
+  *before* anything is deployed, so Cancel (or Escape) leaves the server exactly as it
+  was — "Deploy & run" is one action, and backing out of it should not leave a deployed
+  version behind. Deploy only never opens it: nothing is being started, so there are no
+  start values to collect.
+
+- **The Modeler's Variables panel says what a variable holds, not just that it exists.**
+  It listed a name and who writes it. That answers "does this variable exist"; in front of
+  a connector result it does not answer the two questions an author actually has — what
+  type is this, and what is inside it. Each row now carries a type badge, and where a
+  value can be shown it is shown:
+  - **The type, where the model declares one.** A start variable states its own (it used
+    to be a word inside the origin line, "start variable · number"; it is a badge like
+    every other type now). A form field's component type *is* a type — a checkbox writes a
+    boolean whatever it is labelled, a dynamic list binds an array under its path
+    ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)). And what a connector kind writes is a fact about
+    the kind, known before anything runs: fifteen of the catalog's kinds
+    ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)) now declare their result type
+    machine-readably, several of them per operation — a SQL `query` returns rows, `query
+    one` a row, an `execute` a count. Where nothing declares a type — a FEEL script's
+    result is whatever its expression evaluates to — the row carries **no badge**: a badge
+    reads as knowledge, and a guessed one is worse than the blank it replaces.
+  - **The value it last actually held**, read from a real instance of this process, with a
+    line above the list naming which run it was and its state. A structure opens where it
+    stands, with the same collapsed summary the replay's Variables tab uses (the brackets
+    carry the difference between a list and one of its elements, which truncated text
+    does not) — and opening it is the only way at design time to see that a row carries
+    `kundennr` and not `id`. An observed type wins over a declared one, and the badge's
+    tooltip names both, so a run that contradicts the model is visible rather than quietly
+    overwritten. A diagram that was never deployed — the state of most diagrams being
+    written — shows its declarations and no values, which is the honest answer, not an
+    error.
+
 - **Connectors are their own page in the Console.** They live at `#/console/connectors`,
   beside Organization in the navigation. The connector catalog, the connectors this instance has
   actually configured ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)) and the encrypted
@@ -232,7 +273,7 @@ rules run at deploy.
   the new page, and the contextual help button on it opens the connector chapter.
 
 - **The connector picker is one line per kind.** The Modeler's Type picker lists nineteen
-  kinds ([ADR-0067](docs/adr/0067-connector-kind-catalog.md)), and each was a two-line card:
+  kinds ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)), and each was a two-line card:
   name, then the catalog's one-sentence description underneath. That put a single choice
   across roughly four screens of scrolling — the list stood 2015px tall, and the tallest
   entry alone took 211px — so the way to find a kind was to search for it, and the way to
