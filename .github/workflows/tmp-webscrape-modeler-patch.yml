@@ -65,7 +65,7 @@ jobs:
               { key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches", hint: "HTML writes an array of strings. RSS/Atom write an array of objects with title, link, description, and published." },
             ],
           },
-'''
+          '''
           editor = editor[:start] + new_entry + editor[end:]
 
           save_line = '      upsertExt(modeler, element, stKind.ext, props);'
