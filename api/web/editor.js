@@ -7,7 +7,7 @@ import { copyText } from "./clipboard.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
-import { hasMask, attachEntraAttributeMask, entraResultShape } from "./entra-attrmask.js";
+import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
@@ -16,7 +16,7 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
-import { formFieldKeys } from "./formviewer.js";
+import { formFieldKeys, formFieldTypes, loadFormViewer } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { incidentPanelHTML, incidentRowHTML, bindIncidentActions } from "./incidents.js";
@@ -245,6 +245,27 @@ function highlightJSON(text) {
       else if (m === "null") cls = "j-null";
       return `<span class="${cls}">${m}</span>`;
     });
+}
+
+// A JSON variable's stored value is a JSON string; these read its shape without
+// throwing. isComplexVar tells the structures (objects/arrays, shown behind an
+// expansion) from the scalars shown inline. Module-level because two surfaces read the
+// same shapes now: the replay's Variables tab, where the value came off a real
+// instance, and the Modeler's Variables panel, where it came off the last run of this
+// process. One definition, so a list reads as a list in both.
+const parseJson = (text) => { try { return JSON.parse(text); } catch { return undefined; } };
+function isComplexVar(v) {
+  if (!v || v.kind !== "json") return false;
+  const parsed = parseJson(v.value);
+  return parsed !== null && typeof parsed === "object";
+}
+const jsonTypeLabel = (text) => (Array.isArray(parseJson(text)) ? "array" : "object");
+
+// A one-line preview of a structure, truncated so a big object never blows out the
+// row it sits in — the full value is one click away.
+function jsonPeek(text) {
+  const s = (() => { try { return JSON.stringify(JSON.parse(text)); } catch { return String(text); } })();
+  return s.length > 40 ? s.slice(0, 39) + "…" : s;
 }
 
 // jsonSummary is the compact one-liner shown on a collapsed JSON card.
@@ -526,6 +547,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <div class="vars-head"><b>Variables</b>
             <button class="icon-btn" id="vars-close" title="Close" aria-label="Close">✕</button></div>
           <input class="vars-filter" id="vars-filter" placeholder="Filter by name or origin…"/>
+          <div class="vars-sample" id="vars-sample" hidden></div>
           <div class="vars-list" id="vars-list"></div>
         </aside>
         <div class="props-resizer" id="props-resizer" title="Drag to resize the properties panel"></div>
@@ -1336,13 +1358,31 @@ function devViewContext(modeler, api, field) {
 // assuming the attribute is there, so a kind that names the field differently is a
 // catalog question and not a silent omission here.
 function connectorResultVariable(bo) {
-  if (!bo) return "";
+  return connectorResult(bo).name;
+}
+
+// connectorResult is the same lookup, plus the *type* the catalog declares that result
+// has: what a kind writes is a fact about the kind, not about the endpoint it is
+// pointed at, so the model knows it before anything has run. Several kinds write a
+// different shape per operation — a query returns rows, "query one" a row, an execute a
+// count — so a declaration may be a function of the element's own values, exactly as
+// showIf and hint already are. A kind that writes nothing meaningful for the chosen
+// operation declares "", and the panel shows no badge rather than a wrong one.
+function connectorResult(bo) {
+  const none = { name: "", type: "" };
+  if (!bo) return none;
   const kind = serviceTaskKind(bo);
-  if (!kind || !kind.ext) return "";
+  if (!kind || !kind.ext) return none;
   const field = (kind.fields || []).find((f) => f.key === "resultVariable");
-  if (!field) return "";
+  if (!field) return none;
   const ext = findExt(bo, kind.ext);
-  return (ext && ext[field.key]) || "";
+  const name = (ext && ext[field.key]) || "";
+  if (!name) return none;
+  let type = field.resultType || "";
+  if (typeof type === "function") {
+    try { type = type(ext || {}) || ""; } catch { type = ""; }
+  }
+  return { name, type };
 }
 
 // collectDiagramVariables reads it synchronously; ensureFormFields fills it.
@@ -1361,6 +1401,27 @@ function linkedFormIds(modeler) {
   return ids;
 }
 
+// startFormId is the form a process *starts* with: the one linked on its start event
+// (ADR-0028), whose submitted data becomes the instance's start variables. Distinct from
+// linkedFormIds, which collects every form the diagram references, user-task forms
+// included — those are filled later, by whoever gets the task.
+function startFormId(modeler) {
+  try {
+    const root = rootProcess(modeler);
+    let found = "";
+    modeler.get("elementRegistry").forEach((el) => {
+      const bo = el.businessObject;
+      if (found || !bo || bo.$type !== "bpmn:StartEvent") return;
+      // Only the top-level process's own start event: a start event inside a subprocess
+      // begins that subprocess, not the instance, and never carries start variables.
+      if (root && bo.$parent && bo.$parent !== root) return;
+      const fd = findExt(bo, "zeebe:FormDefinition");
+      if (fd && fd.formId) found = fd.formId;
+    });
+    return found;
+  } catch { return ""; }
+}
+
 // ensureFormFields fetches the schema of each not-yet-cached form id, records its
 // field keys, then calls onLoaded so the caller can re-render with the new
 // variables. Each form is requested once (its cache slot is reserved as null while
@@ -1373,9 +1434,13 @@ function ensureFormFields(api, ids, onLoaded) {
     formFieldCache.set(id, null); // reserve: in flight, don't refetch
     api("GET", "/api/v1/forms/" + encodeURIComponent(id))
       .then((def) => {
-        formFieldCache.set(id, { name: (def && def.name) || id, fields: formFieldKeys(def && def.schema) });
+        formFieldCache.set(id, {
+          name: (def && def.name) || id,
+          fields: formFieldKeys(def && def.schema),
+          types: formFieldTypes(def && def.schema),
+        });
       })
-      .catch(() => { formFieldCache.set(id, { name: id, fields: [] }); })
+      .catch(() => { formFieldCache.set(id, { name: id, fields: [], types: {} }); })
       .then(() => { try { if (onLoaded) onLoaded(); } catch { /* best-effort */ } });
   }
 }
@@ -1389,17 +1454,24 @@ function ensureFormFields(api, ids, onLoaded) {
 function collectDiagramVariables(modeler) {
   const out = [];
   const seen = new Set();
-  const push = (name, origin, originId, source, category = "Process") => {
+  // `type` is what the *model* declares this variable holds, where anything declares
+  // it: a start variable's own type, a form field's component type, the shape a
+  // connector kind writes. Left empty where nothing does — a FEEL script's result is
+  // whatever its expression evaluates to, and a guess there would be worse than the
+  // silence, because a badge reads as knowledge.
+  const push = (name, origin, originId, source, category = "Process", type = "") => {
     name = (name || "").trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    out.push({ name, origin, originId, source, category });
+    out.push({ name, origin, originId, source, category, type });
   };
   try {
     const rootBo = rootProcess(modeler);
     if (rootBo) {
+      // The declared type used to ride along inside the source text ("start variable ·
+      // string"); it is a badge of its own now, like every other type the panel knows.
       for (const v of readStartVariables(rootBo)) {
-        push(v.name, "Start", "", "start variable" + (v.type ? " · " + v.type : ""));
+        push(v.name, "Start", "", "start variable", "Process", v.type || "");
       }
     }
   } catch { /* best-effort */ }
@@ -1414,8 +1486,8 @@ function collectDiagramVariables(modeler) {
       if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
       const cd = findExt(bo, "zeebe:CalledDecision");
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
-      const cr = connectorResultVariable(bo);
-      if (cr) push(cr, label, bo.id, "connector result");
+      const cr = connectorResult(bo);
+      if (cr.name) push(cr.name, label, bo.id, "connector result", "Process", cr.type);
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
       // A data object is first-class per-instance state (ADR-0053): its name is the
@@ -1435,7 +1507,9 @@ function collectDiagramVariables(modeler) {
       if (fd && fd.formId) {
         const cached = formFieldCache.get(fd.formId);
         if (cached && cached.fields) {
-          for (const key of cached.fields) push(key, cached.name || fd.formId, bo.id, "form field", "Form");
+          for (const key of cached.fields) {
+            push(key, cached.name || fd.formId, bo.id, "form field", "Form", (cached.types || {})[key] || "");
+          }
         }
       }
     });
@@ -1465,6 +1539,28 @@ function wireEditorVars(root, modeler, api) {
   try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
   const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
 
+  // The values the variables actually held on the last run of this process, keyed by
+  // name — {value, kind} as the instance list returns them. A diagram that was never
+  // deployed or never ran has none, which is the normal case while modelling and reads
+  // as "no values yet", not as an error. `sample` is what the header names.
+  let sampleValues = null;
+  let sample = null;
+  let sampleTried = false;
+
+  // A structure the reader opened, by variable name. The list is re-rendered on every
+  // diagram change, so without this an expansion would close under the reader mid-edit.
+  const expanded = new Set();
+
+  // typeOf answers "what does this variable hold". An observed value wins: it is what
+  // the name actually held on a real run, where the declaration is what the model
+  // promises. Both are labelled in the badge's tooltip, so a declaration the run
+  // contradicts is visible rather than quietly overwritten.
+  const typeOf = (v) => {
+    const s = sampleValues && sampleValues[v.name];
+    if (s) return { type: s.kind === "json" ? jsonTypeLabel(s.value) : s.kind, observed: true };
+    return { type: v.type || "", observed: false };
+  };
+
   // One variable row. Draggable so its name can be dropped into any text field to
   // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
   // the browser's native drop-to-insert does the work with no per-field wiring.
@@ -1482,9 +1578,63 @@ function wireEditorVars(root, modeler, api) {
         ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
         : ` · ${esc(v.origin)}`}`;
     }
-    return `<div class="var-row" draggable="true" data-var="${esc(v.name)}" title="Drag into a field to insert">
-      <div class="var-name">${esc(v.name)}</div>
-      <div class="var-meta">${meta}</div></div>`;
+    const t = typeOf(v);
+    const badge = t.type
+      ? `<span class="vtag${/^(object|array|json)$/.test(t.type) ? " obj" : ""}" title="${t.observed
+        ? `What this variable held on the run below${v.type ? ` — the model declares ${esc(v.type)}` : ""}`
+        : "What the model declares this variable holds"}">${esc(t.type)}</span>`
+      : "";
+
+    // The observed value, when there is one. A structure opens in place — the shape of
+    // it is what an author is looking at it for, and at design time it is the only way
+    // to see one at all: a name tells you a connector writes `kunden`, not that a row
+    // carries `kundennr` and not `id`.
+    const s = sampleValues && sampleValues[v.name];
+    let valHTML = "";
+    let structHTML = "";
+    if (s && isComplexVar(s)) {
+      const open = expanded.has(v.name);
+      const arr = jsonTypeLabel(s.value) === "array";
+      valHTML = `<button type="button" class="var-peek" data-open="${esc(v.name)}" aria-expanded="${open}"
+        title="Show what ${esc(v.name)} held"><span class="vp-chev" aria-hidden="true">▸</span>
+        <span class="vp-sum">${arr ? "[" : "{"}${esc(jsonSummary(s.value))}${arr ? "]" : "}"}</span>
+        <span class="vp-peek">${esc(jsonPeek(s.value))}</span></button>`;
+      structHTML = `<pre class="var-json"${open ? "" : " hidden"}>${highlightJSON(s.value)}</pre>`;
+    } else if (s) {
+      valHTML = `<div class="var-val" title="What ${esc(v.name)} held on the run below">${esc(jsonPeek(s.value))}</div>`;
+    }
+    return `<div class="var-row${expanded.has(v.name) ? " open" : ""}" draggable="true" data-var="${esc(v.name)}"
+        title="Drag into a field to insert">
+      <div class="var-head"><div class="var-name">${esc(v.name)}</div>${badge}</div>
+      <div class="var-meta">${meta}</div>${valHTML}${structHTML}</div>`;
+  };
+
+  // loadSample reads the values from a real instance of this process, once per opening.
+  // It is best-effort by design: a draft that was never deployed is the normal state of
+  // a diagram being written, and the panel is a modelling aid either way.
+  const sampleBox = root.querySelector("#vars-sample");
+  const loadSample = () => {
+    if (sampleTried || !api) return;
+    sampleTried = true;
+    instanceSamples(modeler, api, {}).then((s) => {
+      if (!s) return;
+      sample = s.instance;
+      sampleValues = s.values || {};
+      render();
+    }).catch(() => { /* no samples; the panel still lists the names */ });
+  };
+
+  // The header line under the filter: which run the values came from. Without it a
+  // value reads as "what this is", when it is "what this was, once" — and on a finished
+  // instance from last week that difference is the whole story.
+  const renderSample = () => {
+    if (!sampleBox) return;
+    if (!sample) { sampleBox.hidden = true; sampleBox.innerHTML = ""; return; }
+    sampleBox.hidden = false;
+    sampleBox.innerHTML = `<span class="vs-text">Values from instance
+      <b>${esc(String(sample.key))}</b> · ${esc(sample.state)}${sample.version
+        ? ` · v${esc(String(sample.version))}` : ""}</span>
+      <button type="button" class="vars-reload" id="vars-reload" title="Re-read the values from the server">↻</button>`;
   };
 
   const render = () => {
@@ -1492,6 +1642,8 @@ function wireEditorVars(root, modeler, api) {
     // the completion/picker lists, which read the same collectDiagramVariables.
     ensureFormFields(api, linkedFormIds(modeler), render);
     if (panel.hidden) return;
+    loadSample();
+    renderSample();
     const q = (filter.value || "").trim().toLowerCase();
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
@@ -1538,7 +1690,31 @@ function wireEditorVars(root, modeler, api) {
     toggle.classList.remove("active");
   });
   filter.addEventListener("input", render);
+  if (sampleBox) sampleBox.addEventListener("click", (e) => {
+    if (!e.target.closest("#vars-reload")) return;
+    // Force past the per-session cache: this is how an author picks up the instance
+    // they started while the Modeler was open.
+    instanceSamples(modeler, api, { force: true }).then((s) => {
+      sample = s ? s.instance : null;
+      sampleValues = s ? (s.values || {}) : null;
+      render();
+    }).catch(() => { /* leave what is on screen */ });
+  });
   list.addEventListener("click", (e) => {
+    // A structure opens and closes in place. Toggled on the row's own state rather
+    // than by re-rendering the list, so the panel does not jump under the reader.
+    const op = e.target.closest(".var-peek");
+    if (op) {
+      const name = op.dataset.open;
+      const row = op.closest(".var-row");
+      const pre = row && row.querySelector(".var-json");
+      const open = !expanded.has(name);
+      if (open) expanded.add(name); else expanded.delete(name);
+      op.setAttribute("aria-expanded", String(open));
+      if (row) row.classList.toggle("open", open);
+      if (pre) pre.hidden = !open;
+      return;
+    }
     const gh = e.target.closest(".vars-group-head");
     if (gh) {
       const grp = gh.closest(".vars-group");
@@ -1965,7 +2141,7 @@ const SERVICE_TASK_KINDS = [
         hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
       },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: "json", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2018,7 +2194,7 @@ const SERVICE_TASK_KINDS = [
         hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
       },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "scimResponse", hint: "The provider's JSON response is written into this process variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: "json", placeholder: "scimResponse", hint: "The provider's JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2087,7 +2263,7 @@ const SERVICE_TASK_KINDS = [
         hint: "Caps what may land in the result variable. A search returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
       },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "search" ? "array" : ""), placeholder: "ldapResult", hint: "A search writes the matched entries as a JSON array into this variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2124,7 +2300,7 @@ const SERVICE_TASK_KINDS = [
         hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
       },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "soapResponse", hint: "The parsed SOAP response body is written into this process variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "soapResponse", hint: "The parsed SOAP response body is written into this process variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2217,7 +2393,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output", showIf: (v) => v.operation === "sync" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "aenderungen",
+        key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "aenderungen",
         showIf: (v) => v.operation === "sync",
         hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
       },
@@ -2246,7 +2422,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "eintraege",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "write" ? "string" : "array"), placeholder: "eintraege",
         hint: "Reading: the entries land here as a JSON array of {dn, attributes} — the same shape the directory connectors return, so downstream handling is shared. Writing: the rendered file lands here as text. Either way entryCount is also set.",
       },
     ],
@@ -2374,7 +2550,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "konto",
+        key: "resultVariable", label: "Result variable", resultType: (v) => entraResultType(v.operation), placeholder: "konto",
         // Operation-aware: the shape a result variable receives differs per operation,
         // so the note names it — e.g. create-user returns the user object you then
         // address as =konto.id, list-users returns an array, add-member returns nothing.
@@ -2413,7 +2589,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
         hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
       },
       {
@@ -2451,7 +2627,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
         hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
       },
       {
@@ -2489,7 +2665,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "zeilen",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "query-one" ? "object" : v.operation === "execute" ? "number" : "array"), placeholder: "zeilen",
         hint: "Receives the rows (query), the single row (query one), or the affected-row count (execute). Required except for execute, where it may be left empty to discard the count.",
       },
       {
@@ -2521,7 +2697,7 @@ const SERVICE_TASK_KINDS = [
       { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },
       { group: "Read", showIf: (v) => v.operation === "read" },
       { key: "limit", label: "Limit", placeholder: "0 = connector default", showIf: (v) => v.operation === "read" },
-      { key: "resultVariable", label: "Result variable", placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
+      { key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "read" ? "array" : "json"), placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
     ],
   },
   {
@@ -2593,7 +2769,7 @@ const SERVICE_TASK_KINDS = [
       },
       { group: "Output" },
       {
-        key: "resultVariable", label: "Result variable", placeholder: "rows",
+        key: "resultVariable", label: "Result variable", resultType: (v) => (v.operation === "write" ? "string" : "array"), placeholder: "rows",
         hint: "Reading: the parsed rows land here as a JSON array. Writing: the rendered file lands here as text. Either way rowCount is also set.",
       },
     ],
@@ -2615,7 +2791,7 @@ const SERVICE_TASK_KINDS = [
       { group: "Item" },
       { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2633,7 +2809,7 @@ const SERVICE_TASK_KINDS = [
       { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
       { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
+      { key: "resultVariable", label: "Result variable", resultType: "string", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
     ],
   },
   {
@@ -2651,7 +2827,7 @@ const SERVICE_TASK_KINDS = [
       { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, hint: "The CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
       { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", hint: "The HTML attribute read from each match (e.g. href). Leave empty to extract each match's text content." },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
+      { key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
     ],
   },
   {
@@ -6641,7 +6817,16 @@ function wireActions(root, modeler, api, toast, projectId) {
   // success view replaces them with a link back to Operations).
   const openDeploy = () => {
     const bo = rootProcess(modeler);
-    dbody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
+    // A process whose start event links a form already says what it starts with, in a
+    // form somebody designed. Asking for the same values again as hand-typed JSON is
+    // both duplicate work and a worse way to enter them, so the panel names the form
+    // and Deploy & run opens it.
+    const fid = startFormId(modeler);
+    dbody.innerHTML = fid
+      ? `<p class="muted" style="margin:0">This process starts with the form
+          <b>${esc((formFieldCache.get(fid) || {}).name || fid)}</b>. <b>Deploy &amp; run</b> opens it,
+          and what you submit becomes the instance's start variables.</p>`
+      : startVarsFormHTML(bo ? readStartVariables(bo) : []);
     wireDeployJSONEditors(dbody);
     dactions.hidden = false;
     dpanel.hidden = false;
@@ -6649,6 +6834,71 @@ function wireActions(root, modeler, api, toast, projectId) {
     const first = dbody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
+
+  // askStartForm renders the process's own start form in a modal and resolves with the
+  // variables to start with, or null when the author backs out — in which case nothing
+  // is deployed either: "Deploy & run" is one action, and cancelling it should leave
+  // the server exactly as it was. Asking before deploying is what makes that possible.
+  function askStartForm(formId) {
+    return new Promise((resolve) => {
+      const ov = document.createElement("div");
+      ov.className = "modal-ov";
+      ov.innerHTML = `
+        <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
+          <div class="modal-head"><h2>Start values</h2></div>
+          <div class="modal-body">
+            <div class="startform-host" id="sf-host"><p class="muted">Loading form…</p></div>
+            <p class="err" id="sf-err"></p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn neutral" data-sf-cancel title="Close without deploying or starting anything">Cancel</button>
+            <button class="btn" data-sf-send disabled title="Deploy this diagram and start an instance with these values">Send</button>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      const host = ov.querySelector("#sf-host");
+      const errEl = ov.querySelector("#sf-err");
+      const sendBtn = ov.querySelector("[data-sf-send]");
+      let form = null;
+      const close = (result) => {
+        if (form) { try { form.destroy(); } catch { /* noop */ } }
+        ov.remove();
+        document.removeEventListener("keydown", onKey);
+        resolve(result);
+      };
+      const onKey = (e) => { if (e.key === "Escape") close(null); };
+      document.addEventListener("keydown", onKey);
+      ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
+      ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+
+      Promise.all([loadFormViewer(), api("GET", "/api/v1/forms/" + encodeURIComponent(formId))])
+        .then(async ([{ Form }, def]) => {
+          host.innerHTML = "";
+          form = new Form({ container: host });
+          await form.importSchema((def && def.schema) || {}, {});
+          sendBtn.disabled = false;
+          sendBtn.focus();
+        })
+        .catch((e) => {
+          // The form is the way in and it did not load. Say so and offer the way out
+          // that still works rather than a Send that would start with nothing.
+          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+            <p class="muted">Deploy only still works, and the process can be started from
+            the Tasks app once its form loads.</p>`;
+        });
+
+      sendBtn.addEventListener("click", () => {
+        if (!form) return;
+        const { data, errors } = form.submit();
+        if (errors && Object.keys(errors).length > 0) {
+          errEl.textContent = "Please fix the highlighted fields.";
+          return;
+        }
+        errEl.textContent = "";
+        close(data || {});
+      });
+    });
+  }
 
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
@@ -6702,9 +6952,17 @@ function wireActions(root, modeler, api, toast, projectId) {
   const doDeploy = async (run) => {
     let body = {};
     if (run) {
-      try {
-        body = readStartFormBody(dbody);
-      } catch (e) { derr.textContent = e.message; return; }
+      const fid = startFormId(modeler);
+      if (fid) {
+        // Ask before deploying: a Cancel here leaves nothing behind on the server.
+        const vars = await askStartForm(fid);
+        if (vars === null) return;
+        body = { variables: vars };
+      } else {
+        try {
+          body = readStartFormBody(dbody);
+        } catch (e) { derr.textContent = e.message; return; }
+      }
     }
     drun.disabled = true;
     donly.disabled = true;
@@ -8507,23 +8765,6 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       ${from}${rel}${child}
     </dl>${loopBlock(s)}${manualBlock(s)}${incidentBlock(s)}${docBlock(docOf(s.elementId))}`;
   }
-
-  // A JSON variable's stored value is a JSON string; these read its shape without
-  // throwing. isComplexVar tells the structures (objects/arrays, shown behind a
-  // modal) from the scalars shown inline in the table.
-  const parseJson = (text) => { try { return JSON.parse(text); } catch { return undefined; } };
-  const isComplexVar = (v) => {
-    if (v.kind !== "json") return false;
-    const parsed = parseJson(v.value);
-    return parsed !== null && typeof parsed === "object";
-  };
-  const jsonTypeLabel = (text) => (Array.isArray(parseJson(text)) ? "array" : "object");
-  // A one-line preview of a structure for the table cell, truncated so a big object
-  // never blows out the row — the full value is one click away in the modal.
-  const jsonPeek = (text) => {
-    const s = (() => { try { return JSON.stringify(JSON.parse(text)); } catch { return String(text); } })();
-    return s.length > 40 ? s.slice(0, 39) + "…" : s;
-  };
 
   // varRow renders one variable as a table row: name, value, type, and a copy
   // action. Scalars show inline and type-colored; objects and arrays show a compact

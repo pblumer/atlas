@@ -34,36 +34,48 @@ export function connectorShape(kind, provider) {
   const sharepoint = kind === "sharepoint";
   const remedy = kind === "remedy";
   const entra = kind === "entra";
+  // The three SQL products. Their whole configuration is one secret — a connection
+  // string has no public half — so there is no endpoint to author: what the Console
+  // shows is a redacted label the server derived from the string itself.
+  const sql = kind === "postgres" || kind === "mariadb" || kind === "mssql";
   // Kinds that default their API base and authenticate with a credential bundle
   // instead of dialing a host:port. Remedy is not one: it needs both.
-  const bundle = native || sharepoint || entra;
+  const bundle = native || sharepoint || entra || sql;
   return {
     mail,
+    sql,
     provider: mail,
     endpoint: !bundle && !preview,
     // A mail connector always has a sender: it is the default From address, and the
     // preview transport frames the message exactly as it would be sent, so it needs
     // one too.
     sender: mail,
-    credRef: preview ? "none" : (bundle || remedy ? "required" : "optional"),
+    // A SQL connector is created by pasting the connection string, which the server
+    // seals into the vault and replaces with a reference — so the reference is one of
+    // two ways in, not the only one, and the form must not insist on it.
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy ? "required" : "optional")),
     endpointPlaceholder: mail
       ? "smtp.office365.com:587"
       : (remedy ? "https://helix.example.com:8008" : "https://temis.internal"),
     credRefLabel: remedy
       ? "Credential reference (vault {username,password})"
-      : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
-        : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)")),
+      : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
+        : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
+          : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: remedy
       ? "remedy_creds (vault {username,password})"
-      : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
-        : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"))),
-    hint: !mail
+      : (sql ? "postgres_pb_pw (a vault key holding the whole connection string)"
+        : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
+          : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
+    hint: sql
+      ? "The <b>whole connection string</b> is the credential \u2014 it is sealed into the vault and the record keeps only a reference, so the Console can never show it back. Atlas supervises a worker for this kind, and it picks the database up as soon as you save; no restart and no start parameter. To replace a connection string later, overwrite its vault key under <b>Secrets</b>."
+      : (!mail
       ? ""
       : (preview
         ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
         : (native
           ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
-          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>).")),
+          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>)."))),
   };
 }
 

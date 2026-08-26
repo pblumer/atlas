@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Deploy &amp; run start-form e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
+         process whose start event links a form, to verify that Deploy & run opens that
+         form in a modal and starts the instance with what was submitted — rather than
+         asking for the same values again as hand-typed JSON (ADR-0028).
+
+         The mock records every write, so a test can prove that Cancel deployed nothing:
+         "Deploy & run" is one action, and backing out of it must leave the server as it
+         was. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_sf" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="proc-sf" name="Account-Bestellung" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Bestellung erfasst">
+      <bpmn:extensionElements><zeebe:formDefinition formId="bestellung" /></bpmn:extensionElements>
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f0</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="proc-sf">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="320" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="320" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The linked start form: one required field, so a Send with it empty has to be
+      // refused rather than starting an instance with a hole in it.
+      const FORM = {
+        id: "bestellung",
+        name: "Account-Bestellung",
+        schema: {
+          type: "default",
+          components: [
+            { type: "textfield", key: "vorname", label: "Vorname", validate: { required: true } },
+            { type: "textfield", key: "nachname", label: "Nachname" },
+            { type: "checkbox", key: "eilig", label: "Eilig" },
+          ],
+        },
+      };
+
+      // Every write the editor makes, in order — window.__writes is the test's evidence
+      // that a Cancel left the server alone.
+      window.__writes = [];
+      const api = async (method, url, body) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/forms\/bestellung$/.test(url)) return FORM;
+        if (method === "GET" && /\/forms$/.test(url)) return [{ id: FORM.id, name: FORM.name }];
+        if (method === "GET" && /\/instances$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "POST" && /\/deployments/.test(url)) {
+          window.__writes.push({ method, url });
+          return { key: 11, processId: "proc-sf", version: 1, warnings: [] };
+        }
+        if (method === "POST" && /\/instances$/.test(url)) {
+          window.__writes.push({ method, url, body });
+          return { key: 99 };
+        }
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

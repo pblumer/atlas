@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-08-21",
+  "generatedAt": "2026-08-26",
   "entries": [
     {
       "id": "entra-id-delta-queries-delta-users-and-delta-groups",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "Read only what changed in Entra ID",
@@ -32,8 +32,8 @@
     },
     {
       "id": "supervise-connector-a-connector-kind-served-by-a-worker-atla",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "Atlas can run the worker a connector needs",
@@ -60,8 +60,8 @@
     },
     {
       "id": "the-active-directory-connector-gets-a-mock-mode-so-an-identi",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "Try an Active Directory process without an Active Directory",
@@ -101,8 +101,8 @@
     },
     {
       "id": "the-handbook-takes-on-the-process-developer-s-role-and-build",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "The handbook now builds a whole application with you",
@@ -114,7 +114,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
       },
       "tags": [
         "Modeler"
@@ -134,8 +134,8 @@
     },
     {
       "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "Find accounts in Entra ID, not just change them",
@@ -163,8 +163,8 @@
     },
     {
       "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "A loop's replay says why it went round again — or stopped",
@@ -192,8 +192,8 @@
     },
     {
       "id": "a-structured-variable-opens-where-it-stands-and-says-what-sh",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Added",
       "title": {
         "en": "See the shape of a variable, not just its first thirty characters",
@@ -205,7 +205,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
       },
       "tags": [
         "Operations"
@@ -219,9 +219,63 @@
       }
     },
     {
+      "id": "deploy-run-opens-the-process-s-start-form",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Changed",
+      "title": {
+        "en": "Deploy & run opens the process's start form.",
+        "de": "Deploy & run opens the process's start form."
+      },
+      "summary": {
+        "en": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all.",
+        "de": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      }
+    },
+    {
+      "id": "the-modeler-s-variables-panel-says-what-a-variable-holds-not",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Changed",
+      "title": {
+        "en": "The Modeler's Variables panel says what a variable holds, not just that it exists.",
+        "de": "The Modeler's Variables panel says what a variable holds, not just that it exists."
+      },
+      "summary": {
+        "en": "It listed a name and who writes it.",
+        "de": "It listed a name and who writes it."
+      },
+      "link": {
+        "label": "ADR-0028",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
+      }
+    },
+    {
+      "id": "connectors-are-their-own-page-in-the-console",
+      "version": "0.4.0",
+      "date": "2026-08-26",
+      "category": "Changed",
+      "title": {
+        "en": "Connectors are their own page in the Console.",
+        "de": "Connectors are their own page in the Console."
+      },
+      "summary": {
+        "en": "They live at #/console/connectors, beside Organization in the navigation.",
+        "de": "They live at #/console/connectors, beside Organization in the navigation."
+      },
+      "link": {
+        "label": "ADR-0041",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0041-connector-management-and-secret-store.md"
+      }
+    },
+    {
       "id": "the-connector-picker-is-one-line-per-kind",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Changed",
       "title": {
         "en": "The connector picker is one line per kind.",
@@ -233,13 +287,13 @@
       },
       "link": {
         "label": "ADR-0067",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-connector-kind-catalog.md"
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
       }
     },
     {
       "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.4.0",
+      "date": "2026-08-26",
       "category": "Changed",
       "title": {
         "en": "Active Directory tasks run beside the engine now",
@@ -275,98 +329,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "a-dot-in-a-write-target-is-refused-at-deploy",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A dot in a variable name is caught at deploy",
-        "de": "Ein Punkt in einem Variablennamen wird beim Deploy abgefangen"
-      },
-      "summary": {
-        "en": "Wherever a model says where to write — a script or decision result, an input or output mapping, a loop's input element or output collection — it names a variable, not a path into one. So \"customers.gesamtumsatz\" quietly made a second variable with that exact name next to customers, instead of adding a field to it, and nothing that read customers.gesamtumsatz afterwards found anything. The deploy now refuses the model, names the element, and says how to do what was meant: build the value in the expression, for example context put(customers, \"gesamtumsatz\", …), and write it under a plain name. Models with such a name have to be corrected before they deploy again; running instances are untouched. Data objects keep their dotted paths, where a dot really is one.",
-        "de": "Überall, wo ein Modell sagt, wohin geschrieben wird — Ergebnis eines Skripts oder einer Entscheidung, Input- oder Output-Mapping, Input element oder Output collection einer Schleife —, benennt es eine Variable, keinen Pfad in eine hinein. \"customers.gesamtumsatz\" legte deshalb stillschweigend eine zweite Variable mit genau diesem Namen neben customers an, statt ein Feld hinzuzufügen, und wer danach customers.gesamtumsatz las, fand nichts. Der Deploy weist ein solches Modell jetzt ab, benennt das Element und sagt, wie es gemeint war: den Wert im Ausdruck bauen, etwa context put(customers, \"gesamtumsatz\", …), und unter einem Namen ohne Punkt schreiben. Modelle mit einem solchen Namen müssen vor dem nächsten Deploy korrigiert werden; laufende Instanzen bleiben unberührt. Datenobjekte behalten ihre Pfade mit Punkt, wo ein Punkt wirklich einer ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-server-that-requires-a-login-no-longer-calls-itself-single",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The account menu stops claiming there is no login",
-        "de": "Das Konto-Menü behauptet nicht mehr, es gäbe keinen Login"
-      },
-      "summary": {
-        "en": "On an instance that requires a login, the account menu said \"Single-user mode\" — the label for a server that has no login at all — whenever nobody was signed in, including on the login screen itself. It now says \"Not signed in\" there, and keeps the old label where it is actually true.",
-        "de": "Auf einer Instanz mit Anmeldepflicht stand im Konto-Menü \"Single-user mode\" — die Bezeichnung für einen Server ganz ohne Login —, sobald niemand angemeldet war, also auch auf dem Login-Bildschirm selbst. Dort steht jetzt \"Nicht angemeldet\"; wo die alte Bezeichnung zutrifft, bleibt sie."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Every task now says where its work will run",
-        "de": "Jede Aufgabe sagt jetzt, wo ihre Arbeit läuft"
-      },
-      "summary": {
-        "en": "The type list on a service task marked every connector as running inside the engine, and that had quietly stopped being true: e-mail, text files, scripts and web scraping are handed to a worker Atlas starts for you, and the database and Entra ID connectors never ran in the engine at all. The mark now comes from the server you are connected to, so it also follows however that server was started. It has also appeared in the two places that said nothing at all — the language of a script task, and a business rule task's choice between the built-in decision engine and an external service. What each one tells you differs, because what a worker holds differs: a connector's credentials, a script's interpreter, a decision service's address.",
-        "de": "Die Typ-Liste einer Service-Aufgabe wies jeden Konnektor als „in der Engine laufend“ aus — und das stimmte längst nicht mehr: E-Mail, Textdateien, Skripte und Web-Scraping übergibt Atlas an einen Worker, den es selbst für Sie startet, und die Datenbank- und Entra-ID-Konnektoren liefen nie in der Engine. Die Kennzeichnung kommt jetzt von dem Server, mit dem Sie verbunden sind, und folgt damit auch dem, womit dieser Server gestartet wurde. Und sie ist an den beiden Stellen aufgetaucht, die bisher gar nichts sagten: bei der Sprache einer Skript-Aufgabe und bei der Wahl einer Business-Rule-Aufgabe zwischen der eingebauten Entscheidungs-Engine und einem externen Dienst. Was dort jeweils steht, unterscheidet sich — weil sich unterscheidet, was ein Worker hält: die Zugangsdaten eines Konnektors, den Interpreter eines Skripts, die Adresse eines Entscheidungsdienstes."
-      },
-      "link": {
-        "label": "ADR-0164",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
-      },
-      "tags": [
-        "Modeler",
-        "Connectors"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and drop a service task on the canvas.",
-          "In the properties panel, open Type: every connector now carries a mark — in-engine, on a worker, or worker only.",
-          "Pick the E-Mail connector: on a standard install it reads on a worker, and the note underneath says where that connector is configured.",
-          "Change the task into a script task and choose PowerShell: the same mark sits beside the language, and says something a connector would not."
-        ],
-        "de": [
-          "Modeler öffnen und eine Service-Aufgabe auf die Fläche ziehen.",
-          "Im Eigenschaften-Panel „Type“ aufklappen: Jeder Konnektor trägt jetzt eine Kennzeichnung — in-engine, on a worker oder worker only.",
-          "Den E-Mail-Konnektor wählen: Bei einer Standardinstallation steht dort „on a worker“, und der Hinweis darunter sagt, wo dieser Konnektor konfiguriert wird.",
-          "Die Aufgabe in eine Skript-Aufgabe umwandeln und PowerShell wählen: Dieselbe Kennzeichnung steht neben der Sprache — mit einem Hinweis, den ein Konnektor so nicht bekommt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

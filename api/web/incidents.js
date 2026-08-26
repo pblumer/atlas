@@ -59,8 +59,8 @@ export function incidentConnectorChip(inc) {
 function incidentConnectorAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="btn neutral sm" href="#/console/org"
-      title="No connector is configured under this name — add one in Organization &rsaquo; Connectors">&#9881; Configure &#8599;</a>`;
+    return `<a class="btn neutral sm" href="#/console/connectors"
+      title="No connector is configured under this name — add one under Console &rsaquo; Connectors">&#9881; Configure &#8599;</a>`;
   }
   return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Connector&hellip;</button>`;

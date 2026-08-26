@@ -58,9 +58,9 @@ host can reach it — see [Reverse proxy and TLS](#8-reverse-proxy-and-tls).
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.3.0/atlas_0.3.0_linux_amd64.tar.gz
-tar -xzf atlas_0.3.0_linux_amd64.tar.gz
-./atlas_0.3.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.4.0/atlas_0.4.0_linux_amd64.tar.gz
+tar -xzf atlas_0.4.0_linux_amd64.tar.gz
+./atlas_0.4.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -82,7 +82,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.3.0
+VERSION=0.4.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -91,7 +91,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.3.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.4.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -290,7 +290,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.3.0'
+$Version = '0.4.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -306,7 +306,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.3.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.4.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -322,7 +322,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.3.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.4.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>

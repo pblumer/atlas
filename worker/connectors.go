@@ -144,6 +144,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
+			if reg == nil {
+				// Told to serve Entra, holding no tenant. Not an error, for the reason
+				// mail's identical branch above is not: this worker may serve other
+				// kinds, and a kind supervised by default must park rather than fail
+				// on a server where nobody has configured a tenant yet.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
@@ -161,6 +169,13 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			reg, names, err := sqlRegistryFromEnv(env, p)
 			if err != nil {
 				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve this product, holding no database — the state every
+				// server starts in. Parks like mail and Entra above rather than
+				// failing; a connector configured in the Console brings it back.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
 			}
 			built.Names = append(built.Names, names...)
 			built.Handlers[p.JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
