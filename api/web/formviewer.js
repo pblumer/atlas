@@ -36,6 +36,40 @@ export function loadFormViewer() {
 // anything inside its per-row template. A plain group is layout only, so its fields
 // belong to the enclosing scope and are collected by recursing. Each key appears once,
 // in document order.
+// FORM_FIELD_TYPES maps a form-js input component to the type of the variable it
+// writes. The component type is the only type declaration a form carries, and it is a
+// real one: a checkbox writes a boolean whatever it is labelled, a taglist writes an
+// array. Components not listed here write a string — every text-shaped input does, and
+// so does a select or a radio, whose value is one of its option keys.
+const FORM_FIELD_TYPES = {
+  number: "number",
+  checkbox: "boolean",
+  checklist: "array",
+  taglist: "array",
+  filepicker: "array",
+};
+
+// formFieldTypes maps each key formFieldKeys returns to that variable's type, for the
+// Modeler's Variables panel: a form is the one design-time source that knows the type
+// of what it writes before anything has run. Walks the same schema the same way, so
+// the two agree on which keys exist; a repeating container binds an array under its
+// path, whatever its per-row template contains.
+export function formFieldTypes(schema) {
+  const types = {};
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.path) { if (!(c.path in types)) types[c.path] = "array"; continue; }
+      if (typeof c.key === "string" && c.key.trim() && !(c.key.trim() in types)) {
+        types[c.key.trim()] = FORM_FIELD_TYPES[c.type] || "string";
+      }
+      if (Array.isArray(c.components)) walk(c.components);
+    }
+  };
+  if (schema && Array.isArray(schema.components)) walk(schema.components);
+  return types;
+}
+
 export function formFieldKeys(schema) {
   const keys = [];
   const seen = new Set();
