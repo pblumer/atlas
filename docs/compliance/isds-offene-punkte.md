@@ -16,6 +16,12 @@ vergeben, nicht aus der Produktroadmap:
 - **P3 — Reifegrad**: erhöht die Prüfbarkeit und senkt den Aufwand jeder
   künftigen ISDS-Prüfung.
 
+> **O-07, O-03 und O-04 sind ausgearbeitet** im
+> [Zugriffsschutz-Konzept](zugriffsschutz-konzept.md): Schnittstelleninventar,
+> der `/mcp`-Befund im Detail, acht Massnahmen mit Aufwand und ein Stufenplan bis
+> zur Tauglichkeit für einen produktiven PoC. O-01 und O-02 bleiben dort
+> ausdrücklich draussen, bekommen aber die Grundlage, auf der sie aufsetzen.
+
 | Nr. | Punkt | Prio | Risiko | Stand heute | Was fehlt |
 |-----|-------|------|--------|-------------|-----------|
 | O-01 | **Föderierte Authentisierung** (OIDC/SAML, Ziel eIAM) | P1 | R-03 | Nur lokale Passwörter (bcrypt, Session-Cookie). Das Datenmodell hält die Haken `Source`/`ExternalID` bereit, die Authentisierungsgrenze ist bewusst austauschbar gebaut (ADR-0044) | Ein OIDC-Relying-Party-Fluss hinter derselben `*Principal`-Grenze; Rollen-/Gruppen-Mapping aus Claims; Doku für den Betrieb hinter einem authentisierenden Proxy |
