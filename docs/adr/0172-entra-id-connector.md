@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name)
+- **Status:** Proposed (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives.)
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 
@@ -246,6 +246,38 @@ keeps the authored `=…` text on the task's interned `Connector` for introspect
 incident or a placement badge still has something to show), and the deploy-time
 connector-preflight skips any reference whose name begins with `=`, because there is no
 fixed name to check and the runtime unresolved-connector incident stands in for it.
+
+### Amendment (2026-08-25): a per-operation capture mask, and a result-shape hint
+
+The body-carrying operations were authored as one free-text JSON field. That is
+maximally flexible and minimally guided: nothing says *which* attributes a create-user
+takes, and the raw JSON invites two silent mistakes Graph will not forgive — a
+mis-cased key (`DisplayName` for `displayName`, dropped without error) and a stray
+trailing comma. So the Modeler now shows a **per-operation capture mask** for those
+operations: named fields for the important attributes (create-user: displayName,
+mailNickname, userPrincipalName, the passwordProfile, accountEnabled, usageLocation;
+create-group: displayName, mailNickname, mailEnabled, securityEnabled, a Unified
+toggle; and so on), plus a **"Weitere Attribute (JSON)"** escape hatch for anything the
+mask does not name.
+
+Deliberately UI-only (the assemble-in-the-editor option, not first-class attributes):
+the mask reads and writes the *same single* `attributes` JSON string the compiler
+already consumes — no new moddle property, no compiler change. Every field is text, so
+a FEEL value (`=profil.accountEnabled`) works in any field exactly as inline JSON
+allowed; the mask's build/parse pair does the coercion, so a boolean field emits a real
+JSON boolean rather than the string `"true"`. Anything the mask cannot parse (a
+hand-authored non-object body) leaves the fields empty and rides along verbatim in the
+escape hatch, so switching an existing raw-JSON task to the mask never loses it.
+Operations whose body is an array (assign-license's `addLicenses`/`removeLicenses`) keep
+the raw JSON editor. The mask lives in its own module (`entra-attrmask.js`) with pure,
+unit-tested assemble/parse functions and a Playwright harness driving the real widget.
+
+The same amendment closes a smaller gap: the Modeler never told an author what the
+**result variable** receives, and its shape differs per operation. The field's hint is
+now operation-aware — create-user returns the user object you then address as
+`=konto.id`, list-users returns an array, a body-less operation returns nothing — so a
+downstream `=konto.<field>` can be authored with confidence. (The hint renderer learned
+to take a function of the current values for this; a static string still works.)
 
 ### The OAuth2 token flow, lifted
 
