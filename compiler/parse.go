@@ -2107,6 +2107,7 @@ type xmlEntraConnector struct {
 	MaxUsers           string `xml:"maxUsers,attr"`
 	Search             string `xml:"search,attr"`
 	AdvancedQuery      string `xml:"advancedQuery,attr"`
+	DeltaLink          string `xml:"deltaLink,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

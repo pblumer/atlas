@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Entra ID delta queries — `delta-users` and `delta-groups`**
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Change detection instead of
+  a full compare: a delta operation enumerates the directory the first run and returns
+  only what changed on every run after, which is what makes an hourly identity sync
+  affordable. The `@odata.deltaLink` cursor round-trips through the process — the
+  operation takes an optional `deltaLink` (empty on the first run, the previous run's
+  cursor thereafter) and returns `{ value, deltaLink }` so a model persists the cursor
+  and hands it back next time. Deletions arrive in `value` marked `@removed`; `$select`,
+  `$top` and the `maxUsers` cap apply, while `$filter`/`$search`/advanced query do not
+  (Graph's delta endpoint runs none of them, and the compiler refuses them at deploy).
+  This closes the third Entra capability tracked in [issue #433](https://github.com/pblumer/atlas/issues/433).
+  Fixed alongside: `newPassword` and `deltaLink` were being dropped from the job payload
+  the engine hands the worker, so `reset-password` resolved an empty secret — both now
+  cross the wire and are covered by a worker round-trip test.
+
 - **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
   [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),

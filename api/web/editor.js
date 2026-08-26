@@ -2252,7 +2252,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, update, enable, disable, reset password, delete), groups (create, read, list, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID Connector", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD connector, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -2270,6 +2270,7 @@ const SERVICE_TASK_KINDS = [
           { v: "create-user", l: "Create user" },
           { v: "get-user", l: "Read user" },
           { v: "list-users", l: "List users" },
+          { v: "delta-users", l: "Delta users (Änderungen)" },
           { v: "update-user", l: "Update user" },
           { v: "reset-password", l: "Reset password" },
           { v: "enable", l: "Enable account" },
@@ -2280,6 +2281,7 @@ const SERVICE_TASK_KINDS = [
           { v: "create-group", l: "Create group" },
           { v: "get-group", l: "Read group" },
           { v: "list-groups", l: "List groups" },
+          { v: "delta-groups", l: "Delta groups (Änderungen)" },
           { v: "update-group", l: "Update group" },
           { v: "delete-group", l: "Delete group" },
           { v: "add-group-owner", l: "Add group owner" },
@@ -2349,18 +2351,26 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
-        hint: "An OData $select: which properties each user comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large listing out of the state store.",
+        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
-        hint: "How many users to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole listing, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
+        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: "How many objects to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole read, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
-        key: "maxUsers", label: "Maximum users", placeholder: "1000",
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
-        hint: "Caps what may land in the result variable. A listing returning more fails the job rather than truncating, because a short result set is a wrong answer, not a partial one. Empty uses 1000; 0 is unbounded.",
+        key: "maxUsers", label: "Maximum objects", placeholder: "1000",
+        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
+      },
+      {
+        key: "deltaLink", label: "Delta-Link (Resume)", placeholder: "=letzterDeltaLink", fx: true,
+        showIf: (v) => v.operation === "delta-users" || v.operation === "delta-groups",
+        // Almost always a FEEL variable holding the deltaLink a previous run wrote — the
+        // whole point of change tracking is to resume from it. Empty starts a fresh
+        // enumeration that seeds a new cursor.
+        hint: "Setzt eine Änderungsverfolgung fort: der @odata.deltaLink, den ein früherer Lauf zurückgab — fast immer eine FEEL-Variable (fx), z.B. =letzterDeltaLink. Leer lassen für den ersten Lauf: dann zählt der Konnektor das Verzeichnis einmal vollständig auf und liefert einen frischen Cursor. Das Ergebnis ist ein Objekt { value: [Änderungen], deltaLink: \"…\" }; den deltaLink persistieren (Datenobjekt) und beim nächsten Lauf hier wieder übergeben. Gelöschte Objekte kommen mit @removed markiert mit.",
       },
       { group: "Output" },
       {
