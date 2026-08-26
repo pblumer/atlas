@@ -178,6 +178,12 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"non-boolean advancedQuery", `connector="c" operation="list-users" resultVariable="r" advancedQuery="vielleicht"`, "non-boolean advancedQuery"},
 		{"search with advancedQuery false", `connector="c" operation="list-users" resultVariable="r" search="&#34;x:y&#34;" advancedQuery="false"`, "only as an advanced query"},
 		{"bad FEEL search", `connector="c" operation="list-users" resultVariable="r" search="="`, "search"},
+		{"delta without a result variable", `connector="c" operation="delta-users"`, "resultVariable"},
+		{"filter on a delta query", `connector="c" operation="delta-users" resultVariable="r" filter="x eq 1"`, "not a listing"},
+		{"search on a delta query", `connector="c" operation="delta-users" resultVariable="r" search="&#34;x:y&#34;"`, "not a listing"},
+		{"advancedQuery on a delta query", `connector="c" operation="delta-groups" resultVariable="r" advancedQuery="true"`, "not a listing"},
+		{"deltaLink on a listing", `connector="c" operation="list-users" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
+		{"deltaLink on a single-object read", `connector="c" operation="get-user" userId="u" deltaLink="https://x"`, "not a change-tracking query"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
@@ -269,6 +275,40 @@ func TestEntraConnectorSearchImpliesAdvancedQuery(t *testing.T) {
 	_, feel := entraDetail(t, `connector="c" operation="list-users" resultVariable="r" search="=suchbegriff"`)
 	if feel.EntraSearch.Expr == nil {
 		t.Errorf("search should be a compiled FEEL expression, got literal %q", feel.EntraSearch.Literal)
+	}
+}
+
+// A delta query is a listing's change-tracking twin (ADR-0172): it returns a collection
+// — so it takes select/pageSize/maxUsers and needs a resultVariable — and additionally a
+// deltaLink to resume from, a literal-or-FEEL cursor that is empty on the first run.
+func TestEntraConnectorDelta(t *testing.T) {
+	cp, d := entraDetail(t, `connector="contoso" operation="delta-users" resultVariable="aenderungen"
+		select="id,displayName" pageSize="50" deltaLink="=letzterDeltaLink"`)
+	if got := cp.Intern(d.EntraOp); got != "delta-users" {
+		t.Errorf("operation = %q, want delta-users", got)
+	}
+	if got := cp.Intern(d.EntraSelect); got != "id,displayName" {
+		t.Errorf("select = %q", got)
+	}
+	if d.EntraPageSize != 50 {
+		t.Errorf("pageSize = %d, want 50", d.EntraPageSize)
+	}
+	// The maxUsers guard defaults on for a delta as for a listing.
+	if d.EntraMaxUsers != defaultEntraMaxUsers {
+		t.Errorf("maxUsers = %d, want the default %d guard", d.EntraMaxUsers, defaultEntraMaxUsers)
+	}
+	if d.EntraDeltaLink.Expr == nil {
+		t.Errorf("deltaLink should compile a FEEL expression, got literal %q", d.EntraDeltaLink.Literal)
+	}
+	// A fresh delta authors no deltaLink; the field stays zero.
+	_, fresh := entraDetail(t, `connector="c" operation="delta-groups" resultVariable="r"`)
+	if fresh.EntraDeltaLink.Literal != "" || fresh.EntraDeltaLink.Expr != nil {
+		t.Errorf("a fresh delta carries a deltaLink: %+v", fresh.EntraDeltaLink)
+	}
+	// And an operation that is not a delta carries no deltaLink state at all.
+	_, single := entraDetail(t, `connector="c" operation="disable" userId="u"`)
+	if single.EntraDeltaLink.Literal != "" || single.EntraDeltaLink.Expr != nil {
+		t.Errorf("a non-delta task carries a deltaLink: %+v", single.EntraDeltaLink)
 	}
 }
 

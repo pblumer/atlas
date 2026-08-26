@@ -279,6 +279,57 @@ now operation-aware — create-user returns the user object you then address as
 downstream `=konto.<field>` can be authored with confidence. (The hint renderer learned
 to take a function of the current values for this; a static string still works.)
 
+### Amendment (2026-08-26): delta queries — reading only what changed
+
+This closes the third capability the [MIM comparison](../comparisons/mim.md) named for
+this system, and the one the original ADR left for later: **change detection instead of
+a full compare.** Two operations join the table — `delta-users` (`GET /users/delta`) and
+`delta-groups` (`GET /groups/delta`) — and are the listing's change-tracking twin. A
+delta is a full enumeration *the first time* and only what changed on every run after,
+which is what makes an hourly identity sync affordable where re-listing the directory
+each time is not.
+
+The design question a delta poses that a listing does not is **where the cursor lives.**
+Graph hands back an `@odata.deltaLink` on the last page; a next run passes it back to
+read only the changes since. This connector holds no state between jobs — that is the
+worker model — so the cursor round-trips through the *process*, exactly as
+[`galsync.bpmn`](../../examples/galsync.bpmn) already round-trips a DirSync cookie in a
+BPMN variable:
+
+- the operation takes an optional `deltaLink` (literal-or-FEEL, almost always a variable),
+  empty on the first run and the previous run's cursor thereafter;
+- its result is an **object**, `{ value, deltaLink }`, not the bare array a listing
+  returns — because the cursor is half of what the operation is for. A process persists
+  `deltaLink` (a data object) and hands it back next run.
+
+Two consequences follow from being faithful to Graph rather than tidying its answer:
+
+- **Deletions are in `value`, marked `@removed`.** Graph reports a removed object as an
+  item carrying an `@removed` annotation, interleaved with the changes. The connector
+  passes the page through as sent rather than filtering them out — dropping them would
+  hide exactly the change a leaver flow is watching for. A process tells a change from a
+  removal by the annotation, as Graph intends.
+- **A truncated change set is refused, not returned.** The `maxUsers` cap fails the job
+  rather than truncating, for the listing's reason and one more: a truncated delta would
+  persist a `deltaLink` having skipped changes, so the next run would never see them. The
+  cursor is only sound if the whole change set reached the process.
+
+Delta's query surface is narrower than a listing's, and the compiler enforces it: `$select`,
+`$top` and the `maxUsers` cap apply (both operations return a collection this connector
+pages), but `$filter`, `$search` and advanced query do not — Graph's delta endpoint runs
+none of them, and refusing them at deploy is better than the runtime `400`. `$select` is
+threaded forward by Graph into the `deltaLink` itself, so a resume sends nothing but the
+cursor. As with every other operation the rules live in both tables (the compiler's and
+the connector's) and the drift test holds them together.
+
+A field carried on the resolved job for this — `deltaLink` — has to survive the
+engine→worker hop, and while wiring it the same silent-drop that the advanced-query
+amendment found was found again for `newPassword`: neither was listed in the payload the
+engine hands the worker, so a reset-password resolved an empty secret and a delta could
+not resume. Both are now carried and both are covered by a worker round-trip test, the
+kind that catches a dropped field through what it does rather than through a struct that
+decoded "successfully."
+
 ### The OAuth2 token flow, lifted
 
 This would have been the third copy of the same hundred lines: an expiry-aware cache,

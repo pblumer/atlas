@@ -193,6 +193,12 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "list-users", job: Job{ResultVariable: "leute"},
 			method: "GET", path: "/users",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "delta-users", job: Job{ResultVariable: "aenderungen"},
+			method: "GET", path: "/users/delta",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "delta-groups", job: Job{ResultVariable: "aenderungen"},
+			method: "GET", path: "/groups/delta",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "update-user",
 			job:    Job{UserID: "u1", Attributes: map[string]any{"department": "IT"}},
 			method: "PATCH", path: "/users/u1",
@@ -292,7 +298,14 @@ func TestRunMapsEveryOperation(t *testing.T) {
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			res := map[string]any{"id": "x"}
-			if Ops[tc.op].IsList {
+			switch {
+			case Ops[tc.op].IsDelta:
+				// A delta's last page carries the cursor in place of a next link.
+				res = map[string]any{
+					"value":            []any{map[string]any{"id": "x"}},
+					"@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?$deltatoken=t0",
+				}
+			case Ops[tc.op].IsList:
 				res = map[string]any{"value": []any{map[string]any{"id": "x"}}}
 			}
 			c := &recordingClient{res: res}
@@ -310,7 +323,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 24 {
+	if len(Ops) != 26 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -723,9 +736,9 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 		if spec.NeedsPassword && omit != "password" {
 			parts = append(parts, `newPassword="S3cret!"`)
 		}
-		// A listing has nowhere to put a collection without one, which both halves
-		// enforce — the compiler at deploy, checkRequired on the worker.
-		if spec.IsList && omit != "result" {
+		// A listing or a delta query has nowhere to put a collection without one, which
+		// both halves enforce — the compiler at deploy, checkRequired on the worker.
+		if (spec.IsList || spec.IsDelta) && omit != "result" {
 			parts = append(parts, `resultVariable="leute"`)
 		}
 		return strings.Join(parts, " ")
@@ -745,7 +758,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 					(omit == "group" && spec.NeedsGroup) ||
 					(omit == "attributes" && spec.NeedsAttributes) ||
 					(omit == "password" && spec.NeedsPassword) ||
-					(omit == "result" && spec.IsList)
+					(omit == "result" && (spec.IsList || spec.IsDelta))
 				if !required {
 					continue
 				}
@@ -753,19 +766,29 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 					t.Errorf("Ops[%q] requires %s but the compiler accepted a model without it", op, omit)
 				}
 			}
-			// IsList is the other half of the same agreement: the listing query is
-			// meaningful on exactly the operation that returns a collection, and the
-			// compiler must refuse it everywhere else rather than drop it silently.
-			for _, q := range []string{
-				`filter="accountEnabled eq true"`, `select="id"`, `pageSize="10"`, `maxUsers="10"`,
-				`search="&#34;displayName:Arno&#34;"`, `advancedQuery="true"`,
+			// The query fields are the other half of the same agreement, in three classes
+			// both halves must place the same way: filter/search/advancedQuery on a
+			// listing; select/pageSize/maxUsers on a listing or a delta query (both return
+			// a collection); deltaLink on a delta query alone. The compiler must refuse
+			// each where it has no meaning rather than drop it silently.
+			for _, c := range []struct {
+				q       string
+				allowed bool
+			}{
+				{`filter="accountEnabled eq true"`, spec.IsList},
+				{`search="&#34;displayName:Arno&#34;"`, spec.IsList},
+				{`advancedQuery="true"`, spec.IsList},
+				{`select="id"`, spec.IsList || spec.IsDelta},
+				{`pageSize="10"`, spec.IsList || spec.IsDelta},
+				{`maxUsers="10"`, spec.IsList || spec.IsDelta},
+				{`deltaLink="https://graph.microsoft.com/v1.0/users/delta?$deltatoken=t"`, spec.IsDelta},
 			} {
-				err := compile(attrsFor(op, spec, "") + " " + q)
-				if spec.IsList && err != nil {
-					t.Errorf("Ops[%q] is a listing but the compiler rejects %s: %v", op, q, err)
+				err := compile(attrsFor(op, spec, "") + " " + c.q)
+				if c.allowed && err != nil {
+					t.Errorf("Ops[%q] should accept %s but the compiler rejects it: %v", op, c.q, err)
 				}
-				if !spec.IsList && err == nil {
-					t.Errorf("Ops[%q] returns no collection but the compiler accepted %s", op, q)
+				if !c.allowed && err == nil {
+					t.Errorf("Ops[%q] should reject %s but the compiler accepted it", op, c.q)
 				}
 			}
 		})
