@@ -1,4 +1,4 @@
-# ADR-DRAFT: Panorama architecture modeling and live operational overlays
+# ADR-0189: Panorama architecture modeling and live operational overlays
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
