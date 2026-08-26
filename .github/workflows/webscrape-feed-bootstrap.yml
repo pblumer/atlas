@@ -1,0 +1,33 @@
+name: Apply webscrape feed compiler patch
+
+on:
+  push:
+    branches:
+      - feat/webscrape-feed-extraction
+    paths:
+      - .github/workflows/webscrape-feed-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/webscrape-feed-extraction
+          fetch-depth: 0
+      - name: Apply exact source patch
+        run: python3 .github/scripts/apply_webscrape_feed_patch.py
+      - name: Format modified Go files
+        run: gofmt -w compiler/process.go compiler/parse.go compiler/connector_compile.go
+      - name: Remove one-shot patcher
+        run: rm .github/scripts/apply_webscrape_feed_patch.py .github/workflows/webscrape-feed-bootstrap.yml
+      - name: Commit patched sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add compiler/process.go compiler/parse.go compiler/connector_compile.go .github/scripts/apply_webscrape_feed_patch.py .github/workflows/webscrape-feed-bootstrap.yml
+          git commit -m "feat(compiler): compile webscrape feed modes"
+          git push origin HEAD:feat/webscrape-feed-extraction
