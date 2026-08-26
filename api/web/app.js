@@ -380,6 +380,7 @@ const TOPNAV = {
     { name: "Logs", route: "#/console/logs" },
     { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
+    { name: "Connectors", route: "#/console/connectors" },
     { name: "Audit log", route: "#/console/audit" },
   ],
   modeler: [
@@ -632,7 +633,10 @@ function handbookHelp(path) {
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
-  if (path.startsWith("#/console/org")) return H("formulare", "Forms & connectors");
+  // Organization pointed at the connector chapter only because the connector cards
+  // used to sit on it; with those on their own page it points there instead, and
+  // Organization falls through to the Console's own chapter.
+  if (path.startsWith("#/console/connectors")) return H("formulare", "Forms & connectors");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
   return H("willkommen", "Welcome to Atlas");
 }
@@ -1315,7 +1319,18 @@ async function removeGroupMember(groupId, userId, reload) {
   reload();
 }
 
-async function viewConsoleOrg() {
+// viewConsoleConnectors is the Console's Connectors page: what Atlas can delegate to,
+// what this instance has actually configured, and the vault those configurations
+// resolve their credentials from. The three read in that order because that is the
+// order an operator works in — pick a kind, point it somewhere, give it a credential —
+// and the secrets stay with the connectors because a token *reference* and the secret
+// it resolves to are one setting entered in two places (ADR-0041 · ADR-0069).
+//
+// They were the bottom three cards of Organization, under the user roster, the groups
+// and the colour picker. That page answers "who uses this instance"; a connector is not
+// a person, and the integrations are what an operator comes back to — past everything
+// they were filed behind.
+async function viewConsoleConnectors() {
   const gen = navGen;
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
@@ -1329,19 +1344,6 @@ async function viewConsoleOrg() {
       </td>
       <td style="text-align:right; white-space:nowrap; vertical-align:top">${pill(c)}</td>
     </tr>`;
-
-  // Load the user roster. A 403 means a signed-in non-admin — show a notice
-  // rather than an error card.
-  let users = null;
-  let denied = false;
-  try {
-    users = await api("GET", "/api/v1/users");
-  } catch (e) {
-    denied = /admin/i.test(e.message);
-    // If a newer navigation superseded us, swallow the error rather than let it
-    // reach route()'s catch, which would render an error card over the new view.
-    if (!denied) { if (superseded(gen)) return; throw e; }
-  }
 
   // Managed connector instances (ADR-0041): operator-configured integrations,
   // secret references only. Today the runtime wires the temis decision connector.
@@ -1437,6 +1439,36 @@ async function viewConsoleOrg() {
         </table>
       </div>`;
 
+  if (superseded(gen)) return; // navigated away while the connectors/secrets loaded
+  view.innerHTML = `
+    <div class="card" style="padding:0">
+      <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Connectors</h1></div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
+      delegates to. Each is an org-wide integration, shared across every process.</p>
+      <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
+    </div>
+    ${managedCard}
+    ${secretsCard}`;
+  wireConnectorManagement(connectors);
+  wireSecretsManagement(secrets, secretsState, connectors);
+}
+
+async function viewConsoleOrg() {
+  const gen = navGen;
+
+  // Load the user roster. A 403 means a signed-in non-admin — show a notice
+  // rather than an error card.
+  let users = null;
+  let denied = false;
+  try {
+    users = await api("GET", "/api/v1/users");
+  } catch (e) {
+    denied = /admin/i.test(e.message);
+    // If a newer navigation superseded us, swallow the error rather than let it
+    // reach route()'s catch, which would render an error card over the new view.
+    if (!denied) { if (superseded(gen)) return; throw e; }
+  }
+
   const me = AUTH.user;
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
@@ -1519,7 +1551,7 @@ async function viewConsoleOrg() {
       </table>
     </div>`;
 
-  if (superseded(gen)) return; // navigated away while the roster/connectors/secrets loaded
+  if (superseded(gen)) return; // navigated away while the roster loaded
   view.innerHTML = `
     <div class="card">
       <h1>Organization</h1>
@@ -1529,20 +1561,10 @@ async function viewConsoleOrg() {
     </div>
     ${usersCard}
     ${groupsCard}
-    ${appearanceCard()}
-    <div class="card" style="padding:0; margin-top:18px">
-      <div class="between" style="padding:16px 18px 0"><h2>Connectors</h2></div>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
-      delegates to. Each is an org-wide integration, shared across every process.</p>
-      <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
-    </div>
-    ${managedCard}
-    ${secretsCard}`;
+    ${appearanceCard()}`;
 
-  // Connector management is wired before the (admin-gated) user handlers so it
-  // works even when the user roster is denied to a non-admin.
-  wireConnectorManagement(connectors);
-  wireSecretsManagement(secrets, secretsState, connectors);
+  // Appearance is wired before the (admin-gated) user handlers so it works even when
+  // the user roster is denied to a non-admin.
   wireAppearance();
 
   if (denied) return;
@@ -2893,7 +2915,7 @@ function showMIMReport(res) {
 // re-renders. Only a token *reference* is ever entered — never a secret value
 // (ADR-0041).
 function wireConnectorManagement(connectors) {
-  const reload = () => viewConsoleOrg();
+  const reload = () => viewConsoleConnectors();
   const slot = document.getElementById("connector-form-slot");
   const newBtn = document.getElementById("new-connector");
   if (newBtn && slot) {
@@ -3172,7 +3194,7 @@ async function toggleInboundSubs(row, connectorId) {
 // the vault is denied (non-admin) or unconfigured there is nothing to wire.
 function wireSecretsManagement(secrets, state, connectors) {
   if (state !== "ok") return;
-  const reload = () => viewConsoleOrg();
+  const reload = () => viewConsoleConnectors();
   const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
   const slot = document.getElementById("secret-form-slot");
   const newBtn = document.getElementById("new-secret");
@@ -4121,7 +4143,7 @@ function incidentMenu(r, i) {
   } else if (r.connector) {
     // Nothing to open — the model names a connector nobody configured, so the way out
     // is the Console, where one is created.
-    items.push({ label: "Configure connector ↗", icon: "⚙", href: "#/console/org" });
+    items.push({ label: "Configure connector ↗", icon: "⚙", href: "#/console/connectors" });
   }
   return items;
 }
@@ -6142,6 +6164,7 @@ function routeTitle(path) {
     [/^#\/console\/logs$/, "Logs · Console"],
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
+    [/^#\/console\/connectors$/, "Connectors · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -6201,6 +6224,7 @@ async function route() {
     if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
+    if (path === "#/console/connectors") return await viewConsoleConnectors();
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();

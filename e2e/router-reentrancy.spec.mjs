@@ -72,9 +72,9 @@ test("a superseded logs view does not throw an error card over the new view", as
 });
 
 test("a superseded view does not clobber the view the user navigated to", async ({ page }) => {
-  // The org view awaits three calls before writing view.innerHTML. Navigate org→logs
-  // while its user roster is stalled; the org handler must not paint over the logs
-  // view when its fetch finally resolves.
+  // The org view awaits its user roster before writing view.innerHTML. Navigate
+  // org→logs while that roster is stalled; the org handler must not paint over the
+  // logs view when its fetch finally resolves.
   installMock(page, { "/users": 700 });
   await bootApp(page);
 

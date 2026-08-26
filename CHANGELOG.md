@@ -186,6 +186,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Connectors are their own page in the Console.** They live at `#/console/connectors`,
+  beside Organization in the navigation. The connector catalog, the connectors this instance has
+  actually configured ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)) and the encrypted
+  vault their credentials resolve from ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md))
+  were the last three cards of Organization — below the user roster, the groups and the
+  brand-colour picker. Organization answers "who uses this instance and what does it look
+  like"; a connector is not a person, and as the catalog grew past a dozen kinds the page
+  had become mostly integrations with the people at the top. The three move together and in
+  the order the work happens — pick a kind, point it somewhere, give it a credential —
+  because a token *reference* and the vault secret it resolves to are one setting entered in
+  two places. Organization keeps users, groups and appearance. The deep links follow: an
+  incident whose model names a connector nobody configured, the incident table's
+  "Configure connector ↗", and the handbook's note on where credentials live all point at
+  the new page, and the contextual help button on it opens the connector chapter.
+
 - **The connector picker is one line per kind.** The Modeler's Type picker lists nineteen
   kinds ([ADR-0067](docs/adr/0067-connector-kind-catalog.md)), and each was a two-line card:
   name, then the catalog's one-sentence description underneath. That put a single choice
