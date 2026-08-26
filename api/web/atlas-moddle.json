@@ -350,6 +350,8 @@
         { "name": "url", "type": "String", "isAttr": true },
         { "name": "selector", "type": "String", "isAttr": true },
         { "name": "attribute", "type": "String", "isAttr": true },
+        { "name": "format", "type": "String", "isAttr": true },
+        { "name": "maxItems", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
