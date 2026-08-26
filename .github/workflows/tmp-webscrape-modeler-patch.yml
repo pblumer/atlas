@@ -1,0 +1,127 @@
+name: Temporary webscrape modeler patch
+
+on:
+  push:
+    branches: [feat/webscrape-feed-extraction]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore: apply webscrape modeler patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/webscrape-feed-extraction
+
+      - name: Apply focused modeler edits
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          editor_path = Path("api/web/editor.js")
+          editor = editor_path.read_text()
+
+          old_entry = '''  {
+            id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
+            // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
+            // connector's counterpart to REST's globe and mail's envelope. The
+            // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+            // fill and the white web strokes.
+            glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
+            ext: "atlas:WebscrapeConnector",
+            fields: [
+              { group: "Page" },
+              { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The page to fetch. A value may be a FEEL expression (fx) over the instance's variables." },
+              { group: "Extraction" },
+              { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, hint: "The CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
+              { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", hint: "The HTML attribute read from each match (e.g. href). Leave empty to extract each match's text content." },
+              { group: "Output" },
+              { key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
+            ],
+          },'''
+
+          new_entry = '''  {
+            id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
+            // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
+            // connector's counterpart to REST's globe and mail's envelope. The
+            // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+            // fill and the white web strokes.
+            glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
+            ext: "atlas:WebscrapeConnector",
+            // Feed formats do not have HTML selector semantics (ADR-0190). Normalizing
+            // before the generic upsert means switching modes cannot leave hidden HTML
+            // attributes behind and produce a model the compiler correctly rejects.
+            normalize: (props) => {
+              const feed = props.format === "rss" || props.format === "atom";
+              if (!props.format) props.format = undefined; // HTML is the compatibility default.
+              if (feed) {
+                props.selector = undefined;
+                props.attribute = undefined;
+              }
+            },
+            fields: [
+              { group: "Page" },
+              { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The HTML page, RSS document, or Atom document to fetch. May be a FEEL expression (fx)." },
+              {
+                key: "format", label: "Format", type: "select", reRender: true,
+                options: [{ v: "", l: "HTML" }, { v: "rss", l: "RSS" }, { v: "atom", l: "Atom" }],
+                hint: "Selects the parser explicitly. Atlas does not auto-detect a response format at runtime (ADR-0190).",
+              },
+              { group: "Extraction" },
+              { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, showIf: (v) => !v.format || v.format === "html", hint: "HTML only: the CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
+              { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", showIf: (v) => !v.format || v.format === "html", hint: "HTML only: the attribute read from each match (for example href). Leave empty for text content." },
+              { key: "maxItems", label: "Max items", type: "number", min: 0, placeholder: "0 = unlimited", hint: "Keep only the first N matches or feed entries in document order. Empty or 0 means unlimited." },
+              { group: "Output" },
+              { key: "resultVariable", label: "Result variable", resultType: "array", placeholder: "matches", hint: "HTML writes an array of strings. RSS/Atom write an array of objects with title, link, description, and published." },
+            ],
+          },'''
+
+          if editor.count(old_entry) != 1:
+              raise SystemExit(f"webscrape catalog block count = {editor.count(old_entry)}, want 1")
+          editor = editor.replace(old_entry, new_entry, 1)
+
+          old_save = '''        props[f.key] = (f.type === "number" && v === "") ? undefined : v;
+              }
+              upsertExt(modeler, element, stKind.ext, props);'''
+          new_save = '''        props[f.key] = (f.type === "number" && v === "") ? undefined : v;
+              }
+              // A kind may normalize mutually exclusive authored fields before the
+              // generic extension update. This keeps conditional UI fields from becoming
+              // hidden stale XML while preserving one data-driven save path for all kinds.
+              if (stKind.normalize) stKind.normalize(props);
+              upsertExt(modeler, element, stKind.ext, props);'''
+          if editor.count(old_save) != 1:
+              raise SystemExit(f"generic save block count = {editor.count(old_save)}, want 1")
+          editor = editor.replace(old_save, new_save, 1)
+          editor_path.write_text(editor)
+
+          moddle_path = Path("api/web/atlas-moddle.json")
+          moddle = moddle_path.read_text()
+          old_props = '''        { "name": "url", "type": "String", "isAttr": true },
+                { "name": "selector", "type": "String", "isAttr": true },
+                { "name": "attribute", "type": "String", "isAttr": true },
+                { "name": "resultVariable", "type": "String", "isAttr": true },'''
+          new_props = '''        { "name": "url", "type": "String", "isAttr": true },
+                { "name": "selector", "type": "String", "isAttr": true },
+                { "name": "attribute", "type": "String", "isAttr": true },
+                { "name": "format", "type": "String", "isAttr": true },
+                { "name": "maxItems", "type": "String", "isAttr": true },
+                { "name": "resultVariable", "type": "String", "isAttr": true },'''
+          # The url/selector/attribute sequence is unique to WebscrapeConnector today;
+          # assert that rather than silently changing a second connector in the future.
+          if moddle.count(old_props) != 1:
+              raise SystemExit(f"webscrape moddle property block count = {moddle.count(old_props)}, want 1")
+          moddle_path.write_text(moddle.replace(old_props, new_props, 1))
+          PY
+
+      - name: Commit focused edits and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-webscrape-modeler-patch.yml
+          git add api/web/editor.js api/web/atlas-moddle.json
+          git commit -m "feat(modeler): support webscrape feed extraction"
+          git push origin HEAD:feat/webscrape-feed-extraction
