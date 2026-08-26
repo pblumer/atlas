@@ -217,6 +217,8 @@ type Server struct {
 	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
+	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-draft-api-tokens)
+	apiTokens        *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
 	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
@@ -867,6 +869,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
+	if err != nil {
+		return nil, err
+	}
 	deployTokenStore, err := newDeployTokenStore(filepath.Join(dataDir, "deploy-tokens"))
 	if err != nil {
 		return nil, err
@@ -950,6 +956,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		grantAudit:        grantAudit,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
+		apiTokenStore:     apiTokenStore,
+		apiTokens:         newAPITokenIndex(),
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
@@ -1184,6 +1192,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
 	// reads, so a peer's credential keeps working across a restart.
+	if err := s.loadAPITokens(); err != nil {
+		return nil, err
+	}
+	s.checkWorkerTokenEnv()
 	if err := s.loadDeployTokens(); err != nil {
 		return nil, err
 	}

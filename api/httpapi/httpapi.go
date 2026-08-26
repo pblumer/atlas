@@ -63,6 +63,11 @@ type Principal struct {
 	// slice without a store read (ADR-0180). A membership change
 	// takes effect on the user's next login.
 	GroupIDs []string
+	// Scope confines a principal authenticated by a machine credential to a named
+	// set of operations, whatever its roles would otherwise permit. Empty for a
+	// person: a session is not scoped, it is who you are. The boundary enforces it
+	// in one place; handlers never read it.
+	Scope string
 }
 
 // InGroup reports whether the principal belongs to the group with the given id.

@@ -368,6 +368,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Connectoren, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
 | Projektmitglied | Projekt-Sichtbarkeit `private`/`shared` mit Rollen `viewer`/`editor` (ADR-0071, Gruppen ADR-0180) | Zugriff auf die Design-Time-Artefakte des Projekts |
 | `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | wie ein Benutzer, **nie** admin |
+| API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-draft-api-tokens): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | genau der Geltungsbereich des Tokens — `worker` (vier Operationen) oder `full` (wie ein Benutzer); **nie** admin |
 | MCP-Aufrufer | das Credential, mit dem der Aufrufer `/mcp` erreicht hat (Session-Cookie oder Bearer), unverändert an die API weitergereicht | genau die Rechte dieses Prinzipals — nicht mehr und nicht weniger (ADR-draft-authenticated-mcp-transport) |
 | `deploy-agent` | Deploy-Token eines Peer-Servers (ADR-0129), SHA-256-gehasht abgelegt | fail-closed-Allowlist aus genau zwei Operationen (Bundle importieren, eigene Deployments lesen) |
 | anonym | öffentliche Start-Links (ADR-0029), Selbstregistrierungs-Link (ADR-0126) | nur die freigegebene Startformular-Route, ratenbegrenzt |
@@ -616,6 +617,11 @@ zu bestätigen.
   - Deploy-Tokens (`deploy-agent`): Maschinen-Credential eines Peer-Servers,
     fail-closed auf zwei Operationen begrenzt (ADR-0129); Bestand regelmässig
     prüfen und nicht mehr benötigte löschen.
+  - API-Tokens: Credential für Worker auf anderen Hosts, entfernte MCP-Adapter und
+    CI (ADR-draft-api-tokens). Mit Geltungsbereich und Ablauf ausstellen — `worker`
+    wo immer möglich, `full` nur wo die Aufrufe nicht im Voraus benannt werden
+    können. Ausstellung und Widerruf stehen im Audit-Log (`auth.token_minted`,
+    `auth.token_revoked`); Bestand mit `GET /api/v1/api-tokens` rezertifizieren.
   - Worker- und Connector-Dienstkonten in den Fachsystemen: Least Privilege,
     Rotation ⟨Frist⟩; die Werte liegen im Vault bzw. beim Worker, nie im Modell.
 - **`--user-provisioning` (Standard: an):** freigegebene Prozesse des geschützten

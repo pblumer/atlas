@@ -426,6 +426,7 @@ history.
 
 | Variable | Used for |
 |----------|----------|
+| `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
@@ -544,12 +545,47 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
-| `auth.token_minted`, `auth.token_revoked` | INFO | A deploy token was issued or revoked, by `token_id` and `token_name` |
+| `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
+| `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
 Event names are treated as an API: renaming one is a breaking change and appears under
 _Changed_ in the [changelog](../CHANGELOG.md). Secrets never become fields — the seeded
 admin password stays inside the message text precisely because a field is what a log
 shipper extracts and keeps.
+
+### Credentials for machines
+
+A person signs in; a machine presents an **API token**. Mint one as an
+administrator — the secret comes back exactly once, because the server stores only
+its SHA-256:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
+  -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"name":"worker on host-b","scope":"worker","expiresInDays":90}'
+# {"id":"…","name":"worker on host-b","scope":"worker","expiresAt":…,"token":"atlasat_…"}
+```
+
+| Scope | Reaches |
+|-------|---------|
+| `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
+| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused |
+
+Then hand it over as `--token` or `ATLAS_TOKEN`:
+
+```bash
+atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connector script
+atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
+```
+
+`GET /api/v1/api-tokens` lists what exists (identity, scope, lifetime — never a
+secret) and `DELETE /api/v1/api-tokens/{id}` revokes one, effective on the next
+request. An expired token is refused exactly like an unknown one, and its record
+stays listed so you can see what needs reissuing.
+
+A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
+a peer Atlas uses to publish a bundle here; see
+[ADR-0129](adr/0129-remote-deployment-targets.md).
 
 ### Traces
 

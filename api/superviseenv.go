@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/mail"
@@ -465,7 +466,39 @@ func splitConnectorList(v string) []string {
 // still says which worker did what.
 //
 // An operator who set ATLAS_TOKEN themselves keeps it: they have chosen an identity
-// for their workers, and silently replacing it would undo that choice.
+// for their workers, and silently replacing it would undo that choice. **That value
+// must be one this server accepts** — an API token, ideally scoped `worker`
+// (ADR-draft-api-tokens). It could not be, until API tokens existed: the supervisor
+// honoured the variable while principalFor compared a bearer only against the
+// internal token, so setting it handed every supervised worker a credential that was
+// refused at every poll. checkWorkerTokenEnv says so at startup now, rather than
+// leaving it to be discovered one failing job at a time.
+// checkWorkerTokenEnv warns when an operator has set ATLAS_TOKEN to something this
+// server will not accept. It runs at startup, after the token index is loaded, and
+// changes nothing: the operator's choice is still honoured, because overriding it
+// silently is what the comment above rejects. What it removes is the silence.
+//
+// Only the API-token index is consulted, not the internal token: the internal one
+// is never served over any endpoint, so an operator cannot have obtained it and a
+// match would mean something has gone wrong elsewhere.
+func (s *Server) checkWorkerTokenEnv() {
+	if !s.authEnabled {
+		return
+	}
+	tok := strings.TrimSpace(os.Getenv("ATLAS_TOKEN"))
+	if tok == "" {
+		return
+	}
+	if _, ok := s.apiTokens.match(tok, time.Now().Unix()); ok {
+		return
+	}
+	logging.Warn(logging.AuthWorkerTokenUnknown,
+		"ATLAS_TOKEN is set to a value this server does not accept, and supervised workers "+
+			"are given it instead of this server's own token — they will be refused at every "+
+			"poll. Mint an API token with scope \"worker\" and set ATLAS_TOKEN to that, or "+
+			"unset it and let the server hand its workers their credential")
+}
+
 func (s *Server) workerTokenEnv() []string {
 	if !s.authEnabled || s.internalToken == "" {
 		return nil

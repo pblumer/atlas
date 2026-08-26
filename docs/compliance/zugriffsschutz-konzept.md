@@ -36,7 +36,8 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M5** — `--auth` standardmässig an | ✅ umgesetzt — [`ADR-draft-auth-on-by-default`](../adr/draft-auth-on-by-default.md) |
 | **M7** — Anmelde-Härtung | ✅ umgesetzt — [`ADR-draft-login-throttle-and-audit-log`](../adr/draft-login-throttle-and-audit-log.md), `api/loginguard.go` |
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
-| M3, M6 | offen |
+| **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-draft-api-tokens`](../adr/draft-api-tokens.md), `api/apitokenstore.go` |
+| M6 | offen — das letzte Stück für R-08 |
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -146,7 +147,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 |-----|-----------|---------|-----------|-----------|
 | M1 ✅ | Zugriffsklassen je Route + Inventar-Test | S | Ursache aus 1.1/1.4 | G2 |
 | M2 ✅ | `/mcp` hinter dieselbe Grenze, Identität durchreichen | M | R-08, O-07 | G1, G4 |
-| M3 | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
+| M3 ✅ | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
 | M4 ✅ | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
 | M5 ✅ | `--auth` standardmässig an | S | R-08, R-03 | G5 |
 | M6 | `/metrics` auf eigenen Listener bzw. Zugriffsklasse | S | R-08, O-07 | G1 |
@@ -205,11 +206,21 @@ genügt der statische Bearer samt korrektem `401`/`WWW-Authenticate`; die
 OAuth-Metadaten sind Stufe 2 und erst nötig, wenn ein Client (z. B. ein
 claude.ai-Connector) sich selbst ein Token holen soll.
 
-### M3 — API-Tokens als erste Klasse
+### M3 — API-Tokens als erste Klasse ✅
 
-**Problem.** Es gibt drei uneinheitliche Credentials: den flüchtigen internen
-Token (kein Ablauf, kein Geltungsbereich, kein Widerruf, geteilt mit den Workern),
-Deploy-Tokens (sauber gemacht) und das Session-Cookie.
+**Problem — und es war grösser als hier ursprünglich beschrieben.** Unter `--auth`
+akzeptierte der Server neben dem Session-Cookie nur den internen Token: beim Start
+erzeugt, über keinen Endpunkt ausgeliefert, also nur für den Prozess erreichbar,
+der ihn erzeugt hat. Damit konnte sich **keine Maschine anmelden, die nicht ein
+Kind dieses Servers ist** — kein Worker auf einem anderen Host, kein entfernter
+MCP-Adapter, kein CI-Lauf. M5 hat das vom Randfall zum Normalfall gemacht.
+
+Der Ausweg, den der Code zu versprechen schien, existierte ausserdem nicht:
+`workerTokenEnv` respektiert ein vom Betrieb gesetztes `ATLAS_TOKEN` und spritzt
+dann seinen eigenen nicht mehr ein — während `principalFor` einen Bearer nur gegen
+den internen Token verglich. Der Wert wurde also nach aussen geehrt und nach innen
+abgelehnt: `ATLAS_TOKEN` zu setzen legte die beaufsichtigten Worker lahm. Am
+gebauten Binary verifiziert.
 
 **Lösung.** Das Deploy-Token-Muster verallgemeinern — es ist im Repository schon
 vorbildlich umgesetzt: 32 Byte CSPRNG, **nur der SHA-256 liegt auf Platte**, das
@@ -217,14 +228,23 @@ Geheimnis wird genau einmal ausgeliefert, admin-vergeben, benannt, widerrufbar. 
 `apiToken` ergänzt es um `subject` (Benutzer oder Dienst), `scopes`, `expiresAt`
 und `lastUsedAt`. Der Speicher ist ein Aufruf von `sidecar.NewStore`.
 
-Wenige, grobe Geltungsbereiche genügen für einen PoC: `runtime:read`,
-`runtime:write`, `design:write`, `worker`, `mcp` — durchgesetzt mit demselben
-`ServeMux`-Mechanismus wie `deployAgentAllowed`.
+**Zwei** Geltungsbereiche, nicht fünf: `worker` erreicht genau die vier
+Operationen, die `atlas worker` tatsächlich ausführt, und `full` das, was ein
+angemeldeter Nicht-Admin erreicht — für CI und MCP-Adapter, deren Aufrufe sich
+nicht im Voraus aufzählen lassen. Ein Token ist **nie** admin, also bleiben
+Benutzerverwaltung, Secrets und Backups auch für `full` verschlossen. Feinere
+Schnitte wären ein Berechtigungssystem, und das ist M9.
+
+Durchgesetzt mit demselben `ServeMux`-Mechanismus wie `deployAgentAllowed` — und
+zwar **nicht daneben**: die Deploy-Allowlist ist zu einem Geltungsbereich unter
+den anderen geworden, sodass es eine Stelle gibt, an der die Reichweite jedes
+Maschinen-Credentials steht. Ein zweiter paralleler Mechanismus, eine Änderung
+nach dem ersten eingeführt, wäre genau die Drift, die ein Review findet.
 
 Damit hat der Worker ein eigenes Credential, ein CI-Lauf ein eigenes, und der
-entfernte MCP-Adapter überhaupt eines. Der interne Token verliert seine Rolle als
-Universalschlüssel; falls er bleibt, dann nur noch für den prozessinternen
-Bootstrap.
+entfernte MCP-Adapter überhaupt eines. Der interne Token bleibt für die Kinder
+dieses Servers — er ist flüchtig und verlässt den Host nie, was für diesen Fall
+besser ist als ein dauerhaftes Geheimnis.
 
 **Berührt:** neue Datei nach dem Vorbild von `api/deploytokenstore.go`,
 `api/auth.go`, Console-UI (Minimalansicht: anlegen, auflisten, widerrufen).
@@ -350,9 +370,10 @@ nicht bemerkt. Genau das ist der Grund für Stufe 1.
 
 ### Stufe 1 — PoC-produktivtauglich
 
-~~M1~~ → (~~M2~~ + M3 + ~~M4~~) → ~~M5~~ → ~~M7 + M8~~ → M6. **M1, M2, M4, M5,
-M7 und M8 sind umgesetzt.** Offen: **M3** (API-Tokens) und **M6** (`/metrics`) —
-M6 ist das letzte Stück, das R-08 von gelb auf grün bringt.
+~~M1~~ → (~~M2 + M3 + M4~~) → ~~M5~~ → ~~M7 + M8~~ → M6. **Sieben der acht
+Massnahmen sind umgesetzt.** Offen ist nur **M6** (`/metrics`) — das letzte Stück,
+das R-08 von gelb auf grün bringt, und nach M3 keine Frage eines zweiten Listeners
+mehr, sondern eines Geltungsbereichs `metrics`.
 
 Danach gilt: **keine Schnittstelle ohne Login**, per Test belegbar, und die
 Absicherung überlebt eine vergessene Proxy-Regel. R-08 geht von rot auf grün, O-07
@@ -398,8 +419,14 @@ Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
    `TestMCPToolActsAsTheCallingPrincipal`, dazu
    `TestHTTPForwardsTheCallersCredential` und
    `TestHTTPCallerCredentialBeatsTheAdapters` im `mcp`-Paket. *(M2b)*
-4. Ein widerrufenes und ein abgelaufenes API-Token werden abgewiesen; das
-   Geheimnis ist über keinen Endpunkt erneut abrufbar. *(M3)*
+4. ✅ Ein widerrufenes und ein abgelaufenes API-Token werden abgewiesen; das
+   Geheimnis ist über keinen Endpunkt erneut abrufbar; ein `worker`-Token erreicht
+   nur die vier Worker-Operationen; ein unbekannter Geltungsbereich erreicht nichts.
+   `TestAPITokenRevocationIsImmediate`, `TestAPITokenIndexRefusesAnExpiredToken`,
+   `TestAPITokenSecretIsReturnedOnce`, `TestWorkerScopeReachesOnlyAWorkersOperations`,
+   `TestUnknownScopeReachesNothing`. Am Binary verifiziert: ein entfernter
+   `atlas worker` arbeitet mit dem Token und scheitert ohne es an «authentication
+   required». *(M3)*
 5. ✅ Ein Server ohne Flags verlangt einen Login; `--auth=false` erzeugt eine
    Warnzeile unter `auth.disabled`. Am gebauten Binary geprüft: anonym `401` auf
    `/api/v1/processes`, `/api/v1/users`, `/api/v1/openapi.json`, `/api/docs` und
@@ -444,7 +471,7 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 - ✅ [`draft-authenticated-mcp-transport.md`](../adr/draft-authenticated-mcp-transport.md)
   — M2, ersetzt die `/mcp`-Aussage aus ADR-0016 und erledigt die Folgearbeit aus
   ADR-0049
-- `draft-api-tokens.md` — M3, offen
+- ✅ [`draft-api-tokens.md`](../adr/draft-api-tokens.md) — M3
 - ✅ [`draft-auth-on-by-default.md`](../adr/draft-auth-on-by-default.md) — M5
 - ✅ [`draft-login-throttle-and-audit-log.md`](../adr/draft-login-throttle-and-audit-log.md)
   — M7 und M8 zusammen: eine Drosselung, deren Verweigerungen unsichtbar sind,

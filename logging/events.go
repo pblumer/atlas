@@ -114,6 +114,12 @@ var (
 	AuthPasswordSet  = newEvent("auth.password_set")
 	AuthTokenMinted  = newEvent("auth.token_minted")
 	AuthTokenRevoked = newEvent("auth.token_revoked")
+	// AuthWorkerTokenUnknown is an operator-set ATLAS_TOKEN that this server does
+	// not accept. The supervisor honours the variable and stops injecting its own,
+	// so the workers it starts would hold a credential refused at every poll — a
+	// trap that used to be silent because no value could ever have worked
+	// (ADR-draft-api-tokens).
+	AuthWorkerTokenUnknown = newEvent("auth.worker_token_unknown")
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")

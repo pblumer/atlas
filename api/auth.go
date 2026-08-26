@@ -294,45 +294,9 @@ const RoleDeployAgent = "deploy-agent"
 // resolves to, so an audit trail says which token acted.
 const deployAgentPrincipalPrefix = "system:deploy:"
 
-// deployAgentAllowed is the complete set of operations a deploy token may reach:
-// push a bundle, and read back what this server now runs for that application.
-// Both are what ADR-0129 scoped the credential to — a publisher has to see the
-// result of what it shipped, or its own per-target view is blind.
-//
-// This is a fail-closed allowlist rather than per-handler rejection, and that is
-// the point: a deploy token is a credential handed to another machine, so the
-// blast radius of it leaking must be provable by reading one short list, not by
-// auditing every handler for a role check somebody might have forgotten to add.
-//
-// Matching goes through an http.ServeMux rather than hand-rolled path comparison,
-// so wildcards are resolved by the same matcher that routes the real request —
-// hand-written path parsing is exactly where an allowlist springs a leak.
-var deployAgentAllowed = []string{
-	"POST /api/v1/applications/import",
-	"GET /api/v1/applications/{id}/deployments",
-}
-
-// deployAgentMux resolves a request against deployAgentAllowed. It carries no
-// handlers; only whether a pattern matched is consulted.
-var deployAgentMux = func() *http.ServeMux {
-	m := http.NewServeMux()
-	nop := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
-	for _, pattern := range deployAgentAllowed {
-		m.Handle(pattern, nop)
-	}
-	return m
-}()
-
-// deployAgentMayReach reports whether a deploy token may perform this request.
-// An unmatched request yields an empty pattern, so anything not listed is refused.
-func deployAgentMayReach(r *http.Request) bool {
-	_, pattern := deployAgentMux.Handler(r)
-	return pattern != ""
-}
-
-// isDeployAgent reports whether a principal is a peer authenticated by a deploy
-// token rather than a person or an internal service.
-func isDeployAgent(p *httpapi.Principal) bool { return p != nil && p.HasRole(RoleDeployAgent) }
+// apiTokenPrincipalPrefix does the same for an API token, and is distinct so a
+// trail says which kind of credential acted as well as which one.
+const apiTokenPrincipalPrefix = "system:token:"
 
 // principalFor resolves a request to a Principal, or nil. It first honors a valid
 // internal bearer token (the service identity of a process this server started),
@@ -357,6 +321,19 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				UserID:   deployAgentPrincipalPrefix + rec.ID,
 				Username: rec.Name,
 				Roles:    []string{RoleDeployAgent},
+				Scope:    apiScopeDeploy,
+			}
+		}
+		// An API token identifies a machine an administrator issued a credential to:
+		// a worker on another host, a stdio MCP adapter, a CI job
+		// (ADR-draft-api-tokens). Same index discipline, and deliberately never an
+		// admin — a machine that administers accounts is not a case Atlas has, and a
+		// leaked token that could would be a much worse leak.
+		if rec, ok := s.apiTokens.match(tok, time.Now().Unix()); ok {
+			return &httpapi.Principal{
+				UserID:   apiTokenPrincipalPrefix + rec.ID,
+				Username: rec.Name,
+				Scope:    rec.scope(),
 			}
 		}
 	}
@@ -407,12 +384,17 @@ func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler 
 			httpapi.Error(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		// A deploy token authenticates a peer, not a user: it may reach exactly the
-		// operations on the allowlist and nothing else, whatever the path's own rules
-		// would otherwise permit. Enforced here, in one place, so the credential's
-		// reach is provable by reading deployAgentAllowed (ADR-0129).
-		if p := httpapi.PrincipalFrom(r.Context()); isDeployAgent(p) && !deployAgentMayReach(r) {
-			httpapi.Error(w, http.StatusForbidden, "a deploy token may only publish an application bundle and read its deployments")
+		// A machine credential authenticates a machine, not a user: it reaches exactly
+		// the operations its scope names and nothing else, whatever the path's own
+		// rules would otherwise permit. Enforced here, in one place and for every
+		// scoped credential there is, so the reach of all of them is provable by
+		// reading apiScopeAllowed (ADR-0129, ADR-draft-api-tokens).
+		if p := httpapi.PrincipalFrom(r.Context()); p != nil && p.Scope != "" && !apiScopeMayReach(p.Scope, r) {
+			auditRefusal(r, logging.AuthDenied, "refused: outside this credential's scope",
+				slog.String("scope", p.Scope),
+				slog.String("method", r.Method), slog.String("path", r.URL.Path))
+			httpapi.Error(w, http.StatusForbidden,
+				"this credential's scope ("+p.Scope+") does not permit "+r.Method+" "+r.URL.Path)
 			return
 		}
 		next.ServeHTTP(w, r)

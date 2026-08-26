@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **API tokens: a credential a machine can actually be given.** Under `--auth`, the
+  only non-session credential the server accepted was the internal service token —
+  minted at startup, kept in memory, served over no endpoint, and therefore
+  obtainable only by the process that minted it. That was fine while its holders
+  were this server's own children. It stopped being fine when a login became the
+  default: **a worker on another host, a stdio MCP adapter against a remote server
+  and a CI job all had nothing to present**, and the `--token` flags on
+  `atlas worker` and `atlas mcp` had no value an operator could put in them.
+
+  The workaround the code appeared to offer did not exist either. `workerTokenEnv`
+  honours an operator-set `ATLAS_TOKEN` and stops injecting its own — but
+  `principalFor` compared a bearer only against the internal token, so the value was
+  honoured on the way out and refused on the way in: setting the variable handed
+  every supervised worker a credential the server rejects at every poll.
+
+  `POST /api/v1/api-tokens` now mints one (admin-only). The secret is returned
+  exactly once — only its SHA-256 is stored — and it carries a **lifetime** and a
+  **scope**. `worker` reaches the four operations `atlas worker` actually performs
+  and nothing else; `full` reaches what a signed-in non-admin reaches, for a CI job
+  or an MCP adapter, and is never an admin. Revocation is deletion and takes effect
+  on the next request; an expired token is refused like an unknown one while its
+  record stays listed. `ATLAS_TOKEN` set to an API token now works as the comment
+  always claimed, and a value the server does not accept is called out at startup
+  (`auth.worker_token_unknown`) instead of being discovered one failing job at a
+  time ([ADR-draft-api-tokens](docs/adr/draft-api-tokens.md)).
+
+  The deploy-token allowlist of
+  [ADR-0129](docs/adr/0129-remote-deployment-targets.md) folds into the same scope
+  mechanism rather than sitting beside it, so what *any* machine credential can
+  reach is one file. Deploy tokens keep their own store, prefix and record; what
+  moved is the reach check, not the identity.
+
 - **The login is throttled, and there is a security audit trail.** Two gaps that
   mattered more the moment a login became the default. `/api/v1/auth/login` had
   nothing in front of it — the token bucket existed but guarded only the public form
