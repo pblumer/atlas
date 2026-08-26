@@ -805,6 +805,40 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
 
+## Milestone P — Panorama architecture & live landscape 🔲
+
+A parallel track alongside Milestone S: turn Panorama from a placeholder into a
+standards-based architecture workspace that relates declared ArchiMate 3.2 models
+to current Atlas resources without mixing runtime observations into the model. See
+[ADR-DRAFT: Panorama architecture modeling and live operational overlays](docs/adr/draft-panorama-architecture-modeling-and-live-overlays.md).
+
+- 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
+  design-time sidecar store; import, validate, preserve, and export Open Group
+  ArchiMate Model Exchange XML; keep reusable elements/relationships separate from
+  their views; use optimistic revisions, bounded XML parsing, backup/restore, and
+  interoperability fixtures.
+- 🔲 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
+  `diagram-js` bundle with an Atlas-owned ArchiMate palette, semantic connection
+  rules, property panel, multi-view canvas, undo/redo, save/reload, and browser E2E
+  coverage. Start with Capability, Business Process, the core Application layer,
+  and the Technology elements needed to model artifacts, nodes, services, and
+  networks; state the supported subset explicitly.
+- 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+  ArchiMate elements to Atlas process applications, BPMN process ids,
+  connectors/job types, releases, local runtimes, and deployment targets. Preserve
+  the distinction between an ArchiMate Application Component and an Atlas process
+  application, including many-to-many mappings.
+- 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
+  a separate observation projection for readiness, health, version, deployments,
+  instances, jobs, and incidents. Resolve remote target status server-side with
+  bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
+  stale/unbound states; show status as borders and badges without overwriting
+  ArchiMate layer colors.
+- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments,
+  surface discovered-but-unmodeled resources, provide dependency and impact
+  analysis, and optionally query Prometheus/OpenSearch for historical context.
+  Panorama remains a correlation surface, not a time-series or log database.
+
 ## Milestone A — Modeler & authoring experience 🔲
 
 A parallel track alongside Milestone S: bring the Modeler's *authoring* surface up
