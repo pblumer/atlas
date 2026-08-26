@@ -223,6 +223,7 @@ comment safe to write.
 | [0184](0184-grant-audit-log.md) | Grant audit log | Proposed |
 | [0185](0185-live-group-membership.md) | Live group membership | Proposed |
 | [0186](0186-embed-public-forms-cross-origin.md) | Embedding a public start form cross-origin (scoped CORS) | Proposed |
+| [0187](0187-postgres-change-events.md) | Database change events — captured in the database, read on a worker, deduplicated in the engine | Proposed |
 
 ## Status values
 
