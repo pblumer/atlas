@@ -76,6 +76,14 @@ type createConnectorParams struct {
 	Provider       string `json:"provider"`
 	Sender         string `json:"sender"`
 	Enabled        *bool  `json:"enabled"`
+	// ConnectionString is a SQL connector's whole configuration, sealed into the vault
+	// by the create handler which then stores only the reference — so the record still
+	// holds no secret (I6). It exists because for these kinds the credential *is* the
+	// configuration: a dialog that asked only for a vault key would be a form with one
+	// field that is not the thing the operator has in their hand. Naming an existing
+	// key with credentialsRef instead still works and is what an operator who already
+	// keeps their DSNs in the vault does. Never echoed back.
+	ConnectionString string `json:"connectionString"`
 }
 
 // managedConnectorKinds is the ordered registry of managed connector kinds. Order is
@@ -247,6 +255,35 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateEntraConnector,
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
+	// The three SQL products (ADR-0173, ADR-draft-console-managed-sql-connectors). Each
+	// is worker-only for the same reason Entra is, and more strongly: a DSN *is* a
+	// credential, so the engine builds no client and registers no handler. The store
+	// entry exists so an operator can add a database in the Console instead of on a
+	// command line, and superviseEnv renders its connection string into the supervised
+	// worker's environment. An external worker is handed nothing and still reads its
+	// own environment, which is what keeps ADR-0173's promise intact for every worker
+	// Atlas does not start itself.
+	{
+		name:           connectorKindPostgres,
+		workerOnly:     true,
+		validateCreate: validateSQLConnector,
+		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindPostgres, name) },
+		jobTypes:       []int32{compiler.PostgresJobTypeIndex},
+	},
+	{
+		name:           connectorKindMariaDB,
+		workerOnly:     true,
+		validateCreate: validateSQLConnector,
+		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindMariaDB, name) },
+		jobTypes:       []int32{compiler.MariaDBJobTypeIndex},
+	},
+	{
+		name:           connectorKindMSSQL,
+		workerOnly:     true,
+		validateCreate: validateSQLConnector,
+		problem:        func(s *Server, name string) (string, bool) { return s.sqlConnectorProblem(connectorKindMSSQL, name) },
+		jobTypes:       []int32{compiler.MsSqlJobTypeIndex},
+	},
 }
 
 // setupManagedConnectors wires every managed connector kind at startup: it creates each
@@ -348,7 +385,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindEntra}
+	return []string{connectorKindEntra, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator

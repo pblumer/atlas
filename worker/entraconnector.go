@@ -26,7 +26,13 @@ const entraEnvPrefix = "ATLAS_ENTRA_"
 func entraRegistryFromEnv(env func(string) string) (*entra.Registry, []string, error) {
 	names := splitAndTrim(env(entraEnvPrefix + "CONNECTORS"))
 	if len(names) == 0 {
-		return nil, nil, fmt.Errorf("worker: --connector entra needs at least one connector: set %sCONNECTORS to the tenant names this worker serves", entraEnvPrefix)
+		// Unconfigured, not misconfigured — a nil registry and no error, which the
+		// caller reports as a kind this worker does not serve. Entra is supervised by
+		// default (ADR-0172), so a server with no tenant yet starts one of these on
+		// every boot; failing here would restart it with a growing backoff forever,
+		// which is what exitNothingToServe exists to avoid. A *named* tenant missing a
+		// field, below, is still an error.
+		return nil, nil, nil
 	}
 	reg := entra.NewRegistry()
 	for _, name := range names {

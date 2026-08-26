@@ -2901,11 +2901,12 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="entra">entra</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="entra">entra</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="off" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
@@ -2935,6 +2936,11 @@ function wireConnectorManagement(connectors) {
       const sync = () => {
         const sh = connectorShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        // The connection string is a SQL connector's whole configuration, so it is the
+        // one field that appears for those kinds and for no other. It is not marked
+        // required: an operator who already keeps the DSN in the vault names its key in
+        // the reference field instead, and the server refuses a record with neither.
+        form.querySelectorAll(".sql-only").forEach((el) => { el.style.display = sh.sql ? "" : "none"; });
         senderIn.required = sh.sender;
         endpointField.style.display = sh.endpoint ? "" : "none";
         endpointIn.required = sh.endpoint;
@@ -2987,6 +2993,11 @@ function wireConnectorManagement(connectors) {
           credentialsRef: (f.get("credentialsRef") || "").trim(),
         };
         if (body.kind === "mail") body.provider = (f.get("provider") || "smtp").trim();
+        // Sent only when there is one, so a non-SQL create never carries the field and
+        // the server's "this applies only to a SQL connector" check cannot misfire on
+        // an empty string the form always renders.
+        const conn = (f.get("connectionString") || "").trim();
+        if (conn) body.connectionString = conn;
         try {
           await api("POST", "/api/v1/connectors", body);
           toast("Connector added", "ok");

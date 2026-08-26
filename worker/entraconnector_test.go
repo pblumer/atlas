@@ -30,12 +30,29 @@ func TestBuiltinConnectorsRegistersEntra(t *testing.T) {
 	}
 }
 
-// With no in-process fallback, a broken configuration must be refused while the
-// operator is still watching — and the message must quote the exact variable.
-func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
-	if _, err := BuiltinConnectors(envMap(nil), "entra"); err == nil {
-		t.Error("no ATLAS_ENTRA_CONNECTORS must fail at startup")
+// An Entra worker holding no tenant yet is unconfigured, not misconfigured. Entra is
+// supervised by default (ADR-0172), so a server with no tenant configured starts one
+// of these on every boot: failing here is a restart loop with a growing backoff that
+// never converges, which is exactly what exitNothingToServe exists to avoid. It parks
+// instead, and the Console entry that configures a tenant brings it back.
+func TestAnEntraWorkerWithNoConfiguredTenantParksInsteadOfFailing(t *testing.T) {
+	built, err := BuiltinConnectors(envMap(nil), "entra")
+	if err != nil {
+		t.Fatalf("an unconfigured entra worker must not fail at startup: %v", err)
 	}
+	if len(built.Handlers) != 0 {
+		t.Errorf("handlers = %v, want none — it holds no tenant credential", built.Handlers)
+	}
+	if len(built.Unconfigured) != 1 || built.Unconfigured[0] != "entra" {
+		t.Errorf("unconfigured = %v, want [entra] so the startup line can say it", built.Unconfigured)
+	}
+}
+
+// With no in-process fallback, a broken configuration must be refused while the
+// operator is still watching — and the message must quote the exact variable. A
+// *named* tenant missing a field is that; naming no tenant at all is the parked case
+// above.
+func TestBuiltinConnectorsRefusesAMisconfiguredEntraWorker(t *testing.T) {
 	for _, missing := range []string{"TENANT_ID", "CLIENT_ID", "CLIENT_SECRET"} {
 		env := map[string]string{
 			"ATLAS_ENTRA_CONNECTORS":            "contoso",

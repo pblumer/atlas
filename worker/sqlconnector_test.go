@@ -42,15 +42,47 @@ func TestBuiltinConnectorsRegistersEachSQLProduct(t *testing.T) {
 	}
 }
 
-// A worker with no in-process fallback must refuse a broken configuration while the
-// operator is still watching, not a retry budget later.
-func TestBuiltinConnectorsRefusesAMisconfiguredSQLWorker(t *testing.T) {
-	if _, err := BuiltinConnectors(envMap(nil), "postgres"); err == nil {
-		t.Error("no ATLAS_POSTGRES_CONNECTORS must fail at startup")
-	} else if !strings.Contains(err.Error(), "ATLAS_POSTGRES_CONNECTORS") {
-		t.Errorf("the error should name the variable to set, got: %v", err)
+// A SQL worker holding no database yet is not misconfigured — it is unconfigured,
+// which is the state every server starts in. It must park rather than fail, because
+// a supervised worker that *fails* is restarted with a growing backoff that never
+// converges, and a kind Atlas supervises by default would spend the rest of the
+// server's life restarting into the same emptiness. Configure a connector in the
+// Console and refreshSupervisedWorkers brings this worker back holding it.
+//
+// The distinction this draws is the whole point: nothing configured parks, anything
+// configured-but-broken still fails at startup (the test below).
+func TestASQLWorkerWithNoConfiguredConnectorParksInsteadOfFailing(t *testing.T) {
+	for _, kind := range []string{"postgres", "mariadb", "mssql"} {
+		t.Run(kind, func(t *testing.T) {
+			built, err := BuiltinConnectors(envMap(nil), kind)
+			if err != nil {
+				t.Fatalf("an unconfigured %s worker must not fail at startup: %v", kind, err)
+			}
+			if len(built.Handlers) != 0 {
+				t.Errorf("handlers = %v, want none — it has no database to run them against", built.Handlers)
+			}
+			if len(built.Unconfigured) != 1 || built.Unconfigured[0] != kind {
+				t.Errorf("unconfigured = %v, want [%s] so the startup line can say it", built.Unconfigured, kind)
+			}
+		})
 	}
 
+	// The kinds it *can* serve must survive: a worker serving both must not lose its
+	// CSV handler because no database is configured yet.
+	built, err := BuiltinConnectors(envMap(nil), "csv", "postgres")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if _, ok := built.Handlers[compiler.CsvImportJobType]; !ok {
+		t.Error("the kinds it can serve were dropped along with postgres")
+	}
+}
+
+// A worker with no in-process fallback must refuse a broken configuration while the
+// operator is still watching, not a retry budget later. A *named* connector with no
+// DSN is that: somebody meant to configure it and did it wrong, which is not the
+// same as not having configured one at all.
+func TestBuiltinConnectorsRefusesAMisconfiguredSQLWorker(t *testing.T) {
 	_, err := BuiltinConnectors(envMap(map[string]string{
 		"ATLAS_POSTGRES_CONNECTORS": "hr-db",
 	}), "postgres")
