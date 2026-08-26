@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sqldb"
@@ -4682,6 +4683,20 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+		}}
+	case compiler.RemedyJobTypeIndex:
+		// The form and its field values travel; the AR System base URL and the service
+		// account's password do not. Remedy is mail's situation exactly — one
+		// operator-managed instance behind a name (ADR-0106) — so what names the
+		// credential is the connector's name, resolved against the worker's own
+		// configuration.
+		j, err := remedy.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "remedy", Fields: map[string]any{
+			"connector": j.Connector, "form": j.Form, "values": j.Values,
+			"requestId": j.RequestID, "resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here

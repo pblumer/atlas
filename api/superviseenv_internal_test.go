@@ -291,3 +291,136 @@ func TestAnOutboxDeliveryWithoutAConnectorIsRefused(t *testing.T) {
 		t.Errorf("status = %d, want 400 for an unparseable body", code)
 	}
 }
+
+// The payoff for the Remedy kind (ADR-0106/0168): an operator adds a Helix instance in
+// the Console, and the supervised worker files tickets against it having been told
+// nothing by hand. Remedy is mail's situation exactly — the base URL and the service
+// account live in the connector store and the vault, which a supervised worker can
+// read no more than it can read the engine's memory.
+func TestASupervisedWorkerIsHandedTheRemedyConnectorsFromTheStore(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://localhost:8080", nil, nil))
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "Helix ITSM", Kind: connectorKindRemedy,
+		Endpoint: "https://helix.example.com:8008", CredentialsRef: "remedy-creds",
+		Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_REMEDY_CREDS_TOKEN", `{"username":"atlas-svc","password":"hunter2"}`)
+
+	env := envOf(t, srv.remedyWorkerEnv())
+
+	if got := env["ATLAS_REMEDY_CONNECTORS"]; got != "Helix ITSM" {
+		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want the connector's own name", got)
+	}
+	// The three values remedy.Connector is built from, under the name the worker folds
+	// "Helix ITSM" into.
+	for name, want := range map[string]string{
+		"ATLAS_REMEDY_HELIX_ITSM_ENDPOINT": "https://helix.example.com:8008",
+		"ATLAS_REMEDY_HELIX_ITSM_USERNAME": "atlas-svc",
+		"ATLAS_REMEDY_HELIX_ITSM_PASSWORD": "hunter2",
+	} {
+		if got := env[name]; got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
+
+// The engine and the worker must agree on every variable name, or the handover is a
+// set of variables nobody reads. Building a real worker from what the engine rendered
+// is the only check that cannot drift.
+func TestSupervisedRemedyEnvUsesTheWorkersOwnNames(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "helix", Kind: connectorKindRemedy,
+		Endpoint: "https://helix.example.com:8008", CredentialsRef: "remedy-creds",
+		Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_REMEDY_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+
+	env := envOf(t, srv.remedyWorkerEnv())
+	built, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, connectorKindRemedy)
+	if err != nil {
+		t.Fatalf("a worker could not be configured from what the engine handed it: %v", err)
+	}
+	if !slices.Contains(built.Names, "helix") {
+		t.Errorf("the worker holds %v, want the connector the engine handed it", built.Names)
+	}
+}
+
+// A connector whose credential bundle is missing, malformed, or half-filled is left
+// out entirely rather than handed over incomplete. The worker refuses a *named*
+// instance missing a field at startup — which would take down every other kind it
+// serves — so an unusable connector must not be named at all.
+func TestAnUnusableRemedyConnectorIsNotHandedOver(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for _, c := range []connector{
+		{ID: "1", Name: "nosecret", Kind: connectorKindRemedy, Endpoint: "https://a:8008", CredentialsRef: "absent", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "broken", Kind: connectorKindRemedy, Endpoint: "https://b:8008", CredentialsRef: "broken-creds", Enabled: true, CreatedAt: 2},
+		{ID: "3", Name: "halffilled", Kind: connectorKindRemedy, Endpoint: "https://c:8008", CredentialsRef: "half-creds", Enabled: true, CreatedAt: 3},
+		{ID: "4", Name: "noendpoint", Kind: connectorKindRemedy, CredentialsRef: "good-creds", Enabled: true, CreatedAt: 4},
+		{ID: "5", Name: "off", Kind: connectorKindRemedy, Endpoint: "https://d:8008", CredentialsRef: "good-creds", Enabled: false, CreatedAt: 5},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("Save(%s): %v", c.Name, err)
+		}
+	}
+	t.Setenv("ATLAS_CONNECTOR_BROKEN_CREDS_TOKEN", `not json`)
+	t.Setenv("ATLAS_CONNECTOR_HALF_CREDS_TOKEN", `{"username":"svc"}`)
+	t.Setenv("ATLAS_CONNECTOR_GOOD_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+
+	env := envOf(t, srv.remedyWorkerEnv())
+	if len(env) != 0 {
+		t.Errorf("environment = %v, want nothing handed over: not one of these connectors is usable", env)
+	}
+}
+
+// A disabled connector is one an operator switched off. Handing it over would let a
+// worker keep filing tickets through it, which is the one thing switching it off means.
+func TestOnlyUsableRemedyConnectorsAreHandedOver(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for _, c := range []connector{
+		{ID: "1", Name: "live", Kind: connectorKindRemedy, Endpoint: "https://a:8008", CredentialsRef: "good-creds", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "off", Kind: connectorKindRemedy, Endpoint: "https://b:8008", CredentialsRef: "good-creds", Enabled: false, CreatedAt: 2},
+		{ID: "3", Name: "elsewhere", Kind: connectorKindClio, Endpoint: "http://clio", Enabled: true, CreatedAt: 3},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("Save(%s): %v", c.Name, err)
+		}
+	}
+	t.Setenv("ATLAS_CONNECTOR_GOOD_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+
+	env := envOf(t, srv.remedyWorkerEnv())
+	if got := env["ATLAS_REMEDY_CONNECTORS"]; got != "live" {
+		t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want only the enabled remedy connector", got)
+	}
+	for _, name := range []string{"ATLAS_REMEDY_OFF_ENDPOINT", "ATLAS_REMEDY_ELSEWHERE_ENDPOINT"} {
+		if _, handed := env[name]; handed {
+			t.Errorf("%s was handed to the worker", name)
+		}
+	}
+}
+
+// An instance an operator configured on the host keeps working when a Console one is
+// added: the child inherits its variables, and the rendered list is the union, so a
+// store connector does not silently take the whole list away from it.
+func TestAHostConfiguredRemedyInstanceSurvivesAStoreOne(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	t.Setenv("ATLAS_REMEDY_CONNECTORS", "legacy")
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "console", Kind: connectorKindRemedy, Endpoint: "https://a:8008",
+		CredentialsRef: "good-creds", Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_GOOD_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+
+	got := envOf(t, srv.remedyWorkerEnv())["ATLAS_REMEDY_CONNECTORS"]
+	for _, want := range []string{"legacy", "console"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want it to keep %q", got, want)
+		}
+	}
+}

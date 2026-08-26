@@ -2,6 +2,47 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-bmc-remedy-connector-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Remedy tickets can be filed beside the engine",
+        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
+      },
+      "summary": {
+        "en": "A task that opens a Remedy incident talks to your ITSM system over the network — a login, the create, a logout — and Atlas did all three on the same thread that moves every process forward. That work can now go to a worker instead: start Atlas with --supervise-connector remedy and it runs one for you, configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model. And because the worker holds those credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und Atlas erledigte alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Diese Arbeit kann jetzt ein Worker übernehmen: Starten Sie Atlas mit --supervise-connector remedy, und es betreibt einen für Sie, eingerichtet aus der Helix-Instanz, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts. Und weil der Worker diese Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
+      },
+      "link": {
+        "label": "ADR-0106",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+          "Start Atlas with --supervise-connector remedy — Operations › Workers then shows a worker named remedy, started by Atlas itself.",
+          "That view also lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
+        ],
+        "de": [
+          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+          "Starten Sie Atlas mit --supervise-connector remedy — unter Betrieb › Workers erscheint dann ein Worker namens remedy, von Atlas selbst gestartet.",
+          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "entra-id-delta-queries-delta-users-and-delta-groups",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -288,47 +329,6 @@
       "link": {
         "label": "ADR-0067",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
-      }
-    },
-    {
-      "id": "active-directory-now-runs-on-a-worker-by-default-and-the-eng",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "Active Directory tasks run beside the engine now",
-        "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
-      },
-      "summary": {
-        "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
-        "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
-      },
-      "link": {
-        "label": "ADR-0164",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0164-no-in-process-service-tasks.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
-          "Its log lists every directory operation it performed — and says so when it is in mock mode.",
-          "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
-        ],
-        "de": [
-          "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
-          "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
-          "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
       }
     }
   ]
