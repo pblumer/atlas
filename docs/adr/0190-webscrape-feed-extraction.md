@@ -1,4 +1,4 @@
-# ADR-DRAFT: Add explicit RSS and Atom extraction to the web-scraping connector
+# ADR-0190: Add explicit RSS and Atom extraction to the web-scraping connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
