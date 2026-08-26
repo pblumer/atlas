@@ -181,16 +181,22 @@ type entraOp struct {
 	// needsPassword marks reset-password, the one operation that authors a newPassword
 	// (literal-or-FEEL). It is an error anywhere else, like the listing attributes.
 	needsPassword bool
-	// isList marks the one operation that returns a collection rather than an object
+	// isList marks an operation that returns a collection rather than an object
 	// or nothing. It is what makes filter/select/pageSize/maxUsers meaningful — and
-	// what makes them an error anywhere else.
+	// what makes filter/search/advancedQuery an error anywhere else.
 	isList bool
+	// isDelta marks a change-tracking (delta-query) operation. Like a listing it returns
+	// a collection and takes select/pageSize/maxUsers, but it also takes a deltaLink to
+	// resume from and refuses filter/search/advancedQuery, which Graph's delta endpoint
+	// does not run.
+	isDelta bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true},
 	"list-users":          {isList: true},
+	"delta-users":         {isDelta: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
 	"delete-user":         {needsUser: true},
 	"reset-password":      {needsUser: true, needsPassword: true},
@@ -201,6 +207,7 @@ var entraOps = map[string]entraOp{
 	"create-group":        {needsAttributes: true},
 	"get-group":           {needsGroup: true},
 	"list-groups":         {isList: true},
+	"delta-groups":        {isDelta: true},
 	"update-group":        {needsGroup: true, needsAttributes: true},
 	"delete-group":        {needsGroup: true},
 	"add-group-owner":     {needsUser: true, needsGroup: true},
@@ -294,17 +301,20 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra connector task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
-	if spec.isList && strings.TrimSpace(cn.ResultVariable) == "" {
-		return 0, fmt.Errorf("compiler: entra connector task %q operation list-users needs a resultVariable (a listing that discards its result is a directory read nothing asked for)", st.Id)
+	if (spec.isList || spec.isDelta) && strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra connector task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
-	if err := entraListOnly(st.Id, op, spec.isList, cn); err != nil {
+	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {
 		return 0, err
 	}
-	pageSize, err := entraListBound(st.Id, op, spec.isList, "pageSize", cn.PageSize, defaultEntraPageSize, maxEntraPageSize)
+	// select, pageSize and maxUsers apply to a listing or a delta query — both return a
+	// collection this connector pages.
+	listOrDelta := spec.isList || spec.isDelta
+	pageSize, err := entraListBound(st.Id, op, listOrDelta, "pageSize", cn.PageSize, defaultEntraPageSize, maxEntraPageSize)
 	if err != nil {
 		return 0, err
 	}
-	maxUsers, err := entraListBound(st.Id, op, spec.isList, "maxUsers", cn.MaxUsers, defaultEntraMaxUsers, 0)
+	maxUsers, err := entraListBound(st.Id, op, listOrDelta, "maxUsers", cn.MaxUsers, defaultEntraMaxUsers, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -328,6 +338,10 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
+	deltaLink, err := connectorValue(st.Id, "entra connector", "deltaLink", cn.DeltaLink)
+	if err != nil {
+		return 0, err
+	}
 	advanced, err := entraAdvancedQuery(st.Id, cn)
 	if err != nil {
 		return 0, err
@@ -348,6 +362,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		MaxUsers:      maxUsers,
 		Search:        search,
 		Advanced:      advanced,
+		DeltaLink:     deltaLink,
 		Retries:       retries,
 	}), nil
 }
@@ -383,23 +398,33 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 	}
 }
 
-// entraListOnly rejects a listing attribute on an operation that returns one object
-// or none. Ignoring it would be worse than failing: an author who wrote a filter
-// believes the task is filtered, and a get-user that quietly ignores one addresses
-// whatever userId happens to say instead.
-func entraListOnly(taskID, op string, isList bool, cn *xmlEntraConnector) error {
-	if isList {
-		return nil
-	}
+// entraFieldGating rejects a query field on an operation that has no meaning for it.
+// Ignoring one would be worse than failing: an author who wrote a filter believes the
+// task is filtered, and a get-user that quietly ignores it addresses whatever userId
+// happens to say instead. There are three classes:
+//
+//   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
+//     delta endpoint runs none of them, so they are an error on a delta op too.
+//   - select — a listing or a delta query (both return a collection to project).
+//   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
+//
+// pageSize and maxUsers are numbers, gated by [entraListBound]; this covers the
+// string-valued fields.
+func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) error {
 	for _, a := range []struct{ what, raw string }{
 		{"filter", cn.Filter},
-		{"select", cn.Select},
 		{"search", cn.Search},
 		{"advancedQuery", cn.AdvancedQuery},
 	} {
-		if strings.TrimSpace(a.raw) != "" {
-			return fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which addresses one user directly (%s applies to list-users)", taskID, a.what, op, a.what)
+		if strings.TrimSpace(a.raw) != "" && !spec.isList {
+			return fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
 		}
+	}
+	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta {
+		return fmt.Errorf("compiler: entra connector task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
+	}
+	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
+		return fmt.Errorf("compiler: entra connector task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
 	}
 	return nil
 }
@@ -409,8 +434,9 @@ func entraListOnly(taskID, op string, isList bool, cn *xmlEntraConnector) error 
 // authored number otherwise — including 0, which is how a model says unbounded.
 // A max of 0 means the bound has no ceiling of its own.
 //
-// A bound on a non-listing operation is rejected rather than ignored, for
-// [entraListOnly]'s reason.
+// A bound on an operation that returns no collection is rejected rather than ignored,
+// for [entraFieldGating]'s reason. isList here means "returns a collection" — a listing
+// or a delta query.
 func entraListBound(taskID, op string, isList bool, what, raw string, def, max int32) (int32, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -420,7 +446,7 @@ func entraListBound(taskID, op string, isList bool, what, raw string, def, max i
 		return 0, nil
 	}
 	if !isList {
-		return 0, fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which returns no collection (%s applies to list-users)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: entra connector task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups and the delta operations)", taskID, what, op, what)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {

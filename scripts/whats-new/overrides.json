@@ -1,5 +1,26 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
+  "entra-id-delta-queries-delta-users-and-delta-groups": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Read only what changed in Entra ID",
+      "de": "Nur Änderungen aus Entra ID lesen"
+    },
+    "summary": {
+      "en": "Two new Entra operations — delta-users and delta-groups — read the whole directory the first time and only what changed on every run after, which is what makes an hourly identity sync affordable rather than re-listing everyone each time. The cursor Microsoft Graph hands back travels through the process, not the connector: the task takes it as an optional input (empty on the first run) and returns it beside the changes, so a model saves it and passes it back next run. Deleted accounts arrive marked as removed, so a leaver flow sees them instead of losing them.",
+      "de": "Zwei neue Entra-Operationen — delta-users und delta-groups — lesen das Verzeichnis beim ersten Mal vollständig und danach bei jedem Lauf nur noch, was sich geändert hat; erst das macht einen stündlichen Identity-Sync bezahlbar, statt jedes Mal alle neu aufzulisten. Der Cursor, den Microsoft Graph zurückgibt, reist durch den Prozess, nicht durch den Konnektor: Die Aufgabe nimmt ihn als optionale Eingabe (beim ersten Lauf leer) und gibt ihn neben den Änderungen zurück, sodass ein Modell ihn speichert und beim nächsten Lauf wieder hereinreicht. Gelöschte Konten kommen als entfernt markiert mit — ein Leaver-Flow sieht sie, statt sie zu verlieren."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
   "the-bmc-remedy-connector-runs-on-a-worker": {
     "tags": [
       "Connectors",

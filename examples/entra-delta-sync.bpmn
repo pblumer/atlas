@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entra ID Delta-Sync (ADR-0172, amended) — nur lesen, was sich geändert hat.
+
+  Ein Identity-Sync, der beim ersten Lauf das Verzeichnis einmal aufzählt und danach
+  bei jedem Lauf nur die Änderungen liest. Der Cursor (@odata.deltaLink) lebt nicht im
+  Konnektor (der ist zustandslos, worker-only), sondern reist durch den Prozess:
+
+    Start (letzterDeltaLink: leer beim ersten Lauf, sonst der Cursor vom letzten Lauf)
+     -> [entra delta-users] liest Änderungen seit dem Cursor nach `aenderungen`
+                            = { value: [geänderte/ entfernte Objekte], deltaLink: "…" }
+     -> [Script] `anzahl` = Anzahl der Änderungen
+     -> Ende — `=aenderungen.deltaLink` ist der Cursor, den der nächste Lauf als
+               letzterDeltaLink wieder hereinreicht (z.B. aus einem Datenobjekt oder
+               vom Scheduler, der die Instanz startet).
+
+  Gelöschte Objekte kommen in `aenderungen.value` mit `@removed` markiert mit — ein
+  Leaver-Flow erkennt sie daran, statt sie zu verlieren. delta nimmt $select, $top und
+  die maxUsers-Grenze, aber keinen $filter/$search (Graphs Delta-Endpoint kennt sie
+  nicht). Das $select trägt Graph selbst in den deltaLink weiter, ein Resume schickt
+  also nur den Cursor.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra_delta_sync"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_entra_delta_sync" name="Entra ID: Delta-Sync" isExecutable="true">
+    <bpmn:documentation>Liest Verzeichnisänderungen aus Entra ID über eine Graph-Delta-Abfrage. Der erste Lauf (letzterDeltaLink leer) zählt einmal vollständig auf und liefert einen Cursor; jeder weitere Lauf reicht diesen Cursor als letzterDeltaLink herein und bekommt nur die Änderungen seither. Der neue Cursor steht danach unter =aenderungen.deltaLink und wird für den nächsten Lauf persistiert. Worker-only (ADR-0172): das Tenant-Credential liegt nie in der Engine.</bpmn:documentation>
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="letzterDeltaLink" type="string" default="&#34;&#34;" required="false" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
+
+    <bpmn:startEvent id="start" name="Sync anstoßen">
+      <bpmn:outgoing>f_start_lesen</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="aenderungen_lesen" name="Änderungen lesen (Delta)">
+      <bpmn:documentation>delta-users: liest ab dem Cursor letzterDeltaLink nur die geänderten und entfernten Benutzer nach `aenderungen` — ein Objekt { value, deltaLink }. Leerer Cursor = erster, voller Lauf.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-users"
+                              deltaLink="=letzterDeltaLink"
+                              select="id,displayName,userPrincipalName,accountEnabled"
+                              resultVariable="aenderungen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_zaehlen</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:scriptTask id="zaehlen" name="Änderungen zählen">
+      <bpmn:documentation>Wie viele Objekte hat der Lauf geliefert. Der Cursor selbst braucht kein Skript — er steht direkt als =aenderungen.deltaLink bereit und wird beim nächsten Lauf als letzterDeltaLink wieder hereingereicht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="anzahl" expression="= count(aenderungen.value)" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_lesen_zaehlen</bpmn:incoming>
+      <bpmn:outgoing>f_zaehlen_ende</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="ende" name="Cursor bereit">
+      <bpmn:incoming>f_zaehlen_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_lesen" sourceRef="start" targetRef="aenderungen_lesen" />
+    <bpmn:sequenceFlow id="f_lesen_zaehlen" sourceRef="aenderungen_lesen" targetRef="zaehlen" />
+    <bpmn:sequenceFlow id="f_zaehlen_ende" sourceRef="zaehlen" targetRef="ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_entra_delta_sync">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="120" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="160" width="64" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="aenderungen_lesen">
+        <dc:Bounds x="250" y="98" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zaehlen" bpmnElement="zaehlen">
+        <dc:Bounds x="430" y="98" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="602" y="120" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="588" y="160" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_lesen" bpmnElement="f_start_lesen">
+        <di:waypoint x="188" y="138" /><di:waypoint x="250" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lesen_zaehlen" bpmnElement="f_lesen_zaehlen">
+        <di:waypoint x="370" y="138" /><di:waypoint x="430" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_zaehlen_ende" bpmnElement="f_zaehlen_ende">
+        <di:waypoint x="540" y="138" /><di:waypoint x="602" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
