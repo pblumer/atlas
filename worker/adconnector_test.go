@@ -96,7 +96,7 @@ func TestADBindSecretComesFromTheWorkersEnvironment(t *testing.T) {
 		"bindSecretRef": "AD_BIND", "operation": "disable", "dn": "cn=Arno,dc=x",
 	}), dialer, adSecretFromEnv(envMap(map[string]string{
 		"ATLAS_CONNECTOR_AD_BIND_TOKEN": "s3cr3t",
-	})))
+	})), nil)
 	if err != nil {
 		t.Fatalf("RunADJob: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestADBindSecretComesFromTheWorkersEnvironment(t *testing.T) {
 func TestADUnresolvedBindSecret(t *testing.T) {
 	_, err := RunADJob(context.Background(), adJob(map[string]any{
 		"url": "ldaps://dc", "bindSecretRef": "AD_BIND", "operation": "disable", "dn": "cn=x",
-	}), &recordingDialer{}, adSecretFromEnv(envMap(nil)))
+	}), &recordingDialer{}, adSecretFromEnv(envMap(nil)), nil)
 	if err == nil {
 		t.Fatal("an unresolved bind reference must fail the job")
 	}
@@ -130,7 +130,7 @@ func TestADAnonymousBind(t *testing.T) {
 	dialer := &recordingDialer{}
 	if _, err := RunADJob(context.Background(), adJob(map[string]any{
 		"url": "ldap://dc", "operation": "delete", "dn": "cn=Alt,dc=x",
-	}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+	}), dialer, adSecretFromEnv(envMap(nil)), nil); err != nil {
 		t.Fatalf("RunADJob: %v", err)
 	}
 	if dialer.bindPassword != "" || dialer.conn.delDN != "cn=Alt,dc=x" {
@@ -169,7 +169,7 @@ func TestADResolvedDetailRoundTripsEveryField(t *testing.T) {
 	dialer := &recordingDialer{}
 	if _, err := RunADJob(context.Background(), adJob(fields), dialer, adSecretFromEnv(envMap(map[string]string{
 		"ATLAS_CONNECTOR_AD_BIND_TOKEN": "s3cr3t",
-	}))); err != nil {
+	})), nil); err != nil {
 		t.Fatalf("RunADJob: %v", err)
 	}
 	if !dialer.startTLS {
@@ -181,20 +181,20 @@ func TestADResolvedDetailRoundTripsEveryField(t *testing.T) {
 }
 
 func TestRunADJobErrors(t *testing.T) {
-	if _, err := RunADJob(context.Background(), Job{}, &recordingDialer{}, adSecretFromEnv(envMap(nil))); err == nil {
+	if _, err := RunADJob(context.Background(), Job{}, &recordingDialer{}, adSecretFromEnv(envMap(nil)), nil); err == nil {
 		t.Error("a job with no connector detail must fail")
 	}
 	// A dial that fails, fails the job.
 	_, err := RunADJob(context.Background(), adJob(map[string]any{
 		"url": "ldaps://dc", "operation": "delete", "dn": "cn=x",
-	}), &recordingDialer{err: errors.New("no route to host")}, adSecretFromEnv(envMap(nil)))
+	}), &recordingDialer{err: errors.New("no route to host")}, adSecretFromEnv(envMap(nil)), nil)
 	if err == nil {
 		t.Error("a dial failure must fail the job")
 	}
 	// An empty url is refused before any dial.
 	if _, err := RunADJob(context.Background(), adJob(map[string]any{
 		"operation": "delete", "dn": "cn=x",
-	}), &recordingDialer{}, adSecretFromEnv(envMap(nil))); err == nil {
+	}), &recordingDialer{}, adSecretFromEnv(envMap(nil)), nil); err == nil {
 		t.Error("an empty url must fail the job")
 	}
 }
@@ -212,7 +212,7 @@ func TestRunADJobSync(t *testing.T) {
 		"url": "ldaps://dc", "operation": "sync", "baseDN": "dc=x",
 		"cookieVariable": "cookie", "resultVariable": "aenderungen",
 		"cookie": base64.StdEncoding.EncodeToString([]byte{0xBE, 0xEF}),
-	}), dialer, adSecretFromEnv(envMap(nil)))
+	}), dialer, adSecretFromEnv(envMap(nil)), nil)
 	if err != nil {
 		t.Fatalf("RunADJob: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestADMockModeServesAJobWithoutADirectory(t *testing.T) {
 		"url": "ldaps://dc.example.com:636", "operation": "create-user",
 		"dn":         "cn=Arno,ou=users,dc=example,dc=com",
 		"attributes": map[string]any{"sAMAccountName": []any{"arno"}},
-	}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+	}), dialer, adSecretFromEnv(envMap(nil)), nil); err != nil {
 		t.Fatalf("RunADJob in mock mode: %v", err)
 	}
 	entries := mock.Entries()
@@ -344,7 +344,7 @@ func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
 	// The seeded account can be disabled, which is what a leaver process does first.
 	if _, err := RunADJob(context.Background(), adJob(map[string]any{
 		"url": "ldaps://dc", "operation": "disable", "dn": "cn=Arno,ou=users,dc=example,dc=com",
-	}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+	}), dialer, adSecretFromEnv(envMap(nil)), nil); err != nil {
 		t.Fatalf("disable against the seeded directory: %v", err)
 	}
 	if got := mock.Entries()[0].Attributes["userAccountControl"]; got[0] != "514" {
@@ -389,7 +389,7 @@ func TestAnUnusableADMockSeedStartsAnEmptyDirectoryRatherThanKillingTheWorker(t 
 				"url": "ldaps://dc", "operation": "create-user",
 				"dn":         "cn=Neu,ou=users,dc=example,dc=com",
 				"attributes": map[string]any{"sAMAccountName": []any{"neu"}},
-			}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+			}), dialer, adSecretFromEnv(envMap(nil)), nil); err != nil {
 				t.Errorf("a joiner against the empty directory failed: %v", err)
 			}
 		})
@@ -494,5 +494,128 @@ func TestBuiltinConnectorsInADMockMode(t *testing.T) {
 		"url": "ldaps://dc", "operation": "disable", "dn": "cn=Arno,ou=users,dc=example,dc=com",
 	})); err != nil {
 		t.Errorf("disable against the seeded worker: %v", err)
+	}
+}
+
+// Two forests, one worker, addressed by name. This is what a record buys that a
+// model-authored url could not: the same worker serves both, and a job naming one
+// never reaches the other (ADR-draft-ad-as-a-console-connector).
+func TestTwoNamedDirectoriesAreServedSeparatelyByOneWorker(t *testing.T) {
+	dirs, names, err := adDirectoriesFromEnv(envMap(map[string]string{
+		"ATLAS_AD_CONNECTORS":    "prod,test",
+		"ATLAS_AD_PROD_URL":      "ldaps://dc-prod.example.com:636",
+		"ATLAS_AD_PROD_BIND_DN":  "cn=svc-prod,dc=example,dc=com",
+		"ATLAS_AD_PROD_PASSWORD": "pw-prod",
+		"ATLAS_AD_TEST_URL":      "ldaps://dc-test.example.com:636",
+		"ATLAS_AD_TEST_BIND_DN":  "cn=svc-test,dc=example,dc=com",
+		"ATLAS_AD_TEST_PASSWORD": "pw-test",
+	}))
+	if err != nil {
+		t.Fatalf("adDirectoriesFromEnv: %v", err)
+	}
+	if len(names) != 2 {
+		t.Fatalf("names = %v, want both directories", names)
+	}
+
+	// A recording dialer reports which URL and which account each job actually used.
+	rec := &recordingDialer{}
+	for _, tc := range []struct{ connector, wantURL, wantBind, wantPass string }{
+		{"prod", "ldaps://dc-prod.example.com:636", "cn=svc-prod,dc=example,dc=com", "pw-prod"},
+		{"test", "ldaps://dc-test.example.com:636", "cn=svc-test,dc=example,dc=com", "pw-test"},
+	} {
+		t.Run(tc.connector, func(t *testing.T) {
+			if _, err := RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+				Kind: "ad", Fields: map[string]any{
+					"connector": tc.connector, "operation": "disable",
+					"dn": "cn=Arno,dc=example,dc=com",
+				},
+			}}, rec, adSecretFromEnv(envMap(nil)), dirs); err != nil {
+				t.Fatalf("RunADJob: %v", err)
+			}
+			if rec.url != tc.wantURL {
+				t.Errorf("dialled %q, want %q", rec.url, tc.wantURL)
+			}
+			if rec.bindDN != tc.wantBind || rec.bindPassword != tc.wantPass {
+				t.Errorf("bound as %q/%q, want %q/%q", rec.bindDN, rec.bindPassword, tc.wantBind, tc.wantPass)
+			}
+		})
+	}
+}
+
+// A job naming a directory this worker does not hold fails by name rather than
+// dialling something else or an empty URL.
+func TestAJobNamingAnUnknownDirectoryFailsByName(t *testing.T) {
+	dirs, _, err := adDirectoriesFromEnv(envMap(map[string]string{
+		"ATLAS_AD_CONNECTORS":    "prod",
+		"ATLAS_AD_PROD_URL":      "ldaps://dc:636",
+		"ATLAS_AD_PROD_BIND_DN":  "cn=svc,dc=x",
+		"ATLAS_AD_PROD_PASSWORD": "pw",
+	}))
+	if err != nil {
+		t.Fatalf("adDirectoriesFromEnv: %v", err)
+	}
+	_, err = RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ad", Fields: map[string]any{
+			"connector": "staging", "operation": "disable", "dn": "cn=Arno,dc=x",
+		},
+	}}, &recordingDialer{}, adSecretFromEnv(envMap(nil)), dirs)
+	if err == nil {
+		t.Fatal("a job naming an unconfigured directory ran anyway")
+	}
+	if !strings.Contains(err.Error(), "staging") {
+		t.Errorf("error = %v, want it to name the directory that is not configured", err)
+	}
+}
+
+// A worker holding no directories at all still serves every task that carries its own
+// url — which is every model written before records existed.
+func TestAWorkerWithNoDirectoriesStillServesTheOlderShape(t *testing.T) {
+	dirs, names, err := adDirectoriesFromEnv(envMap(nil))
+	if err != nil {
+		t.Fatalf("adDirectoriesFromEnv: %v", err)
+	}
+	if dirs != nil || names != nil {
+		t.Fatalf("dirs = %v, names = %v; unconfigured is not misconfigured", dirs, names)
+	}
+	rec := &recordingDialer{}
+	if _, err := RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ad", Fields: map[string]any{
+			"url": "ldaps://dc.example.com:636", "bindDN": "cn=svc,dc=x",
+			"bindSecretRef": "AD_BIND", "operation": "disable", "dn": "cn=Arno,dc=x",
+		},
+	}}, rec, adSecretFromEnv(envMap(map[string]string{"ATLAS_CONNECTOR_AD_BIND_TOKEN": "s3cr3t"})), dirs); err != nil {
+		t.Fatalf("RunADJob with the older shape: %v", err)
+	}
+	if rec.url != "ldaps://dc.example.com:636" || rec.bindPassword != "s3cr3t" {
+		t.Errorf("dialled %q as %q, want the task's own url and the resolved reference", rec.url, rec.bindPassword)
+	}
+}
+
+// A named directory missing a field is refused at startup, not at the first job. The
+// operator named it, so the omission is a mistake to report while they are watching —
+// and a bind DN with no password is worse than missing: Active Directory treats it as
+// an anonymous bind and succeeds.
+func TestANamedDirectoryMissingAFieldIsRefusedAtStartup(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"no url", map[string]string{
+			"ATLAS_AD_CONNECTORS": "prod", "ATLAS_AD_PROD_BIND_DN": "cn=svc,dc=x", "ATLAS_AD_PROD_PASSWORD": "pw",
+		}, "URL"},
+		{"a bind DN with no password", map[string]string{
+			"ATLAS_AD_CONNECTORS": "prod", "ATLAS_AD_PROD_URL": "ldaps://dc:636", "ATLAS_AD_PROD_BIND_DN": "cn=svc,dc=x",
+		}, "PASSWORD"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := adDirectoriesFromEnv(envMap(tc.env))
+			if err == nil {
+				t.Fatal("a directory missing a field was accepted")
+			}
+			if !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "prod") {
+				t.Errorf("error = %v, want it to name the directory and the missing %s", err, tc.want)
+			}
+		})
 	}
 }

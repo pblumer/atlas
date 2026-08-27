@@ -455,6 +455,35 @@ _Changed_ / _Removed_ for each version.
   prevents the quieter bad outcome: an account created in a real directory carrying an
   objectClass and no name.
 
+- **Active Directory is a connector you configure, like every other one.** AD was the
+  one credential-bearing integration an operator could not create: the domain
+  controller's URL and the bind account lived in the *model*, on every task. That put it
+  on the wrong side of the line the rest of the catalogue draws — mail, Entra, Remedy,
+  Jira, SharePoint and the three SQL products are records you add in the Console, and
+  AD is a domain controller with a service account and a password, not an address like a
+  REST endpoint. It had inherited the model-authored shape from the LDAP connector
+  rather than from an argument
+  ([ADR-draft-ad-as-a-console-connector](docs/adr/draft-ad-as-a-console-connector.md)).
+
+  Now **Console › Connectors › New connector › Active Directory**: the LDAP URL, and a
+  credential reference naming a vault bundle `{"bindDN": …, "password": …}` — the Remedy
+  and Entra shape, so the record holds no credential and not even the service account's
+  name. A task then says `connector="prod-forest"` and nothing else about the directory.
+
+  **Several directories are several connectors,** served by one worker — which is the
+  question that had no good answer before. You do not need a worker per forest, and one
+  would not separate anything: jobs are handed out by type, not by target, so two AD
+  workers would race for the same queue.
+
+  **Nothing existing breaks.** A task carrying its own `url`, `bindDN` and `bindSecret`
+  compiles and runs unchanged. Only *both at once* is refused rather than resolved by
+  precedence — the two point at different forests, and a silent winner writes to the
+  wrong one.
+
+  The endpoint's scheme is checked when you save: AD refuses to set a password over an
+  unencrypted channel, so an `ldap://` directory works for every operation except the one
+  a joiner needs most, and would otherwise only say so on a real run.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

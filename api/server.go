@@ -1184,7 +1184,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// serves every process under the reserved AD job type; each job dials, binds,
 	// operates, and closes.
 	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-		return ad.Handler(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret)
+		// No directory registry in-process: a task naming a Console-configured
+		// directory is served by the worker that holds it (ADR-0164/0168), and this
+		// path exists only for a task that carries its own url.
+		return ad.Handler(rd, s.processLookup, ad.NewDialer(), s.resolveConnectorSecret, nil)
 	})
 	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
 	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of

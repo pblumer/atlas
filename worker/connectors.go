@@ -123,11 +123,19 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				return RunMailJob(ctx, j, reg)
 			})
 		case "ad":
-			// AD needs no startup configuration: its server is model-authored and its
-			// bind password is a per-task reference, so there is nothing here a
-			// misconfiguration could be caught in (see adSecretFromEnv) — except the
-			// one thing that is this worker's own: whether it serves a real directory
-			// or a mock one, and the seed file a mock starts from.
+			// Two shapes at once, because a model may carry either
+			// (ADR-draft-ad-as-a-console-connector): directories an operator configured
+			// in the Console, addressed by name, and tasks that carry their own url
+			// with a per-task bind-password reference. A worker holding no directories
+			// still serves the second kind, which is every model written before records
+			// existed.
+			dirs, names, err := adDirectoriesFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			built.Names = append(built.Names, names...)
+			// And the one thing that is this worker's own: whether it reaches a real
+			// directory or a mock one, and the entries a mock starts from.
 			dialer, mock, err := adDialerFromEnv(env)
 			if err != nil {
 				return Connectors{}, err
@@ -137,7 +145,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			}
 			secret := adSecretFromEnv(env)
 			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunADJob(ctx, j, dialer, secret)
+				return RunADJob(ctx, j, dialer, secret, dirs)
 			})
 		case "entra":
 			reg, names, err := entraRegistryFromEnv(env)

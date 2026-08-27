@@ -55,7 +55,7 @@ func adProcessIDs(t *testing.T, cfg compiler.AdConfig) (cp *compiler.CompiledPro
 // as the job's error (retry, then an incident), not a silent no-op.
 func TestAdHandlerStoreError(t *testing.T) {
 	boom := errors.New("boom")
-	h := ad.Handler(&fakeReader{getErr: boom}, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret)
+	h := ad.Handler(&fakeReader{getErr: boom}, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the store error", err)
 	}
@@ -64,7 +64,7 @@ func TestAdHandlerStoreError(t *testing.T) {
 // TestAdHandlerNoCompiledProcess proves a missing compiled process fails the job.
 func TestAdHandlerNoCompiledProcess(t *testing.T) {
 	r := &fakeReader{ei: &model.ElementInstanceValue{ProcessDefKey: 5}, eiOK: true}
-	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret)
+	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	_, err := h(job.Job{ElementInstanceKey: 1})
 	if err == nil {
 		t.Fatal("want an error when the compiled process is gone")
@@ -76,7 +76,7 @@ func TestAdHandlerNoCompiledProcess(t *testing.T) {
 func TestAdHandlerNotAConnectorTask(t *testing.T) {
 	cp, _, startID := adProcessIDs(t, compiler.AdConfig{URL: lit(adURL), Op: "disable", DN: lit("cn=x")})
 	r := &fakeReader{ei: &model.ElementInstanceValue{ProcessDefKey: cp.Key, ElementId: startID}, eiOK: true}
-	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, &fakeDialer{conn: &fakeConn{}}, noSecret)
+	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil {
 		t.Fatal("want an error when the element is not a connector task")
 	}
@@ -92,7 +92,7 @@ func TestAdHandlerReadVarsError(t *testing.T) {
 		varsErr: errors.New("read failed"),
 	}
 	dialer := &fakeDialer{conn: &fakeConn{}}
-	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, dialer, noSecret)
+	h := ad.Handler(r, func(uint64) *compiler.CompiledProcess { return cp }, dialer, noSecret, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil {
 		t.Fatal("want an error when the variable read fails")
 	}

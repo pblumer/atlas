@@ -217,7 +217,7 @@ func TestMockIsADialerRunCanUse(t *testing.T) {
 	var d ad.Dialer = ad.NewMockDirectory(ad.Entry{DN: arnoDN})
 	if _, err := ad.Run(context.Background(), ad.Job{
 		URL: mockTLSURL, Operation: "delete", DN: arnoDN,
-	}, d, nil); err != nil {
+	}, d, nil, nil); err != nil {
 		t.Fatalf("Run against the mock: %v", err)
 	}
 }
@@ -235,7 +235,7 @@ func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
 			mock := ad.NewMockDirectory()
 			_, err := ad.Run(context.Background(), ad.Job{
 				URL: "ldaps://dc", Operation: op, DN: "cn=Neu,dc=example,dc=com",
-			}, mock, func(string) string { return "pw" })
+			}, mock, func(string) string { return "pw" }, nil)
 			if err == nil {
 				t.Fatal("a create with no attributes was performed")
 			}
