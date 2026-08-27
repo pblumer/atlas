@@ -16,6 +16,8 @@
   h1 { font-size:20px; margin:0 0 6px; }
   .muted { color:var(--muted); }
   .err { color:var(--danger); }
+  .vouch { margin-top:16px; padding:12px 14px; border-radius:8px; border:1px solid #f0d9a8; background:#fdf6e7; font-size:14px; }
+  .vouch b { color:#7a5a12; }
   ul.reach { margin:16px 0 0; padding-left:20px; }
   ul.reach li { margin:4px 0; }
   .who { margin-top:18px; padding-top:14px; border-top:1px solid var(--border); font-size:14px; }
@@ -104,8 +106,19 @@ function consent(ctx) {
     ? ["Drive Atlas through its Model Context Protocol tools, as you.",
        "Nothing else: this approval does not reach the rest of the API."]
     : ["Use the Atlas API as you — everything your account can do."];
+  // Who vouched for this application. Where self-registration is open, the name
+  // above is one the application chose for itself and nobody checked — and a
+  // person cannot weigh a request without being told which of the two they are
+  // looking at (ADR-0200). Silent when an administrator entered it: that is the
+  // ordinary case, and a banner on every screen is a banner nobody reads.
+  const vouch = ctx.selfRegistered
+    ? `<div class="vouch"><b>This application registered itself.</b> Nobody here
+       entered it or checked it, and the name above is the one it chose. Approve it
+       only if you started this yourself and recognise what you started.</div>`
+    : "";
   card.innerHTML = `<h1>Authorize ${esc(ctx.clientName)}</h1>
     <p class="muted">This application is asking to act as you in Atlas.</p>
+    ${vouch}
     <ul class="reach">${reach.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
     <p class="muted" style="margin-top:14px">It will be able to do this until you
     withdraw the approval. Access is limited to <code>${esc(ctx.resource)}</code>.</p>

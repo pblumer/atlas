@@ -24,6 +24,28 @@
       ]
     },
     {
+      "id": "a-connector-can-now-register-itself-if-you-let-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "A connector can register itself — if you let it",
+        "de": "Ein Connector kann sich selbst registrieren — wenn Sie es erlauben"
+      },
+      "summary": {
+        "en": "Connecting an AI connector meant an administrator had to enter the application in Atlas first and hand over an id and a secret to paste in. That step can now be dropped: with self-registration switched on, a connector needs nothing but this server's address, and the person approves it as usual. It is off unless an operator turns it on, and that is deliberate — it is the one place in Atlas where somebody who has not signed in can leave something behind. What makes it safe to live with is that the approval screen says so: an application that registered itself is labelled there, in as many words, so nobody mistakes it for one that was checked. The name on that screen is the one the application chose for itself. Nothing is reached until a person says yes, and what they say yes to is bounded by their own account. How many self-registered applications are kept is limited, and a new one pushes out the oldest that nobody ever approved — never one somebody is using, so a stranger cannot take your access away by registering enough applications. If your connectors are few and known, leaving this off remains the stronger setup, and it is why that is the default.",
+        "de": "Einen KI-Connector anzuschliessen hiess bisher: Eine Administratorin trägt die Anwendung zuerst in Atlas ein und gibt ID und Geheimnis zum Einfügen heraus. Dieser Schritt kann jetzt entfallen. Ist die Selbstregistrierung eingeschaltet, braucht ein Connector nur noch die Adresse dieses Servers, und die Person stimmt wie gewohnt zu. Standardmässig ist sie aus, und das mit Absicht: Es ist die einzige Stelle in Atlas, an der jemand ohne Anmeldung etwas hinterlassen kann. Lebbar wird das dadurch, dass der Zustimmungsbildschirm es sagt — eine Anwendung, die sich selbst registriert hat, ist dort ausdrücklich als solche gekennzeichnet, damit sie niemand für eine geprüfte hält. Der Name dort ist der, den die Anwendung sich selbst gegeben hat. Erreicht wird nichts, bevor eine Person zustimmt, und was sie zustimmt, ist durch ihr eigenes Konto begrenzt. Wie viele selbstregistrierte Anwendungen aufbewahrt werden, ist begrenzt; eine neue verdrängt die älteste, der nie jemand zugestimmt hat — nie eine, die jemand benutzt. So kann Ihnen kein Fremder den Zugang entziehen, indem er genug Anwendungen registriert. Sind Ihre Connectoren wenige und bekannt, bleibt es die stärkere Einstellung, dies ausgeschaltet zu lassen — deshalb ist es die Voreinstellung."
+      },
+      "link": {
+        "label": "ADR-0200",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
       "id": "a-refused-request-now-says-what-refused-it",
       "version": "Unreleased",
       "date": null,
@@ -265,88 +287,6 @@
         "label": {
           "en": "Open Connectors",
           "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "the-bmc-remedy-connector-runs-on-a-worker",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Remedy tickets can be filed beside the engine",
-        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
-      },
-      "summary": {
-        "en": "A task that opens a Remedy ticket talks to your ITSM system over the network — a login, the create, a logout — and until now Atlas did all three on the same thread that moves every process forward. It now runs a worker for that beside the engine, started by Atlas itself and configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model and nothing needs configuring; a slow or unreachable ITSM host holds up nothing but its own task. And because that worker holds the credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
-        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und bis jetzt tat Atlas alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Dafür läuft jetzt ein Worker neben der Engine, von Atlas selbst gestartet und aus der Helix-Instanz eingerichtet, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsames oder nicht erreichbares ITSM-System hält nur noch seine eigene Aufgabe auf. Und weil dieser Worker die Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
-      },
-      "link": {
-        "label": "ADR-0106",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
-          "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
-          "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
-        ],
-        "de": [
-          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
-          "Öffnen Sie Betrieb › Workers: Der Worker namens remedy läuft dort, von Atlas selbst gestartet.",
-          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "the-active-directory-mockup-is-switched-on-in-the-console-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Switch the Active Directory mockup on without a restart",
-        "de": "Das Active-Directory-Mockup ohne Neustart einschalten"
-      },
-      "summary": {
-        "en": "Trying an identity process out no longer costs an engine restart. Under Connectors there is now an Active Directory card: tick the box, name a seed file if your process expects to find accounts, save. The worker that serves directory tasks comes back simulating them in its own memory, and Atlas keeps running for everyone else. The card says which state it is in — a better answer to \"was that account really created?\" than reading a log. Nothing in your models changes, and nothing changes at all until you use the switch: a server started with the old environment variable keeps behaving exactly as it did.",
-        "de": "Einen Identity-Prozess auszuprobieren kostet keinen Serverneustart mehr. Unter Connectors gibt es jetzt eine Active-Directory-Karte: Haken setzen, bei Bedarf eine Startbestand-Datei angeben, speichern. Der Worker, der die Verzeichnis-Aufgaben bedient, kommt zurück und simuliert sie in seinem eigenen Arbeitsspeicher — Atlas läuft für alle anderen weiter. Die Karte zeigt, in welchem Zustand sie ist; das ist die bessere Antwort auf „wurde das Konto wirklich angelegt?\" als ein Blick ins Log. An den Modellen ändert sich nichts, und überhaupt nichts ändert sich, solange Sie den Schalter nicht benutzen: Ein Server, der mit der alten Umgebungsvariablen gestartet wurde, verhält sich genau wie bisher."
-      },
-      "link": {
-        "label": "ADR-0181",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0181-ad-connector-mock-mode.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Connectors and find the Active Directory card.",
-          "Tick \"Serve Active Directory tasks against a mockup\" and save — the AD worker restarts within seconds.",
-          "Start your process. Operations › Workers shows the worker with a warning that it writes to no directory, then one line per simulated operation."
-        ],
-        "de": [
-          "Öffnen Sie Connectors und suchen Sie die Active-Directory-Karte.",
-          "Haken bei „Serve Active Directory tasks against a mockup\" setzen und speichern — der AD-Worker startet in Sekunden neu.",
-          "Starten Sie Ihren Prozess. Unter Betrieb › Workers steht der Worker mit der Warnung, dass er in kein Verzeichnis schreibt, danach eine Zeile je simulierter Operation."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Connectors öffnen"
         },
         "route": "#/console/connectors"
       }

@@ -1,7 +1,8 @@
 # ADR-0200: Atlas as an OAuth resource server, so a hosted MCP client can connect
 
-- **Status:** Accepted (2026-08-27: both halves implemented — resource server and
-  authorization server; dynamic client registration is the next step)
+- **Status:** Accepted (2026-08-27: options 3 and 4 implemented — resource server,
+  authorization server, and dynamic client registration off by default. CIMD is not
+  built; option 5 waits on O-02)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 
@@ -145,6 +146,40 @@ that a compliant client will actually talk to. Concretely:
   URI, an id and a secret shown once — and the operator pastes id and secret into
   the client's dialog.
 
+**Option 4, as built.** Dynamic client registration (RFC 7591) landed as
+`POST /oauth/register`, and the thing this record warned about — "an unauthenticated
+write endpoint to think hard about" — is answered by four properties, not by the
+endpoint's existence being small:
+
+- **Off unless an operator opens it** (`--oauth-dynamic-registration`), and off
+  means *absent*: the route is not mounted and `registration_endpoint` is not
+  advertised, so a client discovers the policy instead of meeting a refusal. The
+  specification makes DCR a MAY and puts pre-registration first, so the default
+  costs a compliant client nothing.
+- **A self-registered client is marked as such, all the way to the consent screen.**
+  This is the mitigation the rest depends on. With registration open, "an
+  application is asking for access" no longer implies that anybody vetted it, and a
+  person cannot weigh the request without being told which of the two they are
+  looking at. Without this marker, opening registration would silently degrade
+  every consent decision made afterwards.
+- **The registry is bounded, and the cap evicts rather than refuses.** A cap that
+  only refuses is its own denial of service: whoever fills the table first locks
+  everybody else out, permanently and from outside. Eviction takes the oldest
+  self-registration nobody ever approved; an approved one is never evicted, or a
+  stranger could revoke somebody's access by registering enough clients. The
+  residual risk is accepted and named: a client that registered but has not yet
+  been approved can be evicted by a flood, and would have to register again — a
+  window of seconds, and closing it properly means asking an administrator to admit
+  each registration, which is pre-registration, which is already the default.
+- **It is throttled on its own budget**, not the shared public one, so a flood of
+  registrations cannot throttle the token exchanges of clients that already
+  registered — which would turn abuse of this endpoint into an outage for everyone
+  else.
+
+Client ID Metadata Documents, the other half of option 4, are **not** built and are
+not scheduled: they solve the same problem as DCR one step further out, and nothing
+Atlas has met asks for them.
+
 **The token itself** is a third credential shape beside the session cookie and the
 API token, and it is deliberately *not* an API token. It stores as a hash only, the
 way ADR-0194's does, but it carries a **person**, an audience, an expiry in hours
@@ -157,10 +192,11 @@ Option 1 is rejected because it makes "Atlas works with AI agents" true only for
 agents running on a developer's own machine. Option 2 is rejected outright: a shim
 that unconditionally attaches a credential must be publicly reachable for a hosted
 client to use it, and is therefore the pre-ADR-0196 hole with an extra hop — this
-record should not leave that idea looking available. Option 4 is right eventually
-and is not needed now: pre-registration is first in the spec's own priority order,
-and DCR is what lets a client register *without an operator*, which is a
-convenience here and an unauthenticated write endpoint to think hard about. Option
+record should not leave that idea looking available. Option 4 was right eventually
+and was not needed at the time: pre-registration is first in the spec's own priority
+order, and DCR is what lets a client register *without an operator*, which is a
+convenience here and an unauthenticated write endpoint to think hard about — see
+"Option 4, as built" above for how that thinking came out. Option
 5 is the destination, not the next step: federation needs the roles of O-02 to
 assign claims to, and until then Atlas would be delegating to an authority whose
 answer it cannot yet use.

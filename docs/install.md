@@ -325,6 +325,32 @@ once. Disabling an account revokes its approvals with it.
 Registering a client is not the same as being able to use it: an application may
 *ask*, and only a person can say yes.
 
+#### Letting connectors register themselves
+
+If entering each client by hand is more ceremony than you want, `--oauth-dynamic-registration`
+(or `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1`) opens [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)
+self-registration. A connector then needs nothing but the MCP URL: it registers
+itself, and the person approves it as usual.
+
+**It is off by default, and it is worth understanding what turning it on means.**
+It is the only unauthenticated endpoint in Atlas that writes durable state:
+anyone who can reach the port may create a client record and appear on your
+people's consent screens under a name they chose. What makes that liveable is
+that the consent screen **says so** — a self-registered application is labelled
+there, in as many words, so nobody mistakes it for one you vetted. Nothing is
+reached until a person approves, and what they approve is bounded by their own
+account.
+
+The number of self-registered clients is capped; past the cap, registering evicts
+the oldest one nobody approved. An approved client is never evicted, so a flood
+cannot take somebody's access away — but a client that has registered and is
+still waiting for its person to approve can be, and would have to register again.
+`GET /api/v1/oauth-clients` marks which clients registered themselves, and
+`auth.oauth_client_self_registered` records each one as it happens.
+
+Leave it off if your connectors are few and known; an administrator registering
+them by hand is the stronger posture, and it is why that is the default.
+
 ## Windows Server
 
 The release includes a `windows_amd64` build. Note that this is the **binary** on
@@ -421,6 +447,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
+| `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** Atlas terminates no TLS, so the origin it derives from a request is `http://…`, and every absolute URL it publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |

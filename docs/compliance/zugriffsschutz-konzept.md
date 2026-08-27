@@ -38,7 +38,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
-| **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`) und Autorisierungsserver (`api/oauthserver.go`) |
+| **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -459,7 +459,7 @@ Refresh-Tokens, Client-Registrierung über `POST /api/v1/oauth-clients`, und die
 Prüfung der Token-Zielgruppe bei der Ausstellung. Kein impliziter Ablauf, kein
 Passwort-Grant, kein Client-Credentials-Grant — was nicht angeboten wird, gibt es
 nicht. Atlas ist damit ein Autorisierungsserver; die neuen öffentlichen Routen
-sind von M7 (Drosselung) und M8 (Audit, sechs `auth.oauth_*`-Ereignisse) vom
+sind von M7 (Drosselung) und M8 (Audit, acht `auth.oauth_*`-Ereignisse) vom
 ersten Commit an abgedeckt.
 
 Die entscheidende Eigenschaft: **Der ausgestellte Token trägt eine Person.** Damit
@@ -473,9 +473,48 @@ oder gelöschtes Konto verliert seine Zustimmungen — ein Connector darf das Ko
 dahinter nicht überleben —, und eine Rollen- oder Gruppenänderung schreibt sie um,
 statt sie fallen zu lassen.
 
-Als Nächstes die dynamische Client-Registrierung: Sie entfernt den Betreiberschritt
-vor der Person, und sie ist erst jetzt eine begrenzte Entscheidung — weil es einen
-funktionierenden Ablauf gibt, in den hinein registriert wird.
+**Schritt zwei ist ebenfalls umgesetzt: die dynamische Client-Registrierung**
+(RFC 7591, `POST /oauth/register`, `api/oauthregister.go`). Sie entfernt den
+Betreiberschritt vor der Person — ein Connector braucht nur noch die URL dieses
+Servers.
+
+Sie ist **standardmässig aus** (`--oauth-dynamic-registration`), und «aus» heisst
+abwesend: Die Route wird nicht eingehängt und `registration_endpoint` steht nicht
+in den Metadaten. Ein Client erfährt die Politik, statt auf eine Abweisung zu
+laufen. Das ist der einzige unauthentisierte Endpunkt in Atlas, der dauerhaften
+Zustand schreibt, und vier Eigenschaften tragen diesen Entscheid:
+
+1. **Ein selbstregistrierter Client ist auf dem Zustimmungsbildschirm als solcher
+   ausgewiesen** — in klaren Worten, über der Frage. Das ist die Massnahme, von
+   der die übrigen abhängen: Ist Registrierung offen, bedeutet «eine Anwendung
+   fragt nach Zugriff» nicht mehr, dass jemand sie geprüft hat, und ohne diesen
+   Hinweis würde jede spätere Zustimmungsentscheidung stillschweigend entwertet.
+   Der Name auf dem Bildschirm ist einer, den die Anwendung sich vor dreissig
+   Sekunden selbst gegeben hat.
+2. **Die Zahl selbstregistrierter Clients ist begrenzt, und die Grenze verdrängt,
+   statt abzuweisen.** Eine Grenze, die nur abweist, ist ihr eigener
+   Denial-of-Service: Wer die Tabelle zuerst füllt, sperrt alle anderen dauerhaft
+   und von aussen aus. Verdrängt wird der älteste selbstregistrierte Client, dem
+   nie jemand zugestimmt hat.
+3. **Ein zugestimmter Client wird nie verdrängt** — sonst könnte ein Fremder
+   jemandem den Zugang entziehen, indem er genug Clients registriert. Das
+   verbleibende Risiko wird benannt statt weggeredet: Ein Client, der registriert
+   ist und noch auf die Zustimmung seiner Person wartet, kann von einer Flut
+   verdrängt werden und müsste sich neu registrieren — ein Fenster von Sekunden.
+4. **Gedrosselt auf eigenem Budget**, nicht auf dem gemeinsamen öffentlichen: Eine
+   Registrierungsflut darf nicht den Token-Tausch der Clients drosseln, die bereits
+   registriert sind — sonst wird der Missbrauch dieses Endpunkts zum Ausfall für
+   alle anderen.
+
+Registrieren allein erreicht weiterhin nichts: ID und Geheimnis erlauben zu
+*fragen*; erreicht wird nur, was eine Person zustimmt, und begrenzt durch ihr
+eigenes Konto. `auth.oauth_client_self_registered` hält jede Selbstregistrierung
+fest, getrennt vom Administratorakt — «eine Administratorin hat eine Anwendung
+hinzugefügt» und «ein Fremder hat eine hinzugefügt» sind derselbe Satz mit
+verschiedenen Folgen.
+
+Client ID Metadata Documents (CIMD), die andere Hälfte der Vollausbau-Variante,
+sind **nicht** gebaut und nicht geplant.
 
 Föderation hängt nicht am Wollen, sondern an ihrer Voraussetzung: Sie ordnet
 Claims Rollen zu und wartet damit auf **M9**. Was sie ersetzt, ist der in Schritt
@@ -531,8 +570,9 @@ M9 (Rollen, O-02) → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
 dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten
 (O-06).
 
-**M10 stand quer dazu** und ist umgesetzt — beide Hälften, in der Reihenfolge des
-Entscheids. Offen bleibt daraus die dynamische Client-Registrierung (Schritt zwei).
+**M10 stand quer dazu** und ist umgesetzt — beide Hälften und die dynamische
+Client-Registrierung, in der Reihenfolge des Entscheids. Offen bleibt daraus nur
+noch die Föderation, und die wartet auf M9.
 Wer zuerst föderiert (O-01), löscht die Autorisierungsserver-Hälfte wieder: Dann
 zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter, und alles andere
 bleibt stehen. Deshalb setzt nichts im heutigen Code voraus, dass Atlas der
@@ -550,7 +590,7 @@ Aussteller bleibt.
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
 | TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
 | Verschlüsselung ruhender Daten (O-06) | Unabhängige Achse; ändert nichts an der Zugriffsfrage. |
-| Dynamische Client-Registrierung (RFC 7591) und CIMD | Teil der MCP-Spezifikation, dort aber *optional* (MAY), und die Reihenfolge beginnt mit vorregistrierten Zugangsdaten. Sie erspart einen Betreiberschritt, sie stellt keine Verbindung her — und ein unauthentisierter Registrierungs-Endpunkt ist ein Entscheid für sich. **Angenommene Folgearbeit zu M10** (Schritt zwei), nicht Teil des ersten Schritts. |
+| CIMD (Client ID Metadata Documents) | Die andere Hälfte der Vollausbau-Variante der MCP-Spezifikation. Sie löst dasselbe Problem wie RFC 7591 eine Stufe weiter draussen, und nichts, worauf Atlas getroffen ist, verlangt danach. Dynamische Client-Registrierung selbst ist inzwischen umgesetzt (M10, Schritt zwei) — standardmässig aus. |
 
 Begründung für den Schnitt: jeder dieser Punkte ist gross, und **keiner ist nötig,
 damit die Aussage «jede Schnittstelle verlangt einen Login» wahr wird.**
