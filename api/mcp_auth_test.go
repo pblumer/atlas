@@ -14,7 +14,9 @@ import (
 
 // TestInternalTokenAuthenticatesRequests exercises the real New() path: under
 // --auth an internal token is minted, resolves to a non-admin service principal,
-// and lets an unauthenticated-by-cookie request through the gated API (ADR-0049).
+// and lets a request carrying no cookie through the gated API (ADR-0049). It is
+// the credential a supervised worker is handed at spawn; the MCP transport no
+// longer uses it (see mcp_transport_test.go).
 func TestInternalTokenAuthenticatesRequests(t *testing.T) {
 	t.Setenv("ATLAS_ADMIN_USERNAME", "root")
 	t.Setenv("ATLAS_ADMIN_PASSWORD", "rootpassword")

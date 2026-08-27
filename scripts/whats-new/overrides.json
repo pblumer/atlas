@@ -1,36 +1,174 @@
 {
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
-  "the-active-directory-mockup-is-switched-on-in-the-console-no": {
+  "metrics-moved-behind-the-boundary-the-last-route-that-had-no": {
+    "tags": [
+      "Security",
+      "Operations"
+    ],
+    "title": {
+      "en": "The monitoring endpoint asks for a credential now",
+      "de": "Der Monitoring-Endpunkt verlangt jetzt einen Zugang"
+    },
+    "summary": {
+      "en": "`/metrics` was the last address on the server that anybody could read without presenting anything — for a plain reason: until now a monitoring scraper had nothing it could present. With API tokens it does, so the exposition is gated like every other route, and a token scope named `metrics` reaches exactly this one address and nothing else. Worth being plain about the size of this: what `/metrics` carries is instance counts, batch times and queue depth — no process data and no business data. What it buys is that \"nothing here is reachable without a credential\" is now true without an exception. Breaking: every existing scrape configuration needs the token added, which for Prometheus is two lines. The health probes stay open, because a readiness check that needs a credential is useless in the incident it exists for.",
+      "de": "`/metrics` war die letzte Adresse dieses Servers, die jeder ohne Ausweis lesen konnte — aus einem einfachen Grund: Ein Monitoring-Scraper hatte bisher nichts, was er hätte vorzeigen können. Mit API-Tokens hat er es, und deshalb liegt die Metrik-Ausgabe jetzt hinter derselben Anmeldung wie jede andere Route; ein Token-Scope namens `metrics` erreicht genau diese eine Adresse und sonst nichts. Zur Grössenordnung, ganz offen: Was unter `/metrics` steht, sind Instanzzahlen, Batch-Zeiten und Warteschlangenlängen — keine Prozessdaten, keine Geschäftsdaten. Der Gewinn ist, dass „nichts ist ohne Zugang erreichbar\" jetzt ohne Fussnote stimmt. Brechend: Jede bestehende Scrape-Konfiguration braucht das Token — bei Prometheus sind das zwei Zeilen. Die Health-Probes bleiben offen, denn eine Bereitschaftsprüfung, die einen Zugang braucht, hilft in genau dem Vorfall nicht, für den es sie gibt."
+    }
+  },
+  "api-tokens-a-credential-a-machine-can-actually-be-given": {
+    "tags": [
+      "Security",
+      "Operations"
+    ],
+    "title": {
+      "en": "API tokens: a credential you can hand to a machine",
+      "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
+    },
+    "summary": {
+      "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
+      "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
+    }
+  },
+  "the-login-is-throttled-and-there-is-a-security-audit-trail": {
+    "tags": [
+      "Security",
+      "Organization"
+    ],
+    "title": {
+      "en": "Password guessing is slowed down, and sign-ins are recorded",
+      "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
+    },
+    "summary": {
+      "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
+      "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
+    },
+    "try": {
+      "label": {
+        "en": "Open Organization",
+        "de": "Organisation öffnen"
+      },
+      "route": "#/console/org"
+    }
+  },
+  "atlas-serve-requires-a-login-by-default": {
+    "tags": [
+      "Security",
+      "Operations"
+    ],
+    "title": {
+      "en": "Atlas asks for a login out of the box",
+      "de": "Atlas verlangt von Haus aus eine Anmeldung"
+    },
+    "summary": {
+      "en": "Starting the server left it open unless you passed `--auth`, and every document about Atlas — the install guide, the Helm chart, the compliance concept — opened by telling you to pass it. A default that everything tells you to change is not a default. The login is now on. A first start with an empty user store seeds one administrator from `ATLAS_ADMIN_USERNAME` and `ATLAS_ADMIN_PASSWORD`, or generates a password and writes it to the log once; that path was always there, it is simply no longer step six of the install guide. `--auth=false` still runs the server wide open and now says so in a warning line at startup, naming what it means: the API, the UI and the MCP connection, which can deploy and run processes. Breaking: `atlas serve` with no flags now requires a login — pass `--auth=false` for the old behaviour.",
+      "de": "Der Server lief offen, solange man nicht `--auth` mitgab — und jedes Dokument über Atlas, ob Installationsanleitung, Helm-Chart oder Compliance-Konzept, begann damit, genau das zu verlangen. Ein Standard, den einem alle Unterlagen auszureden versuchen, ist kein Standard. Die Anmeldung ist jetzt an. Beim ersten Start mit leerem Benutzerbestand wird ein Administrator aus `ATLAS_ADMIN_USERNAME` und `ATLAS_ADMIN_PASSWORD` angelegt, oder ein Passwort erzeugt und einmalig ins Log geschrieben; diesen Weg gab es immer, er ist nur nicht mehr Schritt sechs der Anleitung. `--auth=false` lässt den Server weiterhin vollständig offen laufen und sagt das jetzt beim Start in einer Warnzeile — samt dem, was es bedeutet: die API, die Oberfläche und der MCP-Zugang, über den sich deployen und Prozesse starten lassen. Brechend: `atlas serve` ohne Optionen verlangt jetzt eine Anmeldung; `--auth=false` stellt das alte Verhalten her."
+    }
+  },
+  "the-api-description-and-the-explorer-are-behind-the-login": {
+    "tags": [
+      "Security"
+    ],
+    "title": {
+      "en": "The API description and its explorer are behind the login",
+      "de": "Die API-Beschreibung und ihr Explorer liegen hinter der Anmeldung"
+    },
+    "summary": {
+      "en": "The machine-readable API description and the built-in explorer were readable by anyone who found the port. Nothing on the login screen reads either of them, and the explorer's \"Try it out\" drives the very API a session is required for — so this is the argument `--docs` already makes, one step further. Whether they are served at all is still `--docs`; who reads them is now the login. They moved together on purpose: an explorer that renders and then cannot fetch its own document is worse than one that says plainly it needs a login.",
+      "de": "Die maschinenlesbare API-Beschreibung und der eingebaute Explorer waren für jeden lesbar, der den Port fand. Der Anmeldebildschirm liest weder das eine noch das andere, und das „Try it out\" des Explorers bedient genau die API, für die eine Sitzung verlangt wird — das ist also dasselbe Argument, das `--docs` ohnehin schon macht, einen Schritt weiter gedacht. Ob beides überhaupt ausgeliefert wird, entscheidet weiterhin `--docs`; wer es liest, entscheidet jetzt die Anmeldung. Beide sind bewusst gemeinsam umgezogen: Ein Explorer, der sich aufbaut und dann sein eigenes Dokument nicht laden kann, ist schlimmer als einer, der klar sagt, dass er eine Anmeldung braucht."
+    }
+  },
+  "mcp-is-behind-the-login-and-acts-as-its-caller": {
+    "tags": [
+      "Security",
+      "Operations"
+    ],
+    "title": {
+      "en": "The MCP connection needs a login — and acts as its caller",
+      "de": "Der MCP-Zugang verlangt eine Anmeldung — und handelt als sein Aufrufer"
+    },
+    "summary": {
+      "en": "Atlas offers its features to AI assistants over MCP, and that connection sat outside the login: it was mounted beside the API server, so the check never saw it, while the adapter attached the server's own internal credential to everything it did. `--auth` therefore did not close it — it supplied it. Anything that could reach the port drove all 71 tools as the server itself, deploying among them, and deploying runs script tasks. It is now mounted by the API server and gated like every other route. It also carries no identity of its own any more: it forwards whatever the request arrived with, so a tool call is exactly as privileged as the person or token that made it, is attributed to them, and inherits every rule the API has — an administrator reaches an admin-only tool, a signed-in ordinary user does not, and a deploy token is refused outright. Breaking on a server with a login: an MCP client must now send the session cookie or a bearer token.",
+      "de": "Atlas bietet seine Funktionen KI-Assistenten über MCP an — und dieser Zugang lag ausserhalb der Anmeldung: Er hing neben dem API-Server, sodass die Prüfung ihn nie zu sehen bekam, während der Adapter allem, was er tat, die interne Kennung des Servers mitgab. `--auth` schloss ihn also nicht, sondern versorgte ihn. Wer den Port erreichte, bediente alle 71 Werkzeuge als der Server selbst, das Deployen eingeschlossen — und Deployen führt Skript-Aufgaben aus. Der Zugang wird jetzt vom API-Server selbst bereitgestellt und wie jede andere Route geschützt. Und er bringt keine eigene Identität mehr mit: Er reicht weiter, womit die Anfrage angekommen ist. Ein Werkzeugaufruf hat damit genau die Rechte dessen, der ihn ausgelöst hat, wird ihm zugeschrieben und erbt jede Regel der API — ein Administrator erreicht ein Administrator-Werkzeug, ein angemeldeter gewöhnlicher Benutzer nicht, und ein Deploy-Token wird rundheraus abgewiesen. Auf einem Server mit Anmeldung brechend: Ein MCP-Client muss jetzt das Sitzungs-Cookie oder ein Bearer-Token mitschicken."
+    }
+  },
+  "atlas-mcp-token": {
+    "tags": [
+      "Security",
+      "Operations"
+    ],
+    "title": {
+      "en": "The MCP bridge can present a credential",
+      "de": "Die MCP-Brücke kann sich ausweisen"
+    },
+    "summary": {
+      "en": "`atlas mcp` connects a local AI assistant to an Atlas server, and against one that requires a login it had nothing to present: every tool call came back with a 401, while `atlas worker` has had a `--token` flag for some time. It now takes the same flag, defaulting to `ATLAS_TOKEN`, and trims the value — a token exported from a shell profile routinely carries a trailing newline, and a credential sent with one is refused for a reason nothing in the error explains. Startup logs whether a credential is configured, never the credential itself, because \"every tool returns 401\" and \"no token was set\" are the same incident.",
+      "de": "`atlas mcp` verbindet einen lokalen KI-Assistenten mit einem Atlas-Server — und gegenüber einem Server mit Anmeldung hatte die Brücke nichts vorzuweisen: Jeder Werkzeugaufruf kam als 401 zurück, während `atlas worker` seine `--token`-Option längst hat. Sie nimmt jetzt dieselbe Option, standardmässig aus `ATLAS_TOKEN`, und schneidet Leerraum ab — ein Token aus einem Shell-Profil trägt regelmässig einen Zeilenumbruch am Ende, und ein damit gesendeter Zugang wird aus einem Grund abgewiesen, den die Fehlermeldung nicht nennt. Beim Start wird protokolliert, ob ein Zugang konfiguriert ist, niemals der Zugang selbst — denn „jedes Werkzeug antwortet mit 401\" und „es wurde kein Token gesetzt\" sind derselbe Vorfall."
+    }
+  },
+  "every-mounted-route-declares-who-may-reach-it": {
+    "tags": [
+      "Security"
+    ],
+    "title": {
+      "en": "Every address the server answers on says who may reach it",
+      "de": "Jede Adresse des Servers sagt, wer sie erreichen darf"
+    },
+    "summary": {
+      "en": "Whether a request needed a login used to be decided by whether its path began with `/api/v1`, so a route was public by omission: anything registered elsewhere was open because of where it sat, not because anyone had decided it should be. That is how the MCP connection and the monitoring endpoint came to be reachable without one. Each route now states its access class where it is registered, a request is classified by the pattern that will actually serve it, and an undeclared pattern is closed — so mounting something off to the side fails safe instead of quietly inheriting the UI's open catch-all. The resulting public set is held against a written-out list by a test, which makes opening a route a reviewable change rather than a side effect. Because those patterns carry the method, so does the class: reading the login screen's own theme and logo stays public, while writing them is now refused at the boundary. Minor change: an anonymous write to one of those answers 401 rather than 403 — nothing was presented, which is what 401 means.",
+      "de": "Ob eine Anfrage eine Anmeldung brauchte, entschied bisher, ob ihr Pfad mit `/api/v1` begann. Eine Route war damit öffentlich durch Unterlassung: Was anderswo registriert war, stand offen, weil es dort hing — nicht, weil das jemand entschieden hätte. So kam es, dass der MCP-Zugang und der Monitoring-Endpunkt ohne Anmeldung erreichbar waren. Jede Route nennt ihre Zugriffsklasse jetzt dort, wo sie registriert wird; eine Anfrage wird nach dem Muster eingeordnet, das sie tatsächlich bedienen wird; und ein nicht deklariertes Muster ist geschlossen — etwas abseits einzuhängen scheitert also sicher, statt stillschweigend den offenen Auffangpfad der Oberfläche zu erben. Was am Ende öffentlich ist, hält ein Test gegen eine ausgeschriebene Liste: Eine Route zu öffnen ist damit eine überprüfbare Änderung und kein Nebeneffekt. Weil diese Muster die HTTP-Methode enthalten, gilt das auch für die Klasse: Farbschema und Logo des Anmeldebildschirms zu lesen bleibt öffentlich, sie zu ändern wird jetzt schon an der Grenze abgewiesen. Kleine Änderung: Ein anonymer Schreibzugriff darauf antwortet mit 401 statt mit 403 — es wurde nichts vorgezeigt, und genau das heisst 401."
+    }
+  },
+  "entra-id-delta-queries-delta-users-and-delta-groups": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Read only what changed in Entra ID",
+      "de": "Nur Änderungen aus Entra ID lesen"
+    },
+    "summary": {
+      "en": "Two new Entra operations — delta-users and delta-groups — read the whole directory the first time and only what changed on every run after, which is what makes an hourly identity sync affordable rather than re-listing everyone each time. The cursor Microsoft Graph hands back travels through the process, not the connector: the task takes it as an optional input (empty on the first run) and returns it beside the changes, so a model saves it and passes it back next run. Deleted accounts arrive marked as removed, so a leaver flow sees them instead of losing them.",
+      "de": "Zwei neue Entra-Operationen — delta-users und delta-groups — lesen das Verzeichnis beim ersten Mal vollständig und danach bei jedem Lauf nur noch, was sich geändert hat; erst das macht einen stündlichen Identity-Sync bezahlbar, statt jedes Mal alle neu aufzulisten. Der Cursor, den Microsoft Graph zurückgibt, reist durch den Prozess, nicht durch den Konnektor: Die Aufgabe nimmt ihn als optionale Eingabe (beim ersten Lauf leer) und gibt ihn neben den Änderungen zurück, sodass ein Modell ihn speichert und beim nächsten Lauf wieder hereinreicht. Gelöschte Konten kommen als entfernt markiert mit — ein Leaver-Flow sieht sie, statt sie zu verlieren."
+    },
+    "try": {
+      "label": {
+        "en": "Open the Modeler",
+        "de": "Modeler öffnen"
+      },
+      "route": "#/modeler"
+    }
+  },
+  "the-bmc-remedy-connector-runs-on-a-worker": {
     "tags": [
       "Connectors",
       "Operations"
     ],
     "title": {
-      "en": "Switch the Active Directory mockup on without a restart",
-      "de": "Das Active-Directory-Mockup ohne Neustart einschalten"
+      "en": "Remedy tickets can be filed beside the engine",
+      "de": "Remedy-Tickets können neben der Engine geschrieben werden"
     },
     "summary": {
-      "en": "Trying an identity process out no longer costs an engine restart. Under Connectors there is now an Active Directory card: tick the box, name a seed file if your process expects to find accounts, save. The worker that serves directory tasks comes back simulating them in its own memory, and Atlas keeps running for everyone else. The card says which state it is in — a better answer to \"was that account really created?\" than reading a log. Nothing in your models changes, and nothing changes at all until you use the switch: a server started with the old environment variable keeps behaving exactly as it did.",
-      "de": "Einen Identity-Prozess auszuprobieren kostet keinen Serverneustart mehr. Unter Connectors gibt es jetzt eine Active-Directory-Karte: Haken setzen, bei Bedarf eine Startbestand-Datei angeben, speichern. Der Worker, der die Verzeichnis-Aufgaben bedient, kommt zurück und simuliert sie in seinem eigenen Arbeitsspeicher — Atlas läuft für alle anderen weiter. Die Karte zeigt, in welchem Zustand sie ist; das ist die bessere Antwort auf „wurde das Konto wirklich angelegt?\" als ein Blick ins Log. An den Modellen ändert sich nichts, und überhaupt nichts ändert sich, solange Sie den Schalter nicht benutzen: Ein Server, der mit der alten Umgebungsvariablen gestartet wurde, verhält sich genau wie bisher."
+      "en": "A task that opens a Remedy ticket talks to your ITSM system over the network — a login, the create, a logout — and until now Atlas did all three on the same thread that moves every process forward. It now runs a worker for that beside the engine, started by Atlas itself and configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model and nothing needs configuring; a slow or unreachable ITSM host holds up nothing but its own task. And because that worker holds the credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
+      "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und bis jetzt tat Atlas alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Dafür läuft jetzt ein Worker neben der Engine, von Atlas selbst gestartet und aus der Helix-Instanz eingerichtet, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsames oder nicht erreichbares ITSM-System hält nur noch seine eigene Aufgabe auf. Und weil dieser Worker die Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
     },
     "tutorial": {
       "en": [
-        "Open Connectors and find the Active Directory card.",
-        "Tick \"Serve Active Directory tasks against a mockup\" and save — the AD worker restarts within seconds.",
-        "Start your process. Operations › Workers shows the worker with a warning that it writes to no directory, then one line per simulated operation."
+        "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
+        "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
+        "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
       ],
       "de": [
-        "Öffnen Sie Connectors und suchen Sie die Active-Directory-Karte.",
-        "Haken bei „Serve Active Directory tasks against a mockup\" setzen und speichern — der AD-Worker startet in Sekunden neu.",
-        "Starten Sie Ihren Prozess. Unter Betrieb › Workers steht der Worker mit der Warnung, dass er in kein Verzeichnis schreibt, danach eine Zeile je simulierter Operation."
+        "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
+        "Öffnen Sie Betrieb › Workers: Der Worker namens remedy läuft dort, von Atlas selbst gestartet.",
+        "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
       ]
     },
     "try": {
       "label": {
-        "en": "Open Connectors",
-        "de": "Connectors öffnen"
+        "en": "Open Workers",
+        "de": "Workers öffnen"
       },
-      "route": "#/console/connectors"
+      "route": "#/operations/workers"
     }
   },
   "the-modeler-stops-guessing-where-a-task-s-work-runs-and-star": {
@@ -358,7 +496,7 @@
     },
     "link": {
       "label": "Changelog",
-      "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
     },
     "try": {
       "label": {
@@ -1104,5 +1242,38 @@
   },
   "the-call-activity-recipe-no-longer-promises-an-incident-that": {
     "hidden": true
+  },
+  "the-active-directory-mockup-is-switched-on-in-the-console-no": {
+    "tags": [
+      "Connectors",
+      "Operations"
+    ],
+    "title": {
+      "en": "Switch the Active Directory mockup on without a restart",
+      "de": "Das Active-Directory-Mockup ohne Neustart einschalten"
+    },
+    "summary": {
+      "en": "Trying an identity process out no longer costs an engine restart. Under Connectors there is now an Active Directory card: tick the box, name a seed file if your process expects to find accounts, save. The worker that serves directory tasks comes back simulating them in its own memory, and Atlas keeps running for everyone else. The card says which state it is in — a better answer to \"was that account really created?\" than reading a log. Nothing in your models changes, and nothing changes at all until you use the switch: a server started with the old environment variable keeps behaving exactly as it did.",
+      "de": "Einen Identity-Prozess auszuprobieren kostet keinen Serverneustart mehr. Unter Connectors gibt es jetzt eine Active-Directory-Karte: Haken setzen, bei Bedarf eine Startbestand-Datei angeben, speichern. Der Worker, der die Verzeichnis-Aufgaben bedient, kommt zurück und simuliert sie in seinem eigenen Arbeitsspeicher — Atlas läuft für alle anderen weiter. Die Karte zeigt, in welchem Zustand sie ist; das ist die bessere Antwort auf „wurde das Konto wirklich angelegt?\" als ein Blick ins Log. An den Modellen ändert sich nichts, und überhaupt nichts ändert sich, solange Sie den Schalter nicht benutzen: Ein Server, der mit der alten Umgebungsvariablen gestartet wurde, verhält sich genau wie bisher."
+    },
+    "tutorial": {
+      "en": [
+        "Open Connectors and find the Active Directory card.",
+        "Tick \"Serve Active Directory tasks against a mockup\" and save — the AD worker restarts within seconds.",
+        "Start your process. Operations › Workers shows the worker with a warning that it writes to no directory, then one line per simulated operation."
+      ],
+      "de": [
+        "Öffnen Sie Connectors und suchen Sie die Active-Directory-Karte.",
+        "Haken bei „Serve Active Directory tasks against a mockup\" setzen und speichern — der AD-Worker startet in Sekunden neu.",
+        "Starten Sie Ihren Prozess. Unter Betrieb › Workers steht der Worker mit der Warnung, dass er in kein Verzeichnis schreibt, danach eine Zeile je simulierter Operation."
+      ]
+    },
+    "try": {
+      "label": {
+        "en": "Open Connectors",
+        "de": "Connectors öffnen"
+      },
+      "route": "#/console/connectors"
+    }
   }
 }

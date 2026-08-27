@@ -106,10 +106,12 @@ persistence:
 # -- Atlas server configuration. These map to `atlas serve` flags / env vars;
 # see cmd/atlas/main.go.
 atlas:
-  # -- Require login for the API and UI (--auth). When true, an admin is seeded
-  # on first run from the credentials below.
+  # -- Require login for the API, the UI and /mcp (--auth). On by default, matching
+  # the binary. When true, an admin is seeded on first run from the credentials
+  # below. Setting this to false renders --auth=false and runs the server open to
+  # anyone who can reach the Service — development only.
   auth:
-    enabled: false
+    enabled: true
     # -- Admin bootstrap credentials (used only when auth.enabled is true and no
     # admin exists yet). Provide them via an existing secret in production.
     existingSecret: ""

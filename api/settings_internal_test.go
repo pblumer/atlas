@@ -172,8 +172,11 @@ func TestThemeWritesRequireAdmin(t *testing.T) {
 // TestThemeReadIsPublic: GET /api/v1/settings/theme is not gated even when auth is
 // enforced, so the login screen can apply the brand colour before sign-in.
 func TestThemeReadIsPublic(t *testing.T) {
-	if requiresAuth("/api/v1/settings/theme") {
+	if classifyPath(t, http.MethodGet, "/api/v1/settings/theme") != accessPublic {
 		t.Fatal("GET theme must be public (applied before login)")
+	}
+	if classifyPath(t, http.MethodPut, "/api/v1/settings/theme") != accessAuthenticated {
+		t.Fatal("PUT theme must be gated")
 	}
 }
 
@@ -295,7 +298,10 @@ func TestLogoWritesRequireAdmin(t *testing.T) {
 			t.Errorf("%s logo without an admin principal: status=%d, want 403", tc.name, rec.Code)
 		}
 	}
-	if requiresAuth("/api/v1/settings/logo") {
+	if classifyPath(t, http.MethodGet, "/api/v1/settings/logo") != accessPublic {
 		t.Fatal("GET logo must be public (shown before login)")
+	}
+	if classifyPath(t, http.MethodPut, "/api/v1/settings/logo") != accessAuthenticated {
+		t.Fatal("PUT logo must be gated")
 	}
 }

@@ -114,34 +114,6 @@ func TestSessionStoreDestroyUser(t *testing.T) {
 	}
 }
 
-func TestRequiresAuth(t *testing.T) {
-	cases := []struct {
-		path string
-		want bool
-	}{
-		{"/", false},
-		{"/index.html", false},
-		{"/healthz", false},
-		// A kubelet has no session either, and a readiness probe that 401s would take
-		// the pod out of rotation for good the moment --auth is turned on (ADR-0142).
-		{"/readyz", false},
-		// A Prometheus scrape carries no session, so gating /metrics would silently
-		// break monitoring the moment --auth is turned on (ADR-0142).
-		{"/metrics", false},
-		{"/api/v1/auth/login", false},
-		{"/api/v1/info", false},
-		{"/api/v1/openapi.json", false},
-		{"/api/v1/users", true},
-		{"/api/v1/auth/me", true},
-		{"/api/v1/processes", true},
-	}
-	for _, c := range cases {
-		if got := requiresAuth(c.path); got != c.want {
-			t.Errorf("requiresAuth(%q) = %v, want %v", c.path, got, c.want)
-		}
-	}
-}
-
 func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 	s := &Server{authEnabled: true, sessions: newSessionStore(time.Hour)}
 	tok, _ := s.sessions.create(User{ID: "usr_1", Username: "alice", Roles: []string{"user"}}, nil)
@@ -155,7 +127,8 @@ func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	h := s.withAuth(next)
+	_, policy := s.mountRoutes()
+	h := s.withAuth(policy, next)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/users", nil))
@@ -183,7 +156,8 @@ func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 func TestWithAuthDisabledPassesThrough(t *testing.T) {
 	s := &Server{authEnabled: false, sessions: newSessionStore(time.Hour)}
 	reached := false
-	h := s.withAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	_, policy := s.mountRoutes()
+	h := s.withAuth(policy, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
 		if httpapi.PrincipalFrom(r.Context()) != nil {
 			t.Errorf("no principal expected when auth disabled")
@@ -246,7 +220,8 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 
 	// The middleware admits a bearer-authenticated request to a gated route.
 	reached := false
-	h := s.withAuth(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	_, policy := s.mountRoutes()
+	h := s.withAuth(policy, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		reached = true
 		if httpapi.PrincipalFrom(r.Context()) == nil {
 			t.Error("principal missing in context")

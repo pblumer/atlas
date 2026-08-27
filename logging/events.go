@@ -81,6 +81,45 @@ var (
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
 	DataDirOpened      = newEvent("server.data_dir_opened")
+	// AuthDisabled is a server started with --auth=false: no login is required for
+	// anything. It is a WARN and it is loud because it is now the deliberate
+	// exception rather than the default — the one line that says this instance is
+	// open to whoever can reach the port (ADR-draft-auth-on-by-default).
+	AuthDisabled = newEvent("auth.disabled")
+
+	// The security audit trail (ADR-draft-login-throttle-and-audit-log). Atlas's
+	// business trails were always strong — every state transition, every variable
+	// override, every task claim, each with its actor — but who signed in, who
+	// failed to, and who changed an account or a credential was written down
+	// nowhere. That is the first thing an audit asks for and the last thing these
+	// events leave unanswered.
+	//
+	// Each carries the acting principal and the client address, and none of them
+	// carries a secret: no password, no token, not even a truncated one. What is an
+	// attribute here is what a log shipper extracts, indexes and keeps.
+	AuthLogin          = newEvent("auth.login")
+	AuthLoginFailed    = newEvent("auth.login_failed")
+	AuthLoginThrottled = newEvent("auth.login_throttled")
+	AuthLogout         = newEvent("auth.logout")
+	// AuthDenied is an authenticated caller refused for lacking a role — an
+	// administration attempt by somebody who may not administer, which is a
+	// different and much rarer signal than an anonymous request being asked to log
+	// in. Only the authorization refusal is recorded; logging every 401 would bury
+	// it under every unauthenticated probe on the internet.
+	AuthDenied = newEvent("auth.denied")
+	// The account lifecycle, and the credentials that are not accounts.
+	AuthUserCreated  = newEvent("auth.user_created")
+	AuthUserUpdated  = newEvent("auth.user_updated")
+	AuthUserDeleted  = newEvent("auth.user_deleted")
+	AuthPasswordSet  = newEvent("auth.password_set")
+	AuthTokenMinted  = newEvent("auth.token_minted")
+	AuthTokenRevoked = newEvent("auth.token_revoked")
+	// AuthWorkerTokenUnknown is an operator-set ATLAS_TOKEN that this server does
+	// not accept. The supervisor honours the variable and stops injecting its own,
+	// so the workers it starts would hold a credential refused at every poll — a
+	// trap that used to be silent because no value could ever have worked
+	// (ADR-draft-api-tokens).
+	AuthWorkerTokenUnknown = newEvent("auth.worker_token_unknown")
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")

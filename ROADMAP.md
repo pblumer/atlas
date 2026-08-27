@@ -258,7 +258,16 @@ The control-flow basics most real models use.
   is wired into the single-binary server run loop under the reserved Remedy job type and
   authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
-  a Remedy-side dedup field are follow-ups. For local development without a real
+  a Remedy-side dedup field are follow-ups.
+  Since the 2026-08-26 amendment the work also **runs on a worker** (ADR-0164/0168): the
+  engine resolves the task into plain values and `atlas worker --connector remedy` creates
+  the entry, holding the AR System base URL and the service account in its own environment
+  (`ATLAS_REMEDY_CONNECTORS` plus per name `_ENDPOINT`, `_USERNAME`, `_PASSWORD`) — handed
+  to a supervised worker out of the connector store and the vault at spawn, exactly as mail
+  is. A Helix instance reachable only from the worker's network is thereby serviceable.
+  Atlas supervises that worker **by default** (ADR-0192), so a
+  ticket create leaves the loop with nothing to configure; the in-process handler remains
+  as the fallback `--in-process-connectors` returns to. For local development without a real
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   connector runs against unmodified (package `connector/remedy/mock`).
@@ -710,8 +719,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   a claude.ai custom connector). Both proxy tool calls to the Atlas HTTP API, so
   an AI agent can deploy a model, start an instance, and read live runtime state.
   Hand-written, no new dependency; the engine invariants stay behind the HTTP API.
-  The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
-  exposing it publicly.
+  `/mcp` is mounted inside the API server's own access boundary, so `--auth` gates
+  it like every other route, and a tool call carries the caller's credential rather
+  than one the adapter supplies
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
 - 🔲 Full properties panel — the hand-written Details panel grows group by group
   ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
   ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
@@ -763,8 +774,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   stable opaque id, a **role list** (RBAC-ready, only `admin` enforced today),
   `Disabled` for deactivation, and `Source`/`ExternalID` hooks for external
   identity providers. Passwords are bcrypt-hashed and never leave the server.
-  Enforcement is **opt-in** (`--auth` / `WithAuth()`, off by default, mirroring
-  `--docs`): with it on, `/api/v1` requires a session (opaque HttpOnly cookie),
+  Enforcement is **on by default** for `atlas serve` — `--auth=false` runs the
+  server open and says so loudly at startup
+  ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md); it was
+  opt-in under ADR-0044, mirroring `--docs`). With it on, `/api/v1`, `/mcp` and the
+  API explorer require a session (opaque HttpOnly cookie),
   managing users requires `admin`, and a fresh instance seeds an admin from
   `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD` (a generated password is logged
   once — no hardcoded credential). The Console's **Organization** page is now a
@@ -777,11 +791,17 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   user as its identity, and an "Assign to…" picker is sourced from a non-admin
   `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
   `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
-  sessions, multi-tenancy, and audit logging. Under `--auth` the in-process **MCP
-  adapter authenticates its loopback calls** with an internal, non-admin service
-  token ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)), so enabling
-  auth no longer breaks MCP; the external `/mcp` transport is still unauthenticated
-  and should be fronted by a reverse proxy (ADR-0016).
+  sessions, multi-tenancy, and audit logging. **Which routes the boundary gates** is
+  now a class declared at each mount site, resolved fail-closed, and held to a
+  written-out allowlist by a test — replacing a path-prefix rule under which a route
+  was public by omission
+  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)). That is
+  what makes **`/mcp` an ordinary gated route**, carrying its caller's own credential
+  instead of the adapter's
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md));
+  the internal service token of
+  [ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md) stays as what a
+  supervised worker authenticates with.
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
@@ -804,6 +824,40 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
   Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
+
+## Milestone P — Panorama architecture & live landscape 🔲
+
+A parallel track alongside Milestone S: turn Panorama from a placeholder into a
+standards-based architecture workspace that relates declared ArchiMate 3.2 models
+to current Atlas resources without mixing runtime observations into the model. See
+[ADR-DRAFT: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
+
+- 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
+  design-time sidecar store; import, validate, preserve, and export Open Group
+  ArchiMate Model Exchange XML; keep reusable elements/relationships separate from
+  their views; use optimistic revisions, bounded XML parsing, backup/restore, and
+  interoperability fixtures.
+- 🔲 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
+  `diagram-js` bundle with an Atlas-owned ArchiMate palette, semantic connection
+  rules, property panel, multi-view canvas, undo/redo, save/reload, and browser E2E
+  coverage. Start with Capability, Business Process, the core Application layer,
+  and the Technology elements needed to model artifacts, nodes, services, and
+  networks; state the supported subset explicitly.
+- 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+  ArchiMate elements to Atlas process applications, BPMN process ids,
+  connectors/job types, releases, local runtimes, and deployment targets. Preserve
+  the distinction between an ArchiMate Application Component and an Atlas process
+  application, including many-to-many mappings.
+- 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
+  a separate observation projection for readiness, health, version, deployments,
+  instances, jobs, and incidents. Resolve remote target status server-side with
+  bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
+  stale/unbound states; show status as borders and badges without overwriting
+  ArchiMate layer colors.
+- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments,
+  surface discovered-but-unmodeled resources, provide dependency and impact
+  analysis, and optionally query Prometheus/OpenSearch for historical context.
+  Panorama remains a correlation surface, not a time-series or log database.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

@@ -3,11 +3,13 @@ package api
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/logging"
 )
 
 // This file is the HTTP surface for identity (ADR-0044): the auth endpoints
@@ -89,6 +91,17 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "username and password are required")
 		return
 	}
+	// Throttled before the store is touched and before bcrypt runs, so a flood
+	// costs the caller a request and this server almost nothing — the ordering is
+	// half the point of the throttle, because verifying a password is the expensive
+	// operation an unauthenticated caller would otherwise get to trigger at will.
+	if !s.logins.allow(httpapi.ClientIP(r), username) {
+		auditRefusal(r, logging.AuthLoginThrottled,
+			"login throttled: too many attempts for this account or from this address",
+			slog.String("username", username))
+		httpapi.Error(w, http.StatusTooManyRequests, "too many login attempts; try again shortly")
+		return
+	}
 	var (
 		u       User
 		ok      bool
@@ -100,6 +113,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok || u.Disabled || !checkPassword(u.PasswordHash, payload.Password) {
+		// The reason is recorded but not returned: the response stays the one
+		// uniform message, so the log tells an operator what happened without the
+		// wire telling an attacker which of their guesses was closer.
+		auditRefusal(r, logging.AuthLoginFailed, "failed login",
+			slog.String("username", username),
+			slog.String("reason", loginFailure(ok, u.Disabled)))
 		httpapi.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -120,7 +139,27 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, r, token, s.sessions.ttl)
+	// Proving you are this account clears the failures counted against it, so a
+	// couple of mistyped passwords are not carried around for the next quarter of
+	// an hour.
+	s.logins.forgive(username)
+	audit(r, logging.AuthLogin, "login",
+		slog.String("username", u.Username), slog.String("user_id", u.ID))
 	httpapi.JSON(w, http.StatusOK, u.toPublic())
+}
+
+// loginFailure names why a login was refused, for the audit line only. The
+// response never distinguishes these — an unknown account and a wrong password
+// answer identically, which is what stops the login from being a directory.
+func loginFailure(found, disabled bool) string {
+	switch {
+	case !found:
+		return "no such account"
+	case disabled:
+		return "account disabled"
+	default:
+		return "wrong password"
+	}
 }
 
 // handleLogout ends the caller's session and clears the cookie. It is idempotent:
@@ -128,6 +167,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		s.sessions.destroy(c.Value)
+	}
+	// Before the cookie is cleared, while the principal is still resolvable —
+	// otherwise the line would say somebody logged out without saying who.
+	if httpapi.PrincipalFrom(r.Context()) != nil {
+		audit(r, logging.AuthLogout, "logout")
 	}
 	clearSessionCookie(w, r)
 	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -293,6 +337,9 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, conflict)
 		return
 	}
+	audit(r, logging.AuthUserCreated, "user created",
+		slog.String("username", rec.Username), slog.String("user_id", rec.ID),
+		slog.Any("roles", rec.Roles))
 	httpapi.JSON(w, http.StatusCreated, rec.toPublic())
 }
 
@@ -413,6 +460,11 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		if disabling {
 			s.sessions.destroyUser(id)
 		}
+		// Roles and the disabled flag are the two fields that change what an account
+		// can do, so they are the two the line carries; the rest is a display change.
+		audit(r, logging.AuthUserUpdated, "user updated",
+			slog.String("username", updated.Username), slog.String("user_id", updated.ID),
+			slog.Any("roles", updated.Roles), slog.Bool("disabled", updated.Disabled))
 		httpapi.JSON(w, http.StatusOK, updated.toPublic())
 	}
 }
@@ -462,6 +514,9 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	default:
+		// That it happened and to whom. Never the password, and never a hash — a
+		// hash in a log is a credential in a log with an extra step.
+		audit(r, logging.AuthPasswordSet, "password set for user", slog.String("user_id", id))
 		httpapi.JSON(w, http.StatusOK, map[string]any{"id": id})
 	}
 }
@@ -511,6 +566,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, "cannot delete the last enabled admin")
 	default:
 		s.sessions.destroyUser(id)
+		audit(r, logging.AuthUserDeleted, "user deleted", slog.String("user_id", id))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

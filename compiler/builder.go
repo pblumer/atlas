@@ -1385,7 +1385,11 @@ type EntraConfig struct {
 	MaxUsers      int32
 	Search        RestExpr
 	Advanced      bool
-	Retries       int32
+	// DeltaLink is the resume cursor for a change-tracking query (delta-users,
+	// delta-groups): a literal-or-FEEL @odata.deltaLink from a previous run, empty on
+	// the first. Zero on every other operation.
+	DeltaLink RestExpr
+	Retries   int32
 }
 
 // AddEntraConnectorTask adds an Entra ID connector task and returns its element id.
@@ -1419,6 +1423,7 @@ func (b *Builder) AddEntraConnectorTask(cfg EntraConfig) int32 {
 		EntraMaxUsers:      cfg.MaxUsers,
 		EntraSearch:        cfg.Search,
 		EntraAdvanced:      cfg.Advanced,
+		EntraDeltaLink:     cfg.DeltaLink,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
