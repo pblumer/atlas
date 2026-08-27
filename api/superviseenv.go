@@ -586,7 +586,7 @@ func (s *Server) adWorkerEnv() []string {
 			// The seed is a file Atlas wrote and Atlas names, not one an operator
 			// pointed at: the Console is org-wide, and a path typed there belongs to
 			// whichever host happens to run the worker
-			// (ADR-draft-atlas-manages-the-ad-mock-seed). The path carries a digest of
+			// (ADR-0202). The path carries a digest of
 			// the seed's content, which is what makes replacing a seed actually reach
 			// the worker — refresh() restarts a child when its rendered environment
 			// differs, and a fixed name would render the same string for new content.

@@ -43,7 +43,7 @@ func TestNoStoredADMockSettingRendersNothing(t *testing.T) {
 
 // Switched on, the worker is told so — and pointed at a seed file *Atlas* wrote, under
 // the names the worker itself reads (ADR-0181,
-// ADR-draft-atlas-manages-the-ad-mock-seed). The path is Atlas's to know; the operator
+// ADR-0202). The path is Atlas's to know; the operator
 // never types one.
 func TestTheStoredADMockSettingReachesTheWorker(t *testing.T) {
 	srv, _ := newValidateServer(t)

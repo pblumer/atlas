@@ -228,7 +228,7 @@ func TestMockIsADialerRunCanUse(t *testing.T) {
 // attribute map, and an entryVariable that resolved to nothing left that map nil, so a
 // joiner whose FEEL variable was empty or misspelled took the AD worker down with
 // "assignment to entry in nil map" instead of failing its job
-// (ADR-draft-atlas-manages-the-ad-mock-seed).
+// (ADR-0202).
 func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
 	for _, op := range []string{"create-user", "create-group", "create-contact"} {
 		t.Run(op, func(t *testing.T) {

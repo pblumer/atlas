@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas holds the AD mockup's starting entries
+# ADR-0202: Atlas holds the AD mockup's starting entries
 
 - **Status:** Proposed
 - **Date:** 2026-08-27

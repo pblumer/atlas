@@ -37,7 +37,7 @@ const maxThemeBytes = 1 << 12
 
 // maxADMockBytes bounds the Active-Directory mockup body, which carries the seed's
 // whole text rather than a setting's worth of it
-// (ADR-draft-atlas-manages-the-ad-mock-seed).
+// (ADR-0202).
 const maxADMockBytes = 1 << 18 // 256 KiB
 
 // hexColorRe matches a canonical "#rrggbb" colour. Validation lives server-side so

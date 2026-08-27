@@ -3343,7 +3343,7 @@ const AD_SEED_EXAMPLE = [
 // as a control that silently does nothing.
 //
 // The starting entries are *content*, not a path
-// (ADR-draft-atlas-manages-the-ad-mock-seed). A file chosen here is read in the
+// (ADR-0202). A file chosen here is read in the
 // browser and posted as text, so what an operator picks is what Atlas stores — no
 // filename that has to mean the same thing on somebody else's disk, and nothing to
 // place on the worker's host.

@@ -159,7 +159,7 @@ var (
 	// because a mock touches nothing real: an empty directory costs a joiner nothing
 	// and costs a leaver one visible incident, whereas refusing takes the worker down
 	// for every AD task at once — which is what an optional field with a typo in it
-	// used to do (ADR-draft-atlas-manages-the-ad-mock-seed).
+	// used to do (ADR-0202).
 	ADMockSeedUnusable = newEvent("ad_mock.seed_unusable")
 	// WorkerHistoryFailed is the job-history exporter reporting that an append did not
 	// reach its clio connector, or that its buffer is dropping entries. Both are

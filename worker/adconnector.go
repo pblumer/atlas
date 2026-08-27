@@ -114,7 +114,7 @@ func adDialerFromEnv(env func(string) string) (ad.Dialer, *ad.MockDirectory, err
 	// mock: an empty directory touches nothing real. A joiner creates its account and
 	// does not notice; a leaver fails one job with "no such object", which surfaces as
 	// an incident against the task that needed the account — pointing at the missing
-	// seed instead of hiding it (ADR-draft-atlas-manages-the-ad-mock-seed).
+	// seed instead of hiding it (ADR-0202).
 	entries, err := adMockSeed(seed)
 	if err != nil {
 		logging.Warn(logging.ADMockSeedUnusable,

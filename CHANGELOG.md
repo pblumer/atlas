@@ -436,7 +436,7 @@ _Changed_ / _Removed_ for each version.
   now starts an **empty** directory with a warning instead of refusing to start: a mock
   touches nothing real, so an empty one costs a leaver one visible incident rather than
   costing every AD task an outage
-  ([ADR-draft-atlas-manages-the-ad-mock-seed](docs/adr/draft-atlas-manages-the-ad-mock-seed.md)).
+  ([ADR-0202](docs/adr/0202-atlas-manages-the-ad-mock-seed.md)).
 
   The request carrying it also has its own size limit now — 256 KiB, refused as too
   large rather than silently truncated. It shared the theme's 4 KiB before and was read

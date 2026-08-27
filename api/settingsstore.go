@@ -66,7 +66,7 @@ type adMockSetting struct {
 	// were typing; and a relative one resolved against the child process's working
 	// directory, which is not a thing anybody can predict from a browser. Worse, the
 	// field looked like a choice among several directories when there is exactly one
-	// (ADR-draft-atlas-manages-the-ad-mock-seed).
+	// (ADR-0202).
 	Seed string `json:"seed,omitempty"`
 	// SeedName is the file an operator uploaded the seed from. Display only — it says
 	// which one is loaded, and never reaches the worker.

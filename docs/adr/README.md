@@ -238,6 +238,7 @@ comment safe to write.
 | [0199](0199-route-access-classes.md) | Every mounted route declares its access class | Proposed |
 | [0200](0200-mcp-oauth-resource-server.md) | Atlas as an OAuth resource server, so a hosted MCP client can connect | Accepted |
 | [0201](0201-jira-connector.md) | Atlas Jira connector | Proposed |
+| [0202](0202-atlas-manages-the-ad-mock-seed.md) | Atlas holds the AD mockup's starting entries | Proposed |
 
 ## Status values
 

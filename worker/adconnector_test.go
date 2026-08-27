@@ -356,7 +356,7 @@ func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
 // down. This is the regression test for a real outage: an *optional* field holding a
 // stale path made every AD task unservable, and because the supervisor restarts a child
 // that exits, the Workers view showed hundreds of starts and one repeated log line
-// (ADR-draft-atlas-manages-the-ad-mock-seed).
+// (ADR-0202).
 //
 // Degrading is only defensible because this is a mock. An empty directory touches
 // nothing real: a joiner creates its account and never notices, and a leaver fails one
