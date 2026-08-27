@@ -252,6 +252,44 @@ _Changed_ / _Removed_ for each version.
   there is no private channel between a supervised worker and its parent. The model still says
   nothing about being mocked. See ADR-0193.
 
+### Fixed
+
+- **An upgraded server no longer hands a returning browser half of the old UI.** The
+  embedded UI is a graph of ES modules that import each other by name, and it was served
+  with **no cache validator at all**: an embedded file has a zero modtime, so
+  `http.ServeContent` omits `Last-Modified`, and `http.FileServerFS` sets no `ETag`. That
+  leaves the browser to guess how long each file stays fresh, and it guesses *per file* —
+  so after an upgrade it could hold a new `editor.js` beside a cached `formviewer.js` and
+  die on `does not provide an export named …`, with a hard reload the only way out. Every
+  asset now carries a strong `ETag` over its own bytes and `Cache-Control: no-cache` —
+  "reuse it, but ask first", not "do not store it": the browser keeps its copy and
+  revalidates, and an unchanged file costs a 304 with no body.
+
+- **A menu's flyout opens to the right, and can be reached.** The "Move to" submenu on an
+  artifact row opened to the *left*, which is not where a submenu opens anywhere else, so
+  the hand went the wrong way first; it opens right now, and flips left only when the
+  right would run off screen. Reaching it was the worse half. The flyout is
+  `position: fixed` — a card's overflow would clip it otherwise — and was shown by
+  `.submenu:hover`, with a 5px gap to cross. A hand moving diagonally from the row to the
+  flyout crosses the menu rows in between, and every one of them is outside the pair, so
+  the flyout closed under the hand before it arrived: getting into it was a knack rather
+  than an action. It now sits flush against the parent menu, and which flyout is open is
+  held in a class rather than in `:hover`, so it survives a moment (260ms) after the
+  pointer leaves — the diagonal reach is forgiven, settling anywhere else still closes it,
+  and dismissing the menu closes it at once rather than after the grace period.
+
+- **Every properties group in the Form and DMN editors reads the same again.** form-js and
+  dmn-js mark a group whose entries are all unset with the class `empty` — their own state
+  flag, on the group's header. `app.css` carried a bare `.empty` for our "nothing here yet"
+  placeholders: centred text and 34px of padding all round. Nothing scoped it, so it reached
+  straight into the vendored panel, and every unset group became a **68px** block against
+  the **27px** of the groups that happened to have something set — with its title pushed
+  inward by the padding and clipped by the centring, so *Custom properties* appeared as
+  *Custom p*. Six rows in two shapes, for no reason a reader could see. The placeholder rule
+  is now held **off** that panel rather than overridden inside it, so the vendored widget's
+  own styling stands rather than being replaced by more of ours; our placeholders elsewhere
+  are untouched.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives
