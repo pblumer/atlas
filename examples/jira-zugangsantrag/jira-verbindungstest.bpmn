@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Jira-Verbindungstest
+
+  Der kuerzestmoegliche Prozess, der beweist, dass der Jira-Konnektor wirklich
+  an deiner Jira haengt: ein Vorgang wird angelegt, seine Antwort landet in einer
+  Variablen, fertig. Drei Elemente, damit im Fehlerfall nichts anderes schuld
+  sein kann als die Verbindung selbst.
+
+  Start (Formular jvt-start: jiraProjekt, vorgangstyp)
+   -> Service-Task "Testvorgang anlegen"  (Jira create-issue -> ticket)
+   -> Ende "Vorgang angelegt"
+
+  Diesen Prozess zuerst starten. Laeuft er durch, sind Endpoint, Credential und
+  Konnektorname richtig — und jeder spaetere Fehler im Zugangsantrag liegt am
+  Modell, nicht an der Einrichtung.
+
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_jira_verbindungstest" targetNamespace="http://atlas/examples">
+  <process id="proc_jira_verbindungstest" name="Jira-Verbindungstest" isExecutable="true">
+    <documentation>Legt einen einzelnen Vorgang in Jira an, um Endpoint, Credential und Konnektornamen zu pruefen. Startvariablen: jiraProjekt (Projektschluessel, z. B. OPS), vorgangstyp (z. B. Task).</documentation>
+
+    <startEvent id="start" name="Test starten">
+      <extensionElements>
+        <zeebe:formDefinition formId="jvt-start"/>
+      </extensionElements>
+      <outgoing>f_start_anlegen</outgoing>
+    </startEvent>
+
+    <serviceTask id="anlegen" name="Testvorgang anlegen">
+      <documentation>Jira-Konnektor, Operation create-issue. Der Konnektorname "jira" verweist auf den Eintrag unter Console -> Connectors; Basis-URL und Credential liegen dort und im Vault, nie im Modell. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket" — im Operations-View sichtbar, und der Schluessel ist danach als =ticket.key referenzierbar.</documentation>
+      <extensionElements>
+        <atlas:jiraConnector connector="jira" operation="create-issue"
+          project="=jiraProjekt"
+          issueType="=vorgangstyp"
+          summary="Atlas-Verbindungstest"
+          description="=&quot;Dieser Vorgang wurde vom Atlas-Verbindungstest angelegt.\nProzessinstanz: &quot; + processInstanceKey"
+          resultVariable="ticket"/>
+      </extensionElements>
+      <incoming>f_start_anlegen</incoming>
+      <outgoing>f_anlegen_ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="ende" name="Vorgang angelegt">
+      <incoming>f_anlegen_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_anlegen" sourceRef="start" targetRef="anlegen"/>
+    <sequenceFlow id="f_anlegen_ende" sourceRef="anlegen" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_jira_verbindungstest">
+    <bpmndi:BPMNPlane id="BPMNPlane_jira_verbindungstest" bpmnElement="proc_jira_verbindungstest">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="136" y="225" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anlegen_di" bpmnElement="anlegen">
+        <omgdc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="400" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="376" y="225" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_anlegen_di" bpmnElement="f_start_anlegen">
+        <omgdi:waypoint x="188" y="200"/><omgdi:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anlegen_ende_di" bpmnElement="f_anlegen_ende">
+        <omgdi:waypoint x="340" y="200"/><omgdi:waypoint x="400" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
