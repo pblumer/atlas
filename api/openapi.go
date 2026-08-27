@@ -533,6 +533,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Revoke a deploy token, effective immediately (admin-only, ADR-0129)", tag: "Deploy tokens",
 			status: http.StatusNoContent}},
 
+		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
+			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens",
+			req: jsonBody("Token name, scope (full|worker) and lifetime in days (0 = never expires)", schemaObj(map[string]any{
+				"name": tString(), "scope": tString(), "expiresInDays": tInteger(),
+			}, "name", "scope")),
+			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
+		{"GET", "/api/v1/api-tokens", s.handleListAPITokens, apiOp{
+			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-0194)", tag: "API tokens",
+			resp: jsonBody("API tokens", tArray())}},
+		{"DELETE", "/api/v1/api-tokens/{id}", s.handleRevokeAPIToken, apiOp{
+			summary: "Revoke an API token, effective immediately (admin-only, ADR-0194)", tag: "API tokens",
+			status: http.StatusNoContent}},
+
 		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
@@ -651,6 +664,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
 			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
+			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings",
+			resp: jsonBody("ADMock", tObject())}},
+		{"PUT", "/api/v1/settings/ad-mock", s.handleSetADMock, apiOp{
+			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings",
+			req:  jsonBody("ADMockRequest", tObject()),
+			resp: jsonBody("ADMock", tObject())}},
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
 			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System",
 			resp: jsonBody("Registration config", schemaObj(map[string]any{

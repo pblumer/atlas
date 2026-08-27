@@ -36,6 +36,26 @@ type registrationSetting struct {
 	ProcessID string `json:"processId"`
 }
 
+// adMockSetting is the org-wide Active-Directory mockup switch
+// (ADR-0193). ADR-0181 decided the switch belongs to the
+// operator rather than to the model, and that is unchanged — this only moves where
+// the operator reaches it, from the process environment into the Console, because a
+// variable set once at start is the wrong ceremony for a thing you flip while trying
+// a process out.
+//
+// Its absence and a stored "off" are different states. No file means the operator has
+// not decided here, so whatever ATLAS_AD_MOCK the server was started with keeps
+// deciding; a stored record decides, either way. That is what keeps an existing
+// installation working exactly as it did until somebody touches the switch.
+type adMockSetting struct {
+	// Enabled turns the AD worker's mockup mode on.
+	Enabled bool `json:"enabled"`
+	// Seed is an optional LDIF or DSML file the mock directory starts from — the
+	// accounts a process expects to find. Read by the *worker*, so the path is the
+	// worker's, which for a supervised one is this host's.
+	Seed string `json:"seed,omitempty"`
+}
+
 // settingsStore persists org-wide UI settings as JSON sidecar files, using the
 // same atomic-write + directory-fsync discipline as the other sidecar stores
 // (ADR-0019/0041). Each setting is a singleton — one instance-wide record, not a
@@ -46,6 +66,7 @@ type settingsStore struct {
 	dir     string
 	file    string // theme.json
 	regFile string // registration.json
+	adFile  string // admock.json
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -57,6 +78,7 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		dir:     dir,
 		file:    filepath.Join(dir, "theme.json"),
 		regFile: filepath.Join(dir, "registration.json"),
+		adFile:  filepath.Join(dir, "admock.json"),
 	}, nil
 }
 
@@ -191,4 +213,29 @@ func (s *settingsStore) clearLogo() error {
 		}
 	}
 	return sidecar.FsyncDir(s.dir)
+}
+
+// getADMock returns the stored AD mockup switch and whether a record exists. A
+// missing file returns (zero, false, nil): nobody has decided in the Console, so the
+// server's own environment still decides.
+func (s *settingsStore) getADMock() (adMockSetting, bool, error) {
+	data, err := os.ReadFile(s.adFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return adMockSetting{}, false, nil
+		}
+		return adMockSetting{}, false, fmt.Errorf("settingsstore: read ad mock: %w", err)
+	}
+	var a adMockSetting
+	if err := json.Unmarshal(data, &a); err != nil {
+		return adMockSetting{}, false, fmt.Errorf("settingsstore: decode ad mock: %w", err)
+	}
+	return a, true, nil
+}
+
+// saveADMock writes the switch durably, overwriting any previous value. A stored
+// Enabled=false is a real value — the operator turning the mockup off — and not the
+// same as no record at all.
+func (s *settingsStore) saveADMock(a adMockSetting) error {
+	return sidecar.WriteJSON(s.dir, s.adFile, a)
 }

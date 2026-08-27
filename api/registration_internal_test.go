@@ -76,8 +76,13 @@ func TestSettingsStoreRegistrationErrors(t *testing.T) {
 // TestRegistrationReadIsPublic: GET /api/v1/settings/registration is not gated even
 // when auth is enforced, so the login screen can read it before sign-in.
 func TestRegistrationReadIsPublic(t *testing.T) {
-	if requiresAuth("/api/v1/settings/registration") {
+	if classifyPath(t, http.MethodGet, "/api/v1/settings/registration") != accessPublic {
 		t.Fatal("GET registration must be public (read before login)")
+	}
+	// The write is not: it is an admin act, gated at the boundary as well as by
+	// requireAdmin in the handler (see access.go).
+	if classifyPath(t, http.MethodPut, "/api/v1/settings/registration") != accessAuthenticated {
+		t.Fatal("PUT registration must be gated")
 	}
 }
 

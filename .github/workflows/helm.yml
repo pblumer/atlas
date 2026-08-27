@@ -45,10 +45,39 @@ jobs:
             --set ingress.enabled=true \
             --set persistence.existingClaim=atlas-data > /dev/null
 
-      - name: Reject auth without a password source
+      # Auth is on by default, so the defaults render above already covers the on
+      # case. (The record deciding that is deliberately not cited here: the numbering
+      # job rewrites a draft citation, and its commit may not touch a workflow file —
+      # see TestNoWorkflowFileCitesADraft.) What is worth pinning is which of the two
+      # credential paths each configuration takes: with no source the chart must omit
+      # the admin environment entirely — there is no Secret to read, and referencing a
+      # key that was never created is a pod that will not start — and the server seeds
+      # itself with a generated password instead. This step used to assert that the
+      # chart refused to render at all, which was right while auth was opt-in and
+      # would now fail the default path.
+      - name: Admin credentials come from a source, or not at all
         run: |
-          if helm template ci deploy/helm/atlas --set atlas.auth.enabled=true > /dev/null 2>&1; then
-            echo "expected rendering to fail when auth is enabled with no password source"
+          helm template ci deploy/helm/atlas > /tmp/no-source.yaml
+          if grep -q ATLAS_ADMIN_PASSWORD /tmp/no-source.yaml; then
+            echo "with no credential source the chart must not reference an admin Secret"
             exit 1
           fi
-          echo "correctly rejected"
+          if ! grep -q -- '--auth=true' /tmp/no-source.yaml; then
+            echo "auth must be on by default"
+            exit 1
+          fi
+
+          helm template ci deploy/helm/atlas --set atlas.auth.password=ci-password > /tmp/chart-secret.yaml
+          grep -q ATLAS_ADMIN_PASSWORD /tmp/chart-secret.yaml
+          grep -q 'kind: Secret' /tmp/chart-secret.yaml
+
+          helm template ci deploy/helm/atlas --set atlas.auth.existingSecret=atlas-admin > /tmp/existing.yaml
+          grep -q 'name: atlas-admin' /tmp/existing.yaml
+
+          helm template ci deploy/helm/atlas --set atlas.auth.enabled=false > /tmp/off.yaml
+          grep -q -- '--auth=false' /tmp/off.yaml
+          if grep -q ATLAS_ADMIN_PASSWORD /tmp/off.yaml; then
+            echo "auth off must not carry admin credentials"
+            exit 1
+          fi
+          echo "all four credential paths render as expected"

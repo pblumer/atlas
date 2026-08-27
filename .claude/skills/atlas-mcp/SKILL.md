@@ -17,10 +17,12 @@ state and never bypasses the API run loop.
 The same tool registry and dispatch path serve both transports:
 
 - Streamable HTTP: `atlas serve --addr :8080` mounts `/mcp`.
-- stdio: `atlas mcp --server http://localhost:8080`.
+- stdio: `atlas mcp --server http://localhost:8080 [--token TOKEN]` (or `ATLAS_TOKEN`).
 
-The `/mcp` transport is not an authentication boundary. Put a publicly reachable
-endpoint behind an authenticating reverse proxy.
+`/mcp` is behind the server's own access boundary: with `--auth` on, a request
+without a credential gets `401`, and a tool call acts as the caller with exactly
+their permissions. Over HTTP, send the session cookie or an `Authorization:
+Bearer` header.
 
 ## Runtime tools
 

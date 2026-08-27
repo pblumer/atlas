@@ -50,10 +50,10 @@ func ClientIP(r *http.Request) string {
 	return host
 }
 
-// Principal is an authenticated caller: a person with a session, the in-process
-// MCP adapter's service identity, or a peer authenticated by a deploy token
-// (ADR-0044/0129). A request with no principal is unauthenticated — either auth
-// is off, or nothing valid was presented.
+// Principal is an authenticated caller: a person with a session, the service
+// identity of a process the server started itself, or a peer authenticated by a
+// deploy token (ADR-0044/0129). A request with no principal is unauthenticated —
+// either auth is off, or nothing valid was presented.
 type Principal struct {
 	UserID   string
 	Username string
@@ -63,6 +63,11 @@ type Principal struct {
 	// slice without a store read (ADR-0180). A membership change
 	// takes effect on the user's next login.
 	GroupIDs []string
+	// Scope confines a principal authenticated by a machine credential to a named
+	// set of operations, whatever its roles would otherwise permit. Empty for a
+	// person: a session is not scoped, it is who you are. The boundary enforces it
+	// in one place; handlers never read it.
+	Scope string
 }
 
 // InGroup reports whether the principal belongs to the group with the given id.

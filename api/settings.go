@@ -408,3 +408,66 @@ func (s *Server) handleDeleteRegistration(w http.ResponseWriter, r *http.Request
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// ---------- The Active-Directory mockup switch (ADR-0193) ----------
+
+// handleGetADMock reports the org-wide AD mockup switch: whether directory writes are
+// simulated in the worker's memory, and the seed file it starts from.
+//
+// Readable by anyone signed in, because it answers a question every operator watching
+// a directory task has — did that account really get created? A run that only looks
+// successful is the failure mode this switch exists around, so hiding its state would
+// be the wrong secrecy.
+func (s *Server) handleGetADMock(w http.ResponseWriter, r *http.Request) {
+	var (
+		a      adMockSetting
+		stored bool
+		err    error
+	)
+	s.do(func() { a, stored, err = s.settings.getADMock() })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read ad mock: "+err.Error())
+		return
+	}
+	// "configured" tells the Console the difference between a decision made here and
+	// none at all — without a record the server's own environment decides, and the
+	// switch must not claim otherwise.
+	httpapi.JSON(w, http.StatusOK, struct {
+		Enabled    bool   `json:"enabled"`
+		Seed       string `json:"seed,omitempty"`
+		Configured bool   `json:"configured"`
+	}{Enabled: a.Enabled, Seed: a.Seed, Configured: stored})
+}
+
+// handleSetADMock stores the switch and lets the supervised AD worker pick it up.
+//
+// Admin-gated: it decides whether this instance writes to a real directory. The save
+// goes through doAndRefresh, so the worker is restarted with the new environment
+// rather than being left holding the old one — which is the whole point of putting
+// the switch here instead of on the command line.
+func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var p struct {
+		Enabled bool   `json:"enabled"`
+		Seed    string `json:"seed"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	a := adMockSetting{Enabled: p.Enabled, Seed: strings.TrimSpace(p.Seed)}
+	var saveErr error
+	s.doAndRefresh(func() { saveErr = s.settings.saveADMock(a) })
+	if saveErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "save ad mock: "+saveErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, a)
+}

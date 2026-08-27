@@ -5,9 +5,13 @@ StatefulSet with a hard-coded replica count of 1 and a ReadWriteOnce volume, so
 two servers can never mount the same data concurrently. Do NOT convert this to a
 Deployment or raise the replica count — that would corrupt durable state.
 */ -}}
-{{- if and .Values.atlas.auth.enabled (not .Values.atlas.auth.existingSecret) (not .Values.atlas.auth.password) -}}
-{{- fail "atlas.auth.enabled is true but no admin password source is set. Provide atlas.auth.password or atlas.auth.existingSecret." -}}
-{{- end -}}
+{{- /*
+  With no password source the server seeds its administrator with a generated
+  password and logs it once (kubectl logs), exactly as the binary does. That used
+  to be a rendering failure, from when auth was opt-in and opting in meant you had
+  chosen to control the credential; as the default it would fail the default path.
+  For anything but a scratch install set atlas.auth.existingSecret.
+*/ -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -65,7 +69,13 @@ spec:
             - {{ . | quote }}
             {{- end }}
           env:
-            {{- if .Values.atlas.auth.enabled }}
+            {{- /*
+              Only when a credential source exists. Without one there is no Secret to
+              read (see secret.yaml), and referencing a key that was never created is
+              a pod that will not start rather than one that seeds itself. Same shape
+              as the vault block below.
+            */ -}}
+            {{- if and .Values.atlas.auth.enabled (or .Values.atlas.auth.existingSecret .Values.atlas.auth.password) }}
             - name: ATLAS_ADMIN_USERNAME
               valueFrom:
                 secretKeyRef:

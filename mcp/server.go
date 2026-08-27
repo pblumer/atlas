@@ -112,7 +112,7 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 			_ = enc.Encode(errorResponse(nil, codeParseError, "parse error"))
 			continue
 		}
-		resp, reply := s.handle(req)
+		resp, reply := s.handleWith(s.client, req)
 		if reply {
 			if err := enc.Encode(resp); err != nil {
 				return err
@@ -122,9 +122,16 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	return scanner.Err()
 }
 
-// handle dispatches one request. The bool result is false for notifications and
-// anything else that must not be answered.
-func (s *Server) handle(req rpcRequest) (rpcResponse, bool) {
+// handleWith dispatches one request, making any Atlas call through client. The
+// bool result is false for notifications and anything else that must not be
+// answered.
+//
+// The client is a parameter rather than read off the Server because the two
+// transports differ in exactly this: a stdio adapter is one process with one
+// identity, so it passes the client it was built with, while the HTTP transport
+// binds a client to each request's own caller. Everything downstream of here is
+// the same code either way (ADR-0196).
+func (s *Server) handleWith(client *Client, req rpcRequest) (rpcResponse, bool) {
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(req), true
@@ -136,7 +143,7 @@ func (s *Server) handle(req rpcRequest) (rpcResponse, bool) {
 	case "tools/list":
 		return s.handleToolsList(req), true
 	case "tools/call":
-		return s.handleToolsCall(req), true
+		return s.handleToolsCall(client, req), true
 	default:
 		if req.isNotification() {
 			return rpcResponse{}, false
@@ -186,7 +193,7 @@ func (s *Server) handleToolsList(req rpcRequest) rpcResponse {
 	return okResponse(req.ID, map[string]any{"tools": list})
 }
 
-func (s *Server) handleToolsCall(req rpcRequest) rpcResponse {
+func (s *Server) handleToolsCall(client *Client, req rpcRequest) rpcResponse {
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -205,7 +212,7 @@ func (s *Server) handleToolsCall(req rpcRequest) rpcResponse {
 	// A tool's own failure (bad argument, server rejection) is reported as a
 	// tool result with isError:true, not a protocol error — that is the MCP
 	// contract, and it lets the model see and react to the message.
-	text, err := tool.Handler(s.client, params.Arguments)
+	text, err := tool.Handler(client, params.Arguments)
 	if err != nil {
 		return okResponse(req.ID, toolResult(err.Error(), true))
 	}

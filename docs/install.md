@@ -142,8 +142,10 @@ Check it from another shell, then stop it with `Ctrl-C`:
 curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-Binding to `127.0.0.1` on the first run is on purpose: authentication is still
-off, and until step 6 anyone who can reach the port is an administrator.
+Binding to `127.0.0.1` on the first run is on purpose. A login is required by
+default, so the first start also seeds an administrator and logs a generated
+password once (step 6) — binding to loopback means that window is not reachable
+from anywhere else while you collect it.
 
 ### 5. Run it as a systemd service
 
@@ -197,10 +199,11 @@ journalctl -u atlas -f
 > apply to the interpreters Atlas spawns. Loosen them only as far as your scripts
 > actually need.
 
-### 6. Turn on authentication
+### 6. The administrator account
 
-The unit above already passes `--auth`. On the **first** start with `--auth` and
-an empty user store, Atlas seeds one administrator:
+Authentication is **on by default**; the unit above passes `--auth` explicitly so
+the file says what it relies on. On the **first** start with an empty user store,
+Atlas seeds one administrator:
 
 ```bash
 sudo mkdir -p /etc/atlas
@@ -271,10 +274,16 @@ server {
 }
 ```
 
-One endpoint needs a decision from you: **`/mcp` is not authenticated at the
-transport level**, by design ([ADR-0016](adr/0016-mcp-server-over-http-api.md)). It is how an
-AI agent drives the server. If you do not want that exposed, block it at the
-proxy:
+`/mcp` — the endpoint an AI agent drives the server through — is gated by
+`--auth` like the rest of the API
+([ADR-0196](adr/0196-authenticated-mcp-transport.md)).
+A request that carries no credential is answered with `401`, and a tool call acts
+as whoever made it, with exactly their permissions. It used to be open at the
+transport level whatever `--auth` said, so a proxy rule was the only thing in
+front of it; if you are upgrading, that rule is now belt and braces rather than
+the protection itself.
+
+If you do not want an agent surface at all, block it at the proxy:
 
 ```nginx
 location /mcp { deny all; }
@@ -375,7 +384,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 |------|---------|--------------|
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
-| `--auth` | `false` | Require login for the API and UI |
+| `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for connector credentials |
@@ -387,7 +396,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
-| `--metrics` | `true` | Serve the Prometheus exposition at `/metrics` |
+| `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
 | `--trace-endpoint` | `$OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector base URL to export request traces to; empty disables tracing — see [Traces](#traces) |
 | `--trace-sample-ratio` | `0.1` | Fraction of traces to record, `0` to `1` |
@@ -405,7 +414,7 @@ explicit `=false` — `--vault=false`, not `--no-vault`.
 | Command | Purpose |
 |---------|---------|
 | `atlas serve [flags]` | Run the engine, API, and UI. This is the default when no subcommand is given. |
-| `atlas mcp [--server URL]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`) |
+| `atlas mcp [--server URL] [--token TOKEN]` | Model Context Protocol adapter on stdio, proxying to a running server (default `http://localhost:8080`). `--token` (or `ATLAS_TOKEN`) is what it authenticates with against a server running `--auth` |
 | `atlas reset-password [--data-dir DIR] [--create-admin] [--password-stdin] USERNAME` | Reset a local user's password straight against the data directory |
 | `atlas version` | Version, git revision, and Go toolchain |
 | `atlas help` | Usage |
@@ -417,6 +426,7 @@ history.
 
 | Variable | Used for |
 |----------|----------|
+| `ATLAS_TOKEN` | The credential `atlas worker` and `atlas mcp` authenticate with, and what supervised workers are given if you set it on the server. It must be an **API token** the server accepts (see below); an arbitrary value is refused, and the server warns at startup if you set one |
 | `ATLAS_ADMIN_USERNAME` | Bootstrap admin name (default `admin`); only read while the user store is empty and `--auth` is on |
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
@@ -430,7 +440,7 @@ history.
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
 | `ATLAS_TEMIS_CONNECTORS` | Comma-separated connector names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN` |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the REST connector named `<REF>` |
-| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file. The models are unchanged and nothing reaches a domain controller ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). Set on `atlas serve` it reaches the AD worker Atlas supervises, since a supervised worker inherits this environment |
+| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Connectors → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
 
@@ -441,9 +451,11 @@ history.
 | `/` | Web UI — modeler, operations, tasks, and the in-app handbook |
 | `/api/v1/…` | JSON API |
 | `/api/docs` | API explorer (disable with `--docs=false`) |
+| `/metrics` | Prometheus exposition — gated by `--auth`; scrape with a token scoped `metrics` |
 | `/healthz` | Liveness — is the process alive. Unconditional; never gated by `--auth` |
 | `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
-| `/mcp` | Model Context Protocol endpoint — **not authenticated at the transport level** |
+| `/mcp` | Model Context Protocol endpoint — gated by `--auth`; a tool call acts as the caller |
+| `/api/v1/openapi.json`, `/api/docs` | The API description and explorer — served with `--docs`, and gated by `--auth` like the rest of the API |
 
 An external worker leases a job with `POST /api/v1/jobs/{key}/activate` and reports the
 outcome with `.../complete` or `.../fail` ([ADR-0007](adr/0007-job-worker-protocol.md)).
@@ -519,11 +531,74 @@ Event names an operator is most likely to alert on:
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
+| `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
+
+**The security audit trail.** Every line below carries the acting principal
+(`actor`, `actor_id`) where the request has one, and the `client_ip` always. None
+of them carries a password, a hash or a token. Ship them with `--log-format=json`.
+
+| Event | Level | Meaning |
+|-------|-------|---------|
+| `auth.login` | INFO | A successful sign-in, with `username` and `user_id` |
+| `auth.login_failed` | WARN | A refused sign-in, with the `username` attempted and a `reason` (`no such account`, `account disabled`, `wrong password`). The response says only "invalid credentials" — the reason is for you, not for the caller |
+| `auth.login_throttled` | WARN | An attempt refused before any password check, because the address or the account had spent its budget |
+| `auth.logout` | INFO | A session was ended by its owner |
+| `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
+| `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
+| `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
+| `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
 Event names are treated as an API: renaming one is a breaking change and appears under
 _Changed_ in the [changelog](../CHANGELOG.md). Secrets never become fields — the seeded
 admin password stays inside the message text precisely because a field is what a log
 shipper extracts and keeps.
+
+### Credentials for machines
+
+A person signs in; a machine presents an **API token**. Mint one as an
+administrator — the secret comes back exactly once, because the server stores only
+its SHA-256:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
+  -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"name":"worker on host-b","scope":"worker","expiresInDays":90}'
+# {"id":"…","name":"worker on host-b","scope":"worker","expiresAt":…,"token":"atlasat_…"}
+```
+
+| Scope | Reaches |
+|-------|---------|
+| `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
+| `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
+| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused |
+
+Then hand it over as `--token` or `ATLAS_TOKEN`:
+
+```bash
+atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connector script
+atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
+```
+
+For Prometheus, that is two lines in the scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: atlas
+    authorization:
+      credentials: atlasat_…      # a token scoped "metrics"
+    static_configs:
+      - targets: ['atlas.example.com:8080']
+```
+
+`GET /api/v1/api-tokens` lists what exists (identity, scope, lifetime — never a
+secret) and `DELETE /api/v1/api-tokens/{id}` revokes one, effective on the next
+request. An expired token is refused exactly like an unknown one, and its record
+stays listed so you can see what needs reissuing.
+
+A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
+a peer Atlas uses to publish a bundle here; see
+[ADR-0129](adr/0129-remote-deployment-targets.md).
 
 ### Traces
 
@@ -646,7 +721,7 @@ another `atlas serve` already owns that directory. Only one may.
 exactly what it says. Install the interpreter, or start with `--python=false`.
 Tasks in that language park until it is available; nothing is lost.
 
-**No login prompt appears** — `--auth` is off. Nothing is protected in that mode;
+**No login prompt appears** — the server was started with `--auth=false`. Nothing is protected in that mode;
 add the flag and restart.
 
 **You cannot log in** — use `atlas reset-password` against the data directory

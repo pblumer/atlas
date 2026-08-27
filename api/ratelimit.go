@@ -8,8 +8,11 @@ import (
 // rateLimiter is a per-key token bucket guarding the unauthenticated public
 // endpoints (ADR-0029): a public write is abuse-exposed, so a burst from one
 // client is throttled. It is deliberately simple — a real internet deployment
-// fronts the server with a reverse proxy (like /mcp, ADR-0016) — but it means a
-// naive script can't hammer a public start link out of the box.
+// fronts the server with a reverse proxy — but it means a naive script can't
+// hammer a public start link out of the box.
+//
+// These are the routes that stay public by decision rather than by omission (see
+// access.go), so a rate limit is the only thing standing in front of them.
 //
 // Each key (the client IP) gets `capacity` tokens that refill at `refill` per
 // second; a request costs one token. now is injectable so tests are deterministic.
@@ -30,6 +33,16 @@ func newRateLimiter(capacity, refillPerSec float64) *rateLimiter {
 		refill:   refillPerSec,
 		now:      time.Now,
 	}
+}
+
+// clear drops a key's bucket, so it starts full again on the next call. The login
+// throttle uses it to forgive an account's failed attempts once somebody proves
+// they are that account (see loginguard.go). Clearing an unknown key is a no-op.
+func (l *rateLimiter) clear(key string) {
+	l.mu.Lock()
+	delete(l.tokens, key)
+	delete(l.last, key)
+	l.mu.Unlock()
 }
 
 // allow reports whether a request keyed by key may proceed, consuming a token if

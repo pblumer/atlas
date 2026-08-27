@@ -253,6 +253,15 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/deploy-tokens/{id}": "credential revocation is admin-only, not an agent action",
 	"POST /api/v1/applications/import":  "server-to-server bundle transport authenticated by a deploy token; agents publish via atlas_publish_application",
 
+	// API tokens (ADR-0194): the same category one step wider. These
+	// mint the credential a worker, a CI job or a remote MCP adapter authenticates
+	// with, so a tool for them would let an agent issue itself a credential that
+	// outlives the session it was asked in — the one capability a per-request
+	// identity is designed not to have (ADR-0196).
+	"POST /api/v1/api-tokens":        "minting a machine credential is admin-only credential management, not an agent action",
+	"GET /api/v1/api-tokens":         "credential listing is admin-only, not an agent action",
+	"DELETE /api/v1/api-tokens/{id}": "credential revocation is admin-only, not an agent action",
+
 	// Deployment targets and promotion (ADR-0129, sending side): a target names
 	// another server and the credential to reach it — admin config in the same
 	// category as connectors. Promotion ships work to a *different* engine, often a
@@ -305,6 +314,14 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/settings/logo":    "UI branding is a Console concern, not an agent action",
 	"PUT /api/v1/settings/logo":    "UI branding is a Console concern, not an agent action",
 	"DELETE /api/v1/settings/logo": "UI branding is a Console concern, not an agent action",
+
+	// The Active Directory mockup switch (ADR-0181/ADR-0193).
+	// The write decides whether this instance writes to a real directory — an
+	// operator's call about their forest, not an agent's. The state is not hidden
+	// from an agent either way: a mocked worker says so in the log atlas_workers
+	// returns, which is where it is worth reading anyway, next to what it did.
+	"GET /api/v1/settings/ad-mock": "the AD mockup switch is a Console concern; its state shows in atlas_workers",
+	"PUT /api/v1/settings/ad-mock": "whether this instance writes to a real directory is an operator decision, not an agent action",
 
 	// Self-service registration config (ADR-0126): a login-screen/admin concern,
 	// not an agent action.

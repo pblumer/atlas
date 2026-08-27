@@ -18,16 +18,56 @@ import (
 type Client struct {
 	baseURL string
 	token   string // optional bearer token attached to every request
+	caller  caller // the credential of whoever made this request, when there is one
 	http    *http.Client
+}
+
+// caller is the credential an MCP request arrived with, forwarded to the Atlas
+// API so a tool call acts as whoever made it rather than as the adapter.
+//
+// It is carried verbatim, by header name, and never parsed. The adapter then does
+// not need to know what an Atlas session cookie is called or which bearer schemes
+// the server accepts — and cannot get either wrong as those change. Whatever
+// authenticated the caller at /mcp is exactly what authenticates the calls their
+// tool makes.
+type caller struct {
+	authorization string // the Authorization header, as received
+	cookie        string // the Cookie header, as received
+}
+
+// empty reports whether the caller presented no credential at all — the ordinary
+// case on a server running without --auth.
+func (c caller) empty() bool { return c.authorization == "" && c.cookie == "" }
+
+// forCaller returns a Client that authenticates as the given caller instead of
+// with the token this one was built with. It shallow-copies, so the derived
+// client shares the underlying http.Client and its connection pool: one struct
+// copy per request, no new transport.
+//
+// A caller with no credential yields the receiver unchanged, which is what makes
+// this safe to call unconditionally on an unauthenticated server.
+func (c *Client) forCaller(cl caller) *Client {
+	if cl.empty() {
+		return c
+	}
+	dup := *c
+	dup.caller = cl
+	return &dup
 }
 
 // ClientOption configures a Client at construction.
 type ClientOption func(*Client)
 
-// WithBearer attaches an Authorization: Bearer <token> header to every request.
-// The single-binary server uses it so the in-process adapter can authenticate its
-// loopback calls when the API requires login (ADR-0049). An empty token is a
-// no-op, so callers can pass it unconditionally.
+// WithBearer attaches an Authorization: Bearer <token> header to every request
+// that carries no caller credential of its own. That is the stdio adapter's case:
+// it is a per-agent process with one identity for its whole life, given on the
+// command line (atlas mcp --token).
+//
+// The HTTP transport does not use it. There, each request brings its own caller
+// and forCaller takes precedence — see ADR-0196 for
+// why the adapter no longer holds a credential of its own on that path.
+//
+// An empty token is a no-op, so callers can pass it unconditionally.
 func WithBearer(token string) ClientOption {
 	return func(c *Client) { c.token = token }
 }
@@ -110,8 +150,17 @@ func (c *Client) doResponse(method, path, contentType string, body []byte) (clie
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	if c.token != "" {
+	// The caller's credential wins over the adapter's own. An adapter that lent its
+	// token to a request that arrived with a weaker one would re-open, one level
+	// down, exactly the privilege the transport used to hand out for free.
+	switch {
+	case c.caller.authorization != "":
+		req.Header.Set("Authorization", c.caller.authorization)
+	case c.token != "":
 		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if c.caller.cookie != "" {
+		req.Header.Set("Cookie", c.caller.cookie)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

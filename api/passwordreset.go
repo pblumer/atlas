@@ -14,10 +14,11 @@ import (
 // is deliberately an operator action, not a self-service flow (ADR-0044): there
 // is no transactional mail sender, email is optional per user, and the HTTP
 // set-password endpoint requires an already-authenticated admin — useless to the
-// locked-out admin who needs it most. The MCP adapter is no escape hatch either:
-// its service identity is intentionally not an admin and cannot manage users
-// (ADR-0049). So recovery lives here, reachable from a shell (e.g. a one-line
-// `docker exec` against the data volume).
+// locked-out admin who needs it most. MCP is no escape hatch either: it is gated
+// like the rest of the API and a tool call carries its caller's own credential, so
+// the locked-out admin has nothing to present there either
+// (ADR-0196). So recovery lives here, reachable from
+// a shell (e.g. a one-line `docker exec` against the data volume).
 
 // ResetPasswordOptions configures a single operator-driven password reset.
 type ResetPasswordOptions struct {

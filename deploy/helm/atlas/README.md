@@ -41,13 +41,25 @@ Then reach it (default `ClusterIP`):
 
 ```bash
 kubectl port-forward svc/atlas 8080:8080
-# open http://127.0.0.1:8080/  — API docs at /api/docs, MCP at /mcp
+# open http://127.0.0.1:8080/ and sign in — API docs at /api/docs, MCP at /mcp
 ```
 
-## Enable authentication
+A login is required by default. With no credentials configured, the first start
+seeds an administrator and logs a generated password **once**:
 
-Auth is **off by default** — the API, UI and `/mcp` are open to anyone who can
-reach the Service. Turn it on before exposing Atlas:
+```bash
+kubectl logs sts/atlas | grep auth.admin_seeded
+```
+
+## Authentication
+
+Auth is **on by default** — the API, the UI and `/mcp` all require a login. Set
+`atlas.auth.enabled=false` only for a throwaway development install; the server
+then logs a warning (`auth.disabled`) and is open to anyone who can reach the
+Service.
+
+For anything real, give it the bootstrap credentials rather than letting one be
+generated into a pod log:
 
 ```bash
 # Simplest (password stored in a chart-managed Secret):
@@ -112,8 +124,9 @@ helm install atlas ./deploy/helm/atlas \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly —
-the `/mcp` endpoint is unauthenticated at the transport level by design.
+Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly.
+Atlas speaks plain HTTP, so the proxy is what terminates TLS; `/mcp` itself is
+gated by `--auth` like every other route and no longer depends on a proxy rule.
 
 ## Values
 

@@ -45,6 +45,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/collab"
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
@@ -212,11 +213,14 @@ type Server struct {
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
+	logins           *loginGuard       // throttles authentication attempts (see loginguard.go)
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
+	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
+	apiTokens        *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
 	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
@@ -262,10 +266,16 @@ type Server struct {
 	// before Handler is mounted; read-only thereafter.
 	authEnabled bool
 
-	// internalToken is a random secret minted at startup when auth is enabled. A
-	// trusted in-process component (the MCP adapter) presents it as a bearer token
-	// so its loopback API calls authenticate without a login (ADR-0049). It
-	// resolves to a non-admin service principal. Empty when auth is off.
+	// internalToken is a random secret minted at startup when auth is enabled, so a
+	// process this server started itself can call the API without a login
+	// (ADR-0049). It resolves to a non-admin service principal. Empty when auth is
+	// off.
+	//
+	// Today that means the supervised workers, handed it at spawn (see
+	// workerTokenEnv). The MCP adapter used to hold it too and no longer does: it
+	// forwards its caller's credential instead, which is what stopped /mcp being a
+	// way to act as this principal without presenting anything
+	// (ADR-0196).
 	internalToken string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
@@ -477,6 +487,14 @@ type Server struct {
 	// reports no lines. Set once at construction; read-only thereafter.
 	logs *LogBuffer
 
+	// mcpHandler is the Model Context Protocol transport, when the binary built one
+	// (WithMCP). Handler mounts it at /mcp inside its own mux so it passes the
+	// access boundary like every other route; it used to be mounted beside this
+	// server, where withAuth never saw it and anything that could reach the port
+	// drove the whole API (ADR-0196). Nil leaves /mcp
+	// unmounted. Set once before Handler is mounted; read-only thereafter.
+	mcpHandler http.Handler
+
 	// publicCORSOrigins is the allow-list of web origins permitted to call the
 	// unauthenticated /public/forms endpoints cross-origin, so a start form can be
 	// embedded in an external site (ADR-0186). Empty is the closed default — no
@@ -500,6 +518,19 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithMCP mounts an MCP transport at /mcp, behind this server's own access
+// boundary. The handler is taken as an http.Handler rather than a concrete type
+// so the dependency runs one way: the mcp package adapts this API, and this
+// package need not know it exists.
+//
+// Mounting it here is the whole point. The transport used to be registered on a
+// mux beside this one, which meant withAuth never resolved a principal for it and
+// --auth did not gate it — while the adapter attached a service credential of its
+// own to the calls it made, so reaching the port was enough to drive the API.
+// Passing the handler in makes that a decision this package owns rather than one
+// the wiring in cmd can make differently (ADR-0196).
+func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
 
 // WithPublicFormsCORS allows the given web origins to call the unauthenticated
 // /public/forms endpoints cross-origin, so a process's start form can be embedded
@@ -840,6 +871,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
+	if err != nil {
+		return nil, err
+	}
 	deployTokenStore, err := newDeployTokenStore(filepath.Join(dataDir, "deploy-tokens"))
 	if err != nil {
 		return nil, err
@@ -917,11 +952,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate:        newRateLimiter(20, 1),
+		logins:            newLoginGuard(),
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
+		apiTokenStore:     apiTokenStore,
+		apiTokens:         newAPITokenIndex(),
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
@@ -1156,6 +1194,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
 	// reads, so a peer's credential keeps working across a restart.
+	if err := s.loadAPITokens(); err != nil {
+		return nil, err
+	}
+	s.checkWorkerTokenEnv()
 	if err := s.loadDeployTokens(); err != nil {
 		return nil, err
 	}
@@ -1996,79 +2038,134 @@ func (s *Server) Close() {
 	}
 }
 
-// Handler returns the HTTP handler: JSON API under /api/v1, /healthz, the
-// embedded web UI at the root, and — when docs are enabled (WithDocs) — the
-// OpenAPI document at /api/v1/openapi.json and the Scalar API explorer at
-// /api/docs.
+// Handler returns the HTTP handler: the JSON API under /api/v1, the probes, the
+// MCP transport when one was supplied (WithMCP), the public share links, and the
+// embedded web UI at the root — every one of them behind the access boundary.
+//
+// With --docs (the default) it also serves the OpenAPI document at
+// /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+	mux, policy := s.mountRoutes()
+	return s.withAuth(policy, mux)
+}
 
-	// The Prometheus exposition sits beside /healthz: same process, same port, and
-	// ungated for the same reason (ADR-0142).
+// mountRoutes registers every route this server serves and, in the same pass,
+// declares the access class of each one (see access.go).
+//
+// The two are built together on purpose. mount is the only way a route reaches
+// the mux, and it cannot be called without stating a class, so "public because
+// nobody said otherwise" is not a state this function can produce. A route
+// mounted straight onto mux, bypassing it, is not thereby public either — it is
+// undeclared, and classify gates what it does not know.
+func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
+	mux := http.NewServeMux()
+	policy := newAccessPolicy(mux)
+	mount := func(class accessClass, pattern string, h http.Handler) {
+		mux.Handle(pattern, h)
+		policy.declare(pattern, class)
+	}
+	mountFunc := func(class accessClass, pattern string, h http.HandlerFunc) {
+		mount(class, pattern, h)
+	}
+
+	// The Prometheus exposition sits beside the probes — same process, same port
+	// (ADR-0142) — but not beside them in reach. It was the last route whose
+	// protection depended on a proxy rule rather than on this server, and a scraper
+	// is a machine, so it presents a credential like every other machine does: an
+	// API token scoped "metrics", which reaches this one route and nothing else
+	// (ADR-0198).
 	if s.metricsEnabled {
-		mux.HandleFunc("GET /metrics", s.handleMetrics)
+		mountFunc(accessAuthenticated, "GET /metrics", s.handleMetrics)
 	}
 	// Liveness: is this process alive. Unconditional on purpose — the only remedy a
 	// liveness probe has is a restart, so it must not fail for anything a restart would
 	// not fix (a long recovery above all). Readiness is the separate question, and it is
-	// answered separately, at /readyz (ADR-0142).
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	// answered separately, at /readyz (ADR-0142). Both are public because a probe that
+	// needs a credential does not work in the incident it exists for.
+	mountFunc(accessPublic, "GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	mux.HandleFunc("GET /readyz", s.handleReadyz)
+	mountFunc(accessPublic, "GET /readyz", s.handleReadyz)
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
 	// table, the same list openapiDoc describes, so the served surface and its
-	// OpenAPI spec cannot drift (ADR-0043).
+	// OpenAPI spec cannot drift (ADR-0043). Each one is gated unless
+	// publicAPIRoutes names it.
 	for _, r := range s.apiRoutes() {
 		route := r.method + " " + r.pattern
+		class := apiRouteAccess(route)
 		if s.traceRoutes {
 			// The span is named for the *pattern*, which is fixed by this table, so the
 			// set of span names is bounded by the code rather than by traffic (ADR-0142).
-			mux.Handle(route, tracing.Handler(route, r.handler))
+			mount(class, route, tracing.Handler(route, r.handler))
 			continue
 		}
-		mux.HandleFunc(route, r.handler)
+		mountFunc(class, route, r.handler)
 	}
+
+	// The MCP transport, when the binary supplied one (ADR-0016). It is mounted
+	// here, inside this handler, rather than beside it: an adapter that drives the
+	// whole API is exactly the surface that must not sit outside the boundary, and
+	// wiring is not a place where that decision should be makeable
+	// (ADR-0196).
+	if s.mcpHandler != nil {
+		mount(accessAuthenticated, "/mcp", s.mcpHandler)
+		mount(accessAuthenticated, "/mcp/", s.mcpHandler)
+	}
+
+	// Anything under /api/v1 that no route above claimed. Without this the UI's "/"
+	// catch-all would serve an unrouted API path — and, being public, would classify
+	// it public on the way in, which is the shape of the bug this whole boundary is
+	// about. Registering it keeps such a path gated, and answers it in the API's own
+	// error envelope rather than with the file server's 404.
+	mountFunc(accessAuthenticated, "/api/v1/", func(w http.ResponseWriter, r *http.Request) {
+		httpapi.Error(w, http.StatusNotFound, "no such endpoint: "+r.Method+" "+r.URL.Path)
+	})
 
 	// The OpenAPI document and the Scalar API explorer are gated behind --docs:
-	// the explorer's "Try it out" exercises the same unauthenticated, mutating
-	// surface as the API, so an operator opts in explicitly (ADR-0043). The
-	// vendored Scalar asset is served by the file server below at /vendor/scalar/.
+	// the explorer's "Try it out" exercises the same mutating surface as the API,
+	// so an operator opts in explicitly (ADR-0043). The vendored Scalar asset is
+	// served by the file server below at /vendor/scalar/.
+	//
+	// They are also behind the login. Nothing on the login screen reads either, and
+	// the explorer is a developer surface that drives the whole API — the same
+	// argument --docs already makes, one step further, now that requiring a login is
+	// the default rather than the exception (ADR-0195). Gating
+	// them together matters: an explorer whose document is refused is a page that
+	// renders and then cannot load what it is for.
 	if s.docsEnabled {
-		mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
-		mux.HandleFunc("GET /api/docs", s.handleDocs)
-		mux.HandleFunc("GET /api/docs/", s.handleDocs)
+		mountFunc(accessAuthenticated, "GET /api/v1/openapi.json", s.handleOpenAPI)
+		mountFunc(accessAuthenticated, "GET /api/docs", s.handleDocs)
+		mountFunc(accessAuthenticated, "GET /api/docs/", s.handleDocs)
 	}
 
-	// Public, unauthenticated start links (ADR-0029). These live under /public/,
-	// outside the /api/v1 surface auth gates, and expose exactly one thing: the
-	// start form for one token. They are rate-limited in the handlers.
-	mux.HandleFunc("GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
-	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
-	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
-	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)
+	// Public, unauthenticated share links (ADR-0029/0143). These expose exactly one
+	// thing each: the start form, or the documentation version, that one token
+	// names. The token in the URL is the whole authorization, and the handlers rate
+	// limit them.
+	mountFunc(accessPublic, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
+	mountFunc(accessPublic, "GET /public/forms/{token}", s.handlePublicFormPage)
+	mountFunc(accessPublic, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
+	mountFunc(accessPublic, "POST /public/forms/{token}/start", s.handlePublicFormStart)
 	// CORS preflight for the two JSON endpoints above, so an allow-listed external
 	// site can embed the start form as a custom widget (ADR-0186). A cross-origin
 	// GET /schema is a "simple" request needing no preflight (its handler sets the
 	// header); a POST /start of application/json is preflighted, so it needs this.
-	mux.HandleFunc("OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
-	mux.HandleFunc("OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+	// A preflight carries no credentials by definition, so it is public with them.
+	mountFunc(accessPublic, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
 
-	// The embedded UI is the catch-all; the more specific API patterns above win
-	// under net/http's precedence rules.
+	// The embedded UI is the catch-all; the more specific patterns above win under
+	// net/http's precedence rules. Static assets, and the login screen has to load.
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
 		// webFS is compiled in, so this only fails on a broken build.
 		panic("api: embedded web assets missing: " + err.Error())
 	}
-	mux.Handle("/", revalidated(sub, http.FileServerFS(sub)))
+	mount(accessPublic, "/", revalidated(sub, http.FileServerFS(sub)))
 
-	// Resolve a Principal for every request and, when enforcement is on, gate the
-	// mutating /api/v1 surface behind a valid session (ADR-0044). With auth off
-	// (the default) this is a transparent pass-through.
-	return s.withAuth(mux)
+	return mux, policy
 }
 
 // readStats reads the live instance counts. It must be called on the run-loop

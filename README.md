@@ -33,10 +33,12 @@ Atlas is a single self-contained binary — engine, HTTP API, and the whole web 
 ```bash
 tar -xzf atlas_0.4.0_linux_amd64.tar.gz
 ./atlas_0.4.0_linux_amd64/atlas serve --data-dir ./atlas-data
-# open http://127.0.0.1:8080/
+# open http://127.0.0.1:8080/ and sign in
 ```
 
 That's the whole setup. No SQL schema to migrate, no broker to provision, no sidecar.
+
+**A login is required by default.** On the first start Atlas creates one administrator and logs a generated password **once** — copy it out of the startup output, or set `ATLAS_ADMIN_PASSWORD` beforehand to choose your own. To poke around without any of that, `--auth=false` runs the server open; it says so loudly at startup, and it is for a laptop, not for anything reachable by anyone else.
 
 **[Installation guide](docs/install.md)** — the step-by-step version: Linux with a systemd unit, Windows Server, macOS, turning on authentication, TLS, backups, upgrades, and the full flag and environment-variable reference. For containers and Kubernetes see **[Deploying Atlas](deploy/)**.
 
@@ -123,7 +125,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 ## Built to be driven by an agent
 
 ```bash
-atlas mcp --server http://localhost:8080
+atlas mcp --server http://localhost:8080          # --token, or ATLAS_TOKEN, when the server requires a login
 ```
 
 Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 65 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, and runtime inspection. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).

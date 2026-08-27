@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/mail"
@@ -454,8 +455,10 @@ func splitConnectorList(v string) []string {
 // into "Atlas starts a worker that cannot do anything" on every authenticated
 // server, which is the worst kind of default.
 //
-// It is this server's own internal token (ADR-0049), the same one the MCP adapter
-// uses over loopback. That is the right credential for the same reason the mail
+// It is this server's own internal token (ADR-0049). The MCP adapter used to share
+// it and no longer does — it forwards its caller's credential instead — so a
+// supervised worker is now the only holder. That is the right credential for the
+// same reason the mail
 // configuration is: a supervised worker is this process's own child on this host,
 // not a third party, and the token reaches it through its environment rather than
 // argv. The principal it resolves to is deliberately not an admin, and a job is
@@ -463,7 +466,39 @@ func splitConnectorList(v string) []string {
 // still says which worker did what.
 //
 // An operator who set ATLAS_TOKEN themselves keeps it: they have chosen an identity
-// for their workers, and silently replacing it would undo that choice.
+// for their workers, and silently replacing it would undo that choice. **That value
+// must be one this server accepts** — an API token, ideally scoped `worker`
+// (ADR-0194). It could not be, until API tokens existed: the supervisor
+// honoured the variable while principalFor compared a bearer only against the
+// internal token, so setting it handed every supervised worker a credential that was
+// refused at every poll. checkWorkerTokenEnv says so at startup now, rather than
+// leaving it to be discovered one failing job at a time.
+// checkWorkerTokenEnv warns when an operator has set ATLAS_TOKEN to something this
+// server will not accept. It runs at startup, after the token index is loaded, and
+// changes nothing: the operator's choice is still honoured, because overriding it
+// silently is what the comment above rejects. What it removes is the silence.
+//
+// Only the API-token index is consulted, not the internal token: the internal one
+// is never served over any endpoint, so an operator cannot have obtained it and a
+// match would mean something has gone wrong elsewhere.
+func (s *Server) checkWorkerTokenEnv() {
+	if !s.authEnabled {
+		return
+	}
+	tok := strings.TrimSpace(os.Getenv("ATLAS_TOKEN"))
+	if tok == "" {
+		return
+	}
+	if _, ok := s.apiTokens.match(tok, time.Now().Unix()); ok {
+		return
+	}
+	logging.Warn(logging.AuthWorkerTokenUnknown,
+		"ATLAS_TOKEN is set to a value this server does not accept, and supervised workers "+
+			"are given it instead of this server's own token — they will be refused at every "+
+			"poll. Mint an API token with scope \"worker\" and set ATLAS_TOKEN to that, or "+
+			"unset it and let the server hand its workers their credential")
+}
+
 func (s *Server) workerTokenEnv() []string {
 	if !s.authEnabled || s.internalToken == "" {
 		return nil
@@ -538,6 +573,20 @@ func (s *Server) doAndRefresh(fn func()) {
 func (s *Server) adWorkerEnv() []string {
 	var env []string
 	s.do(func() {
+		// The Console's mockup switch, when an operator has decided there
+		// (ADR-0193). No stored record renders nothing, so a
+		// server started with ATLAS_AD_MOCK by hand keeps deciding for itself; a
+		// stored one decides either way, because a switch that says "off" while the
+		// worker still simulates would be lying to the person who flipped it.
+		if a, stored, err := s.settings.getADMock(); err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the AD mockup switch for a supervised worker",
+				slog.String("error", err.Error()))
+		} else if stored {
+			env = append(env, adMockEnv+"="+boolEnv(a.Enabled))
+			if seed := strings.TrimSpace(a.Seed); seed != "" && a.Enabled {
+				env = append(env, adMockSeedEnv+"="+seed)
+			}
+		}
 		keys := make([]uint64, 0, len(s.deployments))
 		for key := range s.deployments {
 			keys = append(keys, key)
@@ -605,4 +654,21 @@ func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
 		}
 	}
 	return out
+}
+
+// Environment variables the AD worker reads its mockup configuration from. They are
+// the same names an operator sets by hand for an external worker (ADR-0181) — there
+// is no private channel between a supervised worker and its parent, so what the
+// Console writes and what a hand-run worker reads are one contract.
+const (
+	adMockEnv     = "ATLAS_AD_MOCK"
+	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
+)
+
+// boolEnv renders a switch as the yes/no the worker parses.
+func boolEnv(on bool) string {
+	if on {
+		return "1"
+	}
+	return "0"
 }

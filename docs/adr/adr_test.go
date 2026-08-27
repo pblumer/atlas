@@ -352,3 +352,53 @@ func TestRecordSlugsAreUnique(t *testing.T) {
 		}
 	}
 }
+
+// TestNoWorkflowFileCitesADraft keeps the numbering mechanism able to run.
+//
+// The rewrite in number.go treats .yml as citable, and .github/workflows is not a
+// skipped tree, so a draft citation in a workflow file makes the numbering commit
+// touch that file. GITHUB_TOKEN may not: GitHub refuses a push from a GitHub App
+// that "creates or updates" a workflow without the `workflows` permission, and the
+// numbering job deliberately does not hold it — a job that commits to main
+// unreviewed should not be able to rewrite the definitions of CI itself.
+//
+// It is a sharp edge because nothing about writing the citation looks wrong. The
+// job numbers the records, regenerates the feed, verifies the result, and only then
+// fails on the push — so main keeps the drafts, and every later merge fails the same
+// way until somebody removes the citation. It happened once, to a comment in
+// helm.yml explaining why the chart's default render is the authenticated one.
+//
+// A numbered citation is fine, and stays useful: a number is never reassigned, so
+// nothing rewrites it. Only the draft form is a problem, and only until it is
+// numbered — which is exactly when the damage is done.
+func TestNoWorkflowFileCitesADraft(t *testing.T) {
+	dir := filepath.Join("..", "..", ".github", "workflows")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	// Both forms the rewrite replaces: the citation and the link to the file.
+	cite := regexp.MustCompile(`ADR-draft-[a-z0-9-]+`)
+	link := regexp.MustCompile(`draft-[a-z0-9-]+\.md`)
+	seen := 0
+	for _, e := range entries {
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		if e.IsDir() || !citable[ext] {
+			continue
+		}
+		seen++
+		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		for _, m := range append(cite.FindAllString(string(body), -1), link.FindAllString(string(body), -1)...) {
+			t.Errorf("%s cites %s. The numbering job rewrites that citation, which makes its commit "+
+				"touch a workflow file, which GITHUB_TOKEN may not push — so every merge to main would "+
+				"leave the records unnumbered. Name the decision in prose here, or cite it by number "+
+				"once it has one.", e.Name(), m)
+		}
+	}
+	if seen == 0 {
+		t.Fatalf("no workflow files found under %s; this guard would pass vacuously", dir)
+	}
+}
