@@ -32,11 +32,14 @@
 >   so an operator who adds a Helix instance in the Console gets a worker that can file
 >   against it without setting anything by hand. A connector with no endpoint, or whose
 >   bundle is missing or half-filled, is left out rather than handed over incomplete.
-> - **What did not change.** The model is byte-identical, the in-process handler remains
->   and is still what a default server runs, and the default offload set is untouched:
->   an operator moves the kind with `--offload-connectors remedy` (a worker they run) or
->   `--supervise-connector remedy` (one Atlas starts). Whether Remedy should be offloaded
->   *by default* is a separate decision, as it was for AD ([ADR-0182](0182-ad-default-offload.md)).
+> - **What did not change.** The model is byte-identical, and the in-process handler
+>   remains — it is what `--in-process-connectors` returns to. When this amendment was
+>   written the default offload set was left untouched, because whether Remedy should be
+>   offloaded *by default* was a separate decision, as it was for AD
+>   ([ADR-0182](0182-ad-default-offload.md)). That decision has since been taken in
+>   [the record on defaulting this kind](0192-remedy-default-offload.md): Remedy is now
+>   in `DefaultOffloadedKinds()`, so Atlas supervises the worker itself unless an
+>   operator opts out.
 >
 > The payoff is the one the ADR's own trade-off list could not offer: an AR System
 > reachable only from inside a customer's network can now be served by a worker sitting

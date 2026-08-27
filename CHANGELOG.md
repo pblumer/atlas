@@ -216,12 +216,15 @@ _Changed_ / _Removed_ for each version.
   kind it serves. A worker holding no instance at all parks Remedy tasks instead of leasing
   and failing them.
 
-  **Nothing needs to be done to upgrade**, and nothing changes in any model. The
-  in-process handler remains and is still what a default server runs; the kind moves with
-  `--offload-connectors remedy` (a worker you run) or `--supervise-connector remedy` (one
-  Atlas starts for you). The payoff is an AR System reachable only from inside a customer's
-  network: a worker sitting there can now serve it, and the service account can live only
-  in that worker.
+  **Atlas runs that worker itself, by default** (ADR-0192). The kind
+  was opt-in only for as long as there was no worker to hand the credentials to; with the
+  handover built, that reason is gone, and a ticket create leaves the engine's loop on every
+  installation rather than only where somebody moved it by hand. **Nothing needs to be done
+  to upgrade** and nothing changes in any model — the same connector, built from the same
+  three values, resolved in a different process — and `--in-process-connectors` returns the
+  old arrangement wholesale. The payoff is an AR System reachable only from inside a
+  customer's network: a worker sitting there can serve it, and the service account can live
+  only in that worker rather than in the engine.
 
 ## [0.4.0] — 2026-08-26
 
