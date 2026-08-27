@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "A stuck instance can now be repaired, not just retried: open the incident, correct the process variables, and resolve it in one step. The change is recorded with your name.",
+    "de": "Eine hängende Instanz lässt sich jetzt reparieren, nicht nur erneut versuchen: Incident öffnen, die Prozessvariablen korrigieren und in einem Schritt auflösen. Die Änderung wird mit Ihrem Namen protokolliert."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations › Incidents (or the step-by-step replay of the instance).",
+      "On the stuck incident, click ✎ Fix variables…",
+      "Correct the values, tick \"resolve\" if the fix is complete, and save."
+    ],
+    "de": [
+      "Öffnen Sie Betrieb › Incidents (oder das Schritt-für-Schritt-Replay der Instanz).",
+      "Klicken Sie beim hängenden Incident auf ✎ Variablen korrigieren…",
+      "Werte anpassen, „auflösen\" ankreuzen wenn die Korrektur vollständig ist, und speichern."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Incidents",
+      "de": "Incidents öffnen"
+    },
+    "route": "#/operations/incidents"
+  }
+}

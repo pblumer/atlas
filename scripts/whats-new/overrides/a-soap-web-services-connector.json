@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Call a SOAP web service",
+    "de": "Einen SOAP-Webservice aufrufen"
+  },
+  "summary": {
+    "en": "Older systems that only offer SOAP can now be called directly from a process: you author the request, and the connector handles the envelope, the version-specific headers and the fault handling. A fault comes back as the task's failure reason, so it is visible where every other problem is.",
+    "de": "Ältere Systeme, die nur SOAP anbieten, lassen sich jetzt direkt aus einem Prozess aufrufen: Sie formulieren die Anfrage, um Envelope, versionsabhängige Header und Fehlerbehandlung kümmert sich der Konnektor. Ein Fault erscheint als Fehlergrund der Aufgabe — also dort, wo auch jedes andere Problem sichtbar wird."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

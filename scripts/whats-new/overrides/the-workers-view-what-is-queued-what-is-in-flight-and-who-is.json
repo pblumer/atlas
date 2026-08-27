@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "See what is queued, and who is working on it",
+    "de": "Sehen, was wartet — und wer daran arbeitet"
+  },
+  "summary": {
+    "en": "A new Workers view in Operations shows every job type with how much is waiting, how much is being worked on right now, and which workers are doing it. The case it is built to make obvious is the one that used to be invisible: a queue that keeps growing with nothing in flight and no worker behind it. Open a worker to see the jobs it ran, and restart one Atlas supervises.",
+    "de": "Die neue Ansicht „Workers“ in Operations zeigt zu jedem Aufgabentyp, wie viel wartet, wie viel gerade bearbeitet wird und welche Worker das tun. Sichtbar werden soll vor allem der Fall, den man bisher gar nicht sehen konnte: eine wachsende Warteschlange, an der nichts in Arbeit ist und hinter der kein Worker steht. Ein Klick auf einen Worker zeigt die Jobs, die er ausgeführt hat; einen von Atlas überwachten Worker können Sie dort neu starten."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}

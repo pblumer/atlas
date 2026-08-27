@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "The MCP connection needs a login — and acts as its caller",
+    "de": "Der MCP-Zugang verlangt eine Anmeldung — und handelt als sein Aufrufer"
+  },
+  "summary": {
+    "en": "Atlas offers its features to AI assistants over MCP, and that connection sat outside the login: it was mounted beside the API server, so the check never saw it, while the adapter attached the server's own internal credential to everything it did. `--auth` therefore did not close it — it supplied it. Anything that could reach the port drove all 71 tools as the server itself, deploying among them, and deploying runs script tasks. It is now mounted by the API server and gated like every other route. It also carries no identity of its own any more: it forwards whatever the request arrived with, so a tool call is exactly as privileged as the person or token that made it, is attributed to them, and inherits every rule the API has — an administrator reaches an admin-only tool, a signed-in ordinary user does not, and a deploy token is refused outright. Breaking on a server with a login: an MCP client must now send the session cookie or a bearer token.",
+    "de": "Atlas bietet seine Funktionen KI-Assistenten über MCP an — und dieser Zugang lag ausserhalb der Anmeldung: Er hing neben dem API-Server, sodass die Prüfung ihn nie zu sehen bekam, während der Adapter allem, was er tat, die interne Kennung des Servers mitgab. `--auth` schloss ihn also nicht, sondern versorgte ihn. Wer den Port erreichte, bediente alle 71 Werkzeuge als der Server selbst, das Deployen eingeschlossen — und Deployen führt Skript-Aufgaben aus. Der Zugang wird jetzt vom API-Server selbst bereitgestellt und wie jede andere Route geschützt. Und er bringt keine eigene Identität mehr mit: Er reicht weiter, womit die Anfrage angekommen ist. Ein Werkzeugaufruf hat damit genau die Rechte dessen, der ihn ausgelöst hat, wird ihm zugeschrieben und erbt jede Regel der API — ein Administrator erreicht ein Administrator-Werkzeug, ein angemeldeter gewöhnlicher Benutzer nicht, und ein Deploy-Token wird rundheraus abgewiesen. Auf einem Server mit Anmeldung brechend: Ein MCP-Client muss jetzt das Sitzungs-Cookie oder ein Bearer-Token mitschicken."
+  }
+}

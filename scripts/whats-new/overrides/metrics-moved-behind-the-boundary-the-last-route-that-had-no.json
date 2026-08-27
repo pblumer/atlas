@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "The monitoring endpoint asks for a credential now",
+    "de": "Der Monitoring-Endpunkt verlangt jetzt einen Zugang"
+  },
+  "summary": {
+    "en": "`/metrics` was the last address on the server that anybody could read without presenting anything — for a plain reason: until now a monitoring scraper had nothing it could present. With API tokens it does, so the exposition is gated like every other route, and a token scope named `metrics` reaches exactly this one address and nothing else. Worth being plain about the size of this: what `/metrics` carries is instance counts, batch times and queue depth — no process data and no business data. What it buys is that \"nothing here is reachable without a credential\" is now true without an exception. Breaking: every existing scrape configuration needs the token added, which for Prometheus is two lines. The health probes stay open, because a readiness check that needs a credential is useless in the incident it exists for.",
+    "de": "`/metrics` war die letzte Adresse dieses Servers, die jeder ohne Ausweis lesen konnte — aus einem einfachen Grund: Ein Monitoring-Scraper hatte bisher nichts, was er hätte vorzeigen können. Mit API-Tokens hat er es, und deshalb liegt die Metrik-Ausgabe jetzt hinter derselben Anmeldung wie jede andere Route; ein Token-Scope namens `metrics` erreicht genau diese eine Adresse und sonst nichts. Zur Grössenordnung, ganz offen: Was unter `/metrics` steht, sind Instanzzahlen, Batch-Zeiten und Warteschlangenlängen — keine Prozessdaten, keine Geschäftsdaten. Der Gewinn ist, dass „nichts ist ohne Zugang erreichbar\" jetzt ohne Fussnote stimmt. Brechend: Jede bestehende Scrape-Konfiguration braucht das Token — bei Prometheus sind das zwei Zeilen. Die Health-Probes bleiben offen, denn eine Bereitschaftsprüfung, die einen Zugang braucht, hilft in genau dem Vorfall nicht, für den es sie gibt."
+  }
+}

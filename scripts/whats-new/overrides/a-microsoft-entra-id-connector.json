@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Microsoft Entra ID as ready-made process steps",
+    "de": "Microsoft Entra ID als fertige Prozessschritte"
+  },
+  "summary": {
+    "en": "The same idea for the cloud directory: create, read, update or delete a user, enable or disable an account, and add or remove a group member in Entra ID (formerly Azure AD) — you pick the operation, and the connector knows the Graph call behind it. The credentials for it live on the worker, so Atlas itself never holds an app registration that could disable accounts across your whole tenant.",
+    "de": "Dasselbe Prinzip für das Cloud-Verzeichnis: Benutzer anlegen, lesen, ändern oder löschen, Konten aktivieren oder deaktivieren und Gruppenmitglieder hinzufügen oder entfernen in Entra ID (früher Azure AD) — Sie wählen die Operation, den passenden Graph-Aufruf kennt der Konnektor. Die Zugangsdaten liegen auf dem Worker; Atlas selbst hält also keine App-Registrierung, mit der sich Konten im gesamten Tenant deaktivieren ließen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

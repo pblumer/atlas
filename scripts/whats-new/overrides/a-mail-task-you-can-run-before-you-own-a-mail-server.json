@@ -1,0 +1,16 @@
+{
+  "tags": [
+    "Connectors"
+  ],
+  "summary": {
+    "en": "You can try out a mail step without setting up a real mail server first — a built-in preview provider captures the message so you can see what would be sent.",
+    "de": "Sie können einen Mail-Schritt ausprobieren, ohne zuerst einen echten Mailserver einzurichten — ein eingebauter Vorschau-Provider fängt die Nachricht ab, damit Sie sehen, was gesendet würde."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Outbox",
+      "de": "Postausgang öffnen"
+    },
+    "route": "#/operations/outbox"
+  }
+}

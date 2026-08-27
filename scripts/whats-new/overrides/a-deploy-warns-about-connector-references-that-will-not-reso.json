@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "Modeler"
+  ],
+  "summary": {
+    "en": "Publishing a model that points at a connector which does not exist yet no longer fails silently later — the Modeler shows a warning right next to the success message.",
+    "de": "Ein Modell zu veröffentlichen, das auf einen noch nicht vorhandenen Connector verweist, scheitert nicht mehr stumm erst später — der Modeler zeigt die Warnung direkt neben der Erfolgsmeldung."
+  }
+}

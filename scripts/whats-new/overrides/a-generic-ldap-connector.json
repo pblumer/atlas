@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Any LDAP directory, from a process",
+    "de": "Jedes LDAP-Verzeichnis, direkt aus einem Prozess"
+  },
+  "summary": {
+    "en": "Search, add, modify and delete entries, or change a password, in any LDAP directory. Searches are paged and bounded, so a directory answering with fifty thousand entries neither overwhelms the worker nor quietly returns half an answer, and a modify can change a single value instead of replacing a whole attribute. Sign in anonymously, with a stored password, or with a client certificate.",
+    "de": "Einträge in beliebigen LDAP-Verzeichnissen suchen, anlegen, ändern und löschen oder ein Passwort setzen. Suchen laufen seitenweise und begrenzt, damit ein Verzeichnis mit fünfzigtausend Treffern den Worker weder überlastet noch stillschweigend nur die Hälfte liefert, und eine Änderung kann einen einzelnen Wert betreffen statt ein ganzes Attribut zu ersetzen. Die Anmeldung erfolgt anonym, mit hinterlegtem Passwort oder per Client-Zertifikat."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

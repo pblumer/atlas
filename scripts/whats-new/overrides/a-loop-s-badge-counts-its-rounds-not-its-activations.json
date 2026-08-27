@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "A loop's badge says how often it ran",
+    "de": "Der Zähler an einer Schleife sagt, wie oft sie lief"
+  },
+  "summary": {
+    "en": "The number at the corner of a looping task counted one more than the rounds it ran: the engine enters the activity once as the loop itself and once per round, and the badge showed both. It now says the round count, marked with the loop symbol — and 0 for a loop that was reached but ran nothing, which is the case most worth noticing.",
+    "de": "Die Zahl an der Ecke eines Schleifen-Tasks zählte einen mehr als die tatsächlichen Durchläufe: Die Engine betritt die Aktivität einmal als Schleife selbst und einmal je Durchlauf, und der Zähler zeigte beides. Jetzt steht dort die Anzahl der Durchläufe, mit dem Schleifensymbol gekennzeichnet — und 0 bei einer Schleife, die erreicht wurde, aber nichts ausgeführt hat; genau der Fall, den man sehen will."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Query a database from a process",
+    "de": "Aus einem Prozess eine Datenbank abfragen"
+  },
+  "summary": {
+    "en": "Microsoft SQL Server, MariaDB and PostgreSQL each get their own connector: read rows into a variable, read a single row, or run a statement and get back how many rows it changed. Values are passed as parameters rather than pasted into the statement. The connection details live on the worker, so a database password never reaches the model or the engine.",
+    "de": "Microsoft SQL Server, MariaDB und PostgreSQL bekommen jeweils einen eigenen Konnektor: Zeilen in eine Variable lesen, eine einzelne Zeile lesen oder eine Anweisung ausführen und die Zahl der geänderten Zeilen zurückbekommen. Werte werden als Parameter übergeben und nicht in die Anweisung hineingeschrieben. Die Verbindungsdaten liegen auf dem Worker, ein Datenbankpasswort erreicht also weder das Modell noch die Engine."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

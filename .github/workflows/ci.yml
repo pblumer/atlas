@@ -53,7 +53,7 @@ jobs:
           node scripts/whats-new/gen.mjs
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
-            echo "(Add curated DE/EN prose in scripts/whats-new/overrides.json — see scripts/whats-new/README.md.)"
+            echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
             git --no-pager diff -- api/web/whats-new.json
             exit 1
           fi

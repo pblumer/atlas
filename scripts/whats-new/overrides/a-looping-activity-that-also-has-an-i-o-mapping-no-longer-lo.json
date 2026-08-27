@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Operations"
+  ],
+  "title": {
+    "en": "A loop stops at the maximum you set",
+    "de": "Eine Schleife hält bei dem Maximum, das Sie setzen"
+  },
+  "summary": {
+    "en": "An activity with the loop marker that also mapped a value in had lost count of its own rounds: a task set to run at most nine times ran until somebody cancelled the instance, a collection was worked through one element over and over, and what the rounds produced never reached the process. The rounds are counted again — the maximum holds, the collection advances, and the result of the last run is there when the loop ends.",
+    "de": "Eine Aktivität mit Schleifen-Marker, die zusätzlich einen Wert per Mapping hereinreichte, verlor die Zählung ihrer Durchläufe: Ein Task mit höchstens neun Läufen lief, bis jemand die Instanz abbrach, eine Sammlung wurde immer wieder mit demselben Element abgearbeitet, und was die Durchläufe erzeugt hatten, kam nie im Prozess an. Die Durchläufe werden wieder gezählt — das Maximum greift, die Sammlung läuft weiter, und das Ergebnis des letzten Laufs steht am Ende der Schleife bereit."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

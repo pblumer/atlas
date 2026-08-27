@@ -11,14 +11,14 @@ with a per-visitor toggle.
 ```
 CHANGELOG.md ──┐
                ├─► gen.mjs ──► api/web/whats-new.json ──► app.js renderWhatsNew()
-overrides.json ┘
+overrides/*.json ┘
 ```
 
 - **`CHANGELOG.md` is the source of truth.** `gen.mjs` reads its version sections and
   `Added` / `Changed` / `Fixed` bullets and derives each entry's structure: a stable
   id (the title slug), the headline, the version/date, and a link to the ADR or PR the
   bullet names. New CHANGELOG entries appear automatically.
-- **`overrides.json` adds the human polish.** Keyed by the derived id, it supplies the
+- **`overrides/` adds the human polish.** One file per entry, named `<id>.json`, supplying the
   layman-friendly, bilingual summary, tags, an optional tutorial, and an optional
   "Try it" route — none of which belong in the developer-facing CHANGELOG. It can also
   `hidden: true` a purely internal/API bullet so it stays out of the user list.
@@ -35,15 +35,17 @@ overrides.json ┘
    ```
    Look up the entry's `id` in `api/web/whats-new.json`.
 3. (Optional but recommended for anything a user should notice) add an override in
-   `overrides.json` under that id — **copy it, don't retype it.** The id is the
+   `overrides/<id>.json` — **copy the id, don't retype it.** The id is the
    headline slugified and cut to 60 characters, so a hand-typed key is easy to get one
    character wrong, and a key that matches nothing is not an error the entry shows:
    it renders from the CHANGELOG's own wording, in English, in both languages. The
    generator refuses an unmatched key for exactly that reason (below). Every field is
    optional:
 
+   The file *is* the entry — its name carries the id, so the object holds only fields:
+
    ```json
-   "the-secrets-panel-says-what-a-value-has-to-be": {
+   {
      "tags": ["Organization", "Secrets"],
      "summary": { "en": "…one or two plain sentences…", "de": "…dito auf Deutsch…" },
      "tutorial": { "en": ["Step 1", "Step 2"], "de": ["Schritt 1", "Schritt 2"] },
@@ -86,6 +88,12 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
   two results is not a function of the merged CHANGELOG — it lands clean, silently
   wrong (an entry duplicated, or one past `MAX_ENTRIES` left in), and main goes red on
   its own push rather than on either branch. So the merge conflicts instead.
+
+  The *overrides* used to have the same edge for a different reason: one JSON object,
+  every branch adding its key at the top, and git interleaving two insertions into a
+  single wrong entry. They are one file per entry now, so two branches adding two
+  entries touch two files and merge cleanly. Two branches editing the same entry still
+  conflict — in a small file, where that is the honest answer.
 
   **If you hit that conflict, do not pick a side.** Take the merged `CHANGELOG.md`, then:
 

@@ -1,0 +1,10 @@
+{
+  "tags": [
+    "Operations",
+    "Connectors"
+  ],
+  "summary": {
+    "en": "When a step that calls an external system (a \"connector\", e.g. sending mail) gets stuck, Atlas now tells you the real reason — disabled, misconfigured, or a missing credential — instead of one confusing message.",
+    "de": "Wenn ein Schritt, der ein externes System anspricht (ein „Connector\", z.B. Mailversand), hängen bleibt, nennt Atlas jetzt den echten Grund — deaktiviert, falsch konfiguriert oder fehlende Zugangsdaten — statt einer verwirrenden Sammelmeldung."
+  }
+}
