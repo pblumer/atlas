@@ -402,3 +402,108 @@ func TestNoWorkflowFileCitesADraft(t *testing.T) {
 		t.Fatalf("no workflow files found under %s; this guard would pass vacuously", dir)
 	}
 }
+
+// TestADRDraftAppearsOnlyAsAHeading closes the gap the citation rewrite leaves.
+//
+// rewriteCitations replaces exactly two tokens: `ADR-draft-<slug>` and
+// `draft-<slug>.md`. A Markdown link written as
+// `[ADR-DRAFT: Title](docs/adr/draft-slug.md)` therefore has its *href* rewritten
+// when the record lands on main and its *label* left untouched — so the file goes
+// on calling a numbered, accepted decision a draft, and nothing notices. That is
+// not hypothetical: ROADMAP.md's Milestone P pointed at
+// 0189-panorama-architecture-modeling-and-live-overlays.md under the label
+// "ADR-DRAFT: Panorama architecture modeling and live operational overlays" from
+// the moment that record was numbered until this test was written.
+//
+// So the rule is about the *form*, not about staleness: `ADR-DRAFT` is refused in
+// prose everywhere, before numbering as much as after, because there is no way to
+// write it that survives. Two uses remain, and they are the two the numbering can
+// finish or does not touch:
+//
+//   - the `# ADR-DRAFT: Title` heading a record in flight carries, which
+//     number.go rewrites into `# ADR-NNNN: Title`; and
+//   - the form quoted inside a `code span`, which is a quotation of the
+//     convention rather than a citation of a record.
+//
+// `ADR-draft-<slug>` — lowercase, and what README.md § Writing a record tells you
+// to write — is a different token and is not matched here at all.
+func TestADRDraftAppearsOnlyAsAHeading(t *testing.T) {
+	root := filepath.Join("..", "..")
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("expected the repository root two levels up from docs/adr: %v", err)
+	}
+	seen := 0
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !citable[strings.ToLower(filepath.Ext(path))] {
+			return nil
+		}
+		rel := filepath.ToSlash(mustRel(t, root, path))
+		if definesTheDraftConvention(rel) {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		seen++
+		for i, line := range strings.Split(string(body), "\n") {
+			if draftHeading.MatchString(line) {
+				continue
+			}
+			for _, prose := range outsideCodeSpans(line) {
+				if !strings.Contains(prose, "ADR-DRAFT") {
+					continue
+				}
+				t.Errorf("%s:%d writes ADR-DRAFT outside a heading: %q. The numbering rewrites "+
+					"`ADR-draft-<slug>` and `draft-<slug>.md`, not this — so it will still call the "+
+					"record a draft after the record has a number. Cite it as ADR-draft-<slug> (or by "+
+					"number once it has one), and quote the form in backticks if you mean to name it.",
+					rel, i+1, strings.TrimSpace(line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk repository: %v", err)
+	}
+	if seen == 0 {
+		t.Fatal("no citable files walked; this guard would pass vacuously")
+	}
+}
+
+// definesTheDraftConvention reports whether a file spells the draft form out
+// because it *is* the mechanism, rather than citing a record with it: the Go
+// files in this directory (the heading regex, the error messages that quote it,
+// and the fixtures that prove the rewrite) and the template every record is
+// copied from. The same carve-out, for the same reason, as the one
+// TestCitationsResolveAcrossTheRepository makes for docs/adr/*.go.
+func definesTheDraftConvention(rel string) bool {
+	if rel == "docs/adr/template.md" {
+		return true
+	}
+	return strings.HasPrefix(rel, "docs/adr/") && strings.HasSuffix(rel, ".go")
+}
+
+// outsideCodeSpans returns the parts of one line that are not inside a backtick
+// code span. Splitting on the backtick, the even-indexed segments are the prose
+// and the odd-indexed ones are the spans — so a line quoting the convention is
+// read as the quotation it is. A span left unclosed on its line degrades to
+// "everything after the backtick is a span", which fails open on formatting the
+// author can see rather than reporting a citation that is not there.
+func outsideCodeSpans(line string) []string {
+	parts := strings.Split(line, "`")
+	prose := make([]string, 0, (len(parts)+1)/2)
+	for i := 0; i < len(parts); i += 2 {
+		prose = append(prose, parts[i])
+	}
+	return prose
+}
