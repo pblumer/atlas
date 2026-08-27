@@ -39,7 +39,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
-| **M11** — Berechtigungen auf Konnektor-Ebene | 🔲 offen — Konzept und Entwurf [`ADR-draft-connector-ownership-and-event-delivery`](../adr/draft-connector-ownership-and-event-delivery.md); siehe 3/M11 |
+| **M11** — Berechtigungen auf Konnektor-Ebene | 🔲 offen — Konzept und Entwurf [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md); siehe 3/M11 |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -596,7 +596,7 @@ Nachrichten-Startereignis `mail-eingegangen` heisst — und meine Ereignisse sta
 ihn, weil der Name der ganze Schlüssel ist.
 
 **Vorschlag** (Entwurf:
-[`ADR-draft-connector-ownership-and-event-delivery`](../adr/draft-connector-ownership-and-event-delivery.md)):
+[`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md)):
 
 1. **Der Konnektor bekommt die drei Felder, die ein Projekt schon hat** —
    `ownerId`, `visibility`, `members[{ref, role}]` aus ADR-0071. Wörtlich
@@ -826,7 +826,7 @@ Neu und noch offen:
   Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
   sich für die neuen öffentlichen Routen auf die Zugriffsklassen aus ADR-0199 sowie
   für deren Drosselung und Protokollierung auf ADR-0197.
-- 🔲 [`draft-connector-ownership-and-event-delivery.md`](../adr/draft-connector-ownership-and-event-delivery.md)
+- 🔲 [`0205-connector-ownership-and-event-delivery.md`](../adr/0205-connector-ownership-and-event-delivery.md)
   — M11. Trägt die Freigabe-Sprache aus ADR-0071 und die Gruppen aus ADR-0180 auf
   den Konnektor und auf die Zustellung seiner Ereignisse. Er nimmt ADR-0071 seine
   Linie nicht weg: die Isolation *in* der Engine bleibt ausdrücklich ein eigener,

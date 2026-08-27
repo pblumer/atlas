@@ -1,4 +1,4 @@
-# ADR-DRAFT: Who owns a connector, and who may use the events it brings in
+# ADR-0205: Who owns a connector, and who may use the events it brings in
 
 - **Status:** Proposed
 - **Date:** 2026-08-27
