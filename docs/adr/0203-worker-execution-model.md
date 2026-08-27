@@ -1,4 +1,4 @@
-# ADR-DRAFT: Worker execution model and integration terminology
+# ADR-0203: Worker execution model and integration terminology
 
 - **Status:** Proposed
 - **Date:** 2026-08-27
