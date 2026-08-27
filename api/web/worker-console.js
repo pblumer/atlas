@@ -33,11 +33,28 @@
     if (node && node.textContent && node.textContent.trim() === from) node.textContent = to;
   }
 
+  function replaceHTML(node, html) {
+    if (node && node.innerHTML !== html) node.innerHTML = html;
+  }
+
   function patchNavigation() {
     for (const link of document.querySelectorAll(`a[href="${LEGACY}"]`)) {
       link.setAttribute("href", WORKERS);
-      if (link.closest("#topnav")) link.textContent = "Workers";
+      if (link.closest("#topnav") && link.textContent !== "Workers") link.textContent = "Workers";
       if (link.textContent.trim() === "Configure connector ↗") link.textContent = "Configure worker ↗";
+    }
+  }
+
+  function patchWorkerForm(view) {
+    const form = view.querySelector(".connector-form");
+    if (!form) return;
+    const kind = form.querySelector('select[name="kind"]');
+    const kindLabel = kind && kind.closest("label") && kind.closest("label").querySelector("span");
+    replaceText(kindLabel, "Kind", "Worker type");
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit && submit.textContent.trim() === "Add") {
+      submit.textContent = "Add worker";
+      submit.title = "Add this configured worker";
     }
   }
 
@@ -48,7 +65,7 @@
     const heading = [...view.querySelectorAll("h1")]
       .find((h) => h.textContent.trim() === "Connectors" || h.textContent.trim() === "Workers");
     if (!heading) return false;
-    heading.textContent = "Workers";
+    replaceText(heading, "Connectors", "Workers");
 
     const catalogCard = heading.closest(".card");
     if (catalogCard) {
@@ -62,9 +79,8 @@
         if (intro) catalogCard.insertBefore(catalogTitle, intro);
       }
       const intro = catalogCard.querySelector("p.muted");
-      if (intro) {
-        intro.innerHTML = "Worker Types available to this Atlas instance. A Worker Type defines a capability; configured workers below bind that capability to a concrete target and identity.";
-      }
+      replaceHTML(intro,
+        "Worker Types available to this Atlas instance. A Worker Type defines a capability; configured workers below bind that capability to a concrete target and identity.");
     }
 
     for (const h2 of view.querySelectorAll("h2")) {
@@ -73,8 +89,8 @@
 
     const newWorker = document.getElementById("new-connector");
     if (newWorker) {
-      newWorker.textContent = "New worker";
-      newWorker.title = "Configure a new worker";
+      if (newWorker.textContent !== "New worker") newWorker.textContent = "New worker";
+      if (newWorker.title !== "Configure a new worker") newWorker.title = "Configure a new worker";
     }
 
     const configured = [...view.querySelectorAll("h2")]
@@ -82,9 +98,8 @@
     const configuredCard = configured && configured.closest(".card");
     if (configuredCard) {
       const intro = configuredCard.querySelector("p.muted");
-      if (intro) {
-        intro.innerHTML = "Configured workers bind a <b>Worker Type</b> to a concrete endpoint and identity. The existing connector API remains the compatibility layer during the ADR-0203 migration; credentials stay referenced, never embedded in process models.";
-      }
+      replaceHTML(intro,
+        "Configured workers bind a <b>Worker Type</b> to a concrete endpoint and identity. The existing connector API remains the compatibility layer during the ADR-0203 migration; credentials stay referenced, never embedded in process models.");
       const firstHeader = configuredCard.querySelector("thead th");
       replaceText(firstHeader, "Connector", "Worker");
     }
@@ -94,11 +109,15 @@
     if (secretsCard) {
       const intro = secretsCard.querySelector("p.muted");
       if (intro && /connector/i.test(intro.textContent)) {
-        intro.innerHTML = "Credentials referenced by configured workers, sealed at rest with AES-256-GCM. Values are never shown after they are set. During the compatibility window the existing <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code> fallback remains supported.";
+        replaceHTML(intro,
+          "Credentials referenced by configured workers, sealed at rest with AES-256-GCM. Values are never shown after they are set. During the compatibility window the existing <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code> fallback remains supported.");
       }
     }
 
-    document.title = document.title.replace(/^Connectors · Console/, "Workers · Console");
+    patchWorkerForm(view);
+    if (document.title.startsWith("Connectors · Console")) {
+      document.title = document.title.replace(/^Connectors · Console/, "Workers · Console");
+    }
     return true;
   }
 
@@ -109,8 +128,8 @@
     // Do not publish the Workers hash until app.js has actually entered its legacy
     // connector route. The nav entry is rendered by setChrome after route() captured
     // the legacy path, so seeing it is the safe hand-off point.
-    const legacyNav = document.querySelector(`#topnav a[href="${WORKERS}"]`);
-    if (workerRoute && legacyNav) {
+    const workerNav = document.querySelector(`#topnav a[href="${WORKERS}"]`);
+    if (workerRoute && workerNav) {
       patchWorkerPage();
       if (location.hash === LEGACY) history.replaceState(null, "", WORKERS);
     }
