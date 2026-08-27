@@ -38,8 +38,13 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
+| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | 🔲 offen — Entwurf [`ADR-draft-mcp-oauth-resource-server`](../adr/draft-mcp-oauth-resource-server.md) |
 
-**Alle acht Massnahmen sind umgesetzt. R-08 ist grün.**
+**Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
+
+M10 kam später dazu und ist keine Lücke in R-08: Jede Schnittstelle verlangt einen
+Prinzipal. Sie ist die Antwort auf einen Fall, den M2 und M4 nicht bedacht haben —
+einen Client, den niemand konfigurieren kann, weil er bei einem Dritten läuft.
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -156,6 +161,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M7 ✅ | Anmelde-Härtung: Drosselung je Adresse *und* je Konto | S | O-04, R-12 | — |
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
+| M10 | OAuth-Ressourcenserver für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -365,13 +371,82 @@ Vier Rollen statt einer: `admin`, `modeler` (Design-Time und Deploy), `operator`
 «jeder Angemeldete darf deployen» auf einer Produktion die falsche Vorgabe. Details
 in O-02; wegen G4 gilt jede Regel automatisch auch für MCP.
 
+### M10 — OAuth-Ressourcenserver, damit ein gehosteter MCP-Client anschliessen kann *(offen)*
+
+M2 hat `/mcp` hinter die Grenze gebracht und M4 dem stdio-Adapter ein Credential
+gegeben. Der Fall, den beide nicht abdecken: ein **gehosteter** Client. Ein
+Connector auf claude.ai — oder irgendeine Agentenplattform, die den Server aus
+ihrer eigenen Infrastruktur heraus im Auftrag einer Person erreicht, die im
+Browser sitzt — hat keinen Ort für einen Bearer-Token. Sein Dialog bietet eine URL
+und, unter «Erweitert», optional eine OAuth-Client-ID und ein Client-Geheimnis.
+Sonst nichts.
+
+Das ist kein Gedankenspiel: Ein laufender Connector gegen eine Atlas-Instanz hörte
+in dem Moment auf zu funktionieren, als die Anmeldung kam. Der Client bekam `401`,
+las `WWW-Authenticate: Bearer realm="atlas"`, fand keinen Verweis auf irgendetwas,
+riet `/authorize` — und bekam `404`, was richtig ist, weil Atlas diese Route nicht
+bedient.
+
+Der Kern der Lücke ist schärfer als «MCP über HTTP braucht ein Credential», was M2
+gelöst hat: **Ein API-Token ist ein Credential für eine Maschine, die ein Mensch
+konfiguriert. Ein gehosteter Client ist eine Maschine, die niemand konfigurieren
+kann.** Die Person kann nur «Verbinden» drücken. Ihr stattdessen ein Token in die
+Hand zu geben hiesse, einen langlebigen Bearer auszustellen, der danach in der
+Konfiguration eines Dritten liegt und für jeden lesbar ist, der diese
+Konfiguration lesen darf — das Gegenteil dessen, wofür M3 gebaut wurde.
+
+**Was die Spezifikation verlangt** (MCP-Autorisierung, Revisionen 2025-06-18 und
+2025-11-25): Der MCP-Server ist ein OAuth-**Ressourcenserver**; er nimmt Tokens
+entgegen, er muss sie nicht ausstellen. Verbindlich sind vor allem drei Dinge —
+Metadaten des geschützten Ressourcenservers nach RFC 9728, per
+`WWW-Authenticate`-Verweis auf dem `401` oder als Well-Known-URI; Prüfung der
+Token-Zielgruppe nach RFC 8707 (ein Token für eine andere Ressource wird
+abgewiesen, und Weiterreichen empfangener Tokens ist ausdrücklich verboten); und
+PKCE mit `S256`, wobei der Client `code_challenge_methods_supported` prüfen
+**muss** und abbrechen muss, wenn das Feld fehlt.
+
+**Was den Umfang entscheidet:** Dynamische Client-Registrierung (RFC 7591) ist
+*optional* — in der November-Revision von SHOULD auf MAY abgeschwächt —, und die
+Reihenfolge, die ein Client einhalten soll, beginnt mit **vorregistrierten
+Zugangsdaten**. Genau dafür hat der Connector-Dialog seine beiden Felder. Atlas
+kann also anschliussfähig werden, **ohne RFC 7591 und ohne CIMD zu bauen**: Ein
+Betreiber legt in der Console einen OAuth-Client an und trägt ID und Geheimnis im
+Dialog ein.
+
+Was dazukommt: zwei Well-Known-Dokumente und der `resource_metadata`-Verweis auf
+dem `401` (die Ressourcenserver-Hälfte, klein und ohnehin geschuldet), sowie
+`/authorize` mit Zustimmungsbildschirm und `/token` (die Autorisierungsserver-
+Hälfte). Der ausgestellte Token trägt eine **Person**, nicht eine Rolle — nur so
+überlebt die Eigenschaft aus M2, dass ein Werkzeugaufruf genau die Rechte dessen
+hat, der ihn ausgelöst hat.
+
+**Ehrlich dazugesagt:** Atlas wird damit zum Autorisierungsserver. Das ist eine
+Schwelle: zwei neue öffentliche Routen, ein Zustimmungsbildschirm, den man richtig
+bauen muss, und Anmelde-Drosselung (M7) und Audit-Log (M8) müssen sie vom ersten
+Commit an abdecken. Ein halb gebauter Autorisierungsserver ist schlechter als
+keiner — heute scheitert ein Client schnell und sichtbar, ein entdeckbarer, aber
+kaputter Ablauf scheitert langsam. Deshalb: die Metadaten-Dokumente erst
+ausliefern, wenn die Endpunkte dahinter funktionieren.
+
+**Warum es Föderation (O-01) nicht erschwert, sondern vorbereitet:** Wenn Atlas
+später an eIAM oder einen anderen OIDC-Anbieter delegiert, zeigen die
+Ressourcenserver-Metadaten woandershin und die Autorisierungsserver-Hälfte wird
+gelöscht. Nichts anderes bewegt sich. Genau deshalb wird die
+Ressourcenserver-Hälfte zuerst gebaut.
+
+Entscheid im Entwurf: [`ADR-draft-mcp-oauth-resource-server`](../adr/draft-mcp-oauth-resource-server.md).
+
 ---
 
 ## 4 Stufenplan
 
-### Stufe 0 — heute, ohne Codeänderung
+### Stufe 0 — der Zustand vor Stufe 1
 
-Was ein Betrieb sofort tun muss, wenn heute ein PoC laufen soll. Die Massnahmen
+*Überholt, hier als Beleg behalten:* Seit Stufe 1 ist `--auth` der Standard und
+sind `/mcp` und `/metrics` vom Produkt selbst geschützt — die Proxy-Regeln unten
+sind Verteidigung in der Tiefe, nicht mehr das, was trägt.
+
+Was ein Betrieb sofort tun musste, wenn damals ein PoC laufen sollte. Die Massnahmen
 stehen ausformuliert im ISDS-Konzept, Kapitel 6.4 (M-01, M-02, M-09, M-13); in
 Kurzform:
 
@@ -407,6 +482,17 @@ M9 (Rollen, O-02) → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
 dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten
 (O-06).
 
+**M10 steht quer dazu** und hat eine eigene Reihenfolge. Seine
+Ressourcenserver-Hälfte — die beiden Well-Known-Dokumente, der
+`resource_metadata`-Verweis auf dem `401`, die Prüfung der Token-Zielgruppe — ist
+klein, ohnehin geschuldet und kann jederzeit vorgezogen werden: Sie macht aus einem
+Client, der rät und mit `404` scheitert, einen, der erfährt, warum er nicht
+weiterkommt. Die Autorisierungsserver-Hälfte ist die eigentliche Schwelle und
+gehört terminlich neben M9 — nicht weil sie davon abhängt, sondern weil beide
+darüber entscheiden, wer im Namen wessen was darf, und man sie besser zusammen
+denkt. Wer zuerst föderiert (O-01), baut die Autorisierungsserver-Hälfte gar nicht:
+Dann zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter.
+
 ---
 
 ## 5 Bewusst nicht im Umfang
@@ -419,6 +505,7 @@ dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender 
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
 | TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
 | Verschlüsselung ruhender Daten (O-06) | Unabhängige Achse; ändert nichts an der Zugriffsfrage. |
+| Dynamische Client-Registrierung (RFC 7591) und CIMD | Teil der MCP-Spezifikation, dort aber *optional* (MAY), und die Reihenfolge beginnt mit vorregistrierten Zugangsdaten. Sie erspart einen Betreiberschritt, sie stellt keine Verbindung her — und ein unauthentisierter Registrierungs-Endpunkt ist ein Entscheid für sich. Folgearbeit zu M10, nicht Teil davon. |
 
 Begründung für den Schnitt: jeder dieser Punkte ist gross, und **keiner ist nötig,
 damit die Aussage «jede Schnittstelle verlangt einen Login» wahr wird.**
@@ -507,6 +594,15 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
 M4 hat keinen eigenen Entscheid: es vervollständigt
 `draft-authenticated-mcp-transport` und steht dort.
+
+Neu und noch offen:
+
+- 🔲 [`draft-mcp-oauth-resource-server.md`](../adr/draft-mcp-oauth-resource-server.md)
+  — M10. Erweitert ADR-0196 um den Fall, den dieser nicht bedacht hat: einen
+  Client, dem niemand ein Credential in die Hand geben kann. Er nimmt ADR-0194 das
+  Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
+  sich für die neuen öffentlichen Routen auf die Zugriffsklassen aus ADR-0199 sowie
+  für deren Drosselung und Protokollierung auf ADR-0197.
 
 ---
 
