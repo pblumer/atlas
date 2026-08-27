@@ -11,54 +11,58 @@ import (
 
 // A web-scrape task resolved into plain values, and the function that runs one.
 //
-// The third shape of ADR-0168's split, and the one that shows what the rule is
-// actually about. CSV import needed no credential and no network. Mail needed a
-// credential the worker holds and wrote nothing back. This one needs the network but
-// no credential, and it *does* write a result variable — so it proves the seam
-// carries results outward as well as instructions inward.
-//
-// The division is the same as always: the engine has the compiled process and the
-// scope chain, so it resolves the url, the selector and the attribute; the worker
-// has the network reach, so it fetches. A scrape target inside a network the engine
-// cannot see is exactly the case for moving this kind out.
+// The division follows ADR-0168: the engine owns the compiled process and scope
+// chain, so it resolves FEEL-backed URL/selector values and carries the already
+// compiled structural format/bound outward; the worker owns network reach and
+// document parsing. ADR-0190 changes only the extraction strategy behind that seam.
 
 // Job is a web-scrape task with everything already evaluated. It is what travels
-// with a leased job.
+// with a leased job. Format is always explicit for newly resolved work; an empty
+// value remains HTML for backwards compatibility with pre-ADR-0190 payloads.
 type Job struct {
 	URL       string `json:"url"`
-	Selector  string `json:"selector"`
+	Selector  string `json:"selector,omitempty"`
 	Attribute string `json:"attribute,omitempty"`
+	Format    string `json:"format,omitempty"`
+	MaxItems  int32  `json:"maxItems,omitempty"`
 	// Result names the process variable the scraped values are written to; empty
 	// means the task writes nothing back.
 	Result string `json:"resultVariable,omitempty"`
 }
 
-// Result is what running a Job produces: the scraped values and the variable to
-// write them to.
+// Result is what running a Job produces. HTML keeps Values as the historical
+// string array; RSS/Atom populate Entries instead. Format tells the handler which
+// result shape to persist without inspecting the returned content.
 type Result struct {
 	ResultVariable string
+	Format         string
 	Values         []string
+	Entries        []FeedEntry
 }
 
 // Resolve turns a compiled web-scrape task into a [Job] by evaluating its authored
-// fields against the variables the task sees. Engine work by necessity — FEEL is
-// compiled at deploy (ADR-0008/0015) and the scope lives in the store.
+// values against the variables the task sees. Format and MaxItems are already
+// compile-time structural data (ADR-0190), so resolution copies rather than
+// interprets them.
 func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey uint64) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("webscrape: connector task has no detail")
 	}
-	// Read the variables the task sees once — up its scope chain, so its own
-	// input-mapped locals shadow what it inherits (ADR-0068) — and evaluate both the
-	// url and the selector against that one snapshot.
 	scopeVars, err := state.VisibleVariablesMap(store, elementInstanceKey)
 	if err != nil {
 		return Job{}, fmt.Errorf("webscrape: read variables for element %d: %w", elementInstanceKey, err)
 	}
-	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+	piKey := ei.ProcessInstanceKey
+	format := detail.ScrapeFormat.String()
+	if format == "" {
+		return Job{}, fmt.Errorf("webscrape: compiled task has unknown format %d", detail.ScrapeFormat)
+	}
 	return Job{
 		URL:       resolveValue(detail.Url, piKey, scopeVars),
 		Selector:  resolveValue(detail.ScrapeSelector, piKey, scopeVars),
 		Attribute: cp.Intern(detail.ScrapeAttribute),
+		Format:    format,
+		MaxItems:  detail.ScrapeMaxItems,
 		Result:    cp.Intern(detail.ResultVar),
 	}, nil
 }
@@ -66,13 +70,35 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 // Run fetches and extracts. The in-process path calls it too, so there is one
 // definition of what a resolved scrape means rather than two that drift.
 func Run(ctx context.Context, j Job, client Client) (Result, error) {
-	values, err := client.Scrape(ctx, Request{
+	format := j.Format
+	if format == "" {
+		format = formatHTML
+	}
+	req := Request{
 		URL:       j.URL,
 		Selector:  j.Selector,
 		Attribute: j.Attribute,
-	})
-	if err != nil {
-		return Result{}, err
+		Format:    format,
+		MaxItems:  j.MaxItems,
 	}
-	return Result{ResultVariable: j.Result, Values: values}, nil
+	switch format {
+	case formatHTML:
+		values, err := client.Scrape(ctx, req)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{ResultVariable: j.Result, Format: format, Values: values}, nil
+	case formatRSS, formatAtom:
+		feedClient, ok := client.(FeedClient)
+		if !ok {
+			return Result{}, fmt.Errorf("webscrape: client does not support %s feed extraction", format)
+		}
+		entries, err := feedClient.ScrapeFeed(ctx, req)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{ResultVariable: j.Result, Format: format, Entries: entries}, nil
+	default:
+		return Result{}, fmt.Errorf("webscrape: unsupported compiled format %q", format)
+	}
 }
