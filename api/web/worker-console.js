@@ -19,7 +19,10 @@
   function normalizeRouteForLegacyRouter() {
     if (location.hash === WORKERS) {
       workerRoute = true;
-      history.replaceState(null, "", LEGACY);
+      // app.js does not know the canonical Workers route yet. Use a real hash
+      // navigation so its router receives the legacy route; history.replaceState()
+      // is intentionally not used here because it emits no hashchange event.
+      location.hash = LEGACY;
       return;
     }
     workerRoute = location.hash === LEGACY;
@@ -116,8 +119,10 @@
     patchQueued = false;
     patchNavigation();
     const workerNav = document.querySelector(`#topnav a[href="${WORKERS}"]`);
-    if (workerRoute && workerNav) {
-      patchWorkerPage();
+    if (workerRoute && workerNav && patchWorkerPage()) {
+      // The legacy route has now rendered successfully. Publish the canonical URL
+      // without another router pass, so links/bookmarks expose Workers while the
+      // underlying compatibility route remains private to this adapter.
       if (location.hash === LEGACY) history.replaceState(null, "", WORKERS);
     }
   }
