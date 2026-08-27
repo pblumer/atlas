@@ -1,7 +1,7 @@
 # ADR-0200: Atlas as an OAuth resource server, so a hosted MCP client can connect
 
-- **Status:** Proposed (2026-08-27: the resource-server half is implemented; the
-  authorization-server half is still the open decision)
+- **Status:** Accepted (2026-08-27: the resource-server half is implemented; the
+  authorization-server half is next)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 
@@ -99,6 +99,16 @@ connectable without implementing RFC 7591 or CIMD at all.**
 
 Chosen: **option 3**, with option 4 as a follow-up and option 5 as where this ends
 up.
+
+That order is the accepted plan, not a hope: **3, then 4, and 5 if it earns its
+place.** Option 4 follows because once a person can connect at all, the operator
+step in front of them is the next thing worth removing — and by then there is a
+working flow to register *into*, which is what makes an unauthenticated
+registration endpoint a bounded decision rather than an open one. Option 5 is
+conditional on its own precondition rather than on appetite: federation assigns
+claims to roles, so it waits on M9, and what it replaces is the authorization
+server built in step 3 — the resource-server half stays either way. Nothing in
+steps 3 or 4 should be built in a way that assumes Atlas remains the issuer.
 
 Atlas becomes an OAuth resource server, and gains the smallest authorization server
 that a compliant client will actually talk to. Concretely:
