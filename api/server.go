@@ -30,7 +30,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -2061,7 +2063,7 @@ func (s *Server) Handler() http.Handler {
 		// webFS is compiled in, so this only fails on a broken build.
 		panic("api: embedded web assets missing: " + err.Error())
 	}
-	mux.Handle("/", http.FileServerFS(sub))
+	mux.Handle("/", revalidated(sub, http.FileServerFS(sub)))
 
 	// Resolve a Principal for every request and, when enforcement is on, gate the
 	// mutating /api/v1 surface behind a valid session (ADR-0044). With auth off
@@ -2085,4 +2087,55 @@ func (s *Server) readStats() (statsResp, error) {
 		return statsResp{}, err
 	}
 	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
+}
+
+// webETags maps each embedded UI file to a strong ETag over its bytes, built once at
+// startup. The files are compiled in, so the map is fixed for the life of the process
+// and needs no locking.
+func webETags(root fs.FS) map[string]string {
+	tags := map[string]string{}
+	_ = fs.WalkDir(root, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil //nolint:nilerr // a file that cannot be read simply gets no tag
+		}
+		b, err := fs.ReadFile(root, p)
+		if err != nil {
+			return nil
+		}
+		sum := sha256.Sum256(b)
+		tags["/"+p] = `"` + hex.EncodeToString(sum[:16]) + `"`
+		return nil
+	})
+	return tags
+}
+
+// revalidated wraps the embedded-UI file server so every asset carries a validator.
+//
+// Without one the browser is left to guess how long a file stays fresh, and it guesses
+// per file: an upgraded server could hand a returning browser a *mixed* UI — one module
+// from the new build, another still from the old — and the app died on an import of
+// something the stale half did not export yet. An embedded file has a zero modtime, so
+// http.ServeContent omits Last-Modified and the responses had no validator at all.
+//
+// Each file gets a strong ETag over its own bytes and `Cache-Control: no-cache`, which
+// means "reuse it, but ask first" rather than "do not store it": the browser keeps the
+// copy and revalidates, and an unchanged file costs a 304 with no body. Because the
+// header is set before the file server runs, http.ServeContent does the If-None-Match
+// comparison itself. A path with no tag (nothing matches it in the FS) is passed through
+// untouched — the file server will answer 404 for it.
+func revalidated(root fs.FS, next http.Handler) http.Handler {
+	tags := webETags(root)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		// The SPA shell is served for a bare directory path, so a request for "/" (or
+		// any directory) is answered with the index inside it.
+		if strings.HasSuffix(p, "/") {
+			p += "index.html"
+		}
+		if tag, ok := tags[p]; ok {
+			w.Header().Set("ETag", tag)
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
 }

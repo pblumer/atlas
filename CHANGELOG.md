@@ -46,6 +46,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An upgraded server no longer hands a returning browser half of the old UI.** The
+  embedded UI is a graph of ES modules that import each other by name, and it was served
+  with **no cache validator at all**: an embedded file has a zero modtime, so
+  `http.ServeContent` omits `Last-Modified`, and `http.FileServerFS` sets no `ETag`. That
+  leaves the browser to guess how long each file stays fresh, and it guesses *per file* —
+  so after an upgrade it could hold a new `editor.js` beside a cached `formviewer.js` and
+  die on `does not provide an export named …`, with a hard reload the only way out. Every
+  asset now carries a strong `ETag` over its own bytes and `Cache-Control: no-cache` —
+  "reuse it, but ask first", not "do not store it": the browser keeps its copy and
+  revalidates, and an unchanged file costs a 304 with no body.
+
 - **A menu's flyout opens to the right, and can be reached.** The "Move to" submenu on an
   artifact row opened to the *left*, which is not where a submenu opens anywhere else, so
   the hand went the wrong way first; it opens right now, and flips left only when the

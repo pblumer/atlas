@@ -43,6 +43,24 @@
       }
     },
     {
+      "id": "an-upgraded-server-no-longer-hands-a-returning-browser-half-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An upgraded server no longer hands a returning browser half of the old UI.",
+        "de": "An upgraded server no longer hands a returning browser half of the old UI."
+      },
+      "summary": {
+        "en": "The embedded UI is a graph of ES modules that import each other by name, and it was served with no cache validator at all: an embedded file has a zero modtime, so http.ServeContent omits Last-Modified, and http.FileServerFS sets no ETag.",
+        "de": "The embedded UI is a graph of ES modules that import each other by name, and it was served with no cache validator at all: an embedded file has a zero modtime, so http.ServeContent omits Last-Modified, and http.FileServerFS sets no ETag."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-menu-s-flyout-opens-to-the-right-and-can-be-reached",
       "version": "Unreleased",
       "date": null,
@@ -307,24 +325,6 @@
       "summary": {
         "en": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all.",
         "de": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all."
-      },
-      "link": {
-        "label": "ADR-0028",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
-      }
-    },
-    {
-      "id": "the-modeler-s-variables-panel-says-what-a-variable-holds-not",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "The Modeler's Variables panel says what a variable holds, not just that it exists.",
-        "de": "The Modeler's Variables panel says what a variable holds, not just that it exists."
-      },
-      "summary": {
-        "en": "It listed a name and who writes it.",
-        "de": "It listed a name and who writes it."
       },
       "link": {
         "label": "ADR-0028",
