@@ -38,7 +38,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
-| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | 🔲 offen — Entwurf [`ADR-draft-mcp-oauth-resource-server`](../adr/draft-mcp-oauth-resource-server.md) |
+| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | 🔲 offen — Entwurf [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -434,7 +434,7 @@ Ressourcenserver-Metadaten woandershin und die Autorisierungsserver-Hälfte wird
 gelöscht. Nichts anderes bewegt sich. Genau deshalb wird die
 Ressourcenserver-Hälfte zuerst gebaut.
 
-Entscheid im Entwurf: [`ADR-draft-mcp-oauth-resource-server`](../adr/draft-mcp-oauth-resource-server.md).
+Entscheid im Entwurf: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
 
 ---
 
@@ -597,7 +597,7 @@ M4 hat keinen eigenen Entscheid: es vervollständigt
 
 Neu und noch offen:
 
-- 🔲 [`draft-mcp-oauth-resource-server.md`](../adr/draft-mcp-oauth-resource-server.md)
+- 🔲 [`0200-mcp-oauth-resource-server.md`](../adr/0200-mcp-oauth-resource-server.md)
   — M10. Erweitert ADR-0196 um den Fall, den dieser nicht bedacht hat: einen
   Client, dem niemand ein Credential in die Hand geben kann. Er nimmt ADR-0194 das
   Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
