@@ -214,6 +214,7 @@ type Server struct {
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
+	registerRate     *rateLimiter      // throttles OAuth self-registration, on its own budget
 	logins           *loginGuard       // throttles authentication attempts (see loginguard.go)
 	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
@@ -513,6 +514,14 @@ type Server struct {
 	oauthGrantStore  *oauthGrantStore
 	oauthGrants      *oauthGrantIndex
 	oauthCodes       *oauthCodeStore
+
+	// dynamicRegistration opens RFC 7591 self-registration
+	// (WithDynamicClientRegistration). Off by default: it is the one unauthenticated
+	// endpoint that writes durable state, and oauthregister.go is where that is
+	// argued. Read at mount time and by the metadata document, so the route and what
+	// advertises it cannot disagree. Set once before Handler is mounted; read-only
+	// thereafter.
+	dynamicRegistration bool
 
 	// externalURL is the origin this server is reachable under from outside, when an
 	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
@@ -984,7 +993,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicLinks: publicLinks,
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
-		publicRate:        newRateLimiter(20, 1),
+		publicRate: newRateLimiter(20, 1),
+		// Registration gets its own budget rather than sharing publicRate: a flood of
+		// registrations must not throttle the token exchanges of the clients that
+		// already registered, or abuse of the open endpoint becomes an outage for
+		// everybody else. Burst enough for an operator wiring up several connectors at
+		// once, then one every five seconds — slow enough that churning the bounded
+		// registry from outside is not worth anyone's time (ADR-0197, ADR-0200).
+		registerRate:      newRateLimiter(30, 0.2),
 		logins:            newLoginGuard(),
 		projects:          projects,
 		releases:          releases,
@@ -2147,6 +2163,13 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
 	mountFunc(accessPublic, "GET "+oauthAuthorizePath, s.handleAuthorize)
 	mountFunc(accessPublic, "POST "+oauthTokenPath, s.handleToken)
+	if s.dynamicRegistration {
+		// RFC 7591 self-registration, when an operator opened it. Public because a
+		// client that has nothing yet is the entire caller — and mounted only when it
+		// is on, so a server that did not open it answers 404 rather than refusing
+		// something it appears to offer (ADR-0200, oauthregister.go).
+		mountFunc(accessPublic, "POST "+oauthRegisterPath, s.handleRegisterDynamicClient)
+	}
 	if s.mcpHandler != nil {
 		// The path-suffixed form, for the transport as a resource of its own. Served
 		// only when that transport is, so the document never describes something this

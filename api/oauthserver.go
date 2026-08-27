@@ -26,8 +26,9 @@ import (
 //     flow, no resource-owner password grant, no client-credentials grant. Each of
 //     those either puts a token in a URL or asks an application to handle somebody's
 //     password, and neither is a thing to add without a reason to.
-//   - **Pre-registered clients only.** Registration is an admin act; RFC 7591 and
-//     Client ID Metadata Documents are accepted follow-up work, after this.
+//   - **Pre-registered clients by default.** Registration is an admin act unless an
+//     operator opens RFC 7591 self-registration (oauthregister.go), which is off
+//     until they do. Client ID Metadata Documents are not built.
 //   - **The token carries a person.** Not a role, not a service identity — the human
 //     who approved it, so ADR-0196's property survives: a tool call is exactly as
 //     privileged as whoever made it.
@@ -62,8 +63,7 @@ const (
 // compliant client will talk to.
 func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *http.Request) {
 	base := s.externalBase(r)
-	w.Header().Set("Vary", "X-Forwarded-Proto")
-	httpapi.JSON(w, http.StatusOK, map[string]any{
+	doc := map[string]any{
 		"issuer":                                base,
 		"authorization_endpoint":                base + oauthAuthorizePath,
 		"token_endpoint":                        base + oauthTokenPath,
@@ -71,7 +71,15 @@ func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post"},
-	})
+	}
+	// Advertised only when it is served. A registration_endpoint in this document is
+	// a promise, and a client that takes it and gets a 404 has been told a lie about
+	// the server rather than the truth about its policy (RFC 7591, ADR-0200).
+	if s.dynamicRegistration {
+		doc["registration_endpoint"] = base + oauthRegisterPath
+	}
+	w.Header().Set("Vary", "X-Forwarded-Proto")
+	httpapi.JSON(w, http.StatusOK, doc)
 }
 
 // oauthRequest is a validated authorization request.
@@ -182,6 +190,11 @@ func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) 
 		"clientId":   req.client.ID,
 		"clientName": req.client.Name,
 		"resource":   req.resource,
+		// Who vouched for this application. With self-registration open, the name above
+		// is one the client chose for itself thirty seconds ago and nobody checked, and
+		// the person about to decide has to be told that — see oauthregister.go. Always
+		// present, so the page can rely on it rather than infer from an absent field.
+		"selfRegistered": req.client.Dynamic,
 	}
 	if clientErr != "" {
 		out["error"] = "the client's request is not valid (" + clientErr + ")"

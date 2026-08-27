@@ -15,10 +15,13 @@ import (
 // Administering the authorization server: which applications may ask, and which
 // approvals stand (ADR-0200).
 //
-// Registration is over the API and not (yet) in the Console, which is where API
-// tokens landed too (ADR-0194) and for the same reason: the credential surface is
-// worth getting right before the screen for it. A Console page is the natural
-// follow-up and changes nothing here.
+// These endpoints are what the Console's AI access page drives (web/aiaccess.js),
+// and they changed not at all to gain it: the page asks which application, posts one
+// registration, and shows the three values the connector's own dialog is asking for.
+// That order was deliberate — the credential surface first, the screen second — but
+// only the screen finishes the job. "Paste this JSON into a request" is an
+// instruction for whoever wrote the endpoint, not for the person setting up a
+// connector.
 //
 // The two halves are administered differently on purpose. A **client** is an
 // operator's decision about the installation, so registering and removing one is

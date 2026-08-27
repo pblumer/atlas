@@ -24,6 +24,57 @@
       ]
     },
     {
+      "id": "connecting-an-ai-assistant-is-a-screen-now-not-a-request-bod",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Connecting an AI assistant is a screen now",
+        "de": "Einen KI-Assistenten anzuschliessen ist jetzt ein Bildschirm"
+      },
+      "summary": {
+        "en": "Letting an AI assistant work in Atlas used to mean sending a request by hand and reading the answer out of it. There is now a page for it: Console → AI access. Pick the application, press Create, and you get the three values its own dialog is asking for — the MCP server URL, a client id, and a secret shown once — each with a copy button. The page also checks the address Atlas publishes against the one you are looking at and tells you when they differ, which is the mistake that otherwise shows up much later as a connector that simply does not work, with nothing on screen to explain why. Below the form, the same page lists what is registered, marks anything that registered itself rather than being entered by someone, and shows the approvals people have given — your own, or everyone's if you administer this instance — each with the button that withdraws it. That last part matters most: an approval is the one thing here that belongs to the person rather than to the operator, and withdrawing one no longer requires anything but a click.",
+        "de": "Einem KI-Assistenten Zugang zu Atlas zu geben hiess bisher: eine Anfrage von Hand schicken und die Antwort daraus ablesen. Dafür gibt es jetzt eine Seite — Console → AI access. Anwendung auswählen, «Create» drücken, und Sie erhalten die drei Werte, nach denen deren Dialog fragt: die MCP-Server-URL, eine Client-ID und ein einmalig angezeigtes Geheimnis, jeweils mit Kopierknopf. Die Seite vergleicht ausserdem die Adresse, die Atlas veröffentlicht, mit der, die Sie gerade sehen, und sagt es Ihnen, wenn beide auseinandergehen — genau der Fehler, der sich sonst erst viel später zeigt, als Connector, der einfach nicht funktioniert, ohne dass irgendwo stünde warum. Unter dem Formular listet dieselbe Seite, was registriert ist, kennzeichnet, was sich selbst registriert hat statt von jemandem eingetragen worden zu sein, und zeigt die erteilten Zustimmungen — Ihre eigenen, oder alle, wenn Sie diese Instanz verwalten — jeweils mit dem Knopf, der sie zurückzieht. Das ist der wichtigste Teil: Eine Zustimmung ist das Einzige hier, das der Person gehört und nicht der Betreiberin, und sie zurückzuziehen braucht jetzt nichts als einen Klick."
+      },
+      "link": {
+        "label": "ADR-0200",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open AI access",
+          "de": "KI-Zugang öffnen"
+        },
+        "route": "#/console/ai-access"
+      }
+    },
+    {
+      "id": "a-connector-can-now-register-itself-if-you-let-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "A connector can register itself — if you let it",
+        "de": "Ein Connector kann sich selbst registrieren — wenn Sie es erlauben"
+      },
+      "summary": {
+        "en": "Connecting an AI connector meant an administrator had to enter the application in Atlas first and hand over an id and a secret to paste in. That step can now be dropped: with self-registration switched on, a connector needs nothing but this server's address, and the person approves it as usual. It is off unless an operator turns it on, and that is deliberate — it is the one place in Atlas where somebody who has not signed in can leave something behind. What makes it safe to live with is that the approval screen says so: an application that registered itself is labelled there, in as many words, so nobody mistakes it for one that was checked. The name on that screen is the one the application chose for itself. Nothing is reached until a person says yes, and what they say yes to is bounded by their own account. How many self-registered applications are kept is limited, and a new one pushes out the oldest that nobody ever approved — never one somebody is using, so a stranger cannot take your access away by registering enough applications. If your connectors are few and known, leaving this off remains the stronger setup, and it is why that is the default.",
+        "de": "Einen KI-Connector anzuschliessen hiess bisher: Eine Administratorin trägt die Anwendung zuerst in Atlas ein und gibt ID und Geheimnis zum Einfügen heraus. Dieser Schritt kann jetzt entfallen. Ist die Selbstregistrierung eingeschaltet, braucht ein Connector nur noch die Adresse dieses Servers, und die Person stimmt wie gewohnt zu. Standardmässig ist sie aus, und das mit Absicht: Es ist die einzige Stelle in Atlas, an der jemand ohne Anmeldung etwas hinterlassen kann. Lebbar wird das dadurch, dass der Zustimmungsbildschirm es sagt — eine Anwendung, die sich selbst registriert hat, ist dort ausdrücklich als solche gekennzeichnet, damit sie niemand für eine geprüfte hält. Der Name dort ist der, den die Anwendung sich selbst gegeben hat. Erreicht wird nichts, bevor eine Person zustimmt, und was sie zustimmt, ist durch ihr eigenes Konto begrenzt. Wie viele selbstregistrierte Anwendungen aufbewahrt werden, ist begrenzt; eine neue verdrängt die älteste, der nie jemand zugestimmt hat — nie eine, die jemand benutzt. So kann Ihnen kein Fremder den Zugang entziehen, indem er genug Anwendungen registriert. Sind Ihre Connectoren wenige und bekannt, bleibt es die stärkere Einstellung, dies ausgeschaltet zu lassen — deshalb ist es die Voreinstellung."
+      },
+      "link": {
+        "label": "ADR-0200",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
       "id": "a-refused-request-now-says-what-refused-it",
       "version": "Unreleased",
       "date": null,
@@ -225,90 +276,6 @@
       "tags": [
         "Security"
       ]
-    },
-    {
-      "id": "a-jira-connector",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Jira issues from a process, without writing a REST call",
-        "de": "Jira-Vorgänge aus einem Prozess, ohne einen REST-Aufruf zu schreiben"
-      },
-      "summary": {
-        "en": "A process step can now open a Jira issue, read one, change it, move it to the next status, comment on it, assign it, or search with JQL — picked from a list in the Modeler instead of assembled as a REST call. You give the task a project, an issue type and a summary; Atlas builds what Jira expects and writes the created issue into a variable, so a later step can address it as =ticket.key. The site address and the credential live under Connectors, not in the model, which is what makes moving from a test Jira to the real one a change in one place. Both Jira Cloud and Jira Data Center work, and the model does not have to know which one it is talking to.",
-        "de": "Ein Prozessschritt kann jetzt einen Jira-Vorgang anlegen, lesen, ändern, in den nächsten Status weiterschalten, kommentieren, zuweisen oder per JQL suchen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Sie geben dem Task Projekt, Vorgangstyp und Zusammenfassung; Atlas baut daraus, was Jira erwartet, und schreibt den angelegten Vorgang in eine Variable, sodass ein späterer Schritt ihn als =ticket.key ansprechen kann. Adresse und Zugangsdaten der Jira-Instanz liegen unter Konnektoren, nicht im Modell — deshalb ist der Wechsel von der Test- zur echten Jira eine Änderung an einer Stelle. Jira Cloud und Jira Data Center funktionieren beide, und das Modell muss nicht wissen, mit welchem es spricht."
-      },
-      "link": {
-        "label": "ADR-0201",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Under Console › Connectors, add a connector of kind jira: its site address (https://acme.atlassian.net) and a vault credential — {\"email\": …, \"apiToken\": …} for Jira Cloud, or {\"token\": …} for a Data Center personal access token.",
-          "In the Modeler, drop a service task and pick Jira Connector, then choose an operation — start with Create issue.",
-          "Name your connector, fill in the project key, the issue type and a summary (the fx toggle makes any of them a FEEL expression over the instance's variables), and give it a result variable such as ticket.",
-          "A later task can then address =ticket.key — Transition issue moves that same issue on by the name of the button you see in Jira."
-        ],
-        "de": [
-          "Legen Sie unter Console › Konnektoren einen Konnektor der Art jira an: die Adresse Ihrer Jira (https://acme.atlassian.net) und ein Vault-Secret — {\"email\": …, \"apiToken\": …} für Jira Cloud oder {\"token\": …} für ein Personal Access Token in Data Center.",
-          "Ziehen Sie im Modeler einen Service-Task auf und wählen Sie Jira Connector, dann eine Operation — fangen Sie mit Vorgang anlegen an.",
-          "Tragen Sie Ihren Konnektornamen, den Projektschlüssel, den Vorgangstyp und eine Zusammenfassung ein (der fx-Schalter macht aus jedem davon eine FEEL-Expression über die Variablen der Instanz) und geben Sie eine Ergebnisvariable an, etwa ticket.",
-          "Ein späterer Task spricht dann =ticket.key an — Vorgang weiterschalten bewegt denselben Vorgang weiter, benannt nach dem Knopf, den Sie in Jira sehen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Connectors",
-          "de": "Konnektoren öffnen"
-        },
-        "route": "#/console/connectors"
-      }
-    },
-    {
-      "id": "the-bmc-remedy-connector-runs-on-a-worker",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Remedy tickets can be filed beside the engine",
-        "de": "Remedy-Tickets können neben der Engine geschrieben werden"
-      },
-      "summary": {
-        "en": "A task that opens a Remedy ticket talks to your ITSM system over the network — a login, the create, a logout — and until now Atlas did all three on the same thread that moves every process forward. It now runs a worker for that beside the engine, started by Atlas itself and configured from the Helix instance you set up under Connectors, credentials included. Nothing changes in a model and nothing needs configuring; a slow or unreachable ITSM host holds up nothing but its own task. And because that worker holds the credentials itself, it can sit inside the network your AR System is in and reach one Atlas cannot.",
-        "de": "Eine Aufgabe, die ein Remedy-Ticket anlegt, spricht über das Netz mit Ihrem ITSM-System — Anmelden, Anlegen, Abmelden — und bis jetzt tat Atlas alle drei auf demselben Strang, der jeden Prozess vorwärtsbewegt. Dafür läuft jetzt ein Worker neben der Engine, von Atlas selbst gestartet und aus der Helix-Instanz eingerichtet, die Sie unter Konnektoren angelegt haben — Zugangsdaten inklusive. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsames oder nicht erreichbares ITSM-System hält nur noch seine eigene Aufgabe auf. Und weil dieser Worker die Zugangsdaten selbst hält, kann er im Netz Ihres AR-Systems stehen und eines erreichen, an das Atlas nicht herankommt."
-      },
-      "link": {
-        "label": "ADR-0106",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0106-bmc-remedy-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Set your Remedy instance up under Console › Connectors: its AR System base URL, and a vault credential holding the service account's username and password.",
-          "Open Operations › Workers: the worker named remedy is running there, started by Atlas itself.",
-          "That view lists the instances each worker holds, so a connector name your models use and nothing serves is visible there rather than in a failed job."
-        ],
-        "de": [
-          "Richten Sie Ihre Remedy-Instanz unter Console › Konnektoren ein: die AR-System-Basis-URL und ein Vault-Secret mit Benutzer und Passwort des Dienstkontos.",
-          "Öffnen Sie Betrieb › Workers: Der Worker namens remedy läuft dort, von Atlas selbst gestartet.",
-          "Dieselbe Ansicht zeigt, welche Instanzen jeder Worker hält: Ein Konnektorname, den Ihre Modelle verwenden und niemand bedient, fällt dort auf statt erst in einem fehlgeschlagenen Job."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
     }
   ]
 }

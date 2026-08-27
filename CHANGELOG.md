@@ -32,8 +32,8 @@ _Changed_ / _Removed_ for each version.
   The shape is deliberately the smallest a compliant client will talk to.
   Authorization code with PKCE (`S256`) and refresh, and **no other grant type** —
   no implicit flow, no password grant, no client-credentials grant. Registration is
-  an administrator's act (`POST /api/v1/oauth-clients`); dynamic client
-  registration is accepted follow-up work, not part of this.
+  an administrator's act (`POST /api/v1/oauth-clients`), unless you open
+  self-registration — the next entry.
 
   **What a token reaches follows what was approved.** A grant for `/mcp` drives the
   transport and is refused at `/api/v1` — the audience made into something enforced
@@ -46,12 +46,72 @@ _Changed_ / _Removed_ for each version.
   approved for it. Disabling or deleting an account revokes its grants — a
   connector must not outlive the account behind it — and a role or group change
   rewrites them rather than dropping them, so an administrative edit does not knock
-  somebody's connector over. Six `auth.oauth_*` events record all of it, and carry
+  somebody's connector over. Eight `auth.oauth_*` events record all of it, and carry
   no secret.
 
   Refresh tokens **rotate**: renewing invalidates the token you renewed with, so a
   copied one is worth one use rather than standing access. Access tokens last two
   hours.
+
+- **Connecting an AI assistant is a screen now, not a request body.**
+  **Console → AI access** asks which application, creates its credentials, and hands
+  you the three values the connector's own dialog is asking for — MCP server URL,
+  client id, and the secret, shown once, each with a copy button
+  ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
+
+  The endpoints for this shipped first and the instruction was a `curl` command in
+  the install guide. That is an instruction for whoever wrote the endpoint. The
+  question an operator actually has is *what do I paste into those three fields*,
+  and this answers exactly that.
+
+  It also **checks the address Atlas publishes** against the one you are looking at,
+  and says so when they differ — the `--external-url` mistake otherwise surfaces
+  much later, as a connector that simply does not work, with nothing on screen to
+  suggest why.
+
+  The same page lists what is registered, marks anything that registered itself, and
+  shows every approval — yours, or everyone's for an administrator — with the button
+  that withdraws one. Withdrawing an approval no longer requires the API, which
+  matters because it is the one thing in all of this that belongs to the person
+  rather than to the operator.
+
+- **A connector can now register itself — if you let it.**
+  `--oauth-dynamic-registration` (or `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1`) opens
+  [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html) client registration, so a
+  hosted connector can be connected with nothing but this server's URL: no client
+  id to paste, nothing for an administrator to enter first
+  ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
+
+  **It is off by default and stays off unless you say otherwise**, because it is
+  the one unauthenticated endpoint in Atlas that writes durable state. Off means
+  absent: the route is not mounted and `registration_endpoint` is not in the
+  authorization-server metadata, so a client discovers the truth rather than being
+  told to try and then refused.
+
+  Four things make opening it defensible, and the first is the one that matters.
+  **A client that registered itself is marked as such on the consent screen** — in
+  as many words, above the question. Without that, opening registration would
+  quietly degrade every consent decision anybody makes afterwards: "an application
+  is asking for access" would stop implying that anyone had vetted it, and the
+  person deciding would have no way to tell. The name on that screen is one the
+  application chose for itself thirty seconds ago.
+
+  The rest bound what abuse can achieve. **The number of self-registered clients is
+  capped**, and past the cap registering *evicts* the oldest one nobody ever
+  approved rather than refusing — a cap that only refuses is its own denial of
+  service, since whoever fills the table first would lock everybody else out from
+  outside. **An approved client is never evicted**, so a flood cannot revoke
+  somebody's access. And registration is **throttled on its own budget**, separate
+  from the other public endpoints, so a flood of registrations cannot throttle the
+  token exchanges of clients that already registered.
+
+  Registering still buys nothing on its own: a client id and secret let an
+  application *ask*, and only a person's approval reaches anything — bounded by
+  their own account. `auth.oauth_client_self_registered` records each one, kept
+  distinct from an administrator's registration, because "an administrator added an
+  application" and "a stranger added one" are the same sentence with different
+  consequences. Self-registered clients are also flagged in `GET
+  /api/v1/oauth-clients`.
 
 - **A refused request now says what refused it.** Atlas answers `401` with
   `WWW-Authenticate: Bearer realm="atlas"` and, from now on, a `resource_metadata`

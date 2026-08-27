@@ -3100,3 +3100,35 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* Remove-member ✕ inside a group member chip (ADR-0180). */
 .chip-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 0 0 5px; line-height: 1; }
 .chip-x:hover { color: var(--danger); }
+
+/* The AI-access page (ADR-0200): a numbered walk-through and the values it hands
+   out for pasting elsewhere. Built from the existing tokens so it inherits the
+   themes (theme.js) like every other surface. */
+.step { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--border); }
+.step:first-of-type { border-top: 0; }
+.step-n {
+  flex: none; width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+}
+.step-body { flex: 1; min-width: 0; }
+.step-title { display: block; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+
+/* A value the operator has to move into another application's dialog. The value
+   stays selectable, because a copy button is not a substitute for one on the
+   deployments where the clipboard API is unavailable. */
+.copy-row { margin: 10px 0; }
+.copy-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.copy-value { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.copy-value code {
+  font: 13px/1.6 ui-monospace, monospace; user-select: all; word-break: break-all;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px;
+}
+
+/* Something the operator has to fix for what follows to work at all — louder than
+   .muted, quieter than an error, because nothing has failed yet. */
+.warn-note {
+  margin: 12px 0; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--warn-soft); border: 1px solid var(--warn); color: var(--text); font-size: 13px;
+}
+.warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }

@@ -181,6 +181,11 @@ func runServe(args []string) error {
 	// use. Only the RFC 9728 discovery documents and the WWW-Authenticate challenge
 	// read it today (ADR-0200); unset means derive from the request.
 	externalURL := fs.String("external-url", os.Getenv("ATLAS_EXTERNAL_URL"), "public origin this server is reachable under, e.g. https://atlas.example.com, for the absolute URLs in the OAuth protected-resource metadata and the WWW-Authenticate challenge (ADR-0200); empty derives them from the request (or ATLAS_EXTERNAL_URL)")
+	// RFC 7591 self-registration, off by default. It is the one unauthenticated
+	// endpoint that writes durable state, so an operator turns it on deliberately or
+	// not at all; a client that would use it discovers its absence from the metadata
+	// rather than by being refused (ADR-0200).
+	oauthRegistration := fs.Bool("oauth-dynamic-registration", os.Getenv("ATLAS_OAUTH_DYNAMIC_REGISTRATION") == "1", "let an OAuth client register itself (RFC 7591), so a hosted MCP connector can be connected with nothing but this server's URL; off by default, because it lets anyone who can reach this port create a client record and appear on your people's consent screen under a name they chose. Each such client is marked as self-registered on that screen, and the number kept is bounded (ADR-0200). Leave it off and register clients with POST /api/v1/oauth-clients instead (or ATLAS_OAUTH_DYNAMIC_REGISTRATION=1)")
 	publicFormsCORS := fs.String("public-forms-cors", os.Getenv("ATLAS_PUBLIC_FORMS_CORS_ORIGINS"), "comma-separated web origins allowed to embed a public start form cross-origin (ADR-0186); empty (default) blocks cross-origin access, \"*\" allows any origin. Opens only the cookieless /public/forms endpoints, never /api/v1 (or ATLAS_PUBLIC_FORMS_CORS_ORIGINS)")
 	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
@@ -248,7 +253,7 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *externalURL, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -287,6 +292,14 @@ func envIntOr(key string, def int) int {
 	return def
 }
 
+// oauthConfig is the OAuth-facing half of the serve flags, kept together so the
+// origin the discovery documents publish and the decision to open self-registration
+// travel as one thing rather than as two more positional arguments (ADR-0200).
+type oauthConfig struct {
+	externalURL         string
+	dynamicRegistration bool
+}
+
 // retentionConfig is the history-retention configuration the CLI assembles: the
 // server-wide max age (ADR-0115), plus the sweep's cadence and per-tick batch, which
 // together bound how fast a backlog of finished instances drains. Grouped because they
@@ -297,7 +310,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, externalURL string, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -413,8 +426,19 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 			"--compact-wal has no effect without checkpointing; set --checkpoint-interval to a "+
 				"positive duration to enable it (ADR-0131)")
 	}
-	if externalURL != "" {
-		apiOpts = append(apiOpts, api.WithExternalURL(externalURL))
+	if oauth.externalURL != "" {
+		apiOpts = append(apiOpts, api.WithExternalURL(oauth.externalURL))
+	}
+	if oauth.dynamicRegistration {
+		apiOpts = append(apiOpts, api.WithDynamicClientRegistration())
+		// Said out loud, once, at startup — the same reason --auth=false is. An open
+		// registration endpoint is a legitimate thing to want, and it is the sort of
+		// thing that gets turned on for one connector and then forgotten.
+		logging.Warn(logging.AuthOAuthRegistrationOpen,
+			"OAuth self-registration is OPEN: anyone who can reach this port may register a client "+
+				"and be shown on your people's consent screens under a name they chose. Each is marked "+
+				"there as self-registered, and no client reaches anything until a person approves it. "+
+				"Drop --oauth-dynamic-registration to require an administrator to register clients")
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())

@@ -297,33 +297,60 @@ instance — has nowhere for you to paste a token. Those connect over OAuth
 once, and each person who uses it approves it in their own browser and gets a
 token that carries *them*.
 
-Two things have to be right first. Set `--external-url` to the address people
-reach Atlas at — behind a TLS proxy Atlas cannot work it out, and every URL it
-publishes would name `http://`. Then register the client, as an administrator:
+One thing has to be right first: set `--external-url` to the address people reach
+Atlas at. Behind a TLS proxy Atlas cannot work it out, and every URL it publishes
+would name `http://`, which no hosted connector can use.
 
-```bash
-curl -fsS -X POST https://atlas.example.com/api/v1/oauth-clients \
-  -H 'Content-Type: application/json' -b cookies.txt \
-  -d '{"name":"Claude Connector",
-       "redirectUris":["https://claude.ai/api/mcp/auth_callback"]}'
-```
+Then do it in the Console: **Console → AI access → Connect an assistant**. Pick the
+application, press Create, and the page hands you the three values the connector's
+own dialog is asking for — MCP server URL, client id, and a **secret shown exactly
+once** — each with a copy button. (It also checks the published address for you and
+says so if it is not one a connector could reach.) The same page lists what is
+registered and every approval given, and is where an approval is withdrawn.
 
-The response carries a client id and a **secret shown exactly once** — only its
-fingerprint is stored, so a lost secret is reissued rather than looked up. Put
-both into the connector's dialog, alongside the MCP URL
-(`https://atlas.example.com/mcp`). The redirect URI must match what the connector
-uses, character for character: it is where the authorization code is sent, so it
-is matched whole and never by prefix.
+For scripting, the endpoint behind that form is
+`POST /api/v1/oauth-clients` with `{"name": …, "redirectUris": [ … ]}`; only the
+fingerprint of the secret is stored, so a lost one is reissued rather than looked
+up. The redirect URI must match what the connector uses, character for character:
+it is where the authorization code is sent, so it is matched whole and never by
+prefix.
 
 What each person then gets is confined to what they approved. A connector set up
 against `/mcp` drives the MCP tools and is refused at `/api/v1`; the token expires
 in two hours and renews itself silently. Anyone can see their own approvals at
 `GET /api/v1/oauth-grants` and withdraw one with `DELETE`; an administrator sees
 and can withdraw everyone's, and deleting the client withdraws all of them at
-once. Disabling an account revokes its approvals with it.
+once — all of it on the same **AI access** page, for people who do not use the API.
+Disabling an account revokes its approvals with it.
 
 Registering a client is not the same as being able to use it: an application may
 *ask*, and only a person can say yes.
+
+#### Letting connectors register themselves
+
+If entering each client by hand is more ceremony than you want, `--oauth-dynamic-registration`
+(or `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1`) opens [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)
+self-registration. A connector then needs nothing but the MCP URL: it registers
+itself, and the person approves it as usual.
+
+**It is off by default, and it is worth understanding what turning it on means.**
+It is the only unauthenticated endpoint in Atlas that writes durable state:
+anyone who can reach the port may create a client record and appear on your
+people's consent screens under a name they chose. What makes that liveable is
+that the consent screen **says so** — a self-registered application is labelled
+there, in as many words, so nobody mistakes it for one you vetted. Nothing is
+reached until a person approves, and what they approve is bounded by their own
+account.
+
+The number of self-registered clients is capped; past the cap, registering evicts
+the oldest one nobody approved. An approved client is never evicted, so a flood
+cannot take somebody's access away — but a client that has registered and is
+still waiting for its person to approve can be, and would have to register again.
+The AI access page marks which clients registered themselves, and
+`auth.oauth_client_self_registered` records each one as it happens.
+
+Leave it off if your connectors are few and known; an administrator registering
+them by hand is the stronger posture, and it is why that is the default.
 
 ## Windows Server
 
@@ -421,6 +448,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
+| `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** Atlas terminates no TLS, so the origin it derives from a request is `http://…`, and every absolute URL it publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |

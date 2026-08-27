@@ -121,6 +121,44 @@ func TestPublicRoutesAreExactlyTheAllowlist(t *testing.T) {
 	}
 }
 
+// TestOpeningRegistrationAddsExactlyOnePublicRoute keeps the allowlist above
+// honest about a route that is conditional.
+//
+// wantPublicRoutes describes a default server, and self-registration is off there
+// (ADR-0200), so the one route the flag adds would otherwise never be reviewed by
+// the inventory at all. This states the difference exactly: turning it on opens
+// POST /oauth/register and nothing else. A second route sneaking in behind the
+// same flag fails here.
+func TestOpeningRegistrationAddsExactlyOnePublicRoute(t *testing.T) {
+	closed := accessTestServer(t)
+	_, policy := closed.mountRoutes()
+	before := map[string]bool{}
+	for _, p := range policy.publicPatterns() {
+		before[p] = true
+	}
+
+	open := accessTestServer(t)
+	open.dynamicRegistration = true
+	_, openPolicy := open.mountRoutes()
+
+	added := []string{}
+	for _, p := range openPolicy.publicPatterns() {
+		if !before[p] {
+			added = append(added, p)
+		}
+	}
+	if strings.Join(added, ",") != "POST "+oauthRegisterPath {
+		t.Errorf("opening self-registration made %v public, want exactly [POST %s]", added, oauthRegisterPath)
+	}
+	// Absent by default means absent from the route table, not present and gated:
+	// what a client then meets is the UI catch-all's 404, which is the honest answer
+	// that this server does not offer registration (pinned end-to-end in
+	// TestDynamicRegistrationIsOffByDefault).
+	if before["POST "+oauthRegisterPath] {
+		t.Errorf("POST %s is routed on a default server; it must not exist unless an operator opened it", oauthRegisterPath)
+	}
+}
+
 // TestEveryPublicAPIRouteEntryIsRegistered catches the failure mode an allowlist
 // of strings has: an entry that matches nothing. A typo there is silent — the
 // route it meant to open stays gated and the list still reads as if it were

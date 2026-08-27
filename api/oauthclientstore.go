@@ -16,12 +16,10 @@ import (
 // anything. What reaches anything is the token a person's approval produces, and
 // that is a grant (oauthgrantstore.go).
 //
-// Registration is by an administrator, and only by an administrator. The
-// specification also allows a client to register itself (RFC 7591) or to identify
-// itself by a URL it controls, and ADR-0200 records both as accepted follow-up
-// work — deliberately after this, because an unauthenticated registration endpoint
-// is a decision of its own and because pre-registration is first in the order the
-// specification itself gives.
+// Registration is by an administrator by default, and an operator may additionally
+// open self-registration (RFC 7591) — see oauthregister.go, which is where the
+// consequences of that are worked out. A client that registered itself carries
+// Dynamic, so nothing downstream has to treat the two as the same thing.
 //
 // The storage discipline is the one apiTokenStore uses, for the same reasons: the
 // secret is never stored, only its SHA-256; a durable record per client owned by
@@ -52,6 +50,22 @@ type oauthClient struct {
 
 	CreatedAt int64  `json:"createdAt"`
 	CreatedBy string `json:"createdBy,omitempty"`
+
+	// Dynamic marks a client that registered *itself* (RFC 7591), rather than one an
+	// administrator entered. It is not bookkeeping: it travels to the consent screen,
+	// because with self-registration open "an application is asking for access" no
+	// longer implies anybody vetted it, and a person deciding has to be able to tell
+	// the two apart. It also decides what may be evicted when the registry is full —
+	// see oauthregister.go.
+	Dynamic bool `json:"dynamic,omitempty"`
+
+	// Seq orders self-registrations against each other. CreatedAt is a whole second
+	// and a flood registers many within one, so ordering by it alone would make
+	// "evict the oldest" pick an arbitrary member of the burst. Assigned inside the
+	// run-loop turn that saves the record, as one more than the highest seen, so it
+	// is monotonic without a clock. Zero on an operator-registered client, which is
+	// never evicted anyway.
+	Seq int64 `json:"seq,omitempty"`
 }
 
 // allowsRedirect reports whether uri is one this client registered. Exact string
@@ -73,12 +87,18 @@ type oauthClientView struct {
 	RedirectURIs []string `json:"redirectUris"`
 	CreatedAt    int64    `json:"createdAt"`
 	CreatedBy    string   `json:"createdBy,omitempty"`
+
+	// SelfRegistered says nobody entered this client by hand. Always present rather
+	// than omitted when false: a listing where the field is simply absent on the
+	// vetted ones reads as if the distinction were not being made.
+	SelfRegistered bool `json:"selfRegistered"`
 }
 
 func (c oauthClient) view() oauthClientView {
 	return oauthClientView{
 		ID: c.ID, Name: c.Name, RedirectURIs: c.RedirectURIs,
 		CreatedAt: c.CreatedAt, CreatedBy: c.CreatedBy,
+		SelfRegistered: c.Dynamic,
 	}
 }
 
