@@ -218,8 +218,8 @@
         "de": "Ein Prozessschritt kann jetzt einen Jira-Vorgang anlegen, lesen, ändern, in den nächsten Status weiterschalten, kommentieren, zuweisen oder per JQL suchen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Sie geben dem Task Projekt, Vorgangstyp und Zusammenfassung; Atlas baut daraus, was Jira erwartet, und schreibt den angelegten Vorgang in eine Variable, sodass ein späterer Schritt ihn als =ticket.key ansprechen kann. Adresse und Zugangsdaten der Jira-Instanz liegen unter Konnektoren, nicht im Modell — deshalb ist der Wechsel von der Test- zur echten Jira eine Änderung an einer Stelle. Jira Cloud und Jira Data Center funktionieren beide, und das Modell muss nicht wissen, mit welchem es spricht."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0201",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
       },
       "tags": [
         "Connectors",

@@ -234,7 +234,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **A Jira connector.** Atlassian Jira is a first-class connector kind
-  ([ADR-draft-jira-connector](docs/adr/draft-jira-connector.md)): a service task marked
+  ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one issue-tracker operation
   against a server-registered Jira instance, off the processor loop and after fsync like
   every other connector. Seven operations cover the loop a process actually runs —

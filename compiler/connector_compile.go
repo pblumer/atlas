@@ -1480,7 +1480,7 @@ func jiraOpNames() []string {
 
 // compileJiraConnectorTask compiles an <atlas:jiraConnector> task: one issue-tracker
 // operation against a server-registered Jira instance via the job path
-// (ADR-draft-jira-connector). The base URL and credential are resolved server-side by
+// (ADR-0201). The base URL and credential are resolved server-side by
 // connector name, like Remedy's and SharePoint's; only the operation and its values
 // live in the model.
 func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {

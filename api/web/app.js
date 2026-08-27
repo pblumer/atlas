@@ -481,7 +481,7 @@ const CONNECTORS = [
   {
     id: "jira", name: "Jira", kind: "Issue tracker",
     desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored via the Jira Connector service-task type.",
-    refs: "ADR-0041 · ADR-draft-jira-connector", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0201", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",

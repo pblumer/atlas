@@ -245,7 +245,7 @@ var managedConnectorKinds = []managedConnectorKind{
 	},
 	{
 		// A Jira connector task performs one issue-tracker operation against a
-		// server-registered Atlassian Jira instance (ADR-draft-jira-connector) and
+		// server-registered Atlassian Jira instance (ADR-0201) and
 		// writes what Jira returned into the task's result variable
 		// (HandleWithOutput) — for the operations Jira answers with something. The
 		// base URL and credential bundle live in the managed connector store; the

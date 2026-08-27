@@ -289,7 +289,7 @@ atlas/
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
 │   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
 │   ├── remedy/        BMC Remedy AR System (ADR-0106)
-│   ├── jira/          Atlassian Jira issues (ADR-draft-jira-connector)
+│   ├── jira/          Atlassian Jira issues (ADR-0201)
 │   ├── webscrape/     Web scraping (ADR-0118)
 │   ├── clio/          clio event store: read, write, query (ADR-0036)
 │   ├── temis/         temis decision service (ADR-0050)

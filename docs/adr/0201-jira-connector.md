@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas Jira connector
+# ADR-0201: Atlas Jira connector
 
 - **Status:** Proposed
 - **Date:** 2026-08-27

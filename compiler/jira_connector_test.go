@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:jiraConnector> extension is a Jira connector task
-// (ADR-draft-jira-connector): it performs one issue-tracker operation against a
+// (ADR-0201): it performs one issue-tracker operation against a
 // server-registered Jira instance via the job path. The base URL and credential live
 // server-side, like Remedy's and SharePoint's (ADR-0106/0141); only what the task is
 // *about* — the operation and its values — is authored in the model.

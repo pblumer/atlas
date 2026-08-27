@@ -272,7 +272,7 @@ The control-flow basics most real models use.
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   connector runs against unmodified (package `connector/remedy/mock`).
   **A Jira connector is another catalog kind**
-  ([ADR-draft-jira-connector](docs/adr/draft-jira-connector.md)): a service task marked
+  ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
   through the REST API on the job path. Seven operations cover the loop a process runs
   against an issue tracker — `create-issue`, `get-issue`, `update-issue`,

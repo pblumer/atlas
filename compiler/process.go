@@ -461,7 +461,7 @@ type UserTaskDetail struct {
 //   - Jira (JobType == JiraJobType): Connector names the server-registered Jira
 //     instance; JiraOp is the issue-tracker operation and the Jira* fields below are
 //     the values it takes (all literal-or-FEEL); ResultVar, if set, receives what Jira
-//     returned (ADR-draft-jira-connector).
+//     returned (ADR-0201).
 //   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
@@ -759,7 +759,7 @@ type ConnectorTaskDetail struct {
 	LdifOperation int32
 	LdifSource    int32
 	LdifResult    int32
-	// Jira connector fields (JobType == JiraJobType, ADR-draft-jira-connector).
+	// Jira connector fields (JobType == JiraJobType, ADR-0201).
 	// Connector (above) names the server-registered Jira instance — its base URL and
 	// credential live in the managed connector store and the vault, never in a model.
 	// JiraOp is the interned operation ("create-issue"|"get-issue"|"update-issue"|

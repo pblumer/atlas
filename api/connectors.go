@@ -288,7 +288,7 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 
 // buildJiraClients assembles the Jira connector clients from the enabled managed
 // connector instances of kind "jira", resolving each instance's credential bundle from
-// its credentialsRef via the vault (ADR-draft-jira-connector, ADR-0041). It reads the
+// its credentialsRef via the vault (ADR-0201, ADR-0041). It reads the
 // connector store, so callers run it on the run-loop goroutine (the store's owner). It
 // mirrors buildSharePointClients: credential dispatch — which of the two bundle shapes
 // an operator stored, and so which authentication scheme this instance uses — lives in

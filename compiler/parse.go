@@ -1879,7 +1879,7 @@ type xmlServiceTask struct {
 	// (ADR-0171): LDIF or DSML entries read from, or written to, a variable.
 	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
 	// Jira, when present, marks this service task a Jira connector task
-	// (ADR-draft-jira-connector): one issue-tracker operation against a
+	// (ADR-0201): one issue-tracker operation against a
 	// server-registered Jira instance.
 	Jira *xmlJiraConnector `xml:"extensionElements>jiraConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
@@ -2347,7 +2347,7 @@ type xmlSharePointConnector struct {
 // at call time (the fx toggle, ADR-0067).
 // A Jira connector task's parameters, carried on a service task as an
 // <atlas:jiraConnector connector="..." operation="..." .../> extension element
-// (ADR-draft-jira-connector). connector names a server-registered Jira instance (its
+// (ADR-0201). connector names a server-registered Jira instance (its
 // base URL and credential live on the server, never in the model) and operation is the
 // issue-tracker operation the task performs.
 //

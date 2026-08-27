@@ -336,7 +336,7 @@ const LdifJobType = "io.atlas.ldif"
 const LdifJobTypeIndex int32 = 24
 
 // JiraJobType is the reserved job type a Jira connector task carries
-// (ADR-draft-jira-connector). One job type serves every Jira operation — create an
+// (ADR-0201). One job type serves every Jira operation — create an
 // issue, read one, update, transition, comment, assign, or search — because they
 // share an instance, a credential and an error envelope; the operation is a modeled
 // value rather than a reserved index of its own, as it is for the directory
@@ -1684,7 +1684,7 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 }
 
 // JiraConfig is the deploy-time configuration of a Jira connector task
-// (ADR-draft-jira-connector). Connector names the server-registered Jira instance (its
+// (ADR-0201). Connector names the server-registered Jira instance (its
 // base URL and credential live server-side, never in the model) and Operation is the
 // issue-tracker operation. The remaining values are the ones that operation takes —
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the

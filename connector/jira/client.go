@@ -2,7 +2,7 @@
 // BPMN Jira connector task performs one issue-tracker operation — create an issue,
 // read one, update it, move it through its workflow, comment on it, assign it, or
 // search — against a configured Jira instance via the job path
-// (ADR-draft-jira-connector). It mirrors how the remedy package delegates a ticket to
+// (ADR-0201). It mirrors how the remedy package delegates a ticket to
 // a registry-managed ITSM instance (ADR-0106) and mail a send to a registry-managed
 // provider (ADR-0079), and inherits the job protocol's durability and non-blocking
 // properties (ADR-0007):
@@ -34,7 +34,7 @@
 // Delivery is at-least-once: a crash between "Jira created the issue" and "job
 // completed" replays the create, which can produce a duplicate issue. The job key
 // rides along as an X-Request-ID for a downstream de-duplicator; a real idempotency
-// key is a follow-up (ADR-draft-jira-connector).
+// key is a follow-up (ADR-0201).
 package jira
 
 import (

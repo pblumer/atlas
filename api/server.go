@@ -345,7 +345,7 @@ type Server struct {
 	remedyRegistry *remedy.Registry
 
 	// jiraRegistry resolves a connector name to an Atlassian Jira REST client for Jira
-	// connector tasks (ADR-draft-jira-connector), built from the managed connector
+	// connector tasks (ADR-0201), built from the managed connector
 	// store at startup and rebuilt on every connector change, with each instance's
 	// credential bundle resolved from the vault (ADR-0041). Read only while driving
 	// jobs on the run loop, so it needs no lock.
