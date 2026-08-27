@@ -719,8 +719,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   a claude.ai custom connector). Both proxy tool calls to the Atlas HTTP API, so
   an AI agent can deploy a model, start an instance, and read live runtime state.
   Hand-written, no new dependency; the engine invariants stay behind the HTTP API.
-  The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
-  exposing it publicly.
+  `/mcp` is mounted inside the API server's own access boundary, so `--auth` gates
+  it like every other route, and a tool call carries the caller's credential rather
+  than one the adapter supplies
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
 - 🔲 Full properties panel — the hand-written Details panel grows group by group
   ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
   ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
@@ -772,8 +774,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   stable opaque id, a **role list** (RBAC-ready, only `admin` enforced today),
   `Disabled` for deactivation, and `Source`/`ExternalID` hooks for external
   identity providers. Passwords are bcrypt-hashed and never leave the server.
-  Enforcement is **opt-in** (`--auth` / `WithAuth()`, off by default, mirroring
-  `--docs`): with it on, `/api/v1` requires a session (opaque HttpOnly cookie),
+  Enforcement is **on by default** for `atlas serve` — `--auth=false` runs the
+  server open and says so loudly at startup
+  ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md); it was
+  opt-in under ADR-0044, mirroring `--docs`). With it on, `/api/v1`, `/mcp` and the
+  API explorer require a session (opaque HttpOnly cookie),
   managing users requires `admin`, and a fresh instance seeds an admin from
   `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD` (a generated password is logged
   once — no hardcoded credential). The Console's **Organization** page is now a
@@ -786,11 +791,17 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   user as its identity, and an "Assign to…" picker is sourced from a non-admin
   `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
   `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
-  sessions, multi-tenancy, and audit logging. Under `--auth` the in-process **MCP
-  adapter authenticates its loopback calls** with an internal, non-admin service
-  token ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)), so enabling
-  auth no longer breaks MCP; the external `/mcp` transport is still unauthenticated
-  and should be fronted by a reverse proxy (ADR-0016).
+  sessions, multi-tenancy, and audit logging. **Which routes the boundary gates** is
+  now a class declared at each mount site, resolved fail-closed, and held to a
+  written-out allowlist by a test — replacing a path-prefix rule under which a route
+  was public by omission
+  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)). That is
+  what makes **`/mcp` an ordinary gated route**, carrying its caller's own credential
+  instead of the adapter's
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md));
+  the internal service token of
+  [ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md) stays as what a
+  supervised worker authenticates with.
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes

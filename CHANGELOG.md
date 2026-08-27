@@ -12,6 +12,188 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Security
+
+- **`/metrics` moved behind the boundary — the last route that had not.** The
+  Prometheus exposition was served without authentication since
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), for a reason that has since
+  stopped being true: a scraper carried no session and could not present anything,
+  so the guidance was to put a proxy in front of it. With API tokens it can present
+  something. `/metrics` is now gated like every other route, and a new token scope,
+  `metrics`, allows exactly one pattern — `GET /metrics`, the narrowest scope in the
+  system
+  ([ADR-draft-metrics-behind-the-boundary](docs/adr/draft-metrics-behind-the-boundary.md)).
+
+  Worth being plain about: **the payoff here is structural, not confidential.** The
+  exposition carries instance counts, batch latencies and queue depth — no process
+  variables, no business data. What it buys is that "no interface is reachable
+  without a credential" is now true without a footnote, and that the public list is
+  short enough to read at a glance: the two probes, the login screen's own reads,
+  the token-bearing share links, and the UI.
+
+  **Breaking: every existing scrape config needs a credential.** For Prometheus that
+  is two lines:
+
+  ```yaml
+  authorization:
+    credentials: atlasat_…      # an API token scoped "metrics"
+  ```
+
+  A failing scrape looks like a healthy server, so this is worth doing before the
+  upgrade rather than after; a refused scrape shows up as `auth.denied`. The probes
+  are untouched and stay open — a readiness probe that needs a credential does not
+  work in the incident it exists for — and a signed-in person still reaches the
+  exposition. `--metrics=false` still turns it off entirely.
+
+- **API tokens: a credential a machine can actually be given.** Under `--auth`, the
+  only non-session credential the server accepted was the internal service token —
+  minted at startup, kept in memory, served over no endpoint, and therefore
+  obtainable only by the process that minted it. That was fine while its holders
+  were this server's own children. It stopped being fine when a login became the
+  default: **a worker on another host, a stdio MCP adapter against a remote server
+  and a CI job all had nothing to present**, and the `--token` flags on
+  `atlas worker` and `atlas mcp` had no value an operator could put in them.
+
+  The workaround the code appeared to offer did not exist either. `workerTokenEnv`
+  honours an operator-set `ATLAS_TOKEN` and stops injecting its own — but
+  `principalFor` compared a bearer only against the internal token, so the value was
+  honoured on the way out and refused on the way in: setting the variable handed
+  every supervised worker a credential the server rejects at every poll.
+
+  `POST /api/v1/api-tokens` now mints one (admin-only). The secret is returned
+  exactly once — only its SHA-256 is stored — and it carries a **lifetime** and a
+  **scope**. `worker` reaches the four operations `atlas worker` actually performs
+  and nothing else; `full` reaches what a signed-in non-admin reaches, for a CI job
+  or an MCP adapter, and is never an admin. Revocation is deletion and takes effect
+  on the next request; an expired token is refused like an unknown one while its
+  record stays listed. `ATLAS_TOKEN` set to an API token now works as the comment
+  always claimed, and a value the server does not accept is called out at startup
+  (`auth.worker_token_unknown`) instead of being discovered one failing job at a
+  time ([ADR-draft-api-tokens](docs/adr/draft-api-tokens.md)).
+
+  The deploy-token allowlist of
+  [ADR-0129](docs/adr/0129-remote-deployment-targets.md) folds into the same scope
+  mechanism rather than sitting beside it, so what *any* machine credential can
+  reach is one file. Deploy tokens keep their own store, prefix and record; what
+  moved is the reach check, not the identity.
+
+- **The login is throttled, and there is a security audit trail.** Two gaps that
+  mattered more the moment a login became the default. `/api/v1/auth/login` had
+  nothing in front of it — the token bucket existed but guarded only the public form
+  routes, so password guessing was bounded by nothing but how fast bcrypt would
+  answer, which is backwards: each attempt cost the server ~100ms of CPU and the
+  caller one request. And who signed in, who failed to, and who changed an account
+  appeared in no log at all, so the compliance answer for that had to be "the reverse
+  proxy supplies it" — an answer about somebody else's software, and one that cannot
+  name the *account* an attempt was against.
+
+  Attempts are now throttled on two keys into the same token bucket: 20 per address
+  back to back (refilling every two seconds — a whole office behind one NAT address
+  is an ordinary deployment), and 5 per account (refilling over 15 minutes). It is
+  charged **before** the account is looked up and whether or not that account exists,
+  so the throttle does not answer the question the uniform "invalid credentials"
+  message is careful to leave open, and a flood costs the server a map lookup rather
+  than a bcrypt verification. A successful login clears the account's budget, so two
+  mistyped passwords are not carried around for a quarter of an hour, and the lockout
+  always heals on its own — no operator has to lift one.
+
+  Eleven stable `auth.*` events now record sign-ins, refused sign-ins with the reason,
+  throttling, sign-outs, authorization refusals, the account lifecycle, password sets
+  and deploy-token mint/revoke. Each carries the acting principal and the client
+  address; none carries a password, a hash or a token, and a test drives real secrets
+  through the handlers and asserts none of them reaches the log. Anonymous `401`s are
+  deliberately not recorded — they would bury the meaningful lines under every probe
+  that finds the port. Ship them with `--log-format=json`
+  ([ADR-draft-login-throttle-and-audit-log](docs/adr/draft-login-throttle-and-audit-log.md)).
+
+  **Minor behaviour change:** a burst of failed logins now answers `429` rather than
+  continuing to answer `401`.
+
+- **`atlas serve` requires a login by default.** `--auth` was opt-in, mirroring
+  `--docs` ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) —
+  a reasonable call when authentication first landed and turning it on broke MCP, the
+  explorer and the tests at once. Those reasons are worked through, and what was left
+  was a default that every document about Atlas told you to change: the install guide,
+  the Helm chart and the compliance concept all opened with "turn on `--auth`". A
+  default everything tells you to change is not a default, it is a trap with
+  documentation around it.
+
+  It is now on. `--auth=false` still runs the server fully open and writes one WARN
+  line at startup (`auth.disabled`) naming what that means — the API, the UI, and
+  `/mcp`, which can deploy and run processes. The first start with an empty user store
+  seeds one administrator from `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD`, or
+  generates a password and logs it **once**; that path was always there, it is just no
+  longer step 6 of the install guide. The Helm chart follows, defaulting
+  `atlas.auth.enabled` to `true` and no longer refusing to render without an admin
+  password source — set `atlas.auth.existingSecret` for anything beyond a scratch
+  install ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md)).
+
+  **Breaking.** `atlas serve` with no flags now requires a login. Pass `--auth=false`
+  for the old behaviour.
+
+- **The API description and the explorer are behind the login.** `GET
+  /api/v1/openapi.json` and `/api/docs` were public. Nothing on the login screen reads
+  either, and the explorer's "Try it out" drives the same mutating API a session is
+  required for — the argument `--docs` already makes, one step further. `--docs` still
+  decides whether they are served at all; a login now decides who reads them. They moved
+  together on purpose: an explorer that renders and then cannot fetch its own document
+  is worse than one that says plainly it needs a login.
+
+- **`/mcp` is behind the login, and acts as its caller.** The Model Context Protocol
+  transport was mounted on a mux *beside* the API server, so the authentication
+  middleware never saw it — while the adapter attached the server's internal service
+  token to every loopback call it made
+  ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)). `--auth` therefore did
+  not close `/mcp`; it supplied it with a working credential. Anything that could reach
+  the port drove 71 tools as the `system:mcp` principal, `atlas_deploy` among them — and
+  deploying runs script tasks as the service user, so an exposed `/mcp` was code
+  execution with no authentication at all.
+
+  It is now mounted by the API server itself (`api.WithMCP`) and gated like every other
+  route: without a credential, `401` and a `WWW-Authenticate: Bearer` header. The adapter
+  carries no identity of its own over HTTP — it forwards the `Authorization` or `Cookie`
+  the request arrived with, so a tool call is exactly as privileged as whoever made it,
+  is attributed to them, and inherits every authorization rule the API has. An admin over
+  MCP can now reach an admin-gated tool; a signed-in non-admin cannot; and a deploy
+  token presented there is refused outright, because the transport is not one of the
+  two operations that credential is confined to
+  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
+
+  **Breaking, on servers running `--auth`.** An MCP client that reached `/mcp` without
+  presenting anything now gets `401` and must send the session cookie or a bearer token.
+  A server without `--auth` is unchanged — and is still open, `/mcp` included.
+
+- **`atlas mcp --token`.** The stdio adapter had no way to present a credential, so it
+  could not work against a server running `--auth` at all: every tool call came back
+  `401`, while `atlas worker` has had `--token` for some time. It now takes the same
+  flag, defaulting to `ATLAS_TOKEN`, and trims it — a token exported from a shell
+  profile routinely carries a trailing newline, and a bearer sent with one is refused
+  for a reason nothing in the `401` explains. Startup logs whether a credential is
+  configured (never the credential), because "every tool returns 401" and "no token was
+  set" are the same incident.
+
+- **Every mounted route declares who may reach it.** Which requests the boundary gated
+  used to be a path-prefix test — gated if and only if the path started with `/api/v1` —
+  so a route was public by *omission*: anything registered elsewhere was open because of
+  where it sat, not because anyone decided it should be. That is how `/mcp` and
+  `/metrics` came to be reachable without a login.
+
+  Each route now states an access class where it is mounted, and a request is classified
+  by the pattern that will actually serve it; an undeclared pattern is gated, so mounting
+  a route off to the side fails safe instead of inheriting the UI catch-all. The
+  resulting public set — probes, metrics, the login screen's own reads, the API explorer,
+  the share links and the UI — is held against a written-out list by a test, so opening a
+  route is a reviewable diff rather than a side effect
+  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)).
+
+  Because patterns carry methods, so does the class: `GET /api/v1/settings/theme`,
+  `/logo` and `/registration` stay public for the login screen, while `PUT` and `DELETE`
+  of those paths are now refused at the boundary rather than only by the admin check
+  inside each handler. **Minor behaviour change:** an anonymous write to one of them
+  answers `401` instead of `403` — nothing was presented, which is what `401` means.
+  Which routes are public is otherwise unchanged; `/metrics` in particular is still
+  served without a credential, now by declaration rather than by accident.
+
 ### Added
 
 - **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job

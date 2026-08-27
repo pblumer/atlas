@@ -3,11 +3,13 @@ package api
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/logging"
 )
 
 // Deploy-token management (ADR-0129). Minting, listing, and revoking the
@@ -97,6 +99,8 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusInternalServerError, "create deploy token: "+saveErr.Error())
 		return
 	}
+	audit(r, logging.AuthTokenMinted, "deploy token minted",
+		slog.String("token_id", rec.ID), slog.String("token_name", rec.Name))
 	httpapi.JSON(w, http.StatusOK, newDeployTokenResp{deployTokenView: rec.view(), Token: secret})
 }
 
@@ -142,5 +146,6 @@ func (s *Server) handleRevokeDeployToken(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusInternalServerError, "revoke deploy token: "+delErr.Error())
 		return
 	}
+	audit(r, logging.AuthTokenRevoked, "deploy token revoked", slog.String("token_id", id))
 	w.WriteHeader(http.StatusNoContent)
 }

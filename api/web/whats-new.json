@@ -2,6 +2,187 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "metrics-moved-behind-the-boundary-the-last-route-that-had-no",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "The monitoring endpoint asks for a credential now",
+        "de": "Der Monitoring-Endpunkt verlangt jetzt einen Zugang"
+      },
+      "summary": {
+        "en": "`/metrics` was the last address on the server that anybody could read without presenting anything — for a plain reason: until now a monitoring scraper had nothing it could present. With API tokens it does, so the exposition is gated like every other route, and a token scope named `metrics` reaches exactly this one address and nothing else. Worth being plain about the size of this: what `/metrics` carries is instance counts, batch times and queue depth — no process data and no business data. What it buys is that \"nothing here is reachable without a credential\" is now true without an exception. Breaking: every existing scrape configuration needs the token added, which for Prometheus is two lines. The health probes stay open, because a readiness check that needs a credential is useless in the incident it exists for.",
+        "de": "`/metrics` war die letzte Adresse dieses Servers, die jeder ohne Ausweis lesen konnte — aus einem einfachen Grund: Ein Monitoring-Scraper hatte bisher nichts, was er hätte vorzeigen können. Mit API-Tokens hat er es, und deshalb liegt die Metrik-Ausgabe jetzt hinter derselben Anmeldung wie jede andere Route; ein Token-Scope namens `metrics` erreicht genau diese eine Adresse und sonst nichts. Zur Grössenordnung, ganz offen: Was unter `/metrics` steht, sind Instanzzahlen, Batch-Zeiten und Warteschlangenlängen — keine Prozessdaten, keine Geschäftsdaten. Der Gewinn ist, dass „nichts ist ohne Zugang erreichbar\" jetzt ohne Fussnote stimmt. Brechend: Jede bestehende Scrape-Konfiguration braucht das Token — bei Prometheus sind das zwei Zeilen. Die Health-Probes bleiben offen, denn eine Bereitschaftsprüfung, die einen Zugang braucht, hilft in genau dem Vorfall nicht, für den es sie gibt."
+      },
+      "link": {
+        "label": "ADR-0142",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "api-tokens-a-credential-a-machine-can-actually-be-given",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "API tokens: a credential you can hand to a machine",
+        "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
+      },
+      "summary": {
+        "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
+        "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-login-is-throttled-and-there-is-a-security-audit-trail",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Password guessing is slowed down, and sign-ins are recorded",
+        "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
+      },
+      "summary": {
+        "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
+        "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Organization"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organisation öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
+      "id": "atlas-serve-requires-a-login-by-default",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Atlas asks for a login out of the box",
+        "de": "Atlas verlangt von Haus aus eine Anmeldung"
+      },
+      "summary": {
+        "en": "Starting the server left it open unless you passed `--auth`, and every document about Atlas — the install guide, the Helm chart, the compliance concept — opened by telling you to pass it. A default that everything tells you to change is not a default. The login is now on. A first start with an empty user store seeds one administrator from `ATLAS_ADMIN_USERNAME` and `ATLAS_ADMIN_PASSWORD`, or generates a password and writes it to the log once; that path was always there, it is simply no longer step six of the install guide. `--auth=false` still runs the server wide open and now says so in a warning line at startup, naming what it means: the API, the UI and the MCP connection, which can deploy and run processes. Breaking: `atlas serve` with no flags now requires a login — pass `--auth=false` for the old behaviour.",
+        "de": "Der Server lief offen, solange man nicht `--auth` mitgab — und jedes Dokument über Atlas, ob Installationsanleitung, Helm-Chart oder Compliance-Konzept, begann damit, genau das zu verlangen. Ein Standard, den einem alle Unterlagen auszureden versuchen, ist kein Standard. Die Anmeldung ist jetzt an. Beim ersten Start mit leerem Benutzerbestand wird ein Administrator aus `ATLAS_ADMIN_USERNAME` und `ATLAS_ADMIN_PASSWORD` angelegt, oder ein Passwort erzeugt und einmalig ins Log geschrieben; diesen Weg gab es immer, er ist nur nicht mehr Schritt sechs der Anleitung. `--auth=false` lässt den Server weiterhin vollständig offen laufen und sagt das jetzt beim Start in einer Warnzeile — samt dem, was es bedeutet: die API, die Oberfläche und der MCP-Zugang, über den sich deployen und Prozesse starten lassen. Brechend: `atlas serve` ohne Optionen verlangt jetzt eine Anmeldung; `--auth=false` stellt das alte Verhalten her."
+      },
+      "link": {
+        "label": "ADR-0044",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0044-user-management-and-authentication-boundary.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-api-description-and-the-explorer-are-behind-the-login",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "The API description and its explorer are behind the login",
+        "de": "Die API-Beschreibung und ihr Explorer liegen hinter der Anmeldung"
+      },
+      "summary": {
+        "en": "The machine-readable API description and the built-in explorer were readable by anyone who found the port. Nothing on the login screen reads either of them, and the explorer's \"Try it out\" drives the very API a session is required for — so this is the argument `--docs` already makes, one step further. Whether they are served at all is still `--docs`; who reads them is now the login. They moved together on purpose: an explorer that renders and then cannot fetch its own document is worse than one that says plainly it needs a login.",
+        "de": "Die maschinenlesbare API-Beschreibung und der eingebaute Explorer waren für jeden lesbar, der den Port fand. Der Anmeldebildschirm liest weder das eine noch das andere, und das „Try it out\" des Explorers bedient genau die API, für die eine Sitzung verlangt wird — das ist also dasselbe Argument, das `--docs` ohnehin schon macht, einen Schritt weiter gedacht. Ob beides überhaupt ausgeliefert wird, entscheidet weiterhin `--docs`; wer es liest, entscheidet jetzt die Anmeldung. Beide sind bewusst gemeinsam umgezogen: Ein Explorer, der sich aufbaut und dann sein eigenes Dokument nicht laden kann, ist schlimmer als einer, der klar sagt, dass er eine Anmeldung braucht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security"
+      ]
+    },
+    {
+      "id": "mcp-is-behind-the-login-and-acts-as-its-caller",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "The MCP connection needs a login — and acts as its caller",
+        "de": "Der MCP-Zugang verlangt eine Anmeldung — und handelt als sein Aufrufer"
+      },
+      "summary": {
+        "en": "Atlas offers its features to AI assistants over MCP, and that connection sat outside the login: it was mounted beside the API server, so the check never saw it, while the adapter attached the server's own internal credential to everything it did. `--auth` therefore did not close it — it supplied it. Anything that could reach the port drove all 71 tools as the server itself, deploying among them, and deploying runs script tasks. It is now mounted by the API server and gated like every other route. It also carries no identity of its own any more: it forwards whatever the request arrived with, so a tool call is exactly as privileged as the person or token that made it, is attributed to them, and inherits every rule the API has — an administrator reaches an admin-only tool, a signed-in ordinary user does not, and a deploy token is refused outright. Breaking on a server with a login: an MCP client must now send the session cookie or a bearer token.",
+        "de": "Atlas bietet seine Funktionen KI-Assistenten über MCP an — und dieser Zugang lag ausserhalb der Anmeldung: Er hing neben dem API-Server, sodass die Prüfung ihn nie zu sehen bekam, während der Adapter allem, was er tat, die interne Kennung des Servers mitgab. `--auth` schloss ihn also nicht, sondern versorgte ihn. Wer den Port erreichte, bediente alle 71 Werkzeuge als der Server selbst, das Deployen eingeschlossen — und Deployen führt Skript-Aufgaben aus. Der Zugang wird jetzt vom API-Server selbst bereitgestellt und wie jede andere Route geschützt. Und er bringt keine eigene Identität mehr mit: Er reicht weiter, womit die Anfrage angekommen ist. Ein Werkzeugaufruf hat damit genau die Rechte dessen, der ihn ausgelöst hat, wird ihm zugeschrieben und erbt jede Regel der API — ein Administrator erreicht ein Administrator-Werkzeug, ein angemeldeter gewöhnlicher Benutzer nicht, und ein Deploy-Token wird rundheraus abgewiesen. Auf einem Server mit Anmeldung brechend: Ein MCP-Client muss jetzt das Sitzungs-Cookie oder ein Bearer-Token mitschicken."
+      },
+      "link": {
+        "label": "ADR-0049",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0049-internal-service-auth-for-mcp.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "atlas-mcp-token",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "The MCP bridge can present a credential",
+        "de": "Die MCP-Brücke kann sich ausweisen"
+      },
+      "summary": {
+        "en": "`atlas mcp` connects a local AI assistant to an Atlas server, and against one that requires a login it had nothing to present: every tool call came back with a 401, while `atlas worker` has had a `--token` flag for some time. It now takes the same flag, defaulting to `ATLAS_TOKEN`, and trims the value — a token exported from a shell profile routinely carries a trailing newline, and a credential sent with one is refused for a reason nothing in the error explains. Startup logs whether a credential is configured, never the credential itself, because \"every tool returns 401\" and \"no token was set\" are the same incident.",
+        "de": "`atlas mcp` verbindet einen lokalen KI-Assistenten mit einem Atlas-Server — und gegenüber einem Server mit Anmeldung hatte die Brücke nichts vorzuweisen: Jeder Werkzeugaufruf kam als 401 zurück, während `atlas worker` seine `--token`-Option längst hat. Sie nimmt jetzt dieselbe Option, standardmässig aus `ATLAS_TOKEN`, und schneidet Leerraum ab — ein Token aus einem Shell-Profil trägt regelmässig einen Zeilenumbruch am Ende, und ein damit gesendeter Zugang wird aus einem Grund abgewiesen, den die Fehlermeldung nicht nennt. Beim Start wird protokolliert, ob ein Zugang konfiguriert ist, niemals der Zugang selbst — denn „jedes Werkzeug antwortet mit 401\" und „es wurde kein Token gesetzt\" sind derselbe Vorfall."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "every-mounted-route-declares-who-may-reach-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Every address the server answers on says who may reach it",
+        "de": "Jede Adresse des Servers sagt, wer sie erreichen darf"
+      },
+      "summary": {
+        "en": "Whether a request needed a login used to be decided by whether its path began with `/api/v1`, so a route was public by omission: anything registered elsewhere was open because of where it sat, not because anyone had decided it should be. That is how the MCP connection and the monitoring endpoint came to be reachable without one. Each route now states its access class where it is registered, a request is classified by the pattern that will actually serve it, and an undeclared pattern is closed — so mounting something off to the side fails safe instead of quietly inheriting the UI's open catch-all. The resulting public set is held against a written-out list by a test, which makes opening a route a reviewable change rather than a side effect. Because those patterns carry the method, so does the class: reading the login screen's own theme and logo stays public, while writing them is now refused at the boundary. Minor change: an anonymous write to one of those answers 401 rather than 403 — nothing was presented, which is what 401 means.",
+        "de": "Ob eine Anfrage eine Anmeldung brauchte, entschied bisher, ob ihr Pfad mit `/api/v1` begann. Eine Route war damit öffentlich durch Unterlassung: Was anderswo registriert war, stand offen, weil es dort hing — nicht, weil das jemand entschieden hätte. So kam es, dass der MCP-Zugang und der Monitoring-Endpunkt ohne Anmeldung erreichbar waren. Jede Route nennt ihre Zugriffsklasse jetzt dort, wo sie registriert wird; eine Anfrage wird nach dem Muster eingeordnet, das sie tatsächlich bedienen wird; und ein nicht deklariertes Muster ist geschlossen — etwas abseits einzuhängen scheitert also sicher, statt stillschweigend den offenen Auffangpfad der Oberfläche zu erben. Was am Ende öffentlich ist, hält ein Test gegen eine ausgeschriebene Liste: Eine Route zu öffnen ist damit eine überprüfbare Änderung und kein Nebeneffekt. Weil diese Muster die HTTP-Methode enthalten, gilt das auch für die Klasse: Farbschema und Logo des Anmeldebildschirms zu lesen bleibt öffentlich, sie zu ändern wird jetzt schon an der Grenze abgewiesen. Kleine Änderung: Ein anonymer Schreibzugriff darauf antwortet mit 401 statt mit 403 — es wurde nichts vorgezeigt, und genau das heisst 401."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security"
+      ]
+    },
+    {
       "id": "the-bmc-remedy-connector-runs-on-a-worker",
       "version": "Unreleased",
       "date": null,
@@ -138,197 +319,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "the-handbook-takes-on-the-process-developer-s-role-and-build",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Added",
-      "title": {
-        "en": "The handbook now builds a whole application with you",
-        "de": "Das Handbuch baut jetzt eine ganze Applikation mit Ihnen"
-      },
-      "summary": {
-        "en": "Two new chapters take the process developer's side of the work. The first says what the role owns and where a rule belongs — in the form, in a decision table, in its own process. The second builds an applicant-management application in front of you: two processes, three forms, one decision table that decides how many interview rounds run, a system that fails on purpose so you meet the error path. One button installs the whole thing into your instance and starts a case.",
-        "de": "Zwei neue Kapitel nehmen die Sicht des Prozess-Developers ein. Das erste sagt, was zur Rolle gehört und wo eine Regel hingehört — ins Formular, in eine Entscheidungstabelle, in einen eigenen Prozess. Das zweite baut vor Ihren Augen eine Bewerbermanagement-Applikation: zwei Prozesse, drei Formulare, eine Entscheidungstabelle, die über die Zahl der Interviewrunden bestimmt, und ein Umsystem, das absichtlich ausfällt, damit Sie den Fehlerweg erleben. Ein Knopf installiert das Ganze in Ihrer Instanz und startet einen Fall."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Handbook from the grid menu (top left) — or the Handbook link on the Console.",
-          "In the table of contents, pick “Process developer” → “Workshop: an application”.",
-          "Press “Install & start the application”, then follow the two interview tasks in the inbox."
-        ],
-        "de": [
-          "Handbuch über das Raster-Menü oben links öffnen — oder über den Handbuch-Link auf der Konsole.",
-          "Im Inhaltsverzeichnis „Prozess-Developer“ → „Werkstatt: eine Applikation“ wählen.",
-          "Auf „Applikation installieren & starten“ drücken und dann den beiden Interview-Aufgaben im Posteingang folgen."
-        ]
-      }
-    },
-    {
-      "id": "entra-id-can-be-asked-a-question-not-only-told-what-to-do",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Added",
-      "title": {
-        "en": "Find accounts in Entra ID, not just change them",
-        "de": "Konten in Entra ID finden, nicht nur ändern"
-      },
-      "summary": {
-        "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them — including the forms Entra normally refuses, such as \"every mailbox on this domain\", which a single switch unlocks in exchange for answers that may be a moment out of date. Every match arrives in one process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
-        "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert — auch in den Formen, die Entra sonst ablehnt, etwa „jedes Postfach auf dieser Domäne\", die ein einzelner Schalter freischaltet, dafür aber Antworten liefert, die einen Moment veraltet sein dürfen. Alle Treffer kommen in einer einzigen Prozessvariablen an. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
-      },
-      "link": {
-        "label": "ADR-0172",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0172-entra-id-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-loop-says-what-it-was-told-to-repeat-while-and-what-it-dec",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Added",
-      "title": {
-        "en": "A loop's replay says why it went round again — or stopped",
-        "de": "Der Replay einer Schleife sagt, warum sie erneut lief — oder aufhörte"
-      },
-      "summary": {
-        "en": "A looping task used to be a column of identical rows: it ran nine times, and nothing said whether that was the model or a mistake. Each round now shows the condition as you wrote it, the values that condition read for that round, the maximum, and what the loop did next — ran again, or stopped, with the bound that stopped it. The task itself carries the same reading for the whole loop. A model that runs to its maximum because it states no condition now says so.",
-        "de": "Ein Schleifen-Task war bisher eine Spalte gleich aussehender Zeilen: Er lief neun Mal, und nichts sagte, ob das so gemeint war oder ein Fehler. Jeder Durchlauf zeigt jetzt die Bedingung so, wie Sie sie geschrieben haben, die Werte, die diese Bedingung in diesem Durchlauf gelesen hat, das Maximum und was die Schleife danach tat — noch einmal laufen oder aufhören, mitsamt der Grenze, die sie gestoppt hat. Der Task selbst trägt dieselbe Lesart für die ganze Schleife. Ein Modell, das bis zum Maximum läuft, weil es gar keine Bedingung nennt, sagt das jetzt auch."
-      },
-      "link": {
-        "label": "ADR-0077",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0077-multi-instance-activities.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-structured-variable-opens-where-it-stands-and-says-what-sh",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Added",
-      "title": {
-        "en": "See the shape of a variable, not just its first thirty characters",
-        "de": "Die Struktur einer Variable sehen, nicht nur ihre ersten dreissig Zeichen"
-      },
-      "summary": {
-        "en": "A list and one element out of that list looked the same in the variables table: both previews start with the same field, and the bracket that tells them apart falls off the left edge. The summary now carries the brackets — [3 items] against {3 fields} — and a click opens the value in place, formatted, so you read the structure instead of guessing at it. Values too large for a row still open in their own window.",
-        "de": "Eine Liste und ein einzelnes Element daraus sahen in der Variablentabelle gleich aus: Beide Vorschauen beginnen mit demselben Feld, und die Klammer, die sie unterscheidet, fällt links weg. Die Zusammenfassung trägt jetzt die Klammern — [3 items] gegenüber {3 fields} — und ein Klick öffnet den Wert direkt in der Zeile, formatiert. So liest man die Struktur, statt sie zu erraten. Werte, die für eine Zeile zu groß sind, öffnen weiterhin in einem eigenen Fenster."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-4-0"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "deploy-run-opens-the-process-s-start-form",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "Deploy & run opens the process's start form.",
-        "de": "Deploy & run opens the process's start form."
-      },
-      "summary": {
-        "en": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all.",
-        "de": "A process whose start event links a form (ADR-0028) already says what it starts with, in a form somebody laid out — labels, required marks, field types and all."
-      },
-      "link": {
-        "label": "ADR-0028",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
-      }
-    },
-    {
-      "id": "the-modeler-s-variables-panel-says-what-a-variable-holds-not",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "The Modeler's Variables panel says what a variable holds, not just that it exists.",
-        "de": "The Modeler's Variables panel says what a variable holds, not just that it exists."
-      },
-      "summary": {
-        "en": "It listed a name and who writes it.",
-        "de": "It listed a name and who writes it."
-      },
-      "link": {
-        "label": "ADR-0028",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
-      }
-    },
-    {
-      "id": "connectors-are-their-own-page-in-the-console",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "Connectors are their own page in the Console.",
-        "de": "Connectors are their own page in the Console."
-      },
-      "summary": {
-        "en": "They live at #/console/connectors, beside Organization in the navigation.",
-        "de": "They live at #/console/connectors, beside Organization in the navigation."
-      },
-      "link": {
-        "label": "ADR-0041",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0041-connector-management-and-secret-store.md"
-      }
-    },
-    {
-      "id": "the-connector-picker-is-one-line-per-kind",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "The connector picker is one line per kind.",
-        "de": "The connector picker is one line per kind."
-      },
-      "summary": {
-        "en": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath.",
-        "de": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath."
-      },
-      "link": {
-        "label": "ADR-0067",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
       }
     }
   ]

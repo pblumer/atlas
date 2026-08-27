@@ -174,7 +174,7 @@ func runServe(args []string) error {
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
-	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
+	auth := fs.Bool("auth", true, "require login for the API, the UI and /mcp; on by default (opt-out) — pass --auth=false to run open, which is for development and demos only. On the first start with an empty user store it seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD, generating and logging a password once if none is set")
 	publicFormsCORS := fs.String("public-forms-cors", os.Getenv("ATLAS_PUBLIC_FORMS_CORS_ORIGINS"), "comma-separated web origins allowed to embed a public start form cross-origin (ADR-0186); empty (default) blocks cross-origin access, \"*\" allows any origin. Opens only the cookieless /public/forms endpoints, never /api/v1 (or ATLAS_PUBLIC_FORMS_CORS_ORIGINS)")
 	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
@@ -409,6 +409,15 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
+	} else {
+		// The one line that says this instance is open. Running without a login is a
+		// legitimate thing to want — a laptop, a demo, a throwaway container — but it
+		// is now the deliberate exception, and an exception nobody is told about is
+		// how a demo becomes a deployment (ADR-draft-auth-on-by-default).
+		logging.Warn(logging.AuthDisabled,
+			"running WITHOUT authentication: the API, the web UI and /mcp are open to "+
+				"anyone who can reach this port, and /mcp can deploy and run processes. "+
+				"Drop --auth=false to require a login")
 	}
 	if strings.TrimSpace(publicFormsCORS) != "" {
 		apiOpts = append(apiOpts, api.WithPublicFormsCORS(strings.Split(publicFormsCORS, ",")))
@@ -509,31 +518,32 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if strings.TrimSpace(historyConnector) != "" {
 		apiOpts = append(apiOpts, api.WithWorkerHistory(historyConnector, historyScope))
 	}
+	// The MCP "Streamable HTTP" transport, so a remote MCP client (e.g. a claude.ai
+	// custom connector) can reach the same tools the stdio adapter exposes. It stays
+	// a pure adapter (ADR-0016): it proxies to this server's own HTTP API over
+	// loopback rather than touching the engine, so the single-writer invariant is
+	// untouched.
+	//
+	// It is handed to the api server rather than mounted beside it, so /mcp passes
+	// the same access boundary as every other route. Two things follow, and they are
+	// the point (ADR-draft-authenticated-mcp-transport): under --auth a request that
+	// carries no credential is refused at /mcp before the adapter sees it, and the
+	// adapter is given no credential of its own to make up the difference — it
+	// forwards whatever authenticated the caller, so a tool call is exactly as
+	// privileged as whoever made it.
+	//
+	// This used to be a second mux out here, with the server's internal service
+	// token attached to every loopback call (ADR-0049). withAuth never saw those
+	// requests, so anything that could reach the port drove the whole API.
+	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(loopbackURL(addr)))))
+
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
 		return err
 	}
 	defer srv.Close()
 
-	// Mount the MCP "Streamable HTTP" transport at /mcp alongside the API and UI,
-	// so a remote MCP client (e.g. a claude.ai custom connector) can reach the
-	// same tools the stdio adapter exposes. It stays a pure adapter (ADR-0016):
-	// it proxies to this server's own HTTP API over loopback rather than touching
-	// the engine, so the single-writer invariant is untouched.
-	//
-	// Under --auth the adapter authenticates its loopback calls with the server's
-	// internal service token (ADR-0049), so enabling auth no longer breaks MCP.
-	// The token is empty when auth is off, in which case WithBearer is a no-op.
-	//
-	// The /mcp transport itself is still UNAUTHENTICATED for external callers: put
-	// auth in front of it (reverse proxy) before exposing it publicly.
-	mcpSrv := mcp.NewServer(mcp.NewClient(loopbackURL(addr), mcp.WithBearer(srv.InternalToken())))
-	root := http.NewServeMux()
-	root.Handle("/mcp", mcpSrv)
-	root.Handle("/mcp/", mcpSrv)
-	root.Handle("/", srv.Handler())
-
-	httpSrv := &http.Server{Addr: addr, Handler: root}
+	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler()}
 
 	// Shut down cleanly on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -572,22 +582,49 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls
-// to the Atlas server at --server. Protocol traffic uses stdin/stdout; all logs
+// to the Atlas server at --server, authenticating with --token (or ATLAS_TOKEN)
+// where that server requires a login. Protocol traffic uses stdin/stdout; all logs
 // go to stderr so they never corrupt the JSON-RPC stream.
 func runMCP(args []string) error {
-	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to proxy to")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
 	// Protocol traffic owns stdout, so logs go to stderr and nothing else.
 	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
 		return err
 	}
-	logging.Info(logging.MCPProxying, "proxying MCP over stdio", slog.String("server", *server))
+	return runMCPOn(args, os.Stdin, os.Stdout)
+}
 
-	s := mcp.NewServer(mcp.NewClient(*server))
-	return s.Serve(os.Stdin, os.Stdout)
+// runMCPOn is runMCP with its streams supplied, so a test can drive a JSON-RPC
+// message through the real flag parsing, client construction and dispatch — the
+// credential's path in particular, which is wiring and therefore exactly the part
+// a unit test of the mcp package cannot reach.
+func runMCPOn(args []string, in io.Reader, out io.Writer) error {
+	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
+	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to proxy to")
+	// The adapter is a per-agent process with one identity for its whole life, so
+	// unlike the HTTP transport — which forwards each request's own caller — it
+	// authenticates with a credential given here. Without one it cannot work against
+	// a server running --auth at all: every tool call comes back 401
+	// (ADR-draft-authenticated-mcp-transport). The shape is `atlas worker --token`'s,
+	// because it is the same need.
+	token := fs.String("token", os.Getenv("ATLAS_TOKEN"),
+		"bearer token, when the server requires authentication (or ATLAS_TOKEN)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Trimmed because a token exported from a shell profile or read out of a file
+	// routinely carries a trailing newline, and a bearer sent with one is refused
+	// for a reason nothing in the 401 explains.
+	bearer := strings.TrimSpace(*token)
+
+	// Whether a credential is configured, never the credential itself: an attribute
+	// is what a log shipper extracts, indexes and keeps. It is here because "every
+	// tool returns 401" and "no token was set" are the same incident, and an
+	// operator should not have to guess that.
+	logging.Info(logging.MCPProxying, "proxying MCP over stdio",
+		slog.String("server", *server), slog.Bool("authenticated", bearer != ""))
+
+	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer)))
+	return s.Serve(in, out)
 }
 
 // splitList parses a comma-separated flag into trimmed, non-empty entries.
@@ -918,8 +955,9 @@ func runMockRemedy(args []string) error {
 // runResetPassword sets a local user's password directly against the on-disk user
 // store, without a running server or a login. It is the operator recovery path
 // for a self-hosted, admin-managed instance whose admin is locked out — there is
-// no self-service reset and the MCP adapter is not an admin (ADR-0044/0049), so
-// recovery has to be reachable from a shell (e.g. `docker exec … reset-password`).
+// no self-service reset, and MCP is gated too (ADR-0044,
+// ADR-draft-authenticated-mcp-transport), so recovery has to be reachable from a
+// shell (e.g. `docker exec … reset-password`).
 //
 // By default it generates a strong password and prints it once; --password-stdin
 // reads one from stdin instead, keeping the secret out of the process arguments

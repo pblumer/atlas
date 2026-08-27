@@ -183,8 +183,14 @@ func TestLogoUploadValidation(t *testing.T) {
 	}
 }
 
-// TestLogoAdminGated confirms writes are admin-only when auth is on: an
-// unauthenticated PUT and DELETE are forbidden even though GET is public.
+// TestLogoAdminGated confirms writes are admin-only when auth is on, and that the
+// two refusals are told apart: reading the logo is public, writing it with no
+// credential at all is 401, and writing it as a signed-in non-admin is 403.
+//
+// The anonymous write used to answer 403 as well, because the whole path was
+// exempt from the boundary and requireAdmin inside the handler was the only thing
+// refusing. Only the GET is public now (access.go), so a caller who presented
+// nothing is told to authenticate rather than that they lack a role.
 func TestLogoAdminGated(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
 
@@ -192,12 +198,29 @@ func TestLogoAdminGated(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/settings/logo", "", ""); code != http.StatusNotFound {
 		t.Fatalf("public GET logo: status=%d; want 404 (no logo)", code)
 	}
-	// Writes without an admin session are rejected.
-	if code, _ := doReqBytes(t, ts, http.MethodPut, "/api/v1/settings/logo", samplePNG(), "image/png"); code != http.StatusForbidden {
-		t.Fatalf("anon PUT logo: status=%d; want 403", code)
+	// No credential: refused at the boundary.
+	if code, _ := doReqBytes(t, ts, http.MethodPut, "/api/v1/settings/logo", samplePNG(), "image/png"); code != http.StatusUnauthorized {
+		t.Fatalf("anon PUT logo: status=%d; want 401", code)
 	}
-	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/settings/logo", "", ""); code != http.StatusForbidden {
-		t.Fatalf("anon DELETE logo: status=%d; want 403", code)
+	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/settings/logo", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("anon DELETE logo: status=%d; want 401", code)
+	}
+
+	// Signed in, but not an admin: past the boundary, refused by requireAdmin.
+	admin := newClient(t)
+	if code := login(t, admin, ts, "admin", "password1"); code != http.StatusOK {
+		t.Fatalf("admin login: got %d", code)
+	}
+	if code, body := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"alice","password":"password1","roles":["user"]}`); code != http.StatusCreated {
+		t.Fatalf("create alice: got %d (%s)", code, body)
+	}
+	alice := newClient(t)
+	if code := login(t, alice, ts, "alice", "password1"); code != http.StatusOK {
+		t.Fatalf("alice login: got %d", code)
+	}
+	if code, _ := cReq(t, alice, ts, http.MethodDelete, "/api/v1/settings/logo", ""); code != http.StatusForbidden {
+		t.Fatalf("non-admin DELETE logo: status=%d; want 403", code)
 	}
 }
 
