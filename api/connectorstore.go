@@ -48,12 +48,15 @@ const (
 	connectorKindAD = "ad"
 )
 
-// connector is a managed connector instance: an operator-configured, durable
-// integration Atlas delegates to (ADR-0041). It holds a name a model refers to, an
-// endpoint, and — per the secret model — only a *reference* to a credential
-// (CredentialsRef), never the secret value; the token is resolved from the
-// environment at runtime. Disabled instances are kept but not registered.
-type connector struct {
+// worker is an operator-managed Worker (ADR-0203): an instance of a Worker Type
+// configured with the endpoint, provider and credential reference Atlas uses to
+// execute job-backed work. It is the canonical in-process name for what the legacy
+// HTTP/API surface still calls a connector instance.
+//
+// Persisted JSON deliberately stays byte-compatible with the historical connector
+// record. CredentialsRef is only a reference to secret material, never the secret
+// value itself (I6); disabled Workers remain durable but are not registered.
+type worker struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	Kind           string `json:"kind"`
@@ -61,7 +64,7 @@ type connector struct {
 	CredentialsRef string `json:"credentialsRef,omitempty"`
 	Enabled        bool   `json:"enabled"`
 	CreatedAt      int64  `json:"createdAt"`
-	// Provider and Sender apply to a mail connector (Kind == connectorKindMail,
+	// Provider and Sender apply to a mail Worker (Kind == connectorKindMail,
 	// ADR-0079/0081). Provider selects the transport ("smtp", "gmail", or
 	// "microsoft"; empty defaults to SMTP). Sender is the default From address a mail
 	// task falls back to when it authors no sender — and, for SMTP, the auth username;
@@ -73,26 +76,41 @@ type connector struct {
 	Sender   string `json:"sender,omitempty"`
 }
 
-// connectorStore is a durable store for managed connector instances, one JSON file
-// per id under a single directory — the same on-disk sidecar approach as the
-// deployment/draft/dmn-ref stores (ADR-0019/0034/0041). Like them it is owned
-// solely by the server's run-loop goroutine, so it needs no locking; and it holds
-// no secret material, only references (I6).
+// connector is the compatibility name used by the existing connector-oriented API
+// and implementation while ADR-0203 is migrated incrementally. It is an alias, not a
+// second record type, so connector and Worker code share one JSON representation and
+// one durable store.
+type connector = worker
 
-// connectorStore is a durable store for connector records, one JSON file per id
-// under a single directory (ADR-0019). Like every design-time store it is owned
-// solely by the server's run-loop goroutine, so it needs no locking of its own.
-type connectorStore = sidecar.Store[connector]
+// workerStore is the durable store for configured Workers. The directory and JSON
+// shape intentionally remain the historical connector-store format: this migration
+// changes terminology only and must not fork or rewrite persisted design-time state.
+// Like every design-time store it is owned solely by the server run loop and needs no
+// locking of its own (I3).
+type workerStore = sidecar.Store[worker]
 
-// newConnectorStore opens (creating if needed) the connector directory.
-func newConnectorStore(dir string) (*connectorStore, error) {
+// connectorStore is the compatibility name retained for existing callers until the
+// connector-management API migration in ADR-0203 is complete.
+type connectorStore = workerStore
+
+// newWorkerStore opens (creating if needed) the configured-Worker directory. The
+// on-disk store name remains "connectorstore" so existing error text and operational
+// diagnostics do not change during the compatibility window.
+func newWorkerStore(dir string) (*workerStore, error) {
 	return sidecar.NewStore(dir, "connectorstore",
-		func(rec connector) string { return rec.ID },
-		sidecar.Order(func(a, b connector) bool {
+		func(rec worker) string { return rec.ID },
+		sidecar.Order(func(a, b worker) bool {
 			if a.CreatedAt != b.CreatedAt {
 				return a.CreatedAt < b.CreatedAt
 			}
 			return a.ID < b.ID
 		}),
 	)
+}
+
+// newConnectorStore is the compatibility constructor used by the existing Server
+// wiring. It delegates to the canonical Worker store and therefore cannot create a
+// second source of truth.
+func newConnectorStore(dir string) (*connectorStore, error) {
+	return newWorkerStore(dir)
 }
