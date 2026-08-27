@@ -396,7 +396,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
-| `--metrics` | `true` | Serve the Prometheus exposition at `/metrics` |
+| `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
 | `--trace-endpoint` | `$OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector base URL to export request traces to; empty disables tracing — see [Traces](#traces) |
 | `--trace-sample-ratio` | `0.1` | Fraction of traces to record, `0` to `1` |
@@ -451,6 +451,7 @@ history.
 | `/` | Web UI — modeler, operations, tasks, and the in-app handbook |
 | `/api/v1/…` | JSON API |
 | `/api/docs` | API explorer (disable with `--docs=false`) |
+| `/metrics` | Prometheus exposition — gated by `--auth`; scrape with a token scoped `metrics` |
 | `/healthz` | Liveness — is the process alive. Unconditional; never gated by `--auth` |
 | `/readyz` | Readiness — should this instance be routed traffic. Never gated by `--auth` |
 | `/mcp` | Model Context Protocol endpoint — gated by `--auth`; a tool call acts as the caller |
@@ -569,6 +570,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 | Scope | Reaches |
 |-------|---------|
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
+| `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
 | `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused |
 
 Then hand it over as `--token` or `ATLAS_TOKEN`:
@@ -576,6 +578,17 @@ Then hand it over as `--token` or `ATLAS_TOKEN`:
 ```bash
 atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connector script
 atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
+```
+
+For Prometheus, that is two lines in the scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: atlas
+    authorization:
+      credentials: atlasat_…      # a token scoped "metrics"
+    static_configs:
+      - targets: ['atlas.example.com:8080']
 ```
 
 `GET /api/v1/api-tokens` lists what exists (identity, scope, lifetime — never a

@@ -37,7 +37,9 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M7** — Anmelde-Härtung | ✅ umgesetzt — [`ADR-draft-login-throttle-and-audit-log`](../adr/draft-login-throttle-and-audit-log.md), `api/loginguard.go` |
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-draft-api-tokens`](../adr/draft-api-tokens.md), `api/apitokenstore.go` |
-| M6 | offen — das letzte Stück für R-08 |
+| **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-draft-metrics-behind-the-boundary`](../adr/draft-metrics-behind-the-boundary.md) |
+
+**Alle acht Massnahmen sind umgesetzt. R-08 ist grün.**
 
 Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
 Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
@@ -150,7 +152,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M3 ✅ | API-Tokens als erste Klasse | M | O-07, Teil R-04 | G3 |
 | M4 ✅ | `atlas mcp --token` / `ATLAS_TOKEN` | XS | Nebenbefund 1.3 | G3 |
 | M5 ✅ | `--auth` standardmässig an | S | R-08, R-03 | G5 |
-| M6 | `/metrics` auf eigenen Listener bzw. Zugriffsklasse | S | R-08, O-07 | G1 |
+| M6 ✅ | `/metrics` hinter die Schranke, Geltungsbereich `metrics` | S | R-08, O-07 | G1 |
 | M7 ✅ | Anmelde-Härtung: Drosselung je Adresse *und* je Konto | S | O-04, R-12 | — |
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
@@ -287,13 +289,29 @@ Startlog ablesbar ist statt an einer Argumentliste.
 Standard auf «geschützt» gestanden, während die MCP-Pfade noch kein Credential
 halten konnten.
 
-### M6 — `/metrics` trennen
+### M6 — `/metrics` hinter die Schranke ✅
 
-`--metrics-addr` bindet die Prometheus-Exposition auf einen eigenen Listener
-(z. B. `127.0.0.1:9090`); leer gelassen bleibt sie wie heute am Hauptport, dort
-dann in der Zugriffsklasse `operator` (Token nötig). `/healthz` und `/readyz`
-bleiben offen und inhaltslos — eine Bereitschaftssonde, die ein Credential
-braucht, ist eine Sonde, die im Ernstfall nicht funktioniert.
+Kein eigener Listener. Nach M3 ist es ein Geltungsbereich: `/metrics` wird wie
+jede andere Route erzwungen, und ein neuer Token-Geltungsbereich `metrics`
+erlaubt genau ein Muster — `GET /metrics`. Das ist der engste Geltungsbereich im
+System, denn ein Scraper braucht genau ein GET, für immer.
+
+`--metrics-addr` war nur die Antwort auf eine Frage, die sich nicht mehr stellt:
+Er existierte als Idee, weil ein Scraper sich nicht authentisieren konnte. Ein
+zweiter `http.Server` mit eigenem Lebenszyklus tauscht ausserdem nur eine
+Betriebsverantwortung gegen eine andere und lässt den Port selbst weiterhin offen.
+
+`/healthz` und `/readyz` bleiben offen und inhaltslos — eine Bereitschaftssonde,
+die ein Credential braucht, ist eine Sonde, die im Ernstfall nicht funktioniert.
+
+**Ehrlich gesagt:** der Gewinn ist strukturell, nicht vertraulich. Die Exposition
+trägt Instanzzahlen, Batch-Latenzen und Queue-Tiefe — keine Prozessvariablen,
+keine Geschäftsdaten. Was sie bringt: die Aussage «keine Schnittstelle ohne
+Credential» gilt jetzt ohne Fussnote, und die Liste der offenen Routen ist kurz
+genug, um sie auf einen Blick zu lesen. **Breaking:** jede bestehende
+Scrape-Konfiguration braucht zwei Zeilen (`authorization: credentials:`), und ein
+fehlschlagender Scrape sieht aus wie ein gesunder Server — also vor dem Upgrade
+lesen, nicht danach.
 
 ### M7 — Anmelde-Härtung ✅
 
@@ -370,10 +388,14 @@ nicht bemerkt. Genau das ist der Grund für Stufe 1.
 
 ### Stufe 1 — PoC-produktivtauglich
 
-~~M1~~ → (~~M2 + M3 + M4~~) → ~~M5~~ → ~~M7 + M8~~ → M6. **Sieben der acht
-Massnahmen sind umgesetzt.** Offen ist nur **M6** (`/metrics`) — das letzte Stück,
-das R-08 von gelb auf grün bringt, und nach M3 keine Frage eines zweiten Listeners
-mehr, sondern eines Geltungsbereichs `metrics`.
+~~M1 → (M2 + M3 + M4) → M5 → M7 + M8 → M6~~. **Alle acht Massnahmen sind
+umgesetzt.**
+
+Damit gilt: keine Schnittstelle ohne authentisierten Prinzipal, im
+Auslieferungszustand, per Test belegbar — und ohne Fussnote. Offen bleiben genau
+die Routen auf der ausgeschriebenen Liste: die zwei Sonden, was die Anmeldemaske
+selbst liest, die tokenbasierten öffentlichen Links und die statische Oberfläche.
+**R-08 ist grün**, O-07 erledigt, O-03 und O-04 weitgehend.
 
 Danach gilt: **keine Schnittstelle ohne Login**, per Test belegbar, und die
 Absicherung überlebt eine vergessene Proxy-Regel. R-08 geht von rot auf grün, O-07
@@ -443,7 +465,11 @@ Der Nachweis ist Code, nicht Prosa. Nach Stufe 1 muss gelten:
    Log-Ereignisse mit Akteur — und **kein** Secret im Log.
    `TestAuditTrailRecordsTheAccountLifecycle`,
    `TestAuditTrailNeverCarriesASecret`. *(M8)*
-8. `docs/compliance/isds-konzept.md` (Kap. 5.2.2, 5.2.3, 5.4.2, 6.1) und
+8. ✅ `/metrics` verlangt ein Credential; ein `metrics`-Token erreicht genau diese
+   eine Route, ein `worker`-Token nicht; `/healthz` und `/readyz` bleiben offen.
+   `TestMetricsRequiresACredential`, `TestMetricsScopeReachesOnlyTheExposition`.
+   Am Binary verifiziert. *(M6)*
+9. `docs/compliance/isds-konzept.md` (Kap. 5.2.2, 5.2.3, 5.4.2, 6.1) und
    `isds-offene-punkte.md` (O-03, O-04, O-07) sind in derselben Änderung
    nachgeführt — so verlangt es die Pflegeregel in [`README.md`](README.md).
    Für M1 und M2 ✅ erfolgt.
@@ -463,7 +489,7 @@ reproduzierbar (O-15).
 | [ADR-0044](../adr/0044-user-management-and-authentication-boundary.md) | Erzwingung opt-in | Standard umgekehrt (M5). Die `*Principal`-Grenze selbst bleibt unverändert — sie ist der Grund, warum das alles klein bleibt. |
 | [ADR-0129](../adr/0129-remote-deployment-targets.md) | Deploy-Tokens als Sonderfall | Speicher und Muster werden zu API-Tokens verallgemeinert (M3); Deploy-Tokens werden ein Geltungsbereich davon. |
 | [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | `openapi.json` vor dem Login lesbar | Hinter die Schranke, sobald Auth aktiv ist (M5). |
-| [ADR-0142](../adr/0142-prometheus-metrics.md) | `/metrics` ungated wie `/healthz` | Eigener Listener bzw. Zugriffsklasse `operator` (M6). |
+| [ADR-0142](../adr/0142-prometheus-metrics.md) | `/metrics` ungated wie `/healthz` | Hinter der Schranke, mit Geltungsbereich `metrics` (M6). Was ADR-0142 über *Inhalt* und Kosten der Exposition sagt, bleibt unverändert. |
 
 Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
@@ -472,6 +498,7 @@ Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
   — M2, ersetzt die `/mcp`-Aussage aus ADR-0016 und erledigt die Folgearbeit aus
   ADR-0049
 - ✅ [`draft-api-tokens.md`](../adr/draft-api-tokens.md) — M3
+- ✅ [`draft-metrics-behind-the-boundary.md`](../adr/draft-metrics-behind-the-boundary.md) — M6
 - ✅ [`draft-auth-on-by-default.md`](../adr/draft-auth-on-by-default.md) — M5
 - ✅ [`draft-login-throttle-and-audit-log.md`](../adr/draft-login-throttle-and-audit-log.md)
   — M7 und M8 zusammen: eine Drosselung, deren Verweigerungen unsichtbar sind,

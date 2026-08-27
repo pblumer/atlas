@@ -25,10 +25,6 @@ var wantPublicRoutes = []string{
 	"GET /healthz",
 	"GET /readyz",
 
-	// The Prometheus exposition, ungated beside the probes (ADR-0142). Moving it
-	// to its own listener is the follow-up named in the access-class record.
-	"GET /metrics",
-
 	// What the login screen itself reads, before anyone has a session.
 	"POST /api/v1/auth/login",
 	"GET /api/v1/info",
@@ -163,7 +159,10 @@ func TestAccessClassification(t *testing.T) {
 
 		// Probes, metrics, share links, UI.
 		{"healthz", "GET", "/healthz", accessPublic},
-		{"metrics", "GET", "/metrics", accessPublic},
+		// The exposition is the one route that left the public set after the
+		// boundary existed: a scraper is a machine, and machines present credentials
+		// (ADR-draft-metrics-behind-the-boundary).
+		{"metrics", "GET", "/metrics", accessAuthenticated},
 		{"public form", "GET", "/public/forms/abc123", accessPublic},
 		{"public form start", "POST", "/public/forms/abc123/start", accessPublic},
 		{"ui", "GET", "/", accessPublic},

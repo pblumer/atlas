@@ -2066,12 +2066,14 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		mount(class, pattern, h)
 	}
 
-	// The Prometheus exposition sits beside /healthz: same process, same port, and
-	// ungated for the same reason (ADR-0142). Giving it its own listener, so that
-	// what it discloses does not depend on a proxy rule, is the follow-up named in
-	// ADR-draft-route-access-classes.
+	// The Prometheus exposition sits beside the probes — same process, same port
+	// (ADR-0142) — but not beside them in reach. It was the last route whose
+	// protection depended on a proxy rule rather than on this server, and a scraper
+	// is a machine, so it presents a credential like every other machine does: an
+	// API token scoped "metrics", which reaches this one route and nothing else
+	// (ADR-draft-metrics-behind-the-boundary).
 	if s.metricsEnabled {
-		mountFunc(accessPublic, "GET /metrics", s.handleMetrics)
+		mountFunc(accessAuthenticated, "GET /metrics", s.handleMetrics)
 	}
 	// Liveness: is this process alive. Unconditional on purpose — the only remedy a
 	// liveness probe has is a restart, so it must not fail for anything a restart would

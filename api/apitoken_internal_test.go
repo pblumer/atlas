@@ -87,9 +87,12 @@ func TestUnknownScopeReachesNothing(t *testing.T) {
 // operation it meant to permit stays refused while the list reads as if it were
 // allowed — so the entries are checked against the route table itself.
 func TestEveryScopePatternIsARegisteredRoute(t *testing.T) {
+	// Against everything that was mounted, not just the /api/v1 table: a scope may
+	// name a route registered outside it, and the metrics scope does.
+	_, policy := accessTestServer(t).mountRoutes()
 	registered := map[string]bool{}
-	for _, r := range accessTestServer(t).apiRoutes() {
-		registered[r.method+" "+r.pattern] = true
+	for _, pattern := range policy.declaredPatterns() {
+		registered[pattern] = true
 	}
 	for scope, patterns := range apiScopeAllowed {
 		for _, pattern := range patterns {

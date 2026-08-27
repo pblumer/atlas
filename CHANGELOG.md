@@ -14,6 +14,37 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **`/metrics` moved behind the boundary — the last route that had not.** The
+  Prometheus exposition was served without authentication since
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), for a reason that has since
+  stopped being true: a scraper carried no session and could not present anything,
+  so the guidance was to put a proxy in front of it. With API tokens it can present
+  something. `/metrics` is now gated like every other route, and a new token scope,
+  `metrics`, allows exactly one pattern — `GET /metrics`, the narrowest scope in the
+  system
+  ([ADR-draft-metrics-behind-the-boundary](docs/adr/draft-metrics-behind-the-boundary.md)).
+
+  Worth being plain about: **the payoff here is structural, not confidential.** The
+  exposition carries instance counts, batch latencies and queue depth — no process
+  variables, no business data. What it buys is that "no interface is reachable
+  without a credential" is now true without a footnote, and that the public list is
+  short enough to read at a glance: the two probes, the login screen's own reads,
+  the token-bearing share links, and the UI.
+
+  **Breaking: every existing scrape config needs a credential.** For Prometheus that
+  is two lines:
+
+  ```yaml
+  authorization:
+    credentials: atlasat_…      # an API token scoped "metrics"
+  ```
+
+  A failing scrape looks like a healthy server, so this is worth doing before the
+  upgrade rather than after; a refused scrape shows up as `auth.denied`. The probes
+  are untouched and stay open — a readiness probe that needs a credential does not
+  work in the incident it exists for — and a signed-in person still reaches the
+  exposition. `--metrics=false` still turns it off entirely.
+
 - **API tokens: a credential a machine can actually be given.** Under `--auth`, the
   only non-session credential the server accepted was the internal service token —
   minted at startup, kept in memory, served over no endpoint, and therefore

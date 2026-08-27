@@ -343,9 +343,10 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   Routen ist im Code niedergeschrieben und durch einen Test gegen die tatsächlich
   bediente Oberfläche gehalten (`api/access.go`,
   `TestPublicRoutesAreExactlyTheAllowlist`). Offen bleiben: `/healthz`, `/readyz`,
-  `/metrics`, was die Anmeldemaske selbst liest (Login, Produktinfo, Branding,
-  Registrierungslink), der API-Explorer, die tokenbasierten öffentlichen Links und
-  die statische Oberfläche. **`/mcp` gehört nicht mehr dazu.**
+  was die Anmeldemaske selbst liest (Login, Produktinfo, Branding,
+  Registrierungslink), die tokenbasierten öffentlichen Links und die statische
+  Oberfläche. **`/mcp`, der API-Explorer und `/metrics` gehören nicht mehr dazu** —
+  ein Prometheus-Scraper legt ein API-Token mit Geltungsbereich `metrics` vor.
 - **Nicht vorhanden:** SSO/Föderation (eIAM, OIDC, SAML, LDAP-Login), MFA,
   Kontosperre nach Fehlversuchen, Passwortablauf, Wiederverwendungssperre. Die
   Datenmodell-Haken für externe Identitäten (`Source`, `ExternalID`) existieren,
@@ -590,7 +591,7 @@ zu bestätigen.
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets; wer Dateisystemzugriff hat, liest alle Geschäftsdaten | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, minimaler Admin-Kreis) | gelb → **grün** mit M-04 |
 | R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots | Datenschutz (Art. 6 DSG) | M-08, Modellierungsrichtlinie «Referenz statt Inhalt» | **gelb**, grün bei konsistent konfigurierten Fristen |
 | R-07 | **Keine Hochverfügbarkeit.** Single-Writer, genau ein Prozess pro Datenverzeichnis; Ausfall = Ausfall bis Restore/Neustart; Replikation erst geplant (ADR-0175, *Proposed*) | Verfügbarkeit | M-11, M-12, M-17, ⟨VM-/Storage-HA⟩ | **gelb**, abhängig von der Verfügbarkeitsanforderung |
-| R-08 | **Unauthentisierte Endpunkte.** Offen bleiben `/metrics`, `/healthz`, `/readyz`, der API-Explorer und die öffentlichen Start-Links. `/mcp` ist geschlossen (ADR-draft-authenticated-mcp-transport); welche Route offen ist, ist deklariert und per Test belegt (ADR-draft-route-access-classes) | Vertraulichkeit, Integrität | M-01 (`/metrics` sperren), M-13 | **gelb** — `/metrics` hängt noch an der Proxy-Regel; grün, sobald es einen eigenen Listener bzw. eine eigene Zugriffsklasse hat (O-07) |
+| R-08 | **Unauthentisierte Endpunkte.** Offen bleiben nur noch `/healthz`, `/readyz` und die tokenbasierten öffentlichen Links; dazu, was die Anmeldemaske selbst liest. `/mcp` (ADR-draft-authenticated-mcp-transport), der API-Explorer (ADR-draft-auth-on-by-default) und `/metrics` (ADR-draft-metrics-behind-the-boundary) sind geschlossen. Welche Route offen ist, ist deklariert und per Test gegen eine ausgeschriebene Liste gehalten (ADR-draft-route-access-classes) | Vertraulichkeit, Integrität | M-13 | **grün** — keine Route hängt mehr an einer Proxy-Regel |
 | R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, systemd-Härtung | **gelb** |
 | R-10 | **Ausgehende Connector-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
@@ -674,7 +675,7 @@ mit dem ISBO BIT.
 
 | Nr. | Massnahme | Verantwortlichkeit | Umsetzung / Nachweis |
 |-----|-----------|--------------------|----------------------|
-| M-01 | Reverse Proxy mit TLS vorschalten; `/metrics` sperren (`/mcp` ist durch `--auth` geschützt, eine Sperre dort ist zusätzliche Absicherung); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ aktivieren | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
+| M-01 | Reverse Proxy mit TLS vorschalten (Atlas spricht Klartext-HTTP — das bleibt der Zweck des Proxys); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ nach Bedarf. Endpunktsperren sind seit ADR-draft-metrics-behind-the-boundary nur noch zusätzliche Absicherung, nicht mehr der Schutz selbst | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
 | M-02 | `--auth=false` **nicht** gesetzt (Standard ist an); Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung, Startlog ohne `auth.disabled` |
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |

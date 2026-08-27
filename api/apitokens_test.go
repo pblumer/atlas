@@ -102,6 +102,67 @@ func TestWorkerScopeReachesOnlyAWorkersOperations(t *testing.T) {
 	}
 }
 
+// TestMetricsScopeReachesOnlyTheExposition: the Prometheus exposition was the last
+// route whose protection depended on a proxy rule. A scraper is a machine, so it
+// presents a credential — and the narrowest one there is, because a scraper needs
+// exactly one GET forever.
+func TestMetricsScopeReachesOnlyTheExposition(t *testing.T) {
+	ts, admin := apiTokenServer(t)
+	secret, _ := mint(t, admin, ts, `{"name":"prometheus","scope":"metrics","expiresInDays":365}`)
+
+	code, body := bearerReq(t, ts, http.MethodGet, "/metrics", "", secret)
+	if code != http.StatusOK {
+		t.Fatalf("a metrics token scraping = %d, want 200", code)
+	}
+	if !strings.Contains(string(body), "atlas_") {
+		t.Errorf("the exposition does not look like one: %.120s", body)
+	}
+	for _, path := range []string{"/api/v1/processes", "/api/v1/instances", "/api/v1/jobs/activate"} {
+		if code, _ := bearerReq(t, ts, http.MethodGet, path, "", secret); code != http.StatusForbidden {
+			t.Errorf("metrics token on %s = %d, want 403", path, code)
+		}
+	}
+}
+
+// TestMetricsRequiresACredential: anonymous scraping is over, and a token minted
+// for something else does not get in either.
+func TestMetricsRequiresACredential(t *testing.T) {
+	ts, admin := apiTokenServer(t)
+
+	resp, err := http.Get(ts.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("anonymous scrape = %d, want 401", resp.StatusCode)
+	}
+
+	worker, _ := mint(t, admin, ts, `{"name":"a worker","scope":"worker"}`)
+	if code, _ := bearerReq(t, ts, http.MethodGet, "/metrics", "", worker); code != http.StatusForbidden {
+		t.Errorf("a worker token scraping = %d, want 403", code)
+	}
+
+	// A signed-in person still reaches it: they are authenticated, and the numbers
+	// are operational data, not a secret kept from users.
+	if code, _ := cReq(t, admin, ts, http.MethodGet, "/metrics", ""); code != http.StatusOK {
+		t.Errorf("a signed-in admin scraping = %d, want 200", code)
+	}
+
+	// The probes stay open. A readiness probe that needs a credential is a probe
+	// that does not work in the incident it exists for.
+	for _, path := range []string{"/healthz", "/readyz"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("anonymous %s = %d, want 200", path, resp.StatusCode)
+		}
+	}
+}
+
 // TestAPITokenWithoutALifetimeDoesNotExpire pins the contract of the field: an
 // omitted or zero lifetime means the token keeps working. A worker that runs for a
 // year is a real case; what must not happen is that omitting the field silently

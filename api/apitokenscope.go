@@ -41,6 +41,12 @@ const (
 	// a worker is a long-lived credential on another host, often in another network
 	// zone, and its whole job is four calls.
 	apiScopeWorker = "worker"
+
+	// apiScopeMetrics reaches the Prometheus exposition and nothing else. It is what
+	// let /metrics move behind the boundary at all: a scraper is a machine that needs
+	// exactly one GET forever, which is the narrowest scope there is and the easiest
+	// one to hand out (ADR-draft-metrics-behind-the-boundary).
+	apiScopeMetrics = "metrics"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -64,12 +70,18 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/jobs/{key}/fail",
 		"POST /api/v1/mail/outbox",
 	},
+	// One route, and not one of /api/v1's: the exposition is mounted beside the
+	// probes. A scope is a set of mounted patterns, not of API operations, which is
+	// what makes it able to cover this at all.
+	apiScopeMetrics: {
+		"GET /metrics",
+	},
 }
 
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

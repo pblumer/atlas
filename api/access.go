@@ -129,6 +129,18 @@ func (p *accessPolicy) classify(r *http.Request) accessClass {
 	return p.class[pattern]
 }
 
+// declaredPatterns returns every pattern that was mounted, sorted. A scope's
+// allowlist is checked against this rather than against the /api/v1 route table,
+// because a scope may name a route mounted outside it — /metrics is one.
+func (p *accessPolicy) declaredPatterns() []string {
+	out := make([]string, 0, len(p.class))
+	for pattern := range p.class {
+		out = append(out, pattern)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // publicPatterns returns the declared public patterns, sorted. It exists for the
 // inventory test, which holds this set against a written-out list.
 func (p *accessPolicy) publicPatterns() []string {
