@@ -352,28 +352,68 @@ func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
 	}
 }
 
-// A seed the worker cannot read or parse is refused at startup, where the operator is
-// still watching, rather than discovered a retry budget later.
-func TestADMockSeedFailuresAreRefusedAtStartup(t *testing.T) {
-	_, _, err := adDialerFromEnv(envMap(map[string]string{
-		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": filepath.Join(t.TempDir(), "nope.ldif"),
-	}))
-	if err == nil || !strings.Contains(err.Error(), "nope.ldif") {
-		t.Errorf("error = %v, want it to name the seed file that is not there", err)
-	}
-	path := filepath.Join(t.TempDir(), "broken.ldif")
-	if err := os.WriteFile(path, []byte("kaputt\n"), 0o600); err != nil {
+// A seed the worker cannot read starts an empty directory instead of taking the worker
+// down. This is the regression test for a real outage: an *optional* field holding a
+// stale path made every AD task unservable, and because the supervisor restarts a child
+// that exits, the Workers view showed hundreds of starts and one repeated log line
+// (ADR-draft-atlas-manages-the-ad-mock-seed).
+//
+// Degrading is only defensible because this is a mock. An empty directory touches
+// nothing real: a joiner creates its account and never notices, and a leaver fails one
+// job with "no such object" — an incident against the task that needed the account,
+// which points at the missing seed rather than hiding it.
+func TestAnUnusableADMockSeedStartsAnEmptyDirectoryRatherThanKillingTheWorker(t *testing.T) {
+	broken := filepath.Join(t.TempDir(), "broken.ldif")
+	if err := os.WriteFile(broken, []byte("kaputt\n"), 0o600); err != nil {
 		t.Fatalf("write seed: %v", err)
 	}
-	if _, _, err := adDialerFromEnv(envMap(map[string]string{
-		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": path,
-	})); err == nil {
-		t.Error("a seed file that does not parse was accepted")
+	for _, tc := range []struct{ name, seed string }{
+		{"a seed file that is not there", filepath.Join(t.TempDir(), "nope.ldif")},
+		{"a seed file that does not parse", broken},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dialer, mock, err := adDialerFromEnv(envMap(map[string]string{
+				"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": tc.seed,
+			}))
+			if err != nil {
+				t.Fatalf("the worker refused to start: %v", err)
+			}
+			if mock == nil {
+				t.Fatal("no mock directory; the worker fell back to a real one")
+			}
+			if got := mock.Entries(); len(got) != 0 {
+				t.Errorf("entries = %v, want an empty directory", got)
+			}
+			// And it is a working directory, not a broken one: a joiner runs against it.
+			if _, err := RunADJob(context.Background(), adJob(map[string]any{
+				"url": "ldaps://dc", "operation": "create-user",
+				"dn":         "cn=Neu,ou=users,dc=example,dc=com",
+				"attributes": map[string]any{"sAMAccountName": []any{"neu"}},
+			}), dialer, adSecretFromEnv(envMap(nil))); err != nil {
+				t.Errorf("a joiner against the empty directory failed: %v", err)
+			}
+		})
 	}
-	// A seed named without mock mode is a mistake worth reporting: the file would be
-	// read into a directory nothing ever reaches.
-	if _, _, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK_SEED": path})); err == nil {
-		t.Error("a seed without ATLAS_AD_MOCK was accepted")
+}
+
+// A seed named without mock mode stays a refusal, and deliberately so — it is the one
+// case with no safe way to degrade. Reading the file into a directory nothing reaches
+// would be pointless, and dialling the *real* directory because an operator who
+// obviously wanted a mockup got one variable wrong is the outcome the switch exists to
+// prevent. The Console can no longer produce this combination; a hand-set environment
+// on an external worker still can, and there somebody is at a terminal reading the
+// error.
+func TestASeedWithoutMockModeIsStillRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "forest.ldif")
+	if err := os.WriteFile(path, []byte("dn: cn=Arno,dc=example,dc=com\ncn: Arno\n"), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	_, _, err := adDialerFromEnv(envMap(map[string]string{"ATLAS_AD_MOCK_SEED": path}))
+	if err == nil {
+		t.Fatal("a seed without ATLAS_AD_MOCK was accepted")
+	}
+	if !strings.Contains(err.Error(), "ATLAS_AD_MOCK") {
+		t.Errorf("error = %v, want it to name the switch that is not set", err)
 	}
 }
 
@@ -424,10 +464,17 @@ func TestBuiltinConnectorsInADMockMode(t *testing.T) {
 	if _, ok := got.Handlers[compiler.AdJobType]; !ok {
 		t.Errorf("no handler for %s; have %v", compiler.AdJobType, got.Handlers)
 	}
-	if _, err := BuiltinConnectors(envMap(map[string]string{
+	// An unreadable seed no longer stops the worker from starting: it serves AD against
+	// an empty directory, which is a working worker, rather than exiting and being
+	// restarted forever.
+	degraded, err := BuiltinConnectors(envMap(map[string]string{
 		"ATLAS_AD_MOCK": "1", "ATLAS_AD_MOCK_SEED": filepath.Join(t.TempDir(), "nope.ldif"),
-	}), "ad"); err == nil {
-		t.Error("a worker with an unreadable seed started anyway")
+	}), "ad")
+	if err != nil {
+		t.Fatalf("a worker with an unreadable seed refused to start: %v", err)
+	}
+	if _, ok := degraded.Handlers[compiler.AdJobType]; !ok {
+		t.Error("the degraded worker serves no AD handler")
 	}
 
 	// A seeded worker serves what the seed put there — the handler the worker leases

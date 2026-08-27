@@ -411,6 +411,21 @@ func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler 
 	})
 }
 
+// isAdmin reports whether this request carries the admin role, writing nothing and
+// auditing nothing. It is for a handler that answers *everyone* but keeps one field
+// back — a refusal there would be wrong, because nothing was refused: the caller asked
+// a question they are allowed to ask and got the part of the answer that is theirs.
+//
+// Like requireAdmin it is true when auth is disabled: the server is then single-user
+// and there is no one to keep anything from.
+func (s *Server) isAdmin(r *http.Request) bool {
+	if !s.authEnabled {
+		return true
+	}
+	p := httpapi.PrincipalFrom(r.Context())
+	return p != nil && p.HasRole(RoleAdmin)
+}
+
 // requireAdmin enforces the one authorization rule the MVP ships: managing users
 // needs the admin role. When auth is disabled the server is open (single-user
 // mode), so there is nothing to check and it returns true. When enabled it

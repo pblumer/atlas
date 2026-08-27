@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/ldif"
+	"github.com/pblumer/atlas/logging"
 )
 
 // adSecretPrefix is where an AD worker's bind passwords live. It is deliberately the
@@ -102,9 +104,24 @@ func adDialerFromEnv(env func(string) string) (ad.Dialer, *ad.MockDirectory, err
 		}
 		return ad.NewDialer(), nil, nil
 	}
+	// A seed that cannot be read starts an empty directory rather than taking the
+	// worker down. The refusal it replaces was a real outage: an *optional* field
+	// holding a stale path made every AD task unservable, and because the supervisor
+	// restarts a child that exits, the worker sat in a restart loop where the Workers
+	// view showed hundreds of starts and no explanation but one log line.
+	//
+	// Degrading is safe here in a way it is not elsewhere, and only because this is a
+	// mock: an empty directory touches nothing real. A joiner creates its account and
+	// does not notice; a leaver fails one job with "no such object", which surfaces as
+	// an incident against the task that needed the account — pointing at the missing
+	// seed instead of hiding it (ADR-draft-atlas-manages-the-ad-mock-seed).
 	entries, err := adMockSeed(seed)
 	if err != nil {
-		return nil, nil, err
+		logging.Warn(logging.ADMockSeedUnusable,
+			"the AD mockup seed could not be read; the mock directory starts empty, so anything a "+
+				"process expects to find there will not be found",
+			slog.String("seed", seed), slog.String("error", err.Error()))
+		entries = nil
 	}
 	mock := ad.NewMockDirectory(entries...)
 	return mock, mock, nil

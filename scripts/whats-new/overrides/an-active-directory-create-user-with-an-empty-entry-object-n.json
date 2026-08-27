@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Connectors",
+    "Active Directory"
+  ],
+  "title": {
+    "en": "A create with an empty entry fails the job, not the worker",
+    "de": "Ein Anlegen ohne Attribute lässt den Job scheitern, nicht den Worker"
+  },
+  "summary": {
+    "en": "An Active Directory create-user, create-group or create-contact whose entry variable resolved to nothing crashed the worker outright — against a real domain controller just as readily as against a mockup, and a misspelled variable name was enough. It now fails that one job and says what is empty, so the run points at the model instead of the worker disappearing.",
+    "de": "Ein create-user, create-group oder create-contact im Active Directory, dessen Attribut-Variable ins Leere zeigte, hat den Worker zum Absturz gebracht — am echten Domain Controller genauso wie im Mockup, und ein Tippfehler im Variablennamen genügte. Jetzt scheitert genau dieser eine Job und sagt, was leer ist; der Lauf zeigt damit aufs Modell, statt dass der Worker verschwindet."
+  }
+}
