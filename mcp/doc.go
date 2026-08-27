@@ -17,7 +17,7 @@
 //     --auth a request without a credential is refused there; the transport then
 //     forwards whatever authenticated the caller to the API, so a tool call is
 //     exactly as privileged as whoever made it and no more
-//     (ADR-draft-authenticated-mcp-transport).
+//     (ADR-0196).
 //
 // This is deliberate. The engine is a single-writer partition (invariant I3):
 // exactly one goroutine may touch a partition's processor and state, a

@@ -130,7 +130,7 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 // transports differ in exactly this: a stdio adapter is one process with one
 // identity, so it passes the client it was built with, while the HTTP transport
 // binds a client to each request's own caller. Everything downstream of here is
-// the same code either way (ADR-draft-authenticated-mcp-transport).
+// the same code either way (ADR-0196).
 func (s *Server) handleWith(client *Client, req rpcRequest) (rpcResponse, bool) {
 	switch req.Method {
 	case "initialize":

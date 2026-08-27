@@ -17,7 +17,7 @@ import (
 // locked-out admin who needs it most. MCP is no escape hatch either: it is gated
 // like the rest of the API and a tool call carries its caller's own credential, so
 // the locked-out admin has nothing to present there either
-// (ADR-draft-authenticated-mcp-transport). So recovery lives here, reachable from
+// (ADR-0196). So recovery lives here, reachable from
 // a shell (e.g. a one-line `docker exec` against the data volume).
 
 // ResetPasswordOptions configures a single operator-driven password reset.

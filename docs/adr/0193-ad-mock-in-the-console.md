@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Active Directory mockup switch belongs in the Console
+# ADR-0193: The Active Directory mockup switch belongs in the Console
 
 - **Status:** Proposed
 - **Date:** 2026-08-26

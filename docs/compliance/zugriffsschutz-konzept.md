@@ -30,14 +30,14 @@ Verhältnis zu den bestehenden Unterlagen:
 
 | Massnahme | Stand |
 |-----------|-------|
-| **M1** — Zugriffsklassen je Route + Inventar-Test | ✅ umgesetzt — [`ADR-draft-route-access-classes`](../adr/draft-route-access-classes.md), `api/access.go` |
-| **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-draft-authenticated-mcp-transport`](../adr/draft-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
+| **M1** — Zugriffsklassen je Route + Inventar-Test | ✅ umgesetzt — [`ADR-0199`](../adr/0199-route-access-classes.md), `api/access.go` |
+| **M2** — `/mcp` hinter dieselbe Grenze, Identität durchreichen | ✅ umgesetzt — [`ADR-0196`](../adr/0196-authenticated-mcp-transport.md), `api.WithMCP` + `mcp/client.go` |
 | **M4** — `atlas mcp --token` / `ATLAS_TOKEN` | ✅ umgesetzt — im selben Entscheid, `cmd/atlas/main.go` |
-| **M5** — `--auth` standardmässig an | ✅ umgesetzt — [`ADR-draft-auth-on-by-default`](../adr/draft-auth-on-by-default.md) |
-| **M7** — Anmelde-Härtung | ✅ umgesetzt — [`ADR-draft-login-throttle-and-audit-log`](../adr/draft-login-throttle-and-audit-log.md), `api/loginguard.go` |
+| **M5** — `--auth` standardmässig an | ✅ umgesetzt — [`ADR-0195`](../adr/0195-auth-on-by-default.md) |
+| **M7** — Anmelde-Härtung | ✅ umgesetzt — [`ADR-0197`](../adr/0197-login-throttle-and-audit-log.md), `api/loginguard.go` |
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
-| **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-draft-api-tokens`](../adr/draft-api-tokens.md), `api/apitokenstore.go` |
-| **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-draft-metrics-behind-the-boundary`](../adr/draft-metrics-behind-the-boundary.md) |
+| **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
+| **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 
 **Alle acht Massnahmen sind umgesetzt. R-08 ist grün.**
 
@@ -493,14 +493,14 @@ reproduzierbar (O-15).
 
 Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
-- ✅ [`draft-route-access-classes.md`](../adr/draft-route-access-classes.md) — M1
-- ✅ [`draft-authenticated-mcp-transport.md`](../adr/draft-authenticated-mcp-transport.md)
+- ✅ [`0199-route-access-classes.md`](../adr/0199-route-access-classes.md) — M1
+- ✅ [`0196-authenticated-mcp-transport.md`](../adr/0196-authenticated-mcp-transport.md)
   — M2, ersetzt die `/mcp`-Aussage aus ADR-0016 und erledigt die Folgearbeit aus
   ADR-0049
-- ✅ [`draft-api-tokens.md`](../adr/draft-api-tokens.md) — M3
-- ✅ [`draft-metrics-behind-the-boundary.md`](../adr/draft-metrics-behind-the-boundary.md) — M6
-- ✅ [`draft-auth-on-by-default.md`](../adr/draft-auth-on-by-default.md) — M5
-- ✅ [`draft-login-throttle-and-audit-log.md`](../adr/draft-login-throttle-and-audit-log.md)
+- ✅ [`0194-api-tokens.md`](../adr/0194-api-tokens.md) — M3
+- ✅ [`0198-metrics-behind-the-boundary.md`](../adr/0198-metrics-behind-the-boundary.md) — M6
+- ✅ [`0195-auth-on-by-default.md`](../adr/0195-auth-on-by-default.md) — M5
+- ✅ [`0197-login-throttle-and-audit-log.md`](../adr/0197-login-throttle-and-audit-log.md)
   — M7 und M8 zusammen: eine Drosselung, deren Verweigerungen unsichtbar sind,
   lässt sich weder abstimmen noch belegen, und eine Spur ohne Fehlanmeldungen
   lässt genau den Eintrag aus, mit dem jede Prüfung beginnt

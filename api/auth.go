@@ -326,7 +326,7 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 		}
 		// An API token identifies a machine an administrator issued a credential to:
 		// a worker on another host, a stdio MCP adapter, a CI job
-		// (ADR-draft-api-tokens). Same index discipline, and deliberately never an
+		// (ADR-0194). Same index discipline, and deliberately never an
 		// admin — a machine that administers accounts is not a case Atlas has, and a
 		// leaked token that could would be a much worse leak.
 		if rec, ok := s.apiTokens.match(tok, time.Now().Unix()); ok {
@@ -388,7 +388,7 @@ func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler 
 		// the operations its scope names and nothing else, whatever the path's own
 		// rules would otherwise permit. Enforced here, in one place and for every
 		// scoped credential there is, so the reach of all of them is provable by
-		// reading apiScopeAllowed (ADR-0129, ADR-draft-api-tokens).
+		// reading apiScopeAllowed (ADR-0129, ADR-0194).
 		if p := httpapi.PrincipalFrom(r.Context()); p != nil && p.Scope != "" && !apiScopeMayReach(p.Scope, r) {
 			auditRefusal(r, logging.AuthDenied, "refused: outside this credential's scope",
 				slog.String("scope", p.Scope),

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A throttle on the login, and a security audit trail
+# ADR-0197: A throttle on the login, and a security audit trail
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-Requiring a login is now the default (ADR-draft-auth-on-by-default). That makes
+Requiring a login is now the default (ADR-0195). That makes
 `/api/v1/auth/login` the door everybody comes through, and it had two things
 wrong with it.
 
@@ -209,7 +209,7 @@ ADR-0044 deliberately kept off the engine.
 - closes O-04 and substantially closes O-03 in
   [`docs/compliance/isds-offene-punkte.md`](../compliance/isds-offene-punkte.md);
   improves R-12 and R-13 in [`isds-konzept.md`](../compliance/isds-konzept.md)
-- follows ADR-draft-auth-on-by-default, which is what makes the login the door
+- follows ADR-0195, which is what makes the login the door
   everybody comes through
 - reuses the token bucket of [ADR-0029](0029-public-process-start-links.md) and
   the stable event names of [ADR-0142](0142-prometheus-metrics.md)

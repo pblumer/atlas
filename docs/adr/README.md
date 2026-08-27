@@ -229,6 +229,13 @@ comment safe to write.
 | [0190](0190-webscrape-feed-extraction.md) | Add explicit RSS and Atom extraction to the web-scraping connector | Proposed |
 | [0191](0191-built-in-tls-listener.md) | TLS 1.3 in the binary — an optional listener with operator-supplied certificates | Proposed |
 | [0192](0192-remedy-default-offload.md) | BMC Remedy runs on a worker by default | Proposed |
+| [0193](0193-ad-mock-in-the-console.md) | The Active Directory mockup switch belongs in the Console | Proposed |
+| [0194](0194-api-tokens.md) | API tokens — a credential a machine can actually be given | Proposed |
+| [0195](0195-auth-on-by-default.md) | Requiring a login is the default | Proposed |
+| [0196](0196-authenticated-mcp-transport.md) | The MCP transport is authenticated, and acts as its caller | Proposed |
+| [0197](0197-login-throttle-and-audit-log.md) | A throttle on the login, and a security audit trail | Proposed |
+| [0198](0198-metrics-behind-the-boundary.md) | The Prometheus exposition moves behind the boundary | Proposed |
+| [0199](0199-route-access-classes.md) | Every mounted route declares its access class | Proposed |
 
 ## Status values
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: API tokens — a credential a machine can actually be given
+# ADR-0194: API tokens — a credential a machine can actually be given
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -18,13 +18,13 @@ process's own child on this host, not a third party.
 
 That left a gap nobody could fall into while authentication was opt-in, and which
 became the default path the moment it was not
-(ADR-draft-auth-on-by-default). **A machine that is not this server's child has
+(ADR-0195). **A machine that is not this server's child has
 no credential it can hold.** Concretely:
 
 - `atlas worker --server …` on another host — the ordinary way to run a connector
   in the target system's network zone (ADR-0168) — cannot authenticate.
 - `atlas mcp --server … --token …` gained its flag in
-  ADR-draft-authenticated-mcp-transport, and there is no value an operator can put
+  ADR-0196, and there is no value an operator can put
   in it.
 - A CI job that deploys, a Prometheus scraper, any script: the same.
 
@@ -222,10 +222,10 @@ reviewed as a set the way a named scope can.
   the shared scope mechanism
 - narrows the reach of [ADR-0049](0049-internal-service-auth-for-mcp.md)'s internal
   token to what it was designed for: this server's own children
-- makes `atlas mcp --token` of ADR-draft-authenticated-mcp-transport usable, and
+- makes `atlas mcp --token` of ADR-0196 usable, and
   `atlas worker --token` usable from another host
-- required by ADR-draft-auth-on-by-default, which turned "a remote machine cannot
+- required by ADR-0195, which turned "a remote machine cannot
   authenticate" from an edge case into the default
-- uses the allowlist shape of ADR-draft-route-access-classes
+- uses the allowlist shape of ADR-0199
 - the product-side concept this implements:
   [`docs/compliance/zugriffsschutz-konzept.md`](../compliance/zugriffsschutz-konzept.md), measure M3

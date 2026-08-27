@@ -276,7 +276,7 @@ server {
 
 `/mcp` — the endpoint an AI agent drives the server through — is gated by
 `--auth` like the rest of the API
-([ADR-draft-authenticated-mcp-transport](adr/draft-authenticated-mcp-transport.md)).
+([ADR-0196](adr/0196-authenticated-mcp-transport.md)).
 A request that carries no credential is answered with `401`, and a tool call acts
 as whoever made it, with exactly their permissions. It used to be open at the
 transport level whatever `--auth` said, so a proxy rule was the only thing in

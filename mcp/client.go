@@ -64,7 +64,7 @@ type ClientOption func(*Client)
 // command line (atlas mcp --token).
 //
 // The HTTP transport does not use it. There, each request brings its own caller
-// and forCaller takes precedence — see ADR-draft-authenticated-mcp-transport for
+// and forCaller takes precedence — see ADR-0196 for
 // why the adapter no longer holds a credential of its own on that path.
 //
 // An empty token is a no-op, so callers can pass it unconditionally.

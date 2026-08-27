@@ -130,7 +130,7 @@ func TestAccessClassification(t *testing.T) {
 		want   accessClass
 	}{
 		// The MCP transport is a route like any other now, gated like any other
-		// (ADR-draft-authenticated-mcp-transport). It used to be mounted beside this
+		// (ADR-0196). It used to be mounted beside this
 		// handler, where the boundary never saw it at all.
 		{"mcp transport", "POST", "/mcp", accessAuthenticated},
 		{"mcp subpath", "POST", "/mcp/anything", accessAuthenticated},
@@ -161,7 +161,7 @@ func TestAccessClassification(t *testing.T) {
 		{"healthz", "GET", "/healthz", accessPublic},
 		// The exposition is the one route that left the public set after the
 		// boundary existed: a scraper is a machine, and machines present credentials
-		// (ADR-draft-metrics-behind-the-boundary).
+		// (ADR-0198).
 		{"metrics", "GET", "/metrics", accessAuthenticated},
 		{"public form", "GET", "/public/forms/abc123", accessPublic},
 		{"public form start", "POST", "/public/forms/abc123/start", accessPublic},
@@ -172,7 +172,7 @@ func TestAccessClassification(t *testing.T) {
 		// The API description and the explorer are a developer surface, not something
 		// the login screen reads, and the explorer's "Try it out" drives the same
 		// mutating API. Both moved behind the boundary when --auth became the default
-		// (ADR-draft-auth-on-by-default).
+		// (ADR-0195).
 		{"openapi document", "GET", "/api/v1/openapi.json", accessAuthenticated},
 		{"api explorer", "GET", "/api/docs", accessAuthenticated},
 		{"api explorer asset path", "GET", "/api/docs/", accessAuthenticated},

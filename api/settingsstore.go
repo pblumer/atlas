@@ -37,7 +37,7 @@ type registrationSetting struct {
 }
 
 // adMockSetting is the org-wide Active-Directory mockup switch
-// (ADR-draft-ad-mock-in-the-console). ADR-0181 decided the switch belongs to the
+// (ADR-0193). ADR-0181 decided the switch belongs to the
 // operator rather than to the model, and that is unchanged — this only moves where
 // the operator reaches it, from the process environment into the Console, because a
 // variable set once at start is the wrong ceremony for a thing you flip while trying

@@ -534,16 +534,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
-			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-draft-api-tokens)", tag: "API tokens",
+			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens",
 			req: jsonBody("Token name, scope (full|worker) and lifetime in days (0 = never expires)", schemaObj(map[string]any{
 				"name": tString(), "scope": tString(), "expiresInDays": tInteger(),
 			}, "name", "scope")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/api-tokens", s.handleListAPITokens, apiOp{
-			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-draft-api-tokens)", tag: "API tokens",
+			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-0194)", tag: "API tokens",
 			resp: jsonBody("API tokens", tArray())}},
 		{"DELETE", "/api/v1/api-tokens/{id}", s.handleRevokeAPIToken, apiOp{
-			summary: "Revoke an API token, effective immediately (admin-only, ADR-draft-api-tokens)", tag: "API tokens",
+			summary: "Revoke an API token, effective immediately (admin-only, ADR-0194)", tag: "API tokens",
 			status: http.StatusNoContent}},
 
 		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same

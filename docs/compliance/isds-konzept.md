@@ -152,7 +152,7 @@ Empfehlung des Projektteams für eine Einführung im Bund:
    Punkte R-03/R-04/R-05 und nach einem Penetrationstest.
 2. **Reverse Proxy mit TLS und Authentisierung davor ist obligatorisch** — Atlas
    spricht ausschliesslich Klartext-HTTP (`docs/install.md`). `/metrics` ist am
-   Proxy zu sperren; `/mcp` ist seit ADR-draft-authenticated-mcp-transport durch
+   Proxy zu sperren; `/mcp` ist seit ADR-0196 durch
    `--auth` geschützt, eine Proxy-Regel dafür ist zusätzliche Absicherung und
    nicht mehr der Schutz selbst.
 3. **Eine Installation pro Schutzbedarfsklasse**, nicht Mischbetrieb — solange es
@@ -312,13 +312,13 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | **HTTP-API** (`/api/v1/…`) | vollständige Steuerfläche, OpenAPI-spezifiziert; Explorer unter `/api/docs` (abschaltbar) | einziger Zugangsweg für UI, Worker und Agenten |
 | **Web-UI** | Modeler, Operations (Live-Tokens, Replay), Tasks-Inbox, Console, Handbuch — im Binary eingebettet | zeigt Prozessvariablen und damit potenziell Personendaten |
 | **Worker-Prozess** (`atlas worker`) | führt Connector-/Service-Task-Arbeit aus, least Jobs über die HTTP-API | hält die Credentials der Fachsysteme; läuft idealerweise in der Zone des Zielsystems (ADR-0164/0168) |
-| **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-draft-authenticated-mcp-transport). Der stdio-Adapter hält als Prozess *ein* Credential für seine ganze Laufzeit — `--token` bzw. `ATLAS_TOKEN`, üblicherweise ein API-Token mit Geltungsbereich `full` (ADR-draft-api-tokens) |
+| **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-0196). Der stdio-Adapter hält als Prozess *ein* Credential für seine ganze Laufzeit — `--token` bzw. `ATLAS_TOKEN`, üblicherweise ein API-Token mit Geltungsbereich `full` (ADR-0194) |
 | **Vault** | AES-256-GCM-verschlüsselte Ablage der Connector-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
 | **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | TLS-Terminierung, Zugriffssteuerung, Access-Log, Rate-Limiting | **zwingend** — Atlas selbst kann kein TLS |
 
 ### 5.2.2 Authentisierung
 
-- **Standardmässig an** (ADR-draft-auth-on-by-default): `atlas serve` verlangt
+- **Standardmässig an** (ADR-0195): `atlas serve` verlangt
   eine Anmeldung, ohne dass etwas konfiguriert werden muss. `--auth=false` schaltet
   sie ab und protokolliert das beim Start als Warnung (`auth.disabled`) — für
   Entwicklung und Demos, nie für einen Bundesbetrieb. M-02 prüft deshalb, dass
@@ -339,7 +339,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   das Datenverzeichnis, mit oder ohne laufenden Server.
 - **Schnittstellen:** welche Route ohne Anmeldung erreichbar ist, ist je Route
   deklariert und fail-closed aufgelöst — eine nicht deklarierte Route ist
-  geschützt (ADR-draft-route-access-classes). Die vollständige Liste der offenen
+  geschützt (ADR-0199). Die vollständige Liste der offenen
   Routen ist im Code niedergeschrieben und durch einen Test gegen die tatsächlich
   bediente Oberfläche gehalten (`api/access.go`,
   `TestPublicRoutesAreExactlyTheAllowlist`). Offen bleiben: `/healthz`, `/readyz`,
@@ -353,7 +353,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
   die Anbindung selbst nicht (R-03).
 - **Login-Fehler** liefern eine einheitliche Meldung ohne Benutzer-Enumeration;
   deaktivierte Konten (`Disabled`) werden abgewiesen.
-- **Anmeldeversuche sind begrenzt** (ADR-draft-login-throttle-and-audit-log): je
+- **Anmeldeversuche sind begrenzt** (ADR-0197): je
   Absenderadresse 20 Versuche am Stück, danach einer alle zwei Sekunden; je Konto
   5 Versuche, danach Auffüllung über 15 Minuten. Gezählt wird **vor** dem
   Kontolookup und unabhängig davon, ob das Konto existiert — die Drosselung
@@ -369,8 +369,8 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Connectoren, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
 | Projektmitglied | Projekt-Sichtbarkeit `private`/`shared` mit Rollen `viewer`/`editor` (ADR-0071, Gruppen ADR-0180) | Zugriff auf die Design-Time-Artefakte des Projekts |
 | `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | wie ein Benutzer, **nie** admin |
-| API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-draft-api-tokens): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | genau der Geltungsbereich des Tokens — `worker` (vier Operationen) oder `full` (wie ein Benutzer); **nie** admin |
-| MCP-Aufrufer | das Credential, mit dem der Aufrufer `/mcp` erreicht hat (Session-Cookie oder Bearer), unverändert an die API weitergereicht | genau die Rechte dieses Prinzipals — nicht mehr und nicht weniger (ADR-draft-authenticated-mcp-transport) |
+| API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-0194): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | genau der Geltungsbereich des Tokens — `worker` (vier Operationen) oder `full` (wie ein Benutzer); **nie** admin |
+| MCP-Aufrufer | das Credential, mit dem der Aufrufer `/mcp` erreicht hat (Session-Cookie oder Bearer), unverändert an die API weitergereicht | genau die Rechte dieses Prinzipals — nicht mehr und nicht weniger (ADR-0196) |
 | `deploy-agent` | Deploy-Token eines Peer-Servers (ADR-0129), SHA-256-gehasht abgelegt | fail-closed-Allowlist aus genau zwei Operationen (Bundle importieren, eigene Deployments lesen) |
 | anonym | öffentliche Start-Links (ADR-0029), Selbstregistrierungs-Link (ADR-0126) | nur die freigegebene Startformular-Route, ratenbegrenzt |
 
@@ -393,7 +393,7 @@ Produktion sind deshalb Pflicht (M-05).
 | Metriken | Prometheus-Exposition unter `/metrics` (ADR-0142) | Monitoring |
 | Traces | OpenTelemetry/OTLP, nur `/api/v1`, ohne Query-String, standardmässig aus | Collector |
 
-| Sicherheits-Audit | An-/Abmeldung, Fehlanmeldung mit Grund, Drosselung, Autorisierungsverweigerung, Konto- und Deploy-Token-Lebenszyklus — je Zeile mit handelndem Prinzipal und Absenderadresse, ohne Passwort, Hash oder Token (ADR-draft-login-throttle-and-audit-log) | Anwendungslog, stabile `event=`-Namen `auth.*`, mit `--log-format=json` maschinenlesbar |
+| Sicherheits-Audit | An-/Abmeldung, Fehlanmeldung mit Grund, Drosselung, Autorisierungsverweigerung, Konto- und Deploy-Token-Lebenszyklus — je Zeile mit handelndem Prinzipal und Absenderadresse, ohne Passwort, Hash oder Token (ADR-0197) | Anwendungslog, stabile `event=`-Namen `auth.*`, mit `--log-format=json` maschinenlesbar |
 
 **Verbleibende Lücke:** einen **HTTP-Access-Log** schreibt Atlas weiterhin nicht;
 den muss der Reverse Proxy liefern (M-06). Die sicherheitsrelevanten Ereignisse
@@ -542,7 +542,7 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-11 | Atlas-Server | OTLP-Collector | HTTP / 4318 | Traces, optional, standardmässig aus | ⟨TLS⟩ | ⟨Collector-Regel⟩ |
 | K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape | keine | **keine** — am Proxy/FW einschränken |
 | K-13 | Atlas-Server ↔ Peer-Atlas ⟨andere Umgebung⟩ | je nach Richtung | HTTPS / 443 | Applikations-Promotion zwischen Umgebungen (ADR-0129); nur falls genutzt | TLS, **Verifikation nicht abschaltbar** (kein «skip verify») | Deploy-Token (Bearer, als SHA-256-Hash abgelegt, fail-closed-Allowlist auf 2 Operationen); Zieladresse und Credential-Referenz sind admin-verwaltet |
-| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-draft-authenticated-mcp-transport) |
+| K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
 | K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
 
@@ -591,12 +591,12 @@ zu bestätigen.
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets; wer Dateisystemzugriff hat, liest alle Geschäftsdaten | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, minimaler Admin-Kreis) | gelb → **grün** mit M-04 |
 | R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots | Datenschutz (Art. 6 DSG) | M-08, Modellierungsrichtlinie «Referenz statt Inhalt» | **gelb**, grün bei konsistent konfigurierten Fristen |
 | R-07 | **Keine Hochverfügbarkeit.** Single-Writer, genau ein Prozess pro Datenverzeichnis; Ausfall = Ausfall bis Restore/Neustart; Replikation erst geplant (ADR-0175, *Proposed*) | Verfügbarkeit | M-11, M-12, M-17, ⟨VM-/Storage-HA⟩ | **gelb**, abhängig von der Verfügbarkeitsanforderung |
-| R-08 | **Unauthentisierte Endpunkte.** Offen bleiben nur noch `/healthz`, `/readyz` und die tokenbasierten öffentlichen Links; dazu, was die Anmeldemaske selbst liest. `/mcp` (ADR-draft-authenticated-mcp-transport), der API-Explorer (ADR-draft-auth-on-by-default) und `/metrics` (ADR-draft-metrics-behind-the-boundary) sind geschlossen. Welche Route offen ist, ist deklariert und per Test gegen eine ausgeschriebene Liste gehalten (ADR-draft-route-access-classes) | Vertraulichkeit, Integrität | M-13 | **grün** — keine Route hängt mehr an einer Proxy-Regel |
+| R-08 | **Unauthentisierte Endpunkte.** Offen bleiben nur noch `/healthz`, `/readyz` und die tokenbasierten öffentlichen Links; dazu, was die Anmeldemaske selbst liest. `/mcp` (ADR-0196), der API-Explorer (ADR-0195) und `/metrics` (ADR-0198) sind geschlossen. Welche Route offen ist, ist deklariert und per Test gegen eine ausgeschriebene Liste gehalten (ADR-0199) | Vertraulichkeit, Integrität | M-13 | **grün** — keine Route hängt mehr an einer Proxy-Regel |
 | R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, systemd-Härtung | **gelb** |
 | R-10 | **Ausgehende Connector-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
-| R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht. Anmeldeversuche sind seit ADR-draft-login-throttle-and-audit-log je Adresse und je Konto begrenzt | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
-| R-13 | Sicherheits-Audit-Log für An-/Abmeldungen, Fehlversuche, Drosselung, Autorisierungsverweigerungen und den Konto-/Credential-Lebenszyklus ist vorhanden (`auth.*`, ADR-draft-login-throttle-and-audit-log). **Kein HTTP-Access-Log im Produkt**, und die Aufbewahrung ist die des Anwendungslogs | Nachvollziehbarkeit | M-06 (Access-Log am Proxy, Weiterleitung an ⟨SIEM⟩) | **grün**, sofern das Anwendungslog nach ⟨SIEM⟩ geliefert wird |
+| R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht. Anmeldeversuche sind seit ADR-0197 je Adresse und je Konto begrenzt | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
+| R-13 | Sicherheits-Audit-Log für An-/Abmeldungen, Fehlversuche, Drosselung, Autorisierungsverweigerungen und den Konto-/Credential-Lebenszyklus ist vorhanden (`auth.*`, ADR-0197). **Kein HTTP-Access-Log im Produkt**, und die Aufbewahrung ist die des Anwendungslogs | Nachvollziehbarkeit | M-06 (Access-Log am Proxy, Weiterleitung an ⟨SIEM⟩) | **grün**, sofern das Anwendungslog nach ⟨SIEM⟩ geliefert wird |
 | R-14 | **KI-Funktionen.** Modeler-Copilot und Agent-Task rufen einen vom Betreiber registrierten Endpunkt auf; falsch konfiguriert fliessen Prozessdaten an einen externen Dienst | Vertraulichkeit | M-18 (nicht registrieren bzw. nur bundesinterne Endpunkte) | **grün** bei Nichtregistrierung |
 | R-15 | **Selbstregistrierung / öffentliche Links.** Ein Registrierungs-Link kann beim Bootstrap aktiv sein; Anträge landen als Genehmigungsaufgabe, die Rolle vergibt erst der Admin | Vertraulichkeit | M-13 (bewusst konfigurieren oder abschalten) | **grün** bei bewusster Konfiguration |
 | R-16 | **Datenverzeichnis doppelt geöffnet.** Zwei `atlas serve` auf demselben Verzeichnis korrumpieren es (z. B. durch versehentliche zweite Replika) | Integrität, Verfügbarkeit | Helm-Chart als StatefulSet mit 1 Replika, Betriebsanweisung, M-12 | **grün** bei eingehaltener Betriebsanweisung |
@@ -619,7 +619,7 @@ zu bestätigen.
     fail-closed auf zwei Operationen begrenzt (ADR-0129); Bestand regelmässig
     prüfen und nicht mehr benötigte löschen.
   - API-Tokens: Credential für Worker auf anderen Hosts, entfernte MCP-Adapter und
-    CI (ADR-draft-api-tokens). Mit Geltungsbereich und Ablauf ausstellen — `worker`
+    CI (ADR-0194). Mit Geltungsbereich und Ablauf ausstellen — `worker`
     wo immer möglich, `full` nur wo die Aufrufe nicht im Voraus benannt werden
     können. Ausstellung und Widerruf stehen im Audit-Log (`auth.token_minted`,
     `auth.token_revoked`); Bestand mit `GET /api/v1/api-tokens` rezertifizieren.
@@ -630,7 +630,7 @@ zu bestätigen.
   deaktivieren (ADR-0122/0123). Bewusst entscheiden; wenn nicht benötigt, mit
   `--user-provisioning=false` abschalten.
 - **`--docs` (Standard: an):** API-Explorer unter `/api/docs`. Er und die
-  OpenAPI-Beschreibung liegen seit ADR-draft-auth-on-by-default hinter der
+  OpenAPI-Beschreibung liegen seit ADR-0195 hinter der
   Anmeldung; wo er nicht gebraucht wird, trotzdem abschalten.
 - **`vault.key`:** ohne Schlüssel ist ein Datenverzeichnis nicht wiederherstellbar
   (die Secrets sind unlesbar). Getrennt vom Backup aufbewahren oder — besser —
@@ -657,7 +657,7 @@ BIT-Dienstleistung «Analyse/Monitoring» prüfen.⟩
 | 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Connector-Ziel | Deployment-Historie, Proxy-Log |
 | 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | Häufung von `auth.login_failed`, und `auth.login_throttled` überhaupt — letzteres heisst, dass ein Budget aufgebraucht wurde | Anwendungslog (`--log-format=json`), Alarm auf beide Ereignisse |
 | 04b | Rechteanmassung | `auth.denied`: ein angemeldeter Benutzer greift auf eine admin-geschützte Operation zu | Anwendungslog, mit `actor` und `path` |
-| 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-draft-authenticated-mcp-transport dem handelnden Benutzer zugeordnet |
+| 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-0196 dem handelnden Benutzer zugeordnet |
 | 06 | Auffällige Connector-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Connector; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
 | 07 | Externe Änderung von Prozessvariablen | Variablen einer laufenden Instanz von aussen gesetzt — mit handelndem Benutzer attribuiert | Variablen-Audit (ADR-0098) |
 | 08 | Vault-Schlüssel-Abweichung | Secrets lassen sich nicht mehr öffnen (`keyId`-Mismatch) → Schlüsseltausch oder Manipulation | Startup-/Fehlerlog |
@@ -675,7 +675,7 @@ mit dem ISBO BIT.
 
 | Nr. | Massnahme | Verantwortlichkeit | Umsetzung / Nachweis |
 |-----|-----------|--------------------|----------------------|
-| M-01 | Reverse Proxy mit TLS vorschalten (Atlas spricht Klartext-HTTP — das bleibt der Zweck des Proxys); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ nach Bedarf. Endpunktsperren sind seit ADR-draft-metrics-behind-the-boundary nur noch zusätzliche Absicherung, nicht mehr der Schutz selbst | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
+| M-01 | Reverse Proxy mit TLS vorschalten (Atlas spricht Klartext-HTTP — das bleibt der Zweck des Proxys); Rate-Limiting und ⟨vorgelagerte Authentisierung⟩ nach Bedarf. Endpunktsperren sind seit ADR-0198 nur noch zusätzliche Absicherung, nicht mehr der Schutz selbst | ⟨Betrieb LE⟩ | Proxy-Konfiguration, Abnahmeprotokoll |
 | M-02 | `--auth=false` **nicht** gesetzt (Standard ist an); Bootstrap-Passwort geändert und aus Konfiguration/Log entfernt | ⟨Betrieb LE⟩ | Konfigurationsprüfung, Startlog ohne `auth.disabled` |
 | M-03 | Vault-Schlüssel über `ATLAS_VAULT_KEY_FILE` bereitstellen; getrennte Aufbewahrung; Wiederherstellungsverfahren dokumentiert | ⟨Betrieb LE⟩ | Betriebshandbuch |
 | M-04 | Datenträgerverschlüsselung, Dateirechte (0750/0600), eigener Dienstbenutzer, systemd-Härtung bzw. Container-SecurityContext | ⟨Betrieb LE⟩ | Systemdokumentation |

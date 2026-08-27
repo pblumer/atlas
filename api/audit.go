@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// The security audit trail (ADR-draft-login-throttle-and-audit-log).
+// The security audit trail (ADR-0197).
 //
 // Atlas's business trails were always strong: every state transition is an event,
 // every external variable change names who made it (ADR-0098), every manual task

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// The login throttle (ADR-draft-login-throttle-and-audit-log).
+// The login throttle (ADR-0197).
 //
 // `/api/v1/auth/login` had nothing in front of it. The token bucket in
 // ratelimit.go existed, but only the public form routes used it, so password
@@ -13,7 +13,7 @@ import (
 // answering slowly is itself the problem, because each attempt costs the server
 // far more than it costs the caller. That mattered less while a login was
 // optional; it is the front door now that one is required by default
-// (ADR-draft-auth-on-by-default).
+// (ADR-0195).
 //
 // Two buckets, because one of them alone is bypassable:
 //

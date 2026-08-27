@@ -468,7 +468,7 @@ func splitConnectorList(v string) []string {
 // An operator who set ATLAS_TOKEN themselves keeps it: they have chosen an identity
 // for their workers, and silently replacing it would undo that choice. **That value
 // must be one this server accepts** — an API token, ideally scoped `worker`
-// (ADR-draft-api-tokens). It could not be, until API tokens existed: the supervisor
+// (ADR-0194). It could not be, until API tokens existed: the supervisor
 // honoured the variable while principalFor compared a bearer only against the
 // internal token, so setting it handed every supervised worker a credential that was
 // refused at every poll. checkWorkerTokenEnv says so at startup now, rather than
@@ -574,7 +574,7 @@ func (s *Server) adWorkerEnv() []string {
 	var env []string
 	s.do(func() {
 		// The Console's mockup switch, when an operator has decided there
-		// (ADR-draft-ad-mock-in-the-console). No stored record renders nothing, so a
+		// (ADR-0193). No stored record renders nothing, so a
 		// server started with ATLAS_AD_MOCK by hand keeps deciding for itself; a
 		// stored one decides either way, because a switch that says "off" while the
 		// worker still simulates would be lying to the person who flipped it.

@@ -409,7 +409,7 @@ func (s *Server) handleDeleteRegistration(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---------- The Active-Directory mockup switch (ADR-draft-ad-mock-in-the-console) ----------
+// ---------- The Active-Directory mockup switch (ADR-0193) ----------
 
 // handleGetADMock reports the org-wide AD mockup switch: whether directory writes are
 // simulated in the worker's memory, and the seed file it starts from.

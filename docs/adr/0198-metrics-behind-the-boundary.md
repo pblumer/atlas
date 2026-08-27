@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Prometheus exposition moves behind the boundary
+# ADR-0198: The Prometheus exposition moves behind the boundary
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -13,11 +13,11 @@ turned on. The deployment guidance was the one `/mcp` also carried — put a
 reverse proxy in front of it.
 
 Everything else in that sentence has since changed. `/mcp` is gated
-(ADR-draft-authenticated-mcp-transport). Which routes are public is a declared
+(ADR-0196). Which routes are public is a declared
 class per route rather than a side effect of where they were mounted
-(ADR-draft-route-access-classes). A login is the default
-(ADR-draft-auth-on-by-default). And a machine can now hold a named, scoped,
-expiring, revocable credential (ADR-draft-api-tokens) — which is precisely what
+(ADR-0199). A login is the default
+(ADR-0195). And a machine can now hold a named, scoped,
+expiring, revocable credential (ADR-0194) — which is precisely what
 ADR-0142 lacked when it decided a scraper could not present one.
 
 So `/metrics` is the last route in Atlas whose protection depends on somebody
@@ -84,7 +84,7 @@ an idea only because a scraper could not authenticate, and it substitutes one
 operator responsibility (a proxy rule) for another (a bind address) while adding
 a second `http.Server` with its own lifecycle and shutdown. An operator who wants
 the exposition on a separate network path still has a firewall and a proxy, and
-now has a credential as well. Option 4 is the shape ADR-draft-auth-on-by-default
+now has a credential as well. Option 4 is the shape ADR-0195
 argued against: a default that the documentation tells you to change.
 
 ### Consequences
@@ -131,17 +131,17 @@ argued against: a default that the documentation tells you to change.
 
 ### 4 — a flag, off by default
 - Good: nobody's monitoring breaks.
-- Bad: the exact shape ADR-draft-auth-on-by-default rejected — a default that
+- Bad: the exact shape ADR-0195 rejected — a default that
   every document tells you to change is not a default.
 
 ## Links
 
 - revises the exposition's posture from [ADR-0142](0142-prometheus-metrics.md);
   what it says about *what* is exposed and at what cost is unchanged
-- completes the follow-up named in ADR-draft-route-access-classes, which left
+- completes the follow-up named in ADR-0199, which left
   `/metrics` public deliberately so that record changed no behaviour it was not
   asked to
-- possible only because of ADR-draft-api-tokens: the credential a scraper
+- possible only because of ADR-0194: the credential a scraper
   presents, and the scope that confines it
 - closes O-07 in
   [`docs/compliance/isds-offene-punkte.md`](../compliance/isds-offene-punkte.md)

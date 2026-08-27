@@ -20,7 +20,7 @@ import (
 // request without a credential never reaches here. What this method does is the
 // other half — it forwards the credential the request arrived with to the Atlas
 // API, so a tool call is exactly as privileged as whoever made it. It carries no
-// identity of its own to lend (ADR-draft-authenticated-mcp-transport).
+// identity of its own to lend (ADR-0196).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:

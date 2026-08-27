@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   something. `/metrics` is now gated like every other route, and a new token scope,
   `metrics`, allows exactly one pattern — `GET /metrics`, the narrowest scope in the
   system
-  ([ADR-draft-metrics-behind-the-boundary](docs/adr/draft-metrics-behind-the-boundary.md)).
+  ([ADR-0198](docs/adr/0198-metrics-behind-the-boundary.md)).
 
   Worth being plain about: **the payoff here is structural, not confidential.** The
   exposition carries instance counts, batch latencies and queue depth — no process
@@ -69,7 +69,7 @@ _Changed_ / _Removed_ for each version.
   record stays listed. `ATLAS_TOKEN` set to an API token now works as the comment
   always claimed, and a value the server does not accept is called out at startup
   (`auth.worker_token_unknown`) instead of being discovered one failing job at a
-  time ([ADR-draft-api-tokens](docs/adr/draft-api-tokens.md)).
+  time ([ADR-0194](docs/adr/0194-api-tokens.md)).
 
   The deploy-token allowlist of
   [ADR-0129](docs/adr/0129-remote-deployment-targets.md) folds into the same scope
@@ -104,7 +104,7 @@ _Changed_ / _Removed_ for each version.
   through the handlers and asserts none of them reaches the log. Anonymous `401`s are
   deliberately not recorded — they would bury the meaningful lines under every probe
   that finds the port. Ship them with `--log-format=json`
-  ([ADR-draft-login-throttle-and-audit-log](docs/adr/draft-login-throttle-and-audit-log.md)).
+  ([ADR-0197](docs/adr/0197-login-throttle-and-audit-log.md)).
 
   **Minor behaviour change:** a burst of failed logins now answers `429` rather than
   continuing to answer `401`.
@@ -126,7 +126,7 @@ _Changed_ / _Removed_ for each version.
   longer step 6 of the install guide. The Helm chart follows, defaulting
   `atlas.auth.enabled` to `true` and no longer refusing to render without an admin
   password source — set `atlas.auth.existingSecret` for anything beyond a scratch
-  install ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md)).
+  install ([ADR-0195](docs/adr/0195-auth-on-by-default.md)).
 
   **Breaking.** `atlas serve` with no flags now requires a login. Pass `--auth=false`
   for the old behaviour.
@@ -157,7 +157,7 @@ _Changed_ / _Removed_ for each version.
   MCP can now reach an admin-gated tool; a signed-in non-admin cannot; and a deploy
   token presented there is refused outright, because the transport is not one of the
   two operations that credential is confined to
-  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
+  ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md)).
 
   **Breaking, on servers running `--auth`.** An MCP client that reached `/mcp` without
   presenting anything now gets `401` and must send the session cookie or a bearer token.
@@ -184,7 +184,7 @@ _Changed_ / _Removed_ for each version.
   resulting public set — probes, metrics, the login screen's own reads, the API explorer,
   the share links and the UI — is held against a written-out list by a test, so opening a
   route is a reviewable diff rather than a side effect
-  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)).
+  ([ADR-0199](docs/adr/0199-route-access-classes.md)).
 
   Because patterns carry methods, so does the class: `GET /api/v1/settings/theme`,
   `/logo` and `/registration` stay public for the login screen, while `PUT` and `DELETE`
@@ -250,7 +250,7 @@ _Changed_ / _Removed_ for each version.
   simulates would be lying to the person who flipped it. The Console writes the same two variables
   a hand-run worker reads, so a worker in another network is configured exactly as it was, and
   there is no private channel between a supervised worker and its parent. The model still says
-  nothing about being mocked. See ADR-draft-ad-mock-in-the-console.
+  nothing about being mocked. See ADR-0193.
 
 ## [0.4.0] — 2026-08-26
 

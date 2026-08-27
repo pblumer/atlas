@@ -11,14 +11,14 @@ import (
 )
 
 // API tokens: the credential a machine that is not this server's own child
-// authenticates with (ADR-draft-api-tokens).
+// authenticates with (ADR-0194).
 //
 // Until now the only non-session credential a general caller could hold was the
 // internal service token of ADR-0049 — minted at startup from CSPRNG output, never
 // served over any endpoint, and therefore obtainable only by the process that
 // minted it. That was adequate while it had exactly one holder on one host. It
 // stopped being adequate the moment a login became the default
-// (ADR-draft-auth-on-by-default): a worker on another host, a stdio MCP adapter
+// (ADR-0195): a worker on another host, a stdio MCP adapter
 // against a remote server, a CI job — none of them had anything to present, and
 // `atlas worker --token` / `atlas mcp --token` had no value an operator could put
 // in them.

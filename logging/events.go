@@ -84,10 +84,10 @@ var (
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is
-	// open to whoever can reach the port (ADR-draft-auth-on-by-default).
+	// open to whoever can reach the port (ADR-0195).
 	AuthDisabled = newEvent("auth.disabled")
 
-	// The security audit trail (ADR-draft-login-throttle-and-audit-log). Atlas's
+	// The security audit trail (ADR-0197). Atlas's
 	// business trails were always strong — every state transition, every variable
 	// override, every task claim, each with its actor — but who signed in, who
 	// failed to, and who changed an account or a credential was written down
@@ -118,7 +118,7 @@ var (
 	// not accept. The supervisor honours the variable and stops injecting its own,
 	// so the workers it starts would hold a credential refused at every poll — a
 	// trap that used to be silent because no value could ever have worked
-	// (ADR-draft-api-tokens).
+	// (ADR-0194).
 	AuthWorkerTokenUnknown = newEvent("auth.worker_token_unknown")
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")

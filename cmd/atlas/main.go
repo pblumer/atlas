@@ -413,7 +413,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		// The one line that says this instance is open. Running without a login is a
 		// legitimate thing to want — a laptop, a demo, a throwaway container — but it
 		// is now the deliberate exception, and an exception nobody is told about is
-		// how a demo becomes a deployment (ADR-draft-auth-on-by-default).
+		// how a demo becomes a deployment (ADR-0195).
 		logging.Warn(logging.AuthDisabled,
 			"running WITHOUT authentication: the API, the web UI and /mcp are open to "+
 				"anyone who can reach this port, and /mcp can deploy and run processes. "+
@@ -526,7 +526,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	//
 	// It is handed to the api server rather than mounted beside it, so /mcp passes
 	// the same access boundary as every other route. Two things follow, and they are
-	// the point (ADR-draft-authenticated-mcp-transport): under --auth a request that
+	// the point (ADR-0196): under --auth a request that
 	// carries no credential is refused at /mcp before the adapter sees it, and the
 	// adapter is given no credential of its own to make up the difference — it
 	// forwards whatever authenticated the caller, so a tool call is exactly as
@@ -604,7 +604,7 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 	// unlike the HTTP transport — which forwards each request's own caller — it
 	// authenticates with a credential given here. Without one it cannot work against
 	// a server running --auth at all: every tool call comes back 401
-	// (ADR-draft-authenticated-mcp-transport). The shape is `atlas worker --token`'s,
+	// (ADR-0196). The shape is `atlas worker --token`'s,
 	// because it is the same need.
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"),
 		"bearer token, when the server requires authentication (or ATLAS_TOKEN)")
@@ -956,7 +956,7 @@ func runMockRemedy(args []string) error {
 // store, without a running server or a login. It is the operator recovery path
 // for a self-hosted, admin-managed instance whose admin is locked out — there is
 // no self-service reset, and MCP is gated too (ADR-0044,
-// ADR-draft-authenticated-mcp-transport), so recovery has to be reachable from a
+// ADR-0196), so recovery has to be reachable from a
 // shell (e.g. `docker exec … reset-password`).
 //
 // By default it generates a strong password and prints it once; --password-stdin

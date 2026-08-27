@@ -1,4 +1,4 @@
-# ADR-DRAFT: Requiring a login is the default
+# ADR-0195: Requiring a login is the default
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -18,10 +18,10 @@ Two things have changed since.
 
 **The reasons for opt-in have been worked through.** MCP is no longer broken by
 `--auth` — the transport is gated and forwards its caller's credential
-(ADR-draft-authenticated-mcp-transport), and the stdio adapter can hold one of
+(ADR-0196), and the stdio adapter can hold one of
 its own. Which routes are gated is now a declared class per route rather than a
 path-prefix rule, so what turning auth on actually does is legible and tested
-(ADR-draft-route-access-classes). The remaining objection to flipping the default
+(ADR-0199). The remaining objection to flipping the default
 was the objection of a half-finished feature, and it is finished.
 
 **The default is what a deployment gets.** Every piece of guidance around Atlas —
@@ -152,8 +152,8 @@ strength — it informs without overriding.
 - reverses the opt-in enforcement of
   [ADR-0044](0044-user-management-and-authentication-boundary.md); the
   `*Principal` boundary and the `WithAuth()` option are unchanged
-- depends on ADR-draft-authenticated-mcp-transport (without it, this default
-  would break MCP) and ADR-draft-route-access-classes (which is what makes "what
+- depends on ADR-0196 (without it, this default
+  would break MCP) and ADR-0199 (which is what makes "what
   does auth gate" answerable)
 - narrows [ADR-0043](0043-openapi-spec-and-embedded-api-explorer.md): `--docs`
   still decides whether the explorer is served, and a login now decides who reads it

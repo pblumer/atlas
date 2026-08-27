@@ -1,4 +1,4 @@
-# ADR-DRAFT: Every mounted route declares its access class
+# ADR-0199: Every mounted route declares its access class
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -176,7 +176,7 @@ rather than assertable as a set.
   `*Principal` boundary itself is unchanged
 - generalizes the fail-closed allowlist of
   [ADR-0129](0129-remote-deployment-targets.md)
-- makes ADR-draft-authenticated-mcp-transport expressible: `/mcp` is gated by
+- makes ADR-0196 expressible: `/mcp` is gated by
   being a declared route rather than by a rule written for it
 - relates to [ADR-0142](0142-prometheus-metrics.md) (`/metrics` is public by
   declaration now, not by omission) and

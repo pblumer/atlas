@@ -1,4 +1,4 @@
-# ADR-DRAFT: The MCP transport is authenticated, and acts as its caller
+# ADR-0196: The MCP transport is authenticated, and acts as its caller
 
 - **Status:** Proposed
 - **Date:** 2026-08-26
@@ -77,7 +77,7 @@ the surface wrong.
 
 **Mounting.** `api.WithMCP(h http.Handler)` takes the transport and mounts it at
 `/mcp` and `/mcp/` with class `accessAuthenticated`
-(ADR-draft-route-access-classes), so it passes `withAuth` like every other route.
+(ADR-0199), so it passes `withAuth` like every other route.
 Under `--auth`, a request with no credential is refused with `401` and a
 `WWW-Authenticate: Bearer` header naming the scheme — Bearer and not Basic, since
 Basic is what makes a browser open its own credential dialog over the login
@@ -206,7 +206,7 @@ credential to use, and minting a second one adds a lifecycle to get wrong.
   [ADR-0049](0049-internal-service-auth-for-mcp.md) ("an auth-aware transport for
   the external `/mcp` endpoint itself"); the internal token keeps its other holder,
   the supervised workers
-- builds on ADR-draft-route-access-classes, which is what makes `/mcp` gateable as
+- builds on ADR-0199, which is what makes `/mcp` gateable as
   an ordinary route
 - relates to [ADR-0044](0044-user-management-and-authentication-boundary.md) (the
   `*Principal` boundary this rides) and

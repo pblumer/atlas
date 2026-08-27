@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// API-token management (ADR-draft-api-tokens): minting, listing and revoking the
+// API-token management (ADR-0194): minting, listing and revoking the
 // credentials a machine authenticates with. Admin-gated, because issuing one is
 // the same class of act as creating an account — and, like the deploy tokens this
 // follows, the secret is returned exactly once because the server does not keep it.

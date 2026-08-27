@@ -722,7 +722,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   `/mcp` is mounted inside the API server's own access boundary, so `--auth` gates
   it like every other route, and a tool call carries the caller's credential rather
   than one the adapter supplies
-  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md)).
+  ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md)).
 - 🔲 Full properties panel — the hand-written Details panel grows group by group
   ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
   ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
@@ -776,7 +776,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   identity providers. Passwords are bcrypt-hashed and never leave the server.
   Enforcement is **on by default** for `atlas serve` — `--auth=false` runs the
   server open and says so loudly at startup
-  ([ADR-draft-auth-on-by-default](docs/adr/draft-auth-on-by-default.md); it was
+  ([ADR-0195](docs/adr/0195-auth-on-by-default.md); it was
   opt-in under ADR-0044, mirroring `--docs`). With it on, `/api/v1`, `/mcp` and the
   API explorer require a session (opaque HttpOnly cookie),
   managing users requires `admin`, and a fresh instance seeds an admin from
@@ -795,10 +795,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   now a class declared at each mount site, resolved fail-closed, and held to a
   written-out allowlist by a test — replacing a path-prefix rule under which a route
   was public by omission
-  ([ADR-draft-route-access-classes](docs/adr/draft-route-access-classes.md)). That is
+  ([ADR-0199](docs/adr/0199-route-access-classes.md)). That is
   what makes **`/mcp` an ordinary gated route**, carrying its caller's own credential
   instead of the adapter's
-  ([ADR-draft-authenticated-mcp-transport](docs/adr/draft-authenticated-mcp-transport.md));
+  ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md));
   the internal service token of
   [ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md) stays as what a
   supervised worker authenticates with.

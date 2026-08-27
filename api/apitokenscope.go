@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// What an API token may reach (ADR-draft-api-tokens).
+// What an API token may reach (ADR-0194).
 //
 // A machine credential that can do everything a signed-in person can is the thing
 // this whole line of work exists to stop handing out, so a token carries a scope.
@@ -45,7 +45,7 @@ const (
 	// apiScopeMetrics reaches the Prometheus exposition and nothing else. It is what
 	// let /metrics move behind the boundary at all: a scraper is a machine that needs
 	// exactly one GET forever, which is the narrowest scope there is and the easiest
-	// one to hand out (ADR-draft-metrics-behind-the-boundary).
+	// one to hand out (ADR-0198).
 	apiScopeMetrics = "metrics"
 )
 

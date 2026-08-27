@@ -255,7 +255,7 @@ func TestMCPRefusesADeployToken(t *testing.T) {
 // TestDocsSurfaceIsBehindTheLogin: the API description and the explorer are a
 // developer surface, not something the login screen reads, and the explorer drives
 // the same mutating API a session is required for. Both are refused without one and
-// served with one (ADR-draft-auth-on-by-default).
+// served with one (ADR-0195).
 //
 // They are gated together on purpose: an explorer that renders and then cannot load
 // its own document would be worse than one that says plainly it needs a login.

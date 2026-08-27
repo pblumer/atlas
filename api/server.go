@@ -217,7 +217,7 @@ type Server struct {
 	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
 	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
-	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-draft-api-tokens)
+	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
 	apiTokens        *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
 	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
 	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
@@ -273,7 +273,7 @@ type Server struct {
 	// workerTokenEnv). The MCP adapter used to hold it too and no longer does: it
 	// forwards its caller's credential instead, which is what stopped /mcp being a
 	// way to act as this principal without presenting anything
-	// (ADR-draft-authenticated-mcp-transport).
+	// (ADR-0196).
 	internalToken string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
@@ -489,7 +489,7 @@ type Server struct {
 	// (WithMCP). Handler mounts it at /mcp inside its own mux so it passes the
 	// access boundary like every other route; it used to be mounted beside this
 	// server, where withAuth never saw it and anything that could reach the port
-	// drove the whole API (ADR-draft-authenticated-mcp-transport). Nil leaves /mcp
+	// drove the whole API (ADR-0196). Nil leaves /mcp
 	// unmounted. Set once before Handler is mounted; read-only thereafter.
 	mcpHandler http.Handler
 
@@ -527,7 +527,7 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // --auth did not gate it — while the adapter attached a service credential of its
 // own to the calls it made, so reaching the port was enough to drive the API.
 // Passing the handler in makes that a decision this package owns rather than one
-// the wiring in cmd can make differently (ADR-draft-authenticated-mcp-transport).
+// the wiring in cmd can make differently (ADR-0196).
 func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
 
 // WithPublicFormsCORS allows the given web origins to call the unauthenticated
@@ -2071,7 +2071,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// protection depended on a proxy rule rather than on this server, and a scraper
 	// is a machine, so it presents a credential like every other machine does: an
 	// API token scoped "metrics", which reaches this one route and nothing else
-	// (ADR-draft-metrics-behind-the-boundary).
+	// (ADR-0198).
 	if s.metricsEnabled {
 		mountFunc(accessAuthenticated, "GET /metrics", s.handleMetrics)
 	}
@@ -2106,7 +2106,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// here, inside this handler, rather than beside it: an adapter that drives the
 	// whole API is exactly the surface that must not sit outside the boundary, and
 	// wiring is not a place where that decision should be makeable
-	// (ADR-draft-authenticated-mcp-transport).
+	// (ADR-0196).
 	if s.mcpHandler != nil {
 		mount(accessAuthenticated, "/mcp", s.mcpHandler)
 		mount(accessAuthenticated, "/mcp/", s.mcpHandler)
@@ -2129,7 +2129,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// They are also behind the login. Nothing on the login screen reads either, and
 	// the explorer is a developer surface that drives the whole API — the same
 	// argument --docs already makes, one step further, now that requiring a login is
-	// the default rather than the exception (ADR-draft-auth-on-by-default). Gating
+	// the default rather than the exception (ADR-0195). Gating
 	// them together matters: an explorer whose document is refused is a page that
 	// renders and then cannot load what it is for.
 	if s.docsEnabled {
