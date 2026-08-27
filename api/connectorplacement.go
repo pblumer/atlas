@@ -82,6 +82,7 @@ var authoredKindJobTypes = map[string][]int32{
 	"csv":                   {compiler.CsvImportJobTypeIndex},
 	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
 	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
+	connectorKindJira:       {compiler.JiraJobTypeIndex},
 	"webscrape":             {compiler.WebScrapeJobTypeIndex},
 	"userconnector":         {compiler.UserConnectorJobTypeIndex},
 

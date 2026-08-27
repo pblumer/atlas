@@ -2813,6 +2813,104 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "jira", name: "Jira Connector", group: "Applications", desc: "Create, read, update, transition, comment on, assign, or search Jira issues", icon: "J",
+    // A check-mark inside a rounded square on Atlassian blue: the issue, ticked —
+    // this connector's counterpart to REST's globe and Remedy's ticket. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1868db"/><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="1.6" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.6 8.2l1.7 1.8 3.2-3.4" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
+    ext: "atlas:JiraConnector",
+    fields: [
+      { group: "Jira instance" },
+      { key: "connector", label: "Connector", placeholder: "acme", hint: "Names a server-registered Jira instance (its base URL and credential live on the server, never in the model)." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "create-issue", l: "Create issue" },
+          { v: "get-issue", l: "Read issue" },
+          { v: "update-issue", l: "Update issue" },
+          { v: "transition-issue", l: "Transition issue" },
+          { v: "add-comment", l: "Add comment" },
+          { v: "assign-issue", l: "Assign issue" },
+          { v: "search", l: "Search (JQL)" },
+        ],
+      },
+      {
+        key: "issueKey", label: "Issue", placeholder: "OPS-42", fx: true,
+        // Every operation but create and search addresses one issue. An explicit list
+        // so an operation that takes none never prompts for a key it ignores.
+        showIf: (v) => ["get-issue", "update-issue", "transition-issue", "add-comment", "assign-issue"].includes(v.operation),
+        hint: "The issue key (OPS-42) or its numeric id. Usually a FEEL expression (fx) naming the variable an earlier Create issue wrote — e.g. =ticket.key.",
+      },
+      {
+        key: "project", label: "Project", placeholder: "OPS", fx: true,
+        showIf: (v) => v.operation === "create-issue",
+        hint: "The project key the issue is created in. A value that is all digits is read as a project id instead. May be a FEEL expression (fx).",
+      },
+      {
+        key: "issueType", label: "Issue type", placeholder: "Task", fx: true,
+        showIf: (v) => v.operation === "create-issue",
+        hint: "The issue type by the name Jira shows (Task, Bug, Story…) — or, if all digits, by its id. May be a FEEL expression (fx).",
+      },
+      {
+        key: "summary", label: "Summary", placeholder: "Zugang für =name anlegen", fx: true,
+        showIf: (v) => v.operation === "create-issue" || v.operation === "update-issue",
+        hint: "The issue's one-line summary — required when creating, optional when updating (an update sends only what you change here). May be a FEEL expression (fx).",
+      },
+      {
+        key: "description", label: "Description", placeholder: "=begruendung", fx: true,
+        showIf: (v) => v.operation === "create-issue" || v.operation === "update-issue",
+        hint: "The issue's description. Plain text or Jira wiki markup — this connector speaks Jira's v2 API, so a description is a string, not a document tree. May be a FEEL expression (fx).",
+      },
+      {
+        key: "transition", label: "Transition", placeholder: "Fertig", fx: true,
+        showIf: (v) => v.operation === "transition-issue",
+        hint: "The workflow step to perform, by the name Jira shows on the button — the connector looks its id up first, so the model is not tied to one workflow configuration. A value that is all digits is used as the transition id directly. May be a FEEL expression (fx).",
+      },
+      {
+        key: "comment", label: "Comment", placeholder: "=antwort", fx: true,
+        showIf: (v) => v.operation === "add-comment" || v.operation === "transition-issue",
+        hint: "The comment body. Required for Add comment; on a Transition it is optional and becomes the note explaining the move, posted in the same call. May be a FEEL expression (fx).",
+      },
+      {
+        key: "assignee", label: "Assignee", placeholder: "=konto.accountId", fx: true,
+        showIf: (v) => v.operation === "assign-issue",
+        hint: "The account the issue is handed to: an accountId on Jira Cloud, a username on Data Center. Which one is not guessed — it follows from the credential the connector holds. May be a FEEL expression (fx).",
+      },
+      {
+        key: "jql", label: "JQL", placeholder: "project = OPS AND status = \"To Do\"", fx: true,
+        showIf: (v) => v.operation === "search",
+        hint: "The Jira query the search runs, written exactly as in Jira's own search box. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
+      },
+      {
+        key: "maxResults", label: "Maximum issues", placeholder: "50",
+        showIf: (v) => v.operation === "search",
+        hint: "Caps what may land in the result variable. The connector follows Jira's paging to that many issues, so the result is the issues themselves, never one page of them. Empty uses 50; 0 reads every match.",
+      },
+      {
+        key: "fields", label: "Further fields", type: "map", childType: "atlas:JiraField", fx: true,
+        showIf: (v) => ["create-issue", "update-issue", "transition-issue"].includes(v.operation),
+        hint: "Any other issue field, keyed by its Jira field id or name (labels, components, customfield_10010…). A value may be a FEEL expression (fx), and its shape is kept: a FEEL list is sent as a list, an object as an object, anything else as a string.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "search" ? "array" : "object"),
+        placeholder: "ticket",
+        // Three of the seven operations Jira answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => ["create-issue", "get-issue", "add-comment", "search"].includes(v.operation),
+        hint: (v) => v.operation === "search"
+          ? "The matched issues are written into this process variable as a JSON array — the issues themselves, not Jira's paging envelope."
+          : (v.operation === "create-issue"
+            ? "The created issue is written into this process variable, so a later task can address it as =ticket.key. Leave empty to discard it."
+            : "What Jira returned is written into this process variable (leave empty to discard it)."),
+      },
+    ],
+  },
+  {
   id: "webscrape", name: "Web Scraping Connector", group: "Web & API", desc: "Extract HTML or read an RSS/Atom feed", icon: "W",
   // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
   // connector's counterpart to REST's globe and mail's envelope. The

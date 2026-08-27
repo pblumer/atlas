@@ -121,6 +121,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Ldif.Retries },
 		compile: compileLdifConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Jira != nil },
+		retries: func(st xmlServiceTask) string { return st.Jira.Retries },
+		compile: compileJiraConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -1403,6 +1408,195 @@ func webScrapeMaxItems(taskID, raw string) (int32, error) {
 	}
 	if n < 0 {
 		return 0, fmt.Errorf("compiler: webscrape connector task %q has a negative maxItems %d", taskID, n)
+	}
+	return int32(n), nil
+}
+
+// jiraDefaultMaxResults is the cap a search gets when a model authors none. The
+// compiler writes the effective value into the detail so the runtime interprets
+// nothing (I5); a model asking for more says so, and 0 means unbounded.
+const jiraDefaultMaxResults int32 = 50
+
+// jiraOp describes what one Jira operation requires of a model, and what it is allowed
+// to carry. The table is the compiler's half of connector/jira's Ops table; the drift
+// test TestJiraOpsMatchTheConnector keeps the two from disagreeing about the operation
+// set, which is the failure this shape exists to prevent.
+//
+// Both halves matter. "Needs" is the familiar one: a create with no summary cannot be
+// sent. "Takes" is the half that is easy to forget and expensive to have forgotten — a
+// comment authored on a search, or a project on a transition, would otherwise compile
+// and then be silently dropped at call time, which from the author's side is
+// indistinguishable from a connector that ignored it.
+type jiraOp struct {
+	needsIssue      bool
+	needsProject    bool // project and issue type: what an issue is created in and as
+	needsSummary    bool
+	needsTransition bool
+	needsComment    bool
+	needsAssignee   bool
+	needsJQL        bool
+	// takesSummary allows summary and description (create, and an update that changes
+	// them); takesComment a comment body alongside another operation; takesFields the
+	// extra issue fields; takesSearch the search's own maxResults.
+	takesSummary bool
+	takesComment bool
+	takesFields  bool
+	takesSearch  bool
+	// needsResult marks an operation whose whole point is what it returns: a read that
+	// discards its answer is a call made for nothing. takesResult marks one that
+	// returns something a model may keep or discard — and, by its absence, the three
+	// Jira answers with 204 No Content, where a result variable would name a value
+	// that is never written.
+	needsResult bool
+	takesResult bool
+	// needsChange marks update-issue: without a summary, a description or one extra
+	// field it is a request that changes nothing.
+	needsChange bool
+}
+
+// jiraOps is the operation table: the loop a process actually runs against an issue
+// tracker — open a ticket, read it, change it, move it through its workflow, say
+// something on it, hand it to somebody, and find the ones that match.
+var jiraOps = map[string]jiraOp{
+	"create-issue":     {needsProject: true, needsSummary: true, takesSummary: true, takesFields: true, takesResult: true},
+	"get-issue":        {needsIssue: true, needsResult: true, takesResult: true},
+	"update-issue":     {needsIssue: true, takesSummary: true, takesFields: true, needsChange: true},
+	"transition-issue": {needsIssue: true, needsTransition: true, takesComment: true, takesFields: true},
+	"add-comment":      {needsIssue: true, needsComment: true, takesComment: true, takesResult: true},
+	"assign-issue":     {needsIssue: true, needsAssignee: true},
+	"search":           {needsJQL: true, takesSearch: true, needsResult: true, takesResult: true},
+}
+
+// jiraOpNames lists the operations, sorted, for the messages that have to say what was
+// expected.
+func jiraOpNames() []string {
+	out := make([]string, 0, len(jiraOps))
+	for name := range jiraOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileJiraConnectorTask compiles an <atlas:jiraConnector> task: one issue-tracker
+// operation against a server-registered Jira instance via the job path
+// (ADR-draft-jira-connector). The base URL and credential are resolved server-side by
+// connector name, like Remedy's and SharePoint's; only the operation and its values
+// live in the model.
+func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.Jira
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: jira connector task %q needs a connector (the name the server holds the Jira base URL and credential under)", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: jira connector task %q needs an operation (%s)", st.Id, strings.Join(jiraOpNames(), ", "))
+	}
+	spec, ok := jiraOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: jira connector task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(jiraOpNames(), ", "))
+	}
+	// One pass over every authored value: required where the operation needs it,
+	// refused where it does not use it. A single table means neither half can be
+	// forgotten for a field, and an added field is one row rather than two checks in
+	// two places.
+	values := []struct {
+		attr     string
+		raw      string
+		required bool
+		allowed  bool
+		why      string
+	}{
+		{"issueKey", cn.IssueKey, spec.needsIssue, spec.needsIssue, "the issue key or id the operation addresses (e.g. OPS-42)"},
+		{"project", cn.Project, spec.needsProject, spec.needsProject, "the project key the issue is created in"},
+		{"issueType", cn.IssueType, spec.needsProject, spec.needsProject, "the issue type the issue is created as (e.g. Task)"},
+		{"summary", cn.Summary, spec.needsSummary, spec.takesSummary, "the issue's one-line summary"},
+		{"description", cn.Description, false, spec.takesSummary, "the issue's description"},
+		{"transition", cn.Transition, spec.needsTransition, spec.needsTransition, "the workflow transition to perform, by id or by the name Jira shows"},
+		{"comment", cn.Comment, spec.needsComment, spec.takesComment, "the comment body"},
+		{"assignee", cn.Assignee, spec.needsAssignee, spec.needsAssignee, "the account the issue is assigned to (an accountId on Jira Cloud, a username on Data Center)"},
+		{"jql", cn.JQL, spec.needsJQL, spec.needsJQL, "the JQL query the search runs"},
+		{"maxResults", cn.MaxResults, false, spec.takesSearch, "how many issues a search may return"},
+		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what Jira returned"},
+	}
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: jira connector task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: jira connector task %q operation %q does not use %s (%s); remove it rather than leaving a value the connector ignores",
+				st.Id, op, v.attr, v.why)
+		}
+	}
+	if len(cn.Fields) > 0 && !spec.takesFields {
+		return 0, fmt.Errorf("compiler: jira connector task %q operation %q does not use jiraField values; remove them rather than leaving values the connector ignores", st.Id, op)
+	}
+	fields, err := httpKVList(st.Id, "jira field", cn.Fields)
+	if err != nil {
+		return 0, err
+	}
+	if spec.needsChange && strings.TrimSpace(cn.Summary) == "" && strings.TrimSpace(cn.Description) == "" && len(fields) == 0 {
+		return 0, fmt.Errorf("compiler: jira connector task %q operation %q changes nothing: give it a summary, a description, or at least one jiraField", st.Id, op)
+	}
+	maxResults := int32(0)
+	if spec.takesSearch {
+		maxResults, err = jiraMaxResults(st.Id, cn.MaxResults)
+		if err != nil {
+			return 0, err
+		}
+	}
+	cfg := JiraConfig{
+		Connector:  strings.TrimSpace(cn.Connector),
+		Operation:  op,
+		MaxResults: maxResults,
+		Fields:     fields,
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Retries:    retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"issueKey", cn.IssueKey, &cfg.Issue},
+		{"project", cn.Project, &cfg.Project},
+		{"issueType", cn.IssueType, &cfg.IssueType},
+		{"summary", cn.Summary, &cfg.Summary},
+		{"description", cn.Description, &cfg.Description},
+		{"transition", cn.Transition, &cfg.Transition},
+		{"comment", cn.Comment, &cfg.Comment},
+		{"assignee", cn.Assignee, &cfg.Assignee},
+		{"jql", cn.JQL, &cfg.JQL},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := connectorValue(st.Id, "jira connector", v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddJiraConnectorTask(cfg), nil
+}
+
+// jiraMaxResults reads a search's cap, applying the default when a model authors none.
+// A cap that is not a number, or is negative, is refused at deploy rather than
+// silently read as "no cap" at call time.
+func jiraMaxResults(taskID, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return jiraDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: jira connector task %q has a non-numeric maxResults %q", taskID, raw)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("compiler: jira connector task %q has a negative maxResults %d", taskID, n)
 	}
 	return int32(n), nil
 }

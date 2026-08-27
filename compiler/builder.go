@@ -335,6 +335,21 @@ const LdifJobType = "io.atlas.ldif"
 // compiled process: NewBuilder reserves it twenty-fifth, so it is always 24.
 const LdifJobTypeIndex int32 = 24
 
+// JiraJobType is the reserved job type a Jira connector task carries
+// (ADR-draft-jira-connector). One job type serves every Jira operation — create an
+// issue, read one, update, transition, comment, assign, or search — because they
+// share an instance, a credential and an error envelope; the operation is a modeled
+// value rather than a reserved index of its own, as it is for the directory
+// connectors (ADR-0153/0154/0166/0172).
+const JiraJobType = "io.atlas.jira"
+
+// JiraJobTypeIndex is the interned index JiraJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it twenty-sixth, so it is always 25. Together
+// with the name it lets a job carry its type as an integer and the in-process Jira
+// worker subscribe by one global index across every deployed process, the same way
+// the mail worker uses MailJobTypeIndex.
+const JiraJobTypeIndex int32 = 25
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -367,6 +382,7 @@ var reservedJobTypes = []string{
 	PostgresJobType,      // 22
 	EntraJobType,         // 23
 	LdifJobType,          // 24
+	JiraJobType,          // 25
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1663,6 +1679,69 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 		RemedyForm:   cfg.Form,
 		RemedyFields: cfg.Fields,
 		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// JiraConfig is the deploy-time configuration of a Jira connector task
+// (ADR-draft-jira-connector). Connector names the server-registered Jira instance (its
+// base URL and credential live server-side, never in the model) and Operation is the
+// issue-tracker operation. The remaining values are the ones that operation takes —
+// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
+// variables the task sees at call time. MaxResults is a search's cap, already
+// defaulted by the compiler so the runtime interprets nothing (I5). ResultVar, if set,
+// is the process variable what Jira returned is written back into.
+type JiraConfig struct {
+	Connector   string
+	Operation   string
+	Issue       RestExpr
+	Project     RestExpr
+	IssueType   RestExpr
+	Summary     RestExpr
+	Description RestExpr
+	Transition  RestExpr
+	Comment     RestExpr
+	Assignee    RestExpr
+	JQL         RestExpr
+	MaxResults  int32
+	Fields      []RestKV
+	ResultVar   string
+	Retries     int32
+}
+
+// AddJiraConnectorTask adds a Jira connector task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// JiraJobType so the in-process Jira worker picks it up, evaluates the authored
+// literal-or-FEEL values over the variables the task sees, resolves the named
+// connector's client, performs the one operation, writes what Jira returned into
+// ResultVar (empty = discard it), and completes the job. The Jira base URL and
+// credential are resolved server-side from the named connector, never authored in the
+// model — mirroring Remedy and SharePoint (ADR-0106/0141).
+func (b *Builder) AddJiraConnectorTask(cfg JiraConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(JiraJobType),
+		Connector:       b.intern(cfg.Connector),
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       b.intern(cfg.ResultVar),
+		Auth:            -1,
+		JiraOp:          b.intern(cfg.Operation),
+		JiraIssue:       cfg.Issue,
+		JiraProject:     cfg.Project,
+		JiraIssueType:   cfg.IssueType,
+		JiraSummary:     cfg.Summary,
+		JiraDescription: cfg.Description,
+		JiraTransition:  cfg.Transition,
+		JiraComment:     cfg.Comment,
+		JiraAssignee:    cfg.Assignee,
+		JiraJQL:         cfg.JQL,
+		JiraMaxResults:  cfg.MaxResults,
+		JiraFields:      cfg.Fields,
+		Retries:         cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

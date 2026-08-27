@@ -1878,6 +1878,10 @@ type xmlServiceTask struct {
 	// Ldif, when present, marks this service task a directory-file connector task
 	// (ADR-0171): LDIF or DSML entries read from, or written to, a variable.
 	Ldif *xmlLdifConnector `xml:"extensionElements>ldifConnector"`
+	// Jira, when present, marks this service task a Jira connector task
+	// (ADR-draft-jira-connector): one issue-tracker operation against a
+	// server-registered Jira instance.
+	Jira *xmlJiraConnector `xml:"extensionElements>jiraConnector"`
 	// Mockup, when present, marks this service task an engine-simulated mockup task
 	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
 	// absent.
@@ -2341,6 +2345,41 @@ type xmlSharePointConnector struct {
 // resultVariable, if set, receives the created entry's id. form and every field value
 // is literal or, with a leading '=', a FEEL expression over the instance's variables
 // at call time (the fx toggle, ADR-0067).
+// A Jira connector task's parameters, carried on a service task as an
+// <atlas:jiraConnector connector="..." operation="..." .../> extension element
+// (ADR-draft-jira-connector). connector names a server-registered Jira instance (its
+// base URL and credential live on the server, never in the model) and operation is the
+// issue-tracker operation the task performs.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// issueKey addresses one issue (everything but create-issue and search); project,
+// issueType, summary and description are what an issue is created with (summary and
+// description also carry an update); transition names the workflow step to perform;
+// comment is a comment body (its own operation, and optionally alongside a
+// transition); assignee is the account an issue is handed to; jql and maxResults are a
+// search. jiraField children set any further issue field, including a custom field, by
+// its Jira field id or name. Every value is literal or, with a leading '=', a FEEL
+// expression evaluated over the variables the task sees at call time.
+type xmlJiraConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
+	IssueKey       string      `xml:"issueKey,attr"`
+	Project        string      `xml:"project,attr"`
+	IssueType      string      `xml:"issueType,attr"`
+	Summary        string      `xml:"summary,attr"`
+	Description    string      `xml:"description,attr"`
+	Transition     string      `xml:"transition,attr"`
+	Comment        string      `xml:"comment,attr"`
+	Assignee       string      `xml:"assignee,attr"`
+	JQL            string      `xml:"jql,attr"`
+	MaxResults     string      `xml:"maxResults,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"jiraField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 type xmlRemedyConnector struct {
 	Connector      string      `xml:"connector,attr"`
 	Form           string      `xml:"form,attr"`

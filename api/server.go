@@ -52,6 +52,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
@@ -342,6 +343,13 @@ type Server struct {
 	// bundle resolved from the vault (ADR-0041). Read only while driving jobs on the
 	// run loop, so it needs no lock.
 	remedyRegistry *remedy.Registry
+
+	// jiraRegistry resolves a connector name to an Atlassian Jira REST client for Jira
+	// connector tasks (ADR-draft-jira-connector), built from the managed connector
+	// store at startup and rebuilt on every connector change, with each instance's
+	// credential bundle resolved from the vault (ADR-0041). Read only while driving
+	// jobs on the run loop, so it needs no lock.
+	jiraRegistry *jira.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -1090,7 +1098,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for jobType, exec := range s.scriptWorkers {
 		s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler { return script.Handler(rd, s.processLookup, exec) })
 	}
-	// Managed connector job workers (temis, clio, mail, sharepoint, remedy): one
+	// Managed connector job workers (temis, clio, mail, sharepoint, remedy, jira): one
 	// registry plus job worker(s) per kind, all driven from the managedConnectorKinds
 	// registry so adding a kind needs no new block here. Each registry is created and
 	// built before the loop serves traffic and rebuilt on every connector change; a

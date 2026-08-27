@@ -271,6 +271,24 @@ The control-flow basics most real models use.
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   connector runs against unmodified (package `connector/remedy/mock`).
+  **A Jira connector is another catalog kind**
+  ([ADR-draft-jira-connector](docs/adr/draft-jira-connector.md)): a service task marked
+  `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
+  through the REST API on the job path. Seven operations cover the loop a process runs
+  against an issue tracker — `create-issue`, `get-issue`, `update-issue`,
+  `transition-issue`, `add-comment`, `assign-issue` and `search` (JQL) — with every
+  authored value literal-or-FEEL, and what Jira returned written into a result variable
+  for the four operations that return anything. The site URL and the credential bundle
+  (`{email, apiToken}` for Jira Cloud, `{token}` for a Data Center personal access token)
+  are server-registered and vault-resolved like mail/clio/Remedy, never in the model; the
+  same fact decides both the authentication scheme and how an account is addressed when
+  assigning, so a model does not know which product it is talking to. The `jira` connector
+  trio (registry/client/worker) is wired into the single-binary run loop under the
+  reserved Jira job type and authored via a first-class **Jira Connector** service-task
+  type in the modeler. A transition may be named by the button a person reads in Jira (its
+  id is resolved first), a search follows Jira's paging to the model's cap, and an extra
+  issue field keeps the JSON shape its FEEL value had. Attachments, an out-of-process
+  worker for the kind, and inbound webhook events are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 

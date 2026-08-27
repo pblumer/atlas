@@ -8,8 +8,8 @@
 // value must be", plus the check that mirrors the server's own decoders.
 //
 // The shapes track the Go side: connector/mail/oauth.go's credentialBundle,
-// connector/sharepoint/oauth.go's, and api/connectors.go's remedyCredentials. A field
-// added there is a field added here.
+// connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
+// connector/jira/rest.go's credentialBundle. A field added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -20,8 +20,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // it wants a password or a JSON credential bundle, and since the value is never read
 // back, a wrong shape is invisible until a task parks behind an incident hours later
 // (ADR-0155). The shapes mirror the Go decoders — connector/mail/oauth.go's
-// credentialBundle, connector/sharepoint/oauth.go's, and api/connectors.go's
-// remedyCredentials — so a change there is a change here.
+// credentialBundle, connector/sharepoint/oauth.go's, api/connectors.go's
+// remedyCredentials, and connector/jira/rest.go's credentialBundle — so a change there
+// is a change here.
 export const SECRET_SHAPES = {
   "mail:gmail": {
     what: "a Google OAuth credential bundle (JSON)",
@@ -50,6 +51,15 @@ export const SECRET_SHAPES = {
     fields: ["username", "password"],
     skeleton: { username: "…", password: "…" },
   },
+  "jira:": {
+    what: "a Jira credential bundle (JSON): {email, apiToken} for Jira Cloud, or {token} for a Data Center personal access token",
+    // anyOf, not fields: the two shapes are alternatives, and a bundle is valid when
+    // it satisfies either — which the check below states as "one of these groups",
+    // rather than demanding every field of both.
+    anyOf: [["email", "apiToken"], ["token"]],
+    skeleton: { email: "bot@acme.example", apiToken: "ATATT…" },
+    note: "A Jira Cloud API token is created under <b>Atlassian account &rsaquo; Security &rsaquo; API tokens</b> and is used with the account's e-mail address, not a password. For Jira Data Center, store <code>{\"token\": \"…\"}</code> instead — a personal access token, sent as a bearer.",
+  },
   "mail:smtp": { what: "the SMTP password for the connector's sender address (a plain string)" },
   "mail:preview": { what: "nothing — the preview provider needs no credential" },
   "clio:": { what: "a clio API key (a plain string, <code>kid.secret</code>)" },
@@ -77,7 +87,7 @@ export function secretShapeFor(connectors, name) {
 // mistake can be named, and the connector that defines the expectation is named with
 // it, so changing that connector remains the way out.
 export function checkSecretValue(shape, value) {
-  if (!shape || (!shape.oauth && !shape.fields)) return "";
+  if (!shape || (!shape.oauth && !shape.fields && !shape.anyOf)) return "";
   let parsed;
   try {
     parsed = JSON.parse(value);
@@ -88,6 +98,15 @@ export function checkSecretValue(shape, value) {
     return `${shape.connector.name} (${shape.connector.kind}) needs ${shape.what} — a JSON object, not a ${Array.isArray(parsed) ? "list" : typeof parsed}.`;
   }
   const missing = (need) => need.filter((k) => !String(parsed[k] || "").trim());
+  if (shape.anyOf) {
+    // Satisfying any one group is enough. Reporting the *nearest* group — the one
+    // with the fewest fields still missing — is what turns "this is not a Jira
+    // bundle" into "your Cloud bundle is missing apiToken".
+    const gaps = shape.anyOf.map(missing);
+    if (gaps.some((g) => g.length === 0)) return "";
+    const nearest = gaps.reduce((a, b) => (b.length < a.length ? b : a));
+    return `Missing ${nearest.map((k) => `"${k}"`).join(" and ")}.`;
+  }
   if (shape.fields) {
     const gone = missing(shape.fields);
     return gone.length ? `Missing ${gone.map((k) => `"${k}"`).join(" and ")}.` : "";
