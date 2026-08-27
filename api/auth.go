@@ -336,6 +336,26 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				Scope:    rec.scope(),
 			}
 		}
+		// An OAuth access token identifies a *person* who approved an application to
+		// act as them (ADR-0200) — the one credential here that is not a machine. So
+		// unlike the three above it resolves to the human's own principal, roles and
+		// groups included, which is what keeps ADR-0196's property true through a
+		// hosted client: a tool call is exactly as privileged as whoever made it.
+		//
+		// Roles come from the grant rather than from the user store, because this runs
+		// on a handler goroutine and that store belongs to the run loop. What keeps
+		// them honest is maintenance, not freshness: disabling or deleting the account
+		// revokes its grants and a role change rewrites them (revokeUserGrants,
+		// refreshUserGrants), at the same call sites that already do this for sessions.
+		if g, ok := s.oauthGrants.matchAccess(tok, time.Now().Unix()); ok {
+			return &httpapi.Principal{
+				UserID:   g.UserID,
+				Username: g.Username,
+				Roles:    g.Roles,
+				GroupIDs: g.GroupIDs,
+				Scope:    g.scope(),
+			}
+		}
 	}
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {

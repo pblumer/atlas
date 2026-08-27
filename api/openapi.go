@@ -546,6 +546,32 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Revoke an API token, effective immediately (admin-only, ADR-0194)", tag: "API tokens",
 			status: http.StatusNoContent}},
 
+		{"POST", "/api/v1/oauth-clients", s.handleRegisterOAuthClient, apiOp{
+			summary: "Register an OAuth client — a hosted application allowed to ask a person for access. The secret is returned once and never again (admin-only, ADR-0200)", tag: "OAuth",
+			req: jsonBody("Client name and the exact redirect URIs it may be sent back to", schemaObj(map[string]any{
+				"name": tString(), "redirectUris": tArray(),
+			}, "name", "redirectUris")),
+			resp: jsonBody("Registered client, including its one-time secret", tObject())}},
+		{"GET", "/api/v1/oauth-clients", s.handleListOAuthClients, apiOp{
+			summary: "List registered OAuth clients; secrets are not stored and never returned (admin-only, ADR-0200)", tag: "OAuth",
+			resp: jsonBody("OAuth clients", tArray())}},
+		{"DELETE", "/api/v1/oauth-clients/{id}", s.handleDeleteOAuthClient, apiOp{
+			summary: "Remove an OAuth client and revoke every grant approved for it (admin-only, ADR-0200)", tag: "OAuth",
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/oauth-grants", s.handleListOAuthGrants, apiOp{
+			summary: "List standing OAuth approvals — your own, or everyone's for an administrator (ADR-0200)", tag: "OAuth",
+			resp: jsonBody("OAuth grants", tArray())}},
+		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
+			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth",
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
+			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth",
+			resp: jsonBody("Consent context", tObject())}},
+		{"POST", "/api/v1/oauth/authorize", s.handleApprove, apiOp{
+			summary: "Record a person's decision on an authorization request and return where their browser should go next (ADR-0200)", tag: "OAuth",
+			req:  jsonBody("The authorization request, repeated, plus the decision", tObject()),
+			resp: jsonBody("Where to send the browser", tObject())}},
+
 		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{

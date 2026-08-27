@@ -503,6 +503,17 @@ type Server struct {
 	// unmounted. Set once before Handler is mounted; read-only thereafter.
 	mcpHandler http.Handler
 
+	// The OAuth authorization server (ADR-0200): the clients an operator registered,
+	// the grants people approved for them, and the short-lived codes in flight
+	// between an approval and its token exchange. Each durable store is owned by the
+	// run loop; each index is the concurrent half the handlers read. The codes are
+	// in memory only — a code is worthless a minute after it is issued.
+	oauthClientStore *oauthClientStore
+	oauthClients     *oauthClientIndex
+	oauthGrantStore  *oauthGrantStore
+	oauthGrants      *oauthGrantIndex
+	oauthCodes       *oauthCodeStore
+
 	// externalURL is the origin this server is reachable under from outside, when an
 	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
 	// documents and the WWW-Authenticate challenge build their absolute URLs from;
@@ -893,6 +904,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	oauthClientStore, err := newOAuthClientStore(filepath.Join(dataDir, "oauth-clients"))
+	if err != nil {
+		return nil, err
+	}
+	oauthGrantStore, err := newOAuthGrantStore(filepath.Join(dataDir, "oauth-grants"))
+	if err != nil {
+		return nil, err
+	}
 	targets, err := newTargetStore(filepath.Join(dataDir, "targets"))
 	if err != nil {
 		return nil, err
@@ -974,6 +993,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
 		apiTokens:         newAPITokenIndex(),
+		oauthClientStore:  oauthClientStore,
+		oauthClients:      newOAuthClientIndex(),
+		oauthGrantStore:   oauthGrantStore,
+		oauthGrants:       newOAuthGrantIndex(),
+		oauthCodes:        newOAuthCodeStore(),
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
@@ -1213,6 +1237,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.checkWorkerTokenEnv()
 	if err := s.loadDeployTokens(); err != nil {
+		return nil, err
+	}
+	// Registered OAuth clients and the grants people approved for them (ADR-0200).
+	// Both into their in-memory indexes before traffic, for the reason the token
+	// indexes exist: resolving a credential happens on a handler goroutine and must
+	// touch neither the disk nor a run-loop-owned store.
+	if err := s.loadOAuth(); err != nil {
 		return nil, err
 	}
 	// Push per-server call-activity overrides into the processor. Runs after
@@ -2108,6 +2139,14 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// could never be read by anyone who needed it. It names no secret: the origin, a
 	// product name, and that a bearer goes in a header.
 	mountFunc(accessPublic, "GET "+protectedResourceMetadataPath, s.handleProtectedResourceMetadata)
+	// The authorization server (ADR-0200). Its metadata is public for the same
+	// reason: a client reads it before it holds anything. /oauth/authorize is public
+	// because an unauthenticated *browser* has to be able to land there — a 401 is
+	// not an answer a person can act on — and the page it serves shows nothing until
+	// it asks, while /oauth/token authenticates the client from its own body.
+	mountFunc(accessPublic, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
+	mountFunc(accessPublic, "GET "+oauthAuthorizePath, s.handleAuthorize)
+	mountFunc(accessPublic, "POST "+oauthTokenPath, s.handleToken)
 	if s.mcpHandler != nil {
 		// The path-suffixed form, for the transport as a resource of its own. Served
 		// only when that transport is, so the document never describes something this

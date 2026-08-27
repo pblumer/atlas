@@ -114,6 +114,18 @@ var (
 	AuthPasswordSet  = newEvent("auth.password_set")
 	AuthTokenMinted  = newEvent("auth.token_minted")
 	AuthTokenRevoked = newEvent("auth.token_revoked")
+	// The OAuth authorization server (ADR-0200). Registering a client is an admin
+	// act like minting a token; the rest is one person deciding, which is the event
+	// an audit of "who let that application in" is looking for. AuthOAuthDenied
+	// covers both halves of a refusal — the person declining, and the server
+	// refusing a request that never should have been made — because for an operator
+	// reading a log they are the same question: why did this not connect.
+	AuthOAuthClientRegistered = newEvent("auth.oauth_client_registered")
+	AuthOAuthClientDeleted    = newEvent("auth.oauth_client_deleted")
+	AuthOAuthGranted          = newEvent("auth.oauth_granted")
+	AuthOAuthDenied           = newEvent("auth.oauth_denied")
+	AuthOAuthTokenIssued      = newEvent("auth.oauth_token_issued")
+	AuthOAuthGrantRevoked     = newEvent("auth.oauth_grant_revoked")
 	// AuthWorkerTokenUnknown is an operator-set ATLAS_TOKEN that this server does
 	// not accept. The supervisor honours the variable and stops injecting its own,
 	// so the workers it starts would hold a credential refused at every poll — a

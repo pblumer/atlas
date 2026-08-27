@@ -262,6 +262,22 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/api-tokens":         "credential listing is admin-only, not an agent action",
 	"DELETE /api/v1/api-tokens/{id}": "credential revocation is admin-only, not an agent action",
 
+	// The OAuth authorization server (ADR-0200): the same category again, and here
+	// the reason is sharper than "admin-only". These endpoints are how a *person*
+	// decides which application may act as them, and how that decision is undone.
+	// An agent reaching them over MCP would be an application granting itself the
+	// standing to act as somebody — the exact thing the consent screen exists to put
+	// in front of a human. The two read-only ones are omitted with it: a listing of
+	// who approved what is an operator's view, and the consent context is a screen's
+	// backing call, not a capability.
+	"POST /api/v1/oauth-clients":          "registering an application that may ask for access is admin-only, not an agent action",
+	"GET /api/v1/oauth-clients":           "client listing is admin-only, not an agent action",
+	"DELETE /api/v1/oauth-clients/{id}":   "removing a client and its grants is admin-only, not an agent action",
+	"GET /api/v1/oauth-grants":            "who approved which application is an operator's view, not an agent capability",
+	"DELETE /api/v1/oauth-grants/{id}":    "withdrawing a person's approval is theirs or an administrator's to do",
+	"GET /api/v1/oauth/authorize-context": "backs the consent screen in a browser; nothing for an agent to call",
+	"POST /api/v1/oauth/authorize":        "a person's consent decision, made on a screen — an agent must never record one",
+
 	// Deployment targets and promotion (ADR-0129, sending side): a target names
 	// another server and the credential to reach it — admin config in the same
 	// category as connectors. Promotion ships work to a *different* engine, often a

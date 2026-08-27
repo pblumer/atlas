@@ -9,22 +9,21 @@ import (
 
 // Atlas as an OAuth protected resource (RFC 9728, ADR-0200).
 //
-// This is the resource-server half of that record, and only that half: it says
-// what this server is and how a bearer reaches it. It issues no tokens, and
-// nothing here validates one — Atlas still accepts exactly the credentials it
-// accepted before.
+// This is the resource-server half of that record: it says what this server is,
+// how a bearer reaches it, and where to go and get one. The authorization server
+// it points at is oauthserver.go.
 //
 // What it buys is that a refusal explains itself. A hosted MCP client — a
 // connector on somebody else's infrastructure, driven by a person in a browser —
 // has nowhere to put an API token, so it goes looking for an authorization flow
 // when it is refused. Without a pointer it has to guess, and what it guesses is
-// /authorize, which Atlas does not serve: the operator sees a 404 and no reason
-// for it. With the pointer, the client discovers a document that names the
-// resource it was refused by, and fails for a stated cause instead.
+// /authorize: before this existed Atlas served no such route, and the operator saw
+// a 404 with no reason in it.
 //
-// The documents are deliberately the same shape they will have once tokens exist.
-// What changes then is one field, authorization_servers, and the code that
-// validates the audience the documents already declare.
+// The two halves shipped separately on purpose, and this one is the durable one.
+// If Atlas ever delegates to an external identity provider, the authorization
+// server here is deleted and authorization_servers names somebody else; nothing
+// else in this file moves.
 
 // protectedResourceMetadataPath is the well-known location of the metadata
 // document. RFC 9728 also defines a path-suffixed form for a resource served
@@ -119,12 +118,13 @@ func (s *Server) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.
 		// which would put the credential in access logs and browser history.
 		"bearer_methods_supported": []string{"header"},
 	}
-	// authorization_servers is deliberately absent, and its absence is a test
-	// (TestProtectedResourceMetadataNamesNoAuthorizationServer). It is optional in
-	// RFC 9728, Atlas issues no tokens, and it can validate none from a foreign
-	// issuer. Naming one would walk a client through an entire authorization flow to
-	// be refused at the end with the token in hand — worse than being told at the
-	// start that there is nowhere to go. The field lands with the validation.
+	// Where to go and get a token. This field was deliberately absent while Atlas
+	// issued none — naming an authorization server it could not honour would have
+	// walked a client through an entire flow to refuse it at the end. It issues them
+	// now (oauthserver.go), so the pointer is the truth and the flow completes.
+	if base != "" {
+		doc["authorization_servers"] = []string{base}
+	}
 
 	// The document varies by the header externalBase consults, so a shared cache in
 	// front of Atlas cannot serve one caller's scheme to another.

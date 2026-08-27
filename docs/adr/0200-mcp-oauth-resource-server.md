@@ -1,7 +1,7 @@
 # ADR-0200: Atlas as an OAuth resource server, so a hosted MCP client can connect
 
-- **Status:** Accepted (2026-08-27: the resource-server half is implemented; the
-  authorization-server half is next)
+- **Status:** Accepted (2026-08-27: both halves implemented — resource server and
+  authorization server; dynamic client registration is the next step)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 
@@ -131,12 +131,16 @@ that a compliant client will actually talk to. Concretely:
 - `GET /.well-known/oauth-authorization-server`, advertising
   `code_challenge_methods_supported: ["S256"]` — without it a compliant client must
   refuse to proceed, so this field is not optional in practice.
-- `GET /authorize`: requires a signed-in person, reusing the session and the login
+- `GET /oauth/authorize`: the page a person lands on. Public as a route, because an
+  unauthenticated browser must be able to arrive and be told to sign in — a `401` is
+  not an answer a person can act on — reusing the session and the login
   screen that already exist, and shows a **consent screen** naming the client and
   what it will be able to reach. It issues a short-lived code bound to the person,
   the client, the PKCE challenge and the `resource`.
-- `POST /token`: exchanges that code, with `code_verifier` and `resource`, for an
-  access token and a refresh token.
+- `POST /oauth/token`: exchanges that code, with `code_verifier` and `resource`, for
+  an access token and a refresh token, and later rotates the pair. Rate-limited on
+  the caller's address like the login is (ADR-0197), because it takes a secret and is
+  therefore somewhere to guess one.
 - An OAuth client is registered by an operator in the Console — a name, a redirect
   URI, an id and a secret shown once — and the operator pastes id and secret into
   the client's dialog.
@@ -173,7 +177,7 @@ answer it cannot yet use.
   external provider takes over, the protected-resource metadata points elsewhere and
   the AS half is deleted; nothing else moves.
 - **Negative / trade-offs accepted:** Atlas becomes an authorization server, with
-  `/authorize` and `/token` as new public routes and a consent screen to design and
+  `/oauth/authorize` and `/oauth/token` as new public routes and a consent screen to design and
   to get right. The login throttle (ADR-0197) must cover them from the first commit —
   they are password-adjacent surface, and they are the kind of route that gets found.
 - **Negative:** more credential shapes. Three ways to become a principal is one more

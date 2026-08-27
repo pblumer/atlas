@@ -196,6 +196,7 @@ func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.dropGroupFromSessions(id)
+	s.dropGroupFromGrants(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -256,6 +257,7 @@ func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 		// re-login (ADR-0185). No-op when auth is off (no
 		// sessions) or the user is not signed in.
 		s.sessions.setUserGroupMembership(userID, id, true)
+		s.setGrantGroupMembership(userID, id, true)
 		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
@@ -310,6 +312,7 @@ func (s *Server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request)
 		// Drop the grant from the user's live sessions so access is revoked without a
 		// re-login (ADR-0185).
 		s.sessions.setUserGroupMembership(userID, id, false)
+		s.setGrantGroupMembership(userID, id, false)
 		httpapi.JSON(w, http.StatusOK, view)
 	}
 }

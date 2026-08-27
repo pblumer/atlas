@@ -48,6 +48,19 @@ var wantPublicRoutes = []string{
 	"GET /.well-known/oauth-protected-resource",
 	"GET /.well-known/oauth-protected-resource/mcp",
 
+	// The authorization server (ADR-0200). Its metadata is read before a client
+	// holds anything at all, and its two endpoints have their own reasons:
+	// /oauth/authorize is where an unauthenticated *browser* lands, and answering a
+	// person with 401 is answering them with nothing they can act on — the page it
+	// serves shows only what the context endpoint gives it, and asks them to sign in
+	// first. /oauth/token authenticates the client out of its own request body, so a
+	// session would be the wrong question to ask of it. The context endpoint backs
+	// that page for someone not yet signed in.
+	"GET /.well-known/oauth-authorization-server",
+	"GET /oauth/authorize",
+	"POST /oauth/token",
+	"GET /api/v1/oauth/authorize-context",
+
 	// The embedded web UI. Static assets; the login screen has to load.
 	"/",
 }

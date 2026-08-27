@@ -76,6 +76,14 @@ var publicAPIRoutes = []string{
 	"GET /api/v1/settings/theme",        // brand accent, applied before login (ADR-0113)
 	"GET /api/v1/settings/logo",         // brand logo, shown before login (ADR-0148)
 	"GET /api/v1/settings/registration", // whether the login screen offers self-registration (ADR-0126)
+
+	// What the consent screen is being asked to approve (ADR-0200). Public because
+	// that screen has to render for somebody not yet signed in — its whole job in
+	// that case is to say "sign in to continue". It discloses a registered client's
+	// display name to anyone holding its client id, which is the name that client is
+	// about to show the person anyway, and the id travels in the URL the client
+	// itself built.
+	"GET /api/v1/oauth/authorize-context",
 }
 
 // publicAPIRouteSet indexes publicAPIRoutes for lookup while mounting. Built
