@@ -43,6 +43,24 @@
       }
     },
     {
+      "id": "every-properties-group-in-the-form-and-dmn-editors-reads-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Every properties group in the Form and DMN editors reads the same again.",
+        "de": "Every properties group in the Form and DMN editors reads the same again."
+      },
+      "summary": {
+        "en": "form-js and dmn-js mark a group whose entries are all unset with the class empty — their own state flag, on the group's header.",
+        "de": "form-js and dmn-js mark a group whose entries are all unset with the class empty — their own state flag, on the group's header."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "entra-id-delta-queries-delta-users-and-delta-groups",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -311,24 +329,6 @@
       "link": {
         "label": "ADR-0041",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0041-connector-management-and-secret-store.md"
-      }
-    },
-    {
-      "id": "the-connector-picker-is-one-line-per-kind",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "The connector picker is one line per kind.",
-        "de": "The connector picker is one line per kind."
-      },
-      "summary": {
-        "en": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath.",
-        "de": "The Modeler's Type picker lists nineteen kinds (ADR-0067), and each was a two-line card: name, then the catalog's one-sentence description underneath."
-      },
-      "link": {
-        "label": "ADR-0067",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0067-service-task-connector-catalog.md"
       }
     }
   ]

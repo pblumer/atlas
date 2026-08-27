@@ -462,7 +462,16 @@ tbody tr:hover { background: #fafbfc; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .tabs button { background: none; border: none; padding: 10px 12px; font: inherit; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-.empty { text-align: center; color: var(--muted); padding: 34px; }
+/* The "nothing here yet" placeholder — a centred, padded line where a list or a table
+   would be. Held off the vendored properties panels on purpose: bpmn-js, dmn-js and
+   form-js all mark a group header (and form-js a collapsible entry's title) whose
+   entries are unset with `empty`. That is their state flag, not our placeholder, and a
+   bare `.empty` reached it — 34px of padding all round turned every unset group in the
+   Form and DMN editors into a 68px block with its title pushed in and truncated, beside
+   the 27px rows of the groups that happened to be filled. Not neutralised inside the
+   panel but excluded from it, so the vendor's own styling stands rather than being
+   overridden back to something of ours. */
+.empty:not([class*="bio-properties-panel"]) { text-align: center; color: var(--muted); padding: 34px; }
 
 textarea, input[type=text], select { width: 100%; font: 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); }
 select { font-family: inherit; cursor: pointer; }

@@ -44,6 +44,20 @@ _Changed_ / _Removed_ for each version.
   customer's network: a worker sitting there can serve it, and the service account can live
   only in that worker rather than in the engine.
 
+### Fixed
+
+- **Every properties group in the Form and DMN editors reads the same again.** form-js and
+  dmn-js mark a group whose entries are all unset with the class `empty` — their own state
+  flag, on the group's header. `app.css` carried a bare `.empty` for our "nothing here yet"
+  placeholders: centred text and 34px of padding all round. Nothing scoped it, so it reached
+  straight into the vendored panel, and every unset group became a **68px** block against
+  the **27px** of the groups that happened to have something set — with its title pushed
+  inward by the padding and clipped by the centring, so *Custom properties* appeared as
+  *Custom p*. Six rows in two shapes, for no reason a reader could see. The placeholder rule
+  is now held **off** that panel rather than overridden inside it, so the vendored widget's
+  own styling stands rather than being replaced by more of ours; our placeholders elsewhere
+  are untouched.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives
