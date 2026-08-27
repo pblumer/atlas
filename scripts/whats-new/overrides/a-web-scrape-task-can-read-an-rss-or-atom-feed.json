@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A news feed as process data",
+    "de": "Ein Nachrichten-Feed als Prozessdaten"
+  },
+  "summary": {
+    "en": "A web-scraping step can now read an RSS or Atom feed instead of picking pieces out of a page's HTML. You choose the format in the Modeler, and every feed entry arrives as one object with a headline, a link, a short description and its publication date — so a later step addresses =headlines[1].link directly instead of matching up four separate lists. Max items keeps the first N entries and nothing else. Nothing changes for a scraping task you already have: HTML stays the default, and the format is a choice in the model rather than something Atlas guesses from the answer a site gives.",
+    "de": "Ein Web-Scraping-Schritt kann jetzt einen RSS- oder Atom-Feed lesen, statt Stücke aus dem HTML einer Seite zu klauben. Das Format wählen Sie im Modeler, und jeder Feed-Eintrag kommt als ein Objekt an — mit Schlagzeile, Link, Kurzbeschreibung und Erscheinungsdatum. Ein späterer Schritt spricht damit direkt =schlagzeilen[1].link an, statt vier getrennte Listen wieder zusammenzuführen. Max. Einträge behält die ersten N und sonst nichts. Für einen bestehenden Scraping-Task ändert sich nichts: HTML bleibt die Voreinstellung, und das Format ist eine Angabe im Modell — nichts, was Atlas aus der Antwort einer Website errät."
+  },
+  "tutorial": {
+    "en": [
+      "In the Modeler, drop a service task and pick Web Scraping Connector.",
+      "Enter the feed's address under URL (for example https://www.blick.ch/rss.xml) and set Format to RSS — CSS selector and Attribute disappear, because a feed needs neither.",
+      "Set Max items to 15 and name a result variable, for example headlines.",
+      "A later task can then address =headlines[1].title, or loop over the list; examples/blick-schlagzeilen.bpmn is the whole thing as a ready-made model."
+    ],
+    "de": [
+      "Ziehen Sie im Modeler einen Service-Task auf und wählen Sie Web Scraping Connector.",
+      "Tragen Sie unter URL die Adresse des Feeds ein (zum Beispiel https://www.blick.ch/rss.xml) und stellen Sie Format auf RSS — CSS-Selektor und Attribut verschwinden, denn ein Feed braucht beides nicht.",
+      "Setzen Sie Max. Einträge auf 15 und geben Sie eine Ergebnisvariable an, etwa schlagzeilen.",
+      "Ein späterer Task spricht dann =schlagzeilen[1].title an oder läuft über die Liste; examples/blick-schlagzeilen.bpmn ist das Ganze als fertiges Modell."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

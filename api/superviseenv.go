@@ -583,7 +583,14 @@ func (s *Server) adWorkerEnv() []string {
 				slog.String("error", err.Error()))
 		} else if stored {
 			env = append(env, adMockEnv+"="+boolEnv(a.Enabled))
-			if seed := strings.TrimSpace(a.Seed); seed != "" && a.Enabled {
+			// The seed is a file Atlas wrote and Atlas names, not one an operator
+			// pointed at: the Console is org-wide, and a path typed there belongs to
+			// whichever host happens to run the worker
+			// (ADR-0202). The path carries a digest of
+			// the seed's content, which is what makes replacing a seed actually reach
+			// the worker — refresh() restarts a child when its rendered environment
+			// differs, and a fixed name would render the same string for new content.
+			if seed := s.settings.adSeedPath(a); seed != "" && a.Enabled {
 				env = append(env, adMockSeedEnv+"="+seed)
 			}
 		}

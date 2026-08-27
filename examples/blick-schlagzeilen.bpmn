@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Blick.ch-Schlagzeilen (ADR-0118 + ADR-0190) — ein RSS-Feed als Prozessdaten.
+
+  Das kleinste vollständige Beispiel für den Ausbau des Web-Scraping-Konnektors:
+  derselbe Task, der bisher HTML per CSS-Selektor ausgelesen hat, liest mit
+  format="rss" einen Feed und schreibt **strukturierte Einträge** statt Strings.
+
+    Start (suchwort, leer = alles zählt als Treffer)
+     -> [webscrape rss] holt https://www.blick.ch/rss.xml, die ersten 15 Einträge,
+                        nach `schlagzeilen` = [ { title, link, description, published } ]
+     -> [Script]        `treffer` = die Einträge, deren Titel das Suchwort enthält
+     -> (Treffer?)      count(treffer) > 0 ? -> User-Task "Treffer sichten"
+                                       sonst -> Ende "nichts Neues"
+
+  Drei Dinge, die das Beispiel zeigen:
+
+  1. **Das Format ist Modellwissen, keine Laufzeit-Erkennung.** format="rss" wählt
+     den Parser beim Deployment (ADR-0190). Atlas rät nie am Content-Type herum —
+     ein Server, der seinen Feed als application/xml ausliefert, ändert damit nicht
+     die Gestalt einer Prozessvariablen.
+  2. **Ein Eintrag ist ein Objekt.** `=schlagzeilen[1].title` und `e.link` gibt es,
+     weil der Konnektor die vier Felder title/link/description/published immer
+     schreibt (fehlt eines in der Quelle, ist es leer — erfunden wird nichts).
+     Die HTML-Variante liefert weiterhin ein Array von Strings; welche der beiden
+     Gestalten herauskommt, entscheidet das Modell, nicht die Antwort.
+  3. **maxItems ist die Schranke ohne Folge-Skript.** 15 heisst: die ersten 15
+     Einträge in Dokumentreihenfolge. Ohne Angabe (oder 0) ist es unbegrenzt —
+     so bleibt jedes vor ADR-0190 geschriebene HTML-Modell unverändert.
+
+  Läuft ohne Konfiguration: webscrape ist eine der standardmässig ausgelagerten
+  Konnektor-Arten (ADR-0164), Atlas startet den Worker also selbst. Kein
+  Credential, keine Registrierung im Konnektor-Store — die URL steht im Modell,
+  ein Scrape ist ein GET und ein Retry holt ihn schlicht neu.
+
+  Zum FEEL im Skript-Task, weil die naheliegende Schreibweise hier eine Falle ist:
+  ein Filter `schlagzeilen[contains(title, suchwort)]` wertet **jeden freien Namen
+  im Filter gegen den Eintrag aus**. `suchwort` ist kein Feld eines Eintrags, wird
+  also zu null — der Filter liefert stillschweigend []. Deshalb bindet das Skript
+  die Prüfung mit `for e in …` an eine Schleifenvariable, hängt das Ergebnis als
+  `treffer`-Feld an und filtert erst danach auf dieses Feld.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_blick_schlagzeilen"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_blick_schlagzeilen" name="Blick.ch: Schlagzeilen im Blick" isExecutable="true">
+    <bpmn:documentation>Liest den RSS-Feed von Blick.ch über einen Web-Scraping-Konnektor im Format rss (ADR-0190) und schreibt die ersten 15 Einträge als strukturierte Objekte (title, link, description, published) nach schlagzeilen. Ein Inline-FEEL-Skript hält die Einträge fest, deren Titel das Suchwort enthält; gibt es welche, parkt der Prozess auf einem User-Task zur Sichtung, sonst endet er. Braucht kein Credential und keinen registrierten Konnektor: die URL steht im Modell, den Abruf erledigt der standardmässig mitlaufende webscrape-Worker.</bpmn:documentation>
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="suchwort" type="string" default="&#34;&#34;" required="false" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
+
+    <bpmn:startEvent id="start" name="Feed prüfen">
+      <bpmn:outgoing>f_start_feed</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="feed_lesen" name="Schlagzeilen holen (RSS)">
+      <bpmn:documentation>format="rss" wählt den Feed-Parser beim Deployment. Selector und Attribute sind in diesem Modus verboten — ein Modell, das beides angibt, wird beim Deployment abgewiesen statt eines der Felder still zu ignorieren. maxItems="15" schneidet nach den ersten 15 Einträgen in Dokumentreihenfolge ab.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:webscrapeConnector url="https://www.blick.ch/rss.xml"
+                                  format="rss"
+                                  maxItems="15"
+                                  resultVariable="schlagzeilen"
+                                  retries="3" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_feed</bpmn:incoming>
+      <bpmn:outgoing>f_feed_filtern</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:scriptTask id="treffer_filtern" name="Treffer suchen">
+      <bpmn:documentation>Behält die Einträge, deren Titel das Suchwort enthält (Gross-/Kleinschreibung egal). Leeres Suchwort heisst: jeder Eintrag ist ein Treffer, denn contains(text, "") ist wahr. Die Prüfung hängt als Feld treffer am Zwischenobjekt und wird erst danach gefiltert — ein Filter darf das äussere suchwort nicht sehen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="treffer"
+                      expression="= (for e in schlagzeilen return {titel: e.title, link: e.link, veroeffentlicht: e.published, treffer: contains(lower case(e.title), lower case(suchwort))})[treffer]" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_feed_filtern</bpmn:incoming>
+      <bpmn:outgoing>f_filtern_gw</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="gw_treffer" name="Treffer?" default="f_gw_keine">
+      <bpmn:incoming>f_filtern_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_sichten</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_keine</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="sichten" name="Treffer sichten">
+      <bpmn:documentation>Parkt, bis jemand die Trefferliste gesichtet hat. In der Aufgabe steht treffer als Liste von { titel, link, veroeffentlicht } bereit — der Link kommt aus dem Feed und nicht aus einem zweiten Scrape.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="redaktion" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_sichten</bpmn:incoming>
+      <bpmn:outgoing>f_sichten_ende</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:endEvent id="ende_gesichtet" name="gesichtet">
+      <bpmn:incoming>f_sichten_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_keine" name="nichts Neues">
+      <bpmn:incoming>f_gw_keine</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_feed" sourceRef="start" targetRef="feed_lesen" />
+    <bpmn:sequenceFlow id="f_feed_filtern" sourceRef="feed_lesen" targetRef="treffer_filtern" />
+    <bpmn:sequenceFlow id="f_filtern_gw" sourceRef="treffer_filtern" targetRef="gw_treffer" />
+    <bpmn:sequenceFlow id="f_gw_sichten" name="ja" sourceRef="gw_treffer" targetRef="sichten">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"
+                                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">= count(treffer) &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_gw_keine" name="nein" sourceRef="gw_treffer" targetRef="ende_keine" />
+    <bpmn:sequenceFlow id="f_sichten_ende" sourceRef="sichten" targetRef="ende_gesichtet" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_blick_schlagzeilen">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="140" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="180" width="64" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_feed_lesen" bpmnElement="feed_lesen">
+        <dc:Bounds x="240" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_treffer_filtern" bpmnElement="treffer_filtern">
+        <dc:Bounds x="410" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_treffer" bpmnElement="gw_treffer" isMarkerVisible="true">
+        <dc:Bounds x="580" y="133" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="572" y="103" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_sichten" bpmnElement="sichten">
+        <dc:Bounds x="680" y="118" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_gesichtet" bpmnElement="ende_gesichtet">
+        <dc:Bounds x="860" y="140" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="848" y="180" width="62" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_keine" bpmnElement="ende_keine">
+        <dc:Bounds x="587" y="280" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="570" y="320" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_feed" bpmnElement="f_start_feed">
+        <di:waypoint x="188" y="158" /><di:waypoint x="240" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_feed_filtern" bpmnElement="f_feed_filtern">
+        <di:waypoint x="360" y="158" /><di:waypoint x="410" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_filtern_gw" bpmnElement="f_filtern_gw">
+        <di:waypoint x="530" y="158" /><di:waypoint x="580" y="158" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_sichten" bpmnElement="f_gw_sichten">
+        <di:waypoint x="630" y="158" /><di:waypoint x="680" y="158" />
+        <bpmndi:BPMNLabel><dc:Bounds x="644" y="140" width="14" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_keine" bpmnElement="f_gw_keine">
+        <di:waypoint x="605" y="183" /><di:waypoint x="605" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="612" y="200" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_sichten_ende" bpmnElement="f_sichten_ende">
+        <di:waypoint x="800" y="158" /><di:waypoint x="860" y="158" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

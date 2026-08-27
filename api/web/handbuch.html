@@ -2061,20 +2061,37 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         edit.</p>
       <p data-l="de">Eingeschaltet wird es in der Konsole: <a href="/#/console/connectors">Connectors</a> →
         Karte <b>Active Directory</b> → <i>Serve Active Directory tasks against a mockup</i> → Speichern. Der
-        AD-Worker startet daraufhin neu und kommt gemockt zurück; Atlas läuft dabei weiter. Im selben Feld gibst
-        du optional den <b>Startbestand</b> an – eine LDIF- oder DSML-Datei auf dem Worker-Host mit den Konten
-        und Gruppen, die dein Prozess vorzufinden erwartet, denn ein Leaver hat in einem leeren Verzeichnis
-        nichts zu deaktivieren.</p>
+        AD-Worker startet daraufhin neu und kommt gemockt zurück; Atlas läuft dabei weiter.</p>
+      <p data-l="de">Dieselbe Karte nimmt optional einen <b>Startbestand</b> entgegen – die Konten und Gruppen,
+        die dein Prozess vorzufinden erwartet. Ein Joiner braucht keinen, der legt sein Konto ja selbst an; ein
+        Leaver hat in einem leeren Verzeichnis nichts zu deaktivieren. Du wählst eine LDIF- oder DSML-Datei aus
+        oder fügst den Inhalt direkt ein – <b>einen Pfad gibst du nirgends an</b>: Atlas speichert den Bestand
+        selbst und legt ihn dem Worker hin. Beim Speichern wird er geprüft, und Atlas sagt dir, wie viele
+        Einträge er gelesen hat. Wenn dir nichts einfällt, liefert <i>Example</i> ein kleines Verzeichnis mit
+        zwei Konten und einer Gruppe – genug, um einen Leaver auszuprobieren.</p>
       <p data-l="en">You switch it on in the Console: <a href="/#/console/connectors">Connectors</a> → the
         <b>Active Directory</b> card → <i>Serve Active Directory tasks against a mockup</i> → Save. The AD worker
-        restarts and comes back mocked; Atlas keeps running. The same card takes an optional <b>seed file</b> – an
-        LDIF or DSML file on the worker's host holding the accounts and groups your process expects to find, since
-        a leaver has nothing to disable in an empty directory.</p>
+        restarts and comes back mocked; Atlas keeps running.</p>
+      <p data-l="en">The same card takes optional <b>starting entries</b> – the accounts and groups your process
+        expects to find. A joiner needs none, since it creates its own account; a leaver has nothing to disable in
+        an empty directory. Pick an LDIF or DSML file, or paste the content straight in – <b>there is no path to
+        type</b>: Atlas stores the entries itself and puts them where the worker will find them. They are checked
+        when you save, and Atlas tells you how many entries it read. If nothing comes to mind, <i>Example</i>
+        gives you a small directory with two accounts and a group – enough to try a leaver against.</p>
       <p data-l="de">Einen Worker, den du selbst startest – etwa in einem anderen Netz – erreicht der Schalter
         nicht. Der liest dieselbe Einstellung aus seiner eigenen Umgebung:</p>
       <p data-l="en">A worker you start yourself – in another network, say – is not reached by the switch. It
         reads the same setting from its own environment:</p>
-      <pre><code>ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=forest.ldif atlas worker --connector ad</code></pre>
+      <pre><code>ATLAS_AD_MOCK=1 ATLAS_AD_MOCK_SEED=/srv/atlas/forest.ldif atlas worker --connector ad</code></pre>
+      <p data-l="de">Dort ist der Startbestand wieder ein Pfad, weil dieser Worker auf seinem eigenen Host läuft
+        und Atlas ihm nichts hinlegen kann. Findet er die Datei nicht oder kann sie nicht lesen, startet er mit
+        einem <b>leeren</b> Verzeichnis und schreibt eine Warnung – er verweigert den Start nicht. Ein Joiner
+        merkt davon nichts; ein Leaver scheitert an genau der Stelle, an der das fehlende Konto gebraucht wird,
+        und der Incident zeigt genau dorthin.</p>
+      <p data-l="en">There the starting entries are a path again, because that worker runs on its own host and
+        Atlas has nowhere to put them. If it cannot find or read the file it starts with an <b>empty</b> directory
+        and logs a warning – it does not refuse to start. A joiner never notices; a leaver fails exactly where the
+        missing account was needed, and the incident points straight at it.</p>
       <p data-l="de">Zu sehen ist das Ganze unter <a href="/#/operations/workers">Betrieb &rsaquo; Workers</a>: Dort
         läuft der Worker <code>ad</code>. Sein Log warnt beim Start, dass kein Verzeichnis geschrieben wird, und
         zeigt danach jede simulierte Operation mit ihrem DN – Passwörter sind darin redigiert.</p>

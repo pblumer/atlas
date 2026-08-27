@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Connectors",
+    "Active Directory"
+  ],
+  "title": {
+    "en": "The AD mockup takes your file, not a path to one",
+    "de": "Das AD-Mockup nimmt deine Datei, nicht einen Pfad dorthin"
+  },
+  "summary": {
+    "en": "The mockup's starting entries — the accounts a leaver needs to find, since it has nothing to disable in an empty directory — used to be a file path you typed into the Console for a machine the Console cannot see. Now you pick a file or paste the entries, and Atlas keeps them: it checks them while you watch and tells you how many it read. An Example button fills in a small directory if you would rather just try something. And a seed that cannot be read no longer stops the AD worker from starting — it begins empty and says so.",
+    "de": "Der Startbestand des Mockups — die Konten, die ein Leaver vorfinden muss, denn in einem leeren Verzeichnis hat er nichts zu deaktivieren — war ein Dateipfad, den du in der Konsole für einen Rechner eingetippt hast, den die Konsole gar nicht sieht. Jetzt wählst du eine Datei aus oder fügst die Einträge ein, und Atlas verwahrt sie: Beim Speichern werden sie geprüft, und du erfährst, wie viele gelesen wurden. Ein Beispiel-Knopf füllt ein kleines Verzeichnis ein, wenn du einfach etwas ausprobieren willst. Und ein Bestand, der sich nicht lesen lässt, hält den AD-Worker nicht mehr vom Start ab — er beginnt leer und sagt das."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console › Connectors and find the Active Directory card.",
+      "Tick “Serve Active Directory tasks against a mockup”.",
+      "Press Example for a ready-made directory, or Choose a file… to load your own LDIF/DSML.",
+      "Press Save. Atlas reports how many entries it read and restarts the AD worker.",
+      "Run a leaver against it and watch Operations › Workers for what the mockup did."
+    ],
+    "de": [
+      "Konsole › Connectors öffnen und die Karte Active Directory suchen.",
+      "„Serve Active Directory tasks against a mockup“ ankreuzen.",
+      "Example drücken für ein fertiges Verzeichnis, oder Choose a file… für deine eigene LDIF-/DSML-Datei.",
+      "Save drücken. Atlas meldet die Zahl der gelesenen Einträge und startet den AD-Worker neu.",
+      "Einen Leaver dagegen laufen lassen und unter Betrieb › Workers ansehen, was das Mockup getan hat."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Connectors",
+      "de": "Connectors öffnen"
+    },
+    "route": "#/console/connectors"
+  }
+}

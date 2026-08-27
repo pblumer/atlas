@@ -13,6 +13,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 
 	"github.com/pblumer/atlas/api/token"
+	"github.com/pblumer/atlas/connector/ldif"
 )
 
 // defaultRegistrationProcessID is the process the login screen's "Registrieren"
@@ -33,6 +34,11 @@ type registrationConfig struct {
 // maxThemeBytes bounds the theme request body — it carries a single short colour
 // string, so a tiny cap is plenty and fails a bloated body fast.
 const maxThemeBytes = 1 << 12
+
+// maxADMockBytes bounds the Active-Directory mockup body, which carries the seed's
+// whole text rather than a setting's worth of it
+// (ADR-0202).
+const maxADMockBytes = 1 << 18 // 256 KiB
 
 // hexColorRe matches a canonical "#rrggbb" colour. Validation lives server-side so
 // a malformed value can never be persisted and served to every browser.
@@ -432,11 +438,42 @@ func (s *Server) handleGetADMock(w http.ResponseWriter, r *http.Request) {
 	// "configured" tells the Console the difference between a decision made here and
 	// none at all — without a record the server's own environment decides, and the
 	// switch must not claim otherwise.
+	// The seed's *content* is admin-only, the rest is not. What the switch is set to
+	// answers a question every operator watching a directory task has — did that
+	// account really get created? — so hiding it would be the wrong secrecy. The seed
+	// is directory data: invented for a mockup, but shaped like a staff list, and
+	// there is no reason for everyone signed in to read one.
+	seed := ""
+	if s.isAdmin(r) {
+		seed = a.Seed
+	}
 	httpapi.JSON(w, http.StatusOK, struct {
 		Enabled    bool   `json:"enabled"`
 		Seed       string `json:"seed,omitempty"`
+		SeedName   string `json:"seedName,omitempty"`
+		SeedFormat string `json:"seedFormat,omitempty"`
+		Entries    int    `json:"seedEntries,omitempty"`
+		HasSeed    bool   `json:"hasSeed"`
 		Configured bool   `json:"configured"`
-	}{Enabled: a.Enabled, Seed: a.Seed, Configured: stored})
+	}{
+		Enabled: a.Enabled, Seed: seed, SeedName: a.SeedName, SeedFormat: a.SeedFormat,
+		Entries: a.SeedEntries, HasSeed: strings.TrimSpace(a.Seed) != "", Configured: stored,
+	})
+}
+
+// adSeedFormat decides whether a pasted seed is DSML or LDIF by looking at it rather
+// than at a file name, because there no longer is one to look at: an operator pastes
+// text or drops a file whose name Atlas keeps only to show back.
+//
+// The two are not close enough to confuse: DSML is XML, so the first thing that is not
+// whitespace, a BOM, or an XML declaration is a '<'. Anything else is LDIF, which is
+// the right default in the ambiguous case because it is what a directory exports.
+func adSeedFormat(seed string) string {
+	t := strings.TrimSpace(strings.TrimPrefix(seed, "\ufeff"))
+	if strings.HasPrefix(t, "<") {
+		return ldif.FormatDSML
+	}
+	return ldif.FormatLDIF
 }
 
 // handleSetADMock stores the switch and lets the supervised AD worker pick it up.
@@ -449,25 +486,63 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	// Its own limit, and a MaxBytesReader rather than a LimitReader. The theme's 4 KB
+	// is the size of a colour; this body carries a directory. Truncating one silently
+	// at 4 KB — which is what a LimitReader does — would have surfaced as "invalid JSON
+	// body" on a seed that was perfectly good, which is a maddening thing to debug.
+	// MaxBytesReader says the body is too large instead, and 256 KB holds a few thousand
+	// entries: past that, the answer is a smaller seed, not a bigger field.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxADMockBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var p struct {
-		Enabled bool   `json:"enabled"`
-		Seed    string `json:"seed"`
+		Enabled  bool   `json:"enabled"`
+		Seed     string `json:"seed"`
+		SeedName string `json:"seedName"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	a := adMockSetting{Enabled: p.Enabled, Seed: strings.TrimSpace(p.Seed)}
+	a := adMockSetting{
+		Enabled:  p.Enabled,
+		Seed:     strings.TrimSpace(p.Seed),
+		SeedName: strings.TrimSpace(p.SeedName),
+	}
+	// Parse the seed here, where the person who can fix it is waiting for an answer.
+	// The worker parses it again at startup and no longer dies if it cannot — but a
+	// mock that quietly starts empty is a bad way to learn about a typo, and this is
+	// the one moment somebody is looking at the thing they just wrote.
+	if a.Seed != "" {
+		a.SeedFormat = adSeedFormat(a.Seed)
+		entries, err := ldif.Parse(a.SeedFormat, []byte(a.Seed))
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest,
+				"the seed is not readable as "+a.SeedFormat+": "+err.Error())
+			return
+		}
+		// No length check here: ldif.Parse already refuses a document that holds no
+		// entries, in both formats and with a better message than this layer could give
+		// ("the file holds no entries"). A guard for it would be a branch nothing can
+		// reach.
+		a.SeedEntries = len(entries)
+	}
 	var saveErr error
 	s.doAndRefresh(func() { saveErr = s.settings.saveADMock(a) })
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "save ad mock: "+saveErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, a)
+	httpapi.JSON(w, http.StatusOK, struct {
+		Enabled    bool   `json:"enabled"`
+		SeedName   string `json:"seedName,omitempty"`
+		SeedFormat string `json:"seedFormat,omitempty"`
+		Entries    int    `json:"seedEntries,omitempty"`
+		HasSeed    bool   `json:"hasSeed"`
+	}{
+		Enabled: a.Enabled, SeedName: a.SeedName, SeedFormat: a.SeedFormat,
+		Entries: a.SeedEntries, HasSeed: a.Seed != "",
+	})
 }

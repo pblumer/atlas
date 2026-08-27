@@ -1477,13 +1477,28 @@ async function viewConsoleConnectors() {
         <input type="checkbox" id="admock-on" ${adMock.enabled ? "checked" : ""}>
         <span>Serve Active Directory tasks against a mockup</span>
       </label>
-      <label style="display:block; margin-bottom:10px">
-        <div class="muted" style="font-size:13px; margin-bottom:4px">Seed file (optional) — an LDIF or
-        DSML file <i>on the worker's host</i>, holding the accounts and groups a process expects to
-        find. A leaver has nothing to disable in an empty directory.</div>
-        <input type="text" id="admock-seed" placeholder="/srv/atlas/forest.ldif" value="${esc(adMock.seed || "")}"
-               style="width:100%; max-width:520px">
-      </label>
+      <div style="margin-bottom:10px">
+        <div class="muted" style="font-size:13px; margin-bottom:6px">Starting entries (optional) — the
+        accounts and groups a process expects to find. A joiner creates its own account and needs none;
+        a leaver has nothing to disable in an empty directory. Atlas keeps this and hands it to the
+        worker, so there is no file path to type and nothing to place on the worker's host.</div>
+        <div class="between" style="gap:10px; flex-wrap:wrap">
+          <span id="admock-seed-state" data-seed-name="${esc(adMock.seedName || "")}" style="font-size:13px">${
+            adMock.hasSeed
+              ? `<b>${esc(adMock.seedName || "Starting entries")}</b> — ${
+                  adMock.seedEntries || "?"} entries, ${esc((adMock.seedFormat || "ldif").toUpperCase())}`
+              : `<span class="muted">No starting entries — the mockup begins with an empty directory.</span>`}</span>
+          <span style="white-space:nowrap">
+            <input type="file" id="admock-seed-file" accept=".ldif,.dsml,.xml,text/plain" style="display:none">
+            <button class="btn ghost" id="admock-seed-pick" title="Read an LDIF or DSML file from this computer">Choose a file…</button>
+            <button class="btn ghost" id="admock-seed-edit" title="Paste or edit the entries directly">Paste or edit</button>
+            <button class="btn ghost" id="admock-seed-example" title="A small directory to try a leaver against">Example</button>
+            <button class="btn ghost danger" id="admock-seed-clear" title="Start from an empty directory">Remove</button>
+          </span>
+        </div>
+        <textarea id="admock-seed" rows="9" spellcheck="false" style="display:none; width:100%; margin-top:8px;
+                  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px">${esc(adMock.seed || "")}</textarea>
+      </div>
       <div class="between">
         <button class="btn" id="admock-save">Save</button>
         <span class="muted" id="admock-note" style="font-size:13px">${
@@ -3293,20 +3308,123 @@ async function toggleInboundSubs(row, connectorId) {
   });
 }
 
+// AD_SEED_EXAMPLE is a directory small enough to read and complete enough to run a
+// leaver against: an OU, two accounts, and the group one of them is in. It exists
+// because "starting entries" is a question most people cannot answer on the spot —
+// the honest answer is "whatever your process expects to find", which is no help when
+// you are trying a process out for the first time. One click and a leaver has
+// something to disable.
+const AD_SEED_EXAMPLE = [
+  "dn: ou=Mitarbeitende,dc=example,dc=com",
+  "objectClass: organizationalUnit",
+  "ou: Mitarbeitende",
+  "",
+  "dn: cn=Ada Lovelace,ou=Mitarbeitende,dc=example,dc=com",
+  "objectClass: user",
+  "cn: Ada Lovelace",
+  "sAMAccountName: ada.lovelace",
+  "userPrincipalName: ada.lovelace@example.com",
+  "department: IT",
+  "userAccountControl: 512",
+  "",
+  "dn: cn=Grace Hopper,ou=Mitarbeitende,dc=example,dc=com",
+  "objectClass: user",
+  "cn: Grace Hopper",
+  "sAMAccountName: grace.hopper",
+  "userPrincipalName: grace.hopper@example.com",
+  "department: IT",
+  "userAccountControl: 512",
+  "",
+  "dn: cn=IT,ou=Gruppen,dc=example,dc=com",
+  "objectClass: group",
+  "cn: IT",
+  "member: cn=Ada Lovelace,ou=Mitarbeitende,dc=example,dc=com",
+  "",
+].join("\n");
+
 // wireADMock binds the Active-Directory mockup switch: one PUT, and the supervised
 // AD worker is restarted holding the new setting (ADR-0181). Writing it is
 // admin-gated server-side, so a non-admin gets the refusal as a message rather than
 // as a control that silently does nothing.
+//
+// The starting entries are *content*, not a path
+// (ADR-0202). A file chosen here is read in the
+// browser and posted as text, so what an operator picks is what Atlas stores — no
+// filename that has to mean the same thing on somebody else's disk, and nothing to
+// place on the worker's host.
 function wireADMock() {
   const save = document.getElementById("admock-save");
   if (!save) return;
   const note = document.getElementById("admock-note");
+  const box = document.getElementById("admock-seed");
+  const state = document.getElementById("admock-seed-state");
+  const file = document.getElementById("admock-seed-file");
+  // Seeded from what is stored, so an operator who only flips the switch and saves
+  // does not silently strip the name off a seed they never touched.
+  let seedName = (state && state.dataset.seedName) || "";
+
+  // describe reports what is loaded without claiming to have parsed it: the entry
+  // count comes back from the server, which is the only side that actually parses.
+  const describe = (text, name) => {
+    if (!state) return;
+    state.innerHTML = text.trim()
+      ? `<b>${esc(name || "Starting entries")}</b> — <span class="muted">not saved yet</span>`
+      : `<span class="muted">No starting entries — the mockup begins with an empty directory.</span>`;
+  };
+
+  const pick = document.getElementById("admock-seed-pick");
+  if (pick && file) {
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try {
+        box.value = await f.text();
+        seedName = f.name;
+        describe(box.value, seedName);
+        if (note) note.textContent = "Read from " + f.name + " — press Save to hand it to the worker.";
+      } catch (e) {
+        if (note) note.textContent = "Could not read that file: " + e.message;
+      }
+      file.value = ""; // so picking the same file again still fires a change
+    });
+  }
+
+  const edit = document.getElementById("admock-seed-edit");
+  if (edit) {
+    edit.addEventListener("click", () => {
+      box.style.display = box.style.display === "none" ? "block" : "none";
+      if (box.style.display === "block") box.focus();
+    });
+  }
+
+  const example = document.getElementById("admock-seed-example");
+  if (example) {
+    example.addEventListener("click", () => {
+      box.value = AD_SEED_EXAMPLE;
+      seedName = "example-directory.ldif";
+      box.style.display = "block";
+      describe(box.value, seedName);
+      if (note) note.textContent = "An example directory — press Save to hand it to the worker.";
+    });
+  }
+
+  const clear = document.getElementById("admock-seed-clear");
+  if (clear) {
+    clear.addEventListener("click", () => {
+      box.value = "";
+      seedName = "";
+      describe("", "");
+      if (note) note.textContent = "Removed — press Save to start from an empty directory.";
+    });
+  }
+
   save.addEventListener("click", async () => {
     const enabled = document.getElementById("admock-on").checked;
-    const seed = document.getElementById("admock-seed").value.trim();
+    const seed = box.value.trim();
     save.disabled = true;
     try {
-      await api("PUT", "/api/v1/settings/ad-mock", { enabled, seed });
+      await api("PUT", "/api/v1/settings/ad-mock", { enabled, seed, seedName });
       toast(enabled
         ? "Mockup on — the AD worker restarts and writes to no directory."
         : "Mockup off — the AD worker restarts and talks to the domain controller again.");

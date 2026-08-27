@@ -94,6 +94,15 @@ func dispatch(j Job, conn Conn) error {
 	switch op {
 	case "create-user", "create-group", "create-contact":
 		attrs := j.Attributes
+		// An empty entry object is refused rather than created. It is almost always a
+		// FEEL variable that resolved to nothing — a misspelled entryVariable, or a
+		// script task that did not run — and the alternatives are both worse than
+		// saying so: creating an account carrying nothing but an objectClass leaves a
+		// nameless entry in a real directory, and writing the default class into a nil
+		// map panics the worker outright, which is what this used to do.
+		if len(attrs) == 0 {
+			return fmt.Errorf("ad: %s resolved no attributes; the entry object is empty or the variable naming it is not set", op)
+		}
 		defaultClass := userObjectClass
 		switch op {
 		case "create-group":

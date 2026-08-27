@@ -1,12 +1,16 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pblumer/atlas/api/sidecar"
+	"github.com/pblumer/atlas/connector/ldif"
 )
 
 // uiTheme is the org-wide UI theme (ADR-0113): a single brand accent colour the
@@ -50,10 +54,30 @@ type registrationSetting struct {
 type adMockSetting struct {
 	// Enabled turns the AD worker's mockup mode on.
 	Enabled bool `json:"enabled"`
-	// Seed is an optional LDIF or DSML file the mock directory starts from — the
-	// accounts a process expects to find. Read by the *worker*, so the path is the
-	// worker's, which for a supervised one is this host's.
+
+	// Seed is the directory content the mock starts from — the accounts and groups a
+	// process expects to find, since a leaver has nothing to disable in an empty
+	// forest. It holds the LDIF or DSML *text*, and Atlas owns the file the worker
+	// reads it from.
+	//
+	// It used to hold a path instead, which was wrong twice over. The Console is
+	// org-wide while a path belongs to one machine's filesystem, so the field asked an
+	// operator to name a file they could not see, complete or verify from where they
+	// were typing; and a relative one resolved against the child process's working
+	// directory, which is not a thing anybody can predict from a browser. Worse, the
+	// field looked like a choice among several directories when there is exactly one
+	// (ADR-0202).
 	Seed string `json:"seed,omitempty"`
+	// SeedName is the file an operator uploaded the seed from. Display only — it says
+	// which one is loaded, and never reaches the worker.
+	SeedName string `json:"seedName,omitempty"`
+	// SeedFormat is ldif or dsml, decided once when the seed was saved rather than at
+	// every read, so the worker parses what the Console already validated instead of
+	// guessing again from a file extension.
+	SeedFormat string `json:"seedFormat,omitempty"`
+	// SeedEntries is what the seed parsed to when it was saved, so the Console can say
+	// "142 entries" rather than leaving the operator to trust a silent upload.
+	SeedEntries int `json:"seedEntries,omitempty"`
 }
 
 // settingsStore persists org-wide UI settings as JSON sidecar files, using the
@@ -233,9 +257,66 @@ func (s *settingsStore) getADMock() (adMockSetting, bool, error) {
 	return a, true, nil
 }
 
+// adSeedPrefix names the files a mock directory's starting entries are written to.
+const adSeedPrefix = "admock-seed-"
+
+// adSeedPath is the file a supervised worker reads the seed from. It carries a digest
+// of the seed's own content, and that is not about caching: the supervisor restarts a
+// child only when its rendered *environment* differs (see supervisor.refresh), so a
+// fixed filename would hand an unchanged ATLAS_AD_MOCK_SEED to a worker that then kept
+// serving yesterday's directory after an operator replaced the seed. Naming the file
+// by its content makes the variable change exactly when the content does.
+//
+// Empty when the setting carries no seed: there is then nothing to point a worker at.
+func (s *settingsStore) adSeedPath(a adMockSetting) string {
+	if strings.TrimSpace(a.Seed) == "" {
+		return ""
+	}
+	format := a.SeedFormat
+	if format == "" {
+		format = ldif.FormatLDIF
+	}
+	sum := sha256.Sum256([]byte(a.Seed))
+	return filepath.Join(s.dir, adSeedPrefix+hex.EncodeToString(sum[:8])+"."+format)
+}
+
 // saveADMock writes the switch durably, overwriting any previous value. A stored
 // Enabled=false is a real value — the operator turning the mockup off — and not the
 // same as no record at all.
+//
+// The seed is written beside it as the file a supervised worker will read, and every
+// earlier one is dropped. Both halves have to land before the record does: the worker
+// is restarted off the back of this save, and a record naming a file that is not there
+// yet is the outage this design exists to end.
 func (s *settingsStore) saveADMock(a adMockSetting) error {
+	if err := s.writeADSeed(a); err != nil {
+		return err
+	}
 	return sidecar.WriteJSON(s.dir, s.adFile, a)
+}
+
+// writeADSeed puts the seed on disk under its content-addressed name and removes any
+// seed file that is not the current one — including all of them when the operator
+// cleared the seed. Stale ones are not merely untidy: a worker restarted with an older
+// environment would still find one and start from a directory nobody asked for.
+func (s *settingsStore) writeADSeed(a adMockSetting) error {
+	want := s.adSeedPath(a)
+	if want != "" {
+		if err := sidecar.WriteFile(s.dir, want, []byte(a.Seed)); err != nil {
+			return err
+		}
+	}
+	olds, err := filepath.Glob(filepath.Join(s.dir, adSeedPrefix+"*"))
+	if err != nil {
+		return fmt.Errorf("settingsstore: list ad mock seeds: %w", err)
+	}
+	for _, old := range olds {
+		if old == want {
+			continue
+		}
+		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("settingsstore: remove stale ad mock seed: %w", err)
+		}
+	}
+	return sidecar.FsyncDir(s.dir)
 }
