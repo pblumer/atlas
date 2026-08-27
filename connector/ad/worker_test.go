@@ -153,7 +153,7 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, dialer ad.
 	}
 	runner := job.NewRunner(store, p)
 	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
-		return ad.Handler(rd, func(uint64) *compiler.CompiledProcess { return cp }, dialer, secret)
+		return ad.Handler(rd, func(uint64) *compiler.CompiledProcess { return cp }, dialer, secret, nil)
 	})
 	p.CreateInstance(cp.Key, vars...)
 	if err := runner.Drive(); err != nil {
@@ -384,7 +384,7 @@ func TestAdCreateUserEntryNotObject(t *testing.T) {
 // TestAdHandlerElementInstanceGone covers the vanished-element guard.
 func TestAdHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
-	h := ad.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret)
+	h := ad.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeDialer{conn: &fakeConn{}}, noSecret, nil)
 	out, err := h(job.Job{ElementInstanceKey: 424242})
 	if err != nil || out != nil {
 		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil,nil", out, err)
@@ -439,7 +439,7 @@ func TestAdRecoversAcrossRestart(t *testing.T) {
 	conn := &fakeConn{uac: []string{"512"}}
 	runner := job.NewRunner(store2, p2)
 	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
-		return ad.Handler(rd, lookup, &fakeDialer{conn: conn}, noSecret)
+		return ad.Handler(rd, lookup, &fakeDialer{conn: conn}, noSecret, nil)
 	})
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)

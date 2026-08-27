@@ -40,6 +40,12 @@ const (
 	connectorKindRemedy     = "remedy"
 	connectorKindJira       = "jira"
 	connectorKindEntra      = "entra"
+	// connectorKindAD is the Active Directory connector kind
+	// (ADR-draft-ad-as-a-console-connector). A record holds the directory's LDAP URL
+	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names
+	// the record and nothing else about the directory. Worker-only like Entra: the
+	// engine never binds, so the service account never enters it.
+	connectorKindAD = "ad"
 )
 
 // connector is a managed connector instance: an operator-configured, durable

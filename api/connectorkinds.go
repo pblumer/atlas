@@ -288,6 +288,23 @@ var managedConnectorKinds = []managedConnectorKind{
 		validateCreate: validateEntraConnector,
 		jobTypes:       []int32{compiler.EntraJobTypeIndex},
 	},
+	{
+		// An Active Directory connector task performs one directory operation against a
+		// domain controller an operator configured here
+		// (ADR-draft-ad-as-a-console-connector). The URL lives in the record and the
+		// bind account in a vault bundle behind credentialsRef, so a model names the
+		// directory and says nothing else about it.
+		//
+		// Worker-only for Entra's reason and one of its own: the engine never binds, so
+		// a service account allowed to write half a forest never enters it (ADR-0164
+		// puts every connector task on a worker anyway). A task that carries its own
+		// url instead — the shape AD had before records — still compiles and is served
+		// by the same worker; it just resolves nothing here.
+		name:           connectorKindAD,
+		workerOnly:     true,
+		validateCreate: validateADConnector,
+		jobTypes:       []int32{compiler.AdJobTypeIndex},
+	},
 	// The three SQL products (ADR-0173, ADR-0188). Each
 	// is worker-only for the same reason Entra is, and more strongly: a DSN *is* a
 	// credential, so the engine builds no client and registers no handler. The store
@@ -521,6 +538,29 @@ func validateRemedyConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a remedy connector requires a credentialsRef naming a vault {username,password} bundle"
+	}
+	return ""
+}
+
+// validateADConnector validates an Active Directory create request: it needs the
+// directory's LDAP URL as its endpoint, and a credentialsRef naming a vault
+// {bindDN, password} bundle — the Remedy and Entra shape, so the record itself holds
+// no credential and not even the service account's name (I6).
+//
+// The URL's scheme is checked here because getting it wrong has a specific and
+// expensive failure: AD refuses to set a password over an unencrypted channel, so an
+// ldap:// directory silently works for every operation except the one a joiner needs
+// most, and only discovers that on the first real run.
+func validateADConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if p.Endpoint == "" {
+		return "an active directory connector requires an endpoint — the domain controller's LDAP URL, e.g. ldaps://dc.example.com:636"
+	}
+	if !strings.HasPrefix(p.Endpoint, "ldap://") && !strings.HasPrefix(p.Endpoint, "ldaps://") {
+		return "an active directory endpoint must be an LDAP URL (ldaps://host:636, or ldap://host:389 with StartTLS)"
+	}
+	if p.CredentialsRef == "" {
+		return "an active directory connector requires a credentialsRef naming a vault {bindDN, password} bundle"
 	}
 	return ""
 }

@@ -27,7 +27,7 @@ const (
 // run performs a resolved job against the mock, the way the worker does.
 func run(t *testing.T, d *ad.MockDirectory, j ad.Job) map[string]any {
 	t.Helper()
-	out, err := ad.Run(context.Background(), j, d, nil)
+	out, err := ad.Run(context.Background(), j, d, nil, nil)
 	if err != nil {
 		t.Fatalf("%s %s: %v", j.Operation, j.DN, err)
 	}
@@ -37,7 +37,7 @@ func run(t *testing.T, d *ad.MockDirectory, j ad.Job) map[string]any {
 // runErr performs a job expected to fail and returns the error.
 func runErr(t *testing.T, d *ad.MockDirectory, j ad.Job) error {
 	t.Helper()
-	_, err := ad.Run(context.Background(), j, d, nil)
+	_, err := ad.Run(context.Background(), j, d, nil, nil)
 	if err == nil {
 		t.Fatalf("%s %s succeeded, want a failure", j.Operation, j.DN)
 	}
@@ -487,7 +487,7 @@ func TestMockIsSafeForConcurrentJobs(t *testing.T) {
 			_, _ = ad.Run(context.Background(), ad.Job{
 				URL: mockTLSURL, Operation: "create-user", DN: dn,
 				Attributes: map[string][]string{"sAMAccountName": {"u"}},
-			}, d, nil)
+			}, d, nil, nil)
 		}(i)
 	}
 	wg.Wait()

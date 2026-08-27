@@ -622,8 +622,22 @@ func adOpNames() []string {
 // password; the group operations a member dn.
 func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Ad
-	if strings.TrimSpace(cn.URL) == "" {
-		return 0, fmt.Errorf("compiler: ad connector task %q needs a url (ldaps://host for a password set)", st.Id)
+	// A task addresses its directory one of two ways: by the name of a connector an
+	// operator configured in the Console (the way every other credential-bearing kind
+	// is addressed), or by carrying url/bindDN/bindSecret itself — the original form,
+	// still accepted so models written before this keep compiling
+	// (ADR-draft-ad-as-a-console-connector).
+	//
+	// Both at once is refused rather than resolved by precedence. Whichever rule we
+	// picked, half the readers of the model would assume the other, and the two point
+	// at different directories: a silent winner there writes to the wrong forest.
+	named := strings.TrimSpace(cn.Connector)
+	inline := strings.TrimSpace(cn.URL) != "" || strings.TrimSpace(cn.BindDN) != "" || strings.TrimSpace(cn.BindSecret) != ""
+	switch {
+	case named != "" && inline:
+		return 0, fmt.Errorf("compiler: ad connector task %q names a connector %q *and* carries its own url/bindDN/bindSecret; keep one — the connector, unless the model must hold the directory itself", st.Id, named)
+	case named == "" && strings.TrimSpace(cn.URL) == "":
+		return 0, fmt.Errorf("compiler: ad connector task %q needs a connector (the name of a directory configured in the Console), or a url (ldaps://host for a password set)", st.Id)
 	}
 	op := strings.ToLower(strings.TrimSpace(cn.Operation))
 	if op == "" {
@@ -698,6 +712,7 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		return 0, err
 	}
 	return b.AddAdConnectorTask(AdConfig{
+		Connector:      named,
 		URL:            url,
 		BindDN:         bindDN,
 		BindSecret:     strings.TrimSpace(cn.BindSecret),

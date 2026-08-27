@@ -561,6 +561,48 @@ _Changed_ / _Removed_ for each version.
   prevents the quieter bad outcome: an account created in a real directory carrying an
   objectClass and no name.
 
+- **Active Directory is a connector you configure, like every other one.** AD was the
+  one credential-bearing integration an operator could not create: the domain
+  controller's URL and the bind account lived in the *model*, on every task. That put it
+  on the wrong side of the line the rest of the catalogue draws — mail, Entra, Remedy,
+  Jira, SharePoint and the three SQL products are records you add in the Console, and
+  AD is a domain controller with a service account and a password, not an address like a
+  REST endpoint. It had inherited the model-authored shape from the LDAP connector
+  rather than from an argument
+  ([ADR-draft-ad-as-a-console-connector](docs/adr/draft-ad-as-a-console-connector.md)).
+
+  Now **Console › Connectors › New connector › Active Directory**: the LDAP URL, and a
+  credential reference naming a vault bundle `{"bindDN": …, "password": …}` — the Remedy
+  and Entra shape, so the record holds no credential and not even the service account's
+  name. A task then says `connector="prod-forest"` and nothing else about the directory.
+
+  **Several directories are several connectors,** served by one worker — which is the
+  question that had no good answer before. You do not need a worker per forest, and one
+  would not separate anything: jobs are handed out by type, not by target, so two AD
+  workers would race for the same queue.
+
+  **Nothing existing breaks.** A task carrying its own `url`, `bindDN` and `bindSecret`
+  compiles and runs unchanged. Only *both at once* is refused rather than resolved by
+  precedence — the two point at different forests, and a silent winner writes to the
+  wrong one.
+
+  The endpoint's scheme is checked when you save: AD refuses to set a password over an
+  unencrypted channel, so an `ldap://` directory works for every operation except the one
+  a joiner needs most, and would otherwise only say so on a real run.
+
+- **The AD mockup keeps several directories apart.** It served every URL from one set of
+  entries, so a process addressing two forests found that creating the same account in
+  the *second* failed with "entry already exists" — which no real pair of domain
+  controllers would ever do. The mockup was least trustworthy in exactly the topology
+  that most needs one. Each LDAP URL now gets its own in-memory directory, with its own
+  entries **and its own DirSync change history** — a shared counter was the subtler half
+  of the same bug, since a reconciliation loop over one forest would have reported writes
+  that happened in another, with a cookie making it look authoritative. The starting
+  entries are a template: every directory gets its own copy and diverges from the first
+  write. The switch itself stays org-wide on purpose — simulating one directory while
+  really writing to another is a half-state whose whole risk is that it looks like a full
+  mockup run.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

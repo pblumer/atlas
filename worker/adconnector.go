@@ -40,12 +40,15 @@ func adSecretFromEnv(env func(string) string) ad.SecretResolver {
 	}
 }
 
-// RunADJob performs a resolved AD job with the caller's own dialer and secret store.
-// It is exported for the same reason RunMailJob and the rest are: the environment is
-// only the default place a worker's credentials come from, and a caller embedding
-// this package can resolve references from a vault of its own and get the identical
-// operation.
-func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretResolver) (map[string]any, error) {
+// RunADJob performs a resolved AD job with the caller's own dialer, secret store and
+// directories. It is exported for the same reason RunMailJob and the rest are: the
+// environment is only the default place a worker's credentials come from, and a caller
+// embedding this package can resolve references from a vault of its own and get the
+// identical operation.
+//
+// dirs holds the Console-configured directories a task addresses by name; it may be
+// nil for a worker that serves only tasks carrying their own url.
+func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretResolver, dirs *ad.Registry) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("ad: the job carried no resolved connector detail; is this server offloading the ad kind?")
 	}
@@ -59,7 +62,52 @@ func RunADJob(ctx context.Context, j Job, dialer ad.Dialer, secret ad.SecretReso
 	}
 	// Every AD operation but sync writes to the directory rather than back to a
 	// variable, and returns nothing; sync returns the changes and the next cookie.
-	return ad.Run(ctx, task, dialer, secret)
+	return ad.Run(ctx, task, dialer, secret, dirs)
+}
+
+// adDirEnvPrefix is where an AD worker's configured directories live.
+const adDirEnvPrefix = "ATLAS_AD_"
+
+// adDirectoriesFromEnv builds the directories this worker holds by name.
+// ATLAS_AD_CONNECTORS lists them; each name contributes ATLAS_AD_<NAME>_URL,
+// _BIND_DN and _PASSWORD — the three values [ad.Directory] is built from, so a worker
+// builds the identical target the engine would have
+// (ADR-draft-ad-as-a-console-connector).
+//
+// It is the Remedy shape exactly, and for the same reason: the bind account comes from
+// the environment rather than a flag because argv is readable by anyone who can list
+// processes, and an AD service account is typically allowed to write half the forest.
+func adDirectoriesFromEnv(env func(string) string) (*ad.Registry, []string, error) {
+	names := splitAndTrim(env(adDirEnvPrefix + "CONNECTORS"))
+	if len(names) == 0 {
+		// Unconfigured, not misconfigured. A worker with no directories still serves
+		// every task that carries its own url, which is how AD worked before records
+		// existed and how it keeps working.
+		return nil, nil, nil
+	}
+	reg := ad.NewRegistry()
+	for _, name := range names {
+		key := adDirEnvPrefix + envFold(name) + "_"
+		url, bindDN, password := env(key+"URL"), env(key+"BIND_DN"), env(key+"PASSWORD")
+		if url == "" {
+			return nil, nil, fmt.Errorf("worker: ad directory %q is missing its URL: set %sURL", name, key)
+		}
+		// A bind DN with no password is refused here rather than at the first job. AD
+		// treats a simple bind naming a DN with an empty password as an *anonymous*
+		// bind and succeeds, so the operation that follows fails on permissions
+		// somewhere far from the cause — or worse, quietly reads what anonymous may
+		// read.
+		if bindDN != "" && password == "" {
+			return nil, nil, fmt.Errorf("worker: ad directory %q names a bind DN but has no password: set %sPASSWORD", name, key)
+		}
+		reg.Register(name, ad.Directory{
+			URL:      url,
+			BindDN:   bindDN,
+			Password: password,
+			StartTLS: strings.EqualFold(strings.TrimSpace(env(key+"START_TLS")), "true"),
+		})
+	}
+	return reg, names, nil
 }
 
 // Mock mode: an AD worker with no domain controller behind it.

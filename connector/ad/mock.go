@@ -70,12 +70,32 @@ type MockOperation struct {
 // [Dialer], so it drops into the worker exactly where [GoDialer] sits, and it is safe
 // for concurrent use: one directory serves every job a worker leases.
 type MockDirectory struct {
-	mu      sync.Mutex
-	entries map[string]*mockEntry
-	change  uint64 // the DirSync change counter: every write stamps the entry with it
+	mu sync.Mutex
+	// seed is the starting state *every* forest gets a copy of on first contact — the
+	// accounts a process expects to find, whichever directory it addresses.
+	seed []Entry
+	// forests is one in-memory directory per LDAP URL dialled.
+	//
+	// One mock used to serve every URL, which made it lie in exactly the topology that
+	// most needs a mockup: a process addressing two forests found that creating the same
+	// DN in the *second* one failed with "entry already exists", something no real pair
+	// of domain controllers would ever do
+	// (ADR-draft-ad-as-a-console-connector, amended). Keying on the URL is what makes a
+	// mock run over several directories mean what the same run would mean in production.
+	forests map[string]*mockForest
 	opSeq   uint64
 	ops     []MockOperation
 	observe func(MockOperation)
+}
+
+// mockForest is one simulated directory: the entries at one LDAP URL and that
+// directory's own DirSync change counter. Two forests share nothing — which is the
+// whole point — except the journal and the lock, both of which belong to the worker
+// rather than to any one directory.
+type mockForest struct {
+	url     string
+	entries map[string]*mockEntry
+	change  uint64 // the DirSync change counter: every write stamps the entry with it
 }
 
 // mockEntry is one directory entry. A deleted entry is kept as a tombstone carrying
@@ -92,12 +112,40 @@ type mockEntry struct {
 // the accounts a process expects to find already there. A worker seeds it from an
 // LDIF or DSML file.
 func NewMockDirectory(seed ...Entry) *MockDirectory {
-	d := &MockDirectory{entries: make(map[string]*mockEntry, len(seed))}
-	for _, e := range seed {
-		d.change++
-		d.entries[normalizeDN(e.DN)] = &mockEntry{dn: e.DN, attrs: copyAttrs(e.Attributes), changed: d.change}
+	return &MockDirectory{
+		seed:    append([]Entry(nil), seed...),
+		forests: map[string]*mockForest{},
 	}
-	return d
+}
+
+// forestFor returns the directory at this URL, creating it from the seed on first
+// contact. The caller holds the lock.
+//
+// The seed is a *template*, not shared state: each forest gets its own copy, so two
+// directories start out looking alike and then diverge exactly as two real ones would
+// once a process starts writing to them.
+func (d *MockDirectory) forestFor(rawURL string) *mockForest {
+	key := strings.ToLower(strings.TrimSpace(rawURL))
+	if f, ok := d.forests[key]; ok {
+		return f
+	}
+	f := &mockForest{url: rawURL, entries: make(map[string]*mockEntry, len(d.seed))}
+	for _, e := range d.seed {
+		f.change++
+		f.entries[normalizeDN(e.DN)] = &mockEntry{dn: e.DN, attrs: copyAttrs(e.Attributes), changed: f.change}
+	}
+	d.forests[key] = f
+	return f
+}
+
+// urls returns every directory that has been dialled, sorted. The caller holds the lock.
+func (d *MockDirectory) urls() []string {
+	out := make([]string, 0, len(d.forests))
+	for _, f := range d.forests {
+		out = append(out, f.url)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Observe installs a callback run once per operation, after the directory's lock is
@@ -114,8 +162,52 @@ func (d *MockDirectory) Observe(fn func(MockOperation)) {
 func (d *MockDirectory) Entries() []Entry {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make([]Entry, 0, len(d.entries))
-	for _, e := range d.entries {
+	var out []Entry
+	for _, url := range d.urls() {
+		out = append(out, d.forests[strings.ToLower(strings.TrimSpace(url))].live()...)
+	}
+	return out
+}
+
+// EntriesAt returns the live entries of one directory. It is what a test asserting on
+// a multi-directory run needs, and what Entries cannot answer: flattened across
+// forests, "is this account there?" stops being a question about a directory.
+func (d *MockDirectory) EntriesAt(rawURL string) []Entry {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	f, ok := d.forests[strings.ToLower(strings.TrimSpace(rawURL))]
+	if !ok {
+		return nil
+	}
+	return f.live()
+}
+
+// Seed returns the entries every directory starts from — the template, not the state
+// of any one of them.
+//
+// It exists because forests are created on first contact, so before a single job runs
+// there is nothing to count: a worker announcing "seeded=0" at startup because nobody
+// had dialled yet would take away the one confirmation an operator has that their
+// starting entries loaded at all.
+func (d *MockDirectory) Seed() []Entry {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]Entry(nil), d.seed...)
+}
+
+// URLs returns every directory this mock has been asked to reach, sorted — the answer
+// to "which forests did that run actually touch?".
+func (d *MockDirectory) URLs() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.urls()
+}
+
+// live is one forest's entries, DN-sorted, as a snapshot. Tombstones are not among
+// them: they are gone from the directory and present only in a delta.
+func (f *mockForest) live() []Entry {
+	out := make([]Entry, 0, len(f.entries))
+	for _, e := range f.entries {
 		if e.deleted {
 			continue
 		}
@@ -150,10 +242,16 @@ func (d *MockDirectory) Dial(rawURL, bindDN, bindPassword string, startTLS bool)
 		who = "(anonymous)"
 	}
 	encrypted := scheme == "ldaps" || startTLS
+	// Which directory this connection is to, resolved under the lock the journal write
+	// already takes. A URL dialled for the first time gets its own forest, seeded from
+	// the template — so "the accounts a process expects to find" apply to whichever
+	// directory that process addresses, and two of them stay separate.
+	var f *mockForest
 	_ = d.mutate(func() (string, string, string, error) {
+		f = d.forestFor(rawURL)
 		return "bind", who, fmt.Sprintf("%s encrypted=%t", rawURL, encrypted), nil
 	})
-	return &mockConn{dir: d, encrypted: encrypted}, nil
+	return &mockConn{dir: d, forest: f, encrypted: encrypted}, nil
 }
 
 // mockConn is one connection to the mock directory. It carries whether the channel is
@@ -161,22 +259,25 @@ func (d *MockDirectory) Dial(rawURL, bindDN, bindPassword string, startTLS bool)
 // password may be written over it.
 type mockConn struct {
 	dir       *MockDirectory
+	forest    *mockForest
 	encrypted bool
 }
 
 func (c *mockConn) Add(dn string, attrs map[string][]string) error {
-	return c.dir.add(dn, attrs, c.encrypted)
+	return c.dir.add(c.forest, dn, attrs, c.encrypted)
 }
-func (c *mockConn) Modify(dn string, mods []Mod) error { return c.dir.modify(dn, mods, c.encrypted) }
+func (c *mockConn) Modify(dn string, mods []Mod) error {
+	return c.dir.modify(c.forest, dn, mods, c.encrypted)
+}
 func (c *mockConn) ReadAttr(dn, attr string) ([]string, error) {
-	return c.dir.readAttr(dn, attr)
+	return c.dir.readAttr(c.forest, dn, attr)
 }
 func (c *mockConn) ModifyDN(dn, newRDN, newSuperior string) error {
-	return c.dir.modifyDN(dn, newRDN, newSuperior)
+	return c.dir.modifyDN(c.forest, dn, newRDN, newSuperior)
 }
-func (c *mockConn) Delete(dn string) error { return c.dir.del(dn) }
+func (c *mockConn) Delete(dn string) error { return c.dir.del(c.forest, dn) }
 func (c *mockConn) DirSync(req DirSyncRequest) (DirSyncResult, error) {
-	return c.dir.dirSync(req)
+	return c.dir.dirSync(c.forest, req)
 }
 
 // Close is a no-op: the directory outlives the connection, which is the whole point —
@@ -214,10 +315,10 @@ func (d *MockDirectory) record(op, dn, detail string) MockOperation {
 
 // add creates an entry. A DN that is already there is refused the way AD refuses it,
 // so a replayed job fails rather than quietly creating a second account.
-func (d *MockDirectory) add(dn string, attrs map[string][]string, encrypted bool) error {
+func (d *MockDirectory) add(f *mockForest, dn string, attrs map[string][]string, encrypted bool) error {
 	return d.mutate(func() (string, string, string, error) {
 		key := normalizeDN(dn)
-		if e, ok := d.entries[key]; ok && !e.deleted {
+		if e, ok := f.entries[key]; ok && !e.deleted {
 			return "", "", "", fmt.Errorf("ad: mock: add %s: entry already exists", dn)
 		}
 		stored := copyAttrs(attrs)
@@ -225,11 +326,11 @@ func (d *MockDirectory) add(dn string, attrs map[string][]string, encrypted bool
 		if err != nil {
 			return "", "", "", err
 		}
-		d.change++
+		f.change++
 		if hadPassword {
-			stored["pwdLastSet"] = []string{strconv.FormatUint(d.change, 10)}
+			stored["pwdLastSet"] = []string{strconv.FormatUint(f.change, 10)}
 		}
-		d.entries[key] = &mockEntry{dn: dn, attrs: stored, changed: d.change}
+		f.entries[key] = &mockEntry{dn: dn, attrs: stored, changed: f.change}
 		return "add", dn, attrsDetail(stored), nil
 	})
 }
@@ -237,9 +338,9 @@ func (d *MockDirectory) add(dn string, attrs map[string][]string, encrypted bool
 // modify applies the change operations to an existing entry. It is atomic: every
 // change is applied to a copy and the copy replaces the entry only if all of them
 // hold, so a modify that fails halfway leaves nothing behind.
-func (d *MockDirectory) modify(dn string, mods []Mod, encrypted bool) error {
+func (d *MockDirectory) modify(f *mockForest, dn string, mods []Mod, encrypted bool) error {
 	return d.mutate(func() (string, string, string, error) {
-		e, err := d.liveEntry(dn)
+		e, err := d.liveEntry(f, dn)
 		if err != nil {
 			return "", "", "", err
 		}
@@ -257,12 +358,12 @@ func (d *MockDirectory) modify(dn string, mods []Mod, encrypted bool) error {
 				return "", "", "", err
 			}
 		}
-		d.change++
+		f.change++
 		if passwordSet {
-			working["pwdLastSet"] = []string{strconv.FormatUint(d.change, 10)}
+			working["pwdLastSet"] = []string{strconv.FormatUint(f.change, 10)}
 		}
 		e.attrs = working
-		e.changed = d.change
+		e.changed = f.change
 		return "modify", dn, modsDetail(mods), nil
 	})
 }
@@ -314,10 +415,10 @@ func applyMod(attrs map[string][]string, m Mod, dn string) error {
 // readAttr returns one attribute's values, the base-object read behind the
 // enable/disable read-modify-write. It is not journaled: it is the internal half of
 // an operation the journal already carries.
-func (d *MockDirectory) readAttr(dn, attr string) ([]string, error) {
+func (d *MockDirectory) readAttr(f *mockForest, dn, attr string) ([]string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	e, err := d.liveEntry(dn)
+	e, err := d.liveEntry(f, dn)
 	if err != nil {
 		return nil, err
 	}
@@ -332,9 +433,9 @@ func (d *MockDirectory) readAttr(dn, attr string) ([]string, error) {
 // DN *is* its place in the tree, so a container that moves moves everything below it.
 // The new relative name is written into the naming attribute, because deleteOldRDN is
 // true.
-func (d *MockDirectory) modifyDN(dn, newRDN, newSuperior string) error {
+func (d *MockDirectory) modifyDN(f *mockForest, dn, newRDN, newSuperior string) error {
 	return d.mutate(func() (string, string, string, error) {
-		e, err := d.liveEntry(dn)
+		e, err := d.liveEntry(f, dn)
 		if err != nil {
 			return "", "", "", err
 		}
@@ -348,14 +449,14 @@ func (d *MockDirectory) modifyDN(dn, newRDN, newSuperior string) error {
 		}
 		oldKey, newKey := normalizeDN(dn), normalizeDN(newDN)
 		if newKey != oldKey {
-			if x, ok := d.entries[newKey]; ok && !x.deleted {
+			if x, ok := f.entries[newKey]; ok && !x.deleted {
 				return "", "", "", fmt.Errorf("ad: mock: modifydn %s: entry already exists: %s", dn, newDN)
 			}
 		}
 		depth := len(rdnComponents(e.dn))
 		suffix := "," + oldKey
 		moved := make(map[string]*mockEntry)
-		for k, ent := range d.entries {
+		for k, ent := range f.entries {
 			if ent.deleted || (k != oldKey && !strings.HasSuffix(k, suffix)) {
 				continue
 			}
@@ -364,13 +465,13 @@ func (d *MockDirectory) modifyDN(dn, newRDN, newSuperior string) error {
 			if kept := comps[:max(0, len(comps)-depth)]; len(kept) > 0 {
 				target = strings.Join(kept, ",") + "," + newDN
 			}
-			delete(d.entries, k)
-			d.change++
-			ent.dn, ent.changed = target, d.change
+			delete(f.entries, k)
+			f.change++
+			ent.dn, ent.changed = target, f.change
 			moved[normalizeDN(target)] = ent
 		}
 		for k, ent := range moved {
-			d.entries[k] = ent
+			f.entries[k] = ent
 		}
 		if attr, value, ok := strings.Cut(newRDN, "="); ok {
 			e.attrs[namingAttrKey(e.attrs, attr)] = []string{strings.TrimSpace(value)}
@@ -382,20 +483,20 @@ func (d *MockDirectory) modifyDN(dn, newRDN, newSuperior string) error {
 // del removes an entry, refusing one that still has children — which is what a
 // leaver process wants: the entry below would otherwise vanish unannounced. What is
 // left is a tombstone, so the next delta reports the deletion.
-func (d *MockDirectory) del(dn string) error {
+func (d *MockDirectory) del(f *mockForest, dn string) error {
 	return d.mutate(func() (string, string, string, error) {
-		e, err := d.liveEntry(dn)
+		e, err := d.liveEntry(f, dn)
 		if err != nil {
 			return "", "", "", err
 		}
 		key := normalizeDN(dn)
-		for k, child := range d.entries {
+		for k, child := range f.entries {
 			if !child.deleted && k != key && strings.HasSuffix(k, ","+key) {
 				return "", "", "", fmt.Errorf("ad: mock: delete %s: not allowed on non-leaf: %s is below it", dn, child.dn)
 			}
 		}
-		d.change++
-		e.deleted, e.changed = true, d.change
+		f.change++
+		e.deleted, e.changed = true, f.change
 		e.attrs = map[string][]string{"isDeleted": {"TRUE"}}
 		return "delete", dn, "", nil
 	})
@@ -403,9 +504,9 @@ func (d *MockDirectory) del(dn string) error {
 
 // dirSync performs one DirSync pass: everything under the naming context that
 // changed since the cookie, capped, with the cookie the next pass must present.
-func (d *MockDirectory) dirSync(req DirSyncRequest) (DirSyncResult, error) {
+func (d *MockDirectory) dirSync(f *mockForest, req DirSyncRequest) (DirSyncResult, error) {
 	d.mu.Lock()
-	res, detail, err := d.dirSyncLocked(req)
+	res, detail, err := d.dirSyncLocked(f, req)
 	if err != nil {
 		d.mu.Unlock()
 		return DirSyncResult{}, err
@@ -420,7 +521,7 @@ func (d *MockDirectory) dirSync(req DirSyncRequest) (DirSyncResult, error) {
 }
 
 // dirSyncLocked is the pass itself. The caller holds the lock.
-func (d *MockDirectory) dirSyncLocked(req DirSyncRequest) (DirSyncResult, string, error) {
+func (d *MockDirectory) dirSyncLocked(f *mockForest, req DirSyncRequest) (DirSyncResult, string, error) {
 	base := strings.TrimSpace(req.BaseDN)
 	if !isNamingContext(base) {
 		return DirSyncResult{}, "", fmt.Errorf("ad: mock: dirsync %q: the base is not a naming context root, and DirSync is answered only at one (e.g. dc=example,dc=com)", req.BaseDN)
@@ -434,8 +535,8 @@ func (d *MockDirectory) dirSyncLocked(req DirSyncRequest) (DirSyncResult, string
 		return DirSyncResult{}, "", err
 	}
 	baseKey := normalizeDN(base)
-	changed := make([]*mockEntry, 0, len(d.entries))
-	for k, e := range d.entries {
+	changed := make([]*mockEntry, 0, len(f.entries))
+	for k, e := range f.entries {
 		if e.changed <= since || (k != baseKey && !strings.HasSuffix(k, ","+baseKey)) {
 			continue
 		}
@@ -448,7 +549,7 @@ func (d *MockDirectory) dirSyncLocked(req DirSyncRequest) (DirSyncResult, string
 		changed = append(changed, e)
 	}
 	sort.Slice(changed, func(i, j int) bool { return changed[i].changed < changed[j].changed })
-	cookieAt, more := d.change, false
+	cookieAt, more := f.change, false
 	if n := int(req.MaxEntries); n > 0 && len(changed) > n {
 		changed = changed[:n]
 		cookieAt, more = changed[n-1].changed, true
@@ -483,8 +584,8 @@ func parseMockCookie(cookie []byte) (uint64, error) {
 
 // liveEntry returns the entry at a DN, or the error AD gives for one that is not
 // there. The caller holds the lock.
-func (d *MockDirectory) liveEntry(dn string) (*mockEntry, error) {
-	e, ok := d.entries[normalizeDN(dn)]
+func (d *MockDirectory) liveEntry(f *mockForest, dn string) (*mockEntry, error) {
+	e, ok := f.entries[normalizeDN(dn)]
 	if !ok || e.deleted {
 		return nil, fmt.Errorf("ad: mock: no such object: %s", dn)
 	}

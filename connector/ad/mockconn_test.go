@@ -3,6 +3,7 @@ package ad_test
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -217,7 +218,7 @@ func TestMockIsADialerRunCanUse(t *testing.T) {
 	var d ad.Dialer = ad.NewMockDirectory(ad.Entry{DN: arnoDN})
 	if _, err := ad.Run(context.Background(), ad.Job{
 		URL: mockTLSURL, Operation: "delete", DN: arnoDN,
-	}, d, nil); err != nil {
+	}, d, nil, nil); err != nil {
 		t.Fatalf("Run against the mock: %v", err)
 	}
 }
@@ -235,7 +236,7 @@ func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
 			mock := ad.NewMockDirectory()
 			_, err := ad.Run(context.Background(), ad.Job{
 				URL: "ldaps://dc", Operation: op, DN: "cn=Neu,dc=example,dc=com",
-			}, mock, func(string) string { return "pw" })
+			}, mock, func(string) string { return "pw" }, nil)
 			if err == nil {
 				t.Fatal("a create with no attributes was performed")
 			}
@@ -249,5 +250,186 @@ func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
 				t.Errorf("entries = %v, want the directory untouched", got)
 			}
 		})
+	}
+}
+
+// Two forests are two directories. The mock used to serve every URL from one set of
+// entries, which made it lie in exactly the topology that most needs a mockup: a
+// process addressing two directories found that creating an account in the *second*
+// failed with "entry already exists", something no real pair of domain controllers
+// would ever do (ADR-draft-ad-as-a-console-connector, amended).
+func TestTwoDirectoriesAreTwoForests(t *testing.T) {
+	const (
+		prod = "ldaps://dc-prod.example.com:636"
+		test = "ldaps://dc-test.example.com:636"
+	)
+	mock := ad.NewMockDirectory()
+	secret := func(string) string { return "pw" }
+	create := func(url string) error {
+		_, err := ad.Run(context.Background(), ad.Job{
+			URL: url, BindDN: "cn=svc,dc=x", BindSecret: "S", Operation: "create-user",
+			DN: "cn=Ada,dc=example,dc=com", Attributes: map[string][]string{"sAMAccountName": {"ada"}},
+		}, mock, secret, nil)
+		return err
+	}
+
+	if err := create(prod); err != nil {
+		t.Fatalf("create in the production forest: %v", err)
+	}
+	// The same DN in a *different* directory is a different account, and must succeed.
+	if err := create(test); err != nil {
+		t.Fatalf("create of the same DN in a different forest: %v — the forests are not separate", err)
+	}
+	// A second create in the *same* forest is still refused, exactly as AD refuses it.
+	if err := create(prod); err == nil {
+		t.Error("the same DN was created twice in one forest")
+	}
+
+	for _, url := range []string{prod, test} {
+		if got := mock.EntriesAt(url); len(got) != 1 {
+			t.Errorf("%s holds %v, want exactly its own account", url, got)
+		}
+	}
+	if got := mock.URLs(); len(got) != 2 {
+		t.Errorf("URLs = %v, want both directories", got)
+	}
+}
+
+// A write in one forest does not show up in another. Creating separate maps is easy to
+// get right; keeping the *operations* pointed at the right one is where a refactor
+// would quietly reconverge them.
+func TestAWriteInOneForestDoesNotReachAnother(t *testing.T) {
+	const (
+		a = "ldaps://dc-a.example.com:636"
+		b = "ldaps://dc-b.example.com:636"
+	)
+	mock := ad.NewMockDirectory(ad.Entry{
+		DN: "cn=Ada,dc=example,dc=com", Attributes: map[string][]string{"userAccountControl": {"512"}},
+	})
+	secret := func(string) string { return "pw" }
+	run := func(url, op string) error {
+		_, err := ad.Run(context.Background(), ad.Job{
+			URL: url, BindDN: "cn=svc,dc=x", BindSecret: "S",
+			Operation: op, DN: "cn=Ada,dc=example,dc=com",
+		}, mock, secret, nil)
+		return err
+	}
+
+	// The seed reaches both, because it says what a process expects to find wherever it
+	// looks — but each gets its own copy.
+	if err := run(a, "disable"); err != nil {
+		t.Fatalf("disable in forest a: %v", err)
+	}
+	if err := run(b, "enable"); err != nil {
+		t.Fatalf("enable in forest b: %v", err)
+	}
+	got := map[string]string{}
+	for _, url := range []string{a, b} {
+		entries := mock.EntriesAt(url)
+		if len(entries) != 1 {
+			t.Fatalf("%s holds %v, want the seeded account", url, entries)
+		}
+		got[url] = entries[0].Attributes["userAccountControl"][0]
+	}
+	if got[a] != "514" {
+		t.Errorf("forest a userAccountControl = %q, want the disabled account", got[a])
+	}
+	if got[b] != "512" {
+		t.Errorf("forest b userAccountControl = %q, want the enabled account — the disable leaked across forests", got[b])
+	}
+}
+
+// A DirSync delta is one directory's own history. Sharing a change counter would make a
+// reconciliation loop over one forest report writes that happened in another — the
+// worst kind of wrong answer, because the cookie makes it look authoritative.
+func TestADirSyncDeltaIsOneForestsOwnHistory(t *testing.T) {
+	const (
+		a = "ldaps://dc-a.example.com:636"
+		b = "ldaps://dc-b.example.com:636"
+	)
+	mock := ad.NewMockDirectory()
+	secret := func(string) string { return "pw" }
+	create := func(url, cn string) {
+		t.Helper()
+		if _, err := ad.Run(context.Background(), ad.Job{
+			URL: url, BindDN: "cn=svc,dc=x", BindSecret: "S", Operation: "create-user",
+			DN: "cn=" + cn + ",dc=example,dc=com", Attributes: map[string][]string{"cn": {cn}},
+		}, mock, secret, nil); err != nil {
+			t.Fatalf("create %s in %s: %v", cn, url, err)
+		}
+	}
+	create(a, "Ada")
+	create(b, "Grace")
+
+	out, err := ad.Run(context.Background(), ad.Job{
+		URL: a, BindDN: "cn=svc,dc=x", BindSecret: "S", Operation: "sync",
+		BaseDN: "dc=example,dc=com", CookieVariable: "c", ResultVariable: "changes",
+	}, mock, secret, nil)
+	if err != nil {
+		t.Fatalf("sync forest a: %v", err)
+	}
+	// The delta is {entries, more}: a pass is bounded, so the caller is told whether to
+	// come back rather than left to guess from a length.
+	delta, ok := out["changes"].(map[string]any)
+	if !ok {
+		t.Fatalf("changes = %#v, want the delta object", out["changes"])
+	}
+	entries, ok := delta["entries"].([]any)
+	if !ok {
+		t.Fatalf("entries = %#v, want a list", delta["entries"])
+	}
+	if len(entries) != 1 {
+		t.Fatalf("forest a reported %d changes, want only its own", len(entries))
+	}
+	if got := fmt.Sprint(entries[0]); !strings.Contains(got, "Ada") || strings.Contains(got, "Grace") {
+		t.Errorf("forest a reported %v, want its own account and not the other forest's", got)
+	}
+}
+
+// The three ways to ask a multi-directory mock what happened. They exist because
+// flattening stopped being an answer once one mock could hold several forests: "is this
+// account there?" is a question about a *directory*, and "did the seed load?" is a
+// question about neither — it is about the template every directory starts from.
+func TestAskingAMockWhichDirectoryHoldsWhat(t *testing.T) {
+	const url = "ldaps://dc.example.com:636"
+	seed := ad.Entry{DN: "cn=Ada,dc=example,dc=com", Attributes: map[string][]string{"cn": {"Ada"}}}
+	mock := ad.NewMockDirectory(seed)
+
+	// Before anything dials, the mock holds a template and no directories at all. The
+	// seed still reads back — a worker announces it at startup, before any job runs.
+	if got := mock.Seed(); len(got) != 1 || got[0].DN != seed.DN {
+		t.Errorf("Seed() = %v, want the template it was built with", got)
+	}
+	if got := mock.URLs(); len(got) != 0 {
+		t.Errorf("URLs() = %v, want none before anything dialled", got)
+	}
+	if got := mock.EntriesAt(url); got != nil {
+		t.Errorf("EntriesAt(%q) = %v, want nothing for a directory nobody has reached", url, got)
+	}
+
+	if _, err := ad.Run(context.Background(), ad.Job{
+		URL: url, BindDN: "cn=svc,dc=x", BindSecret: "S",
+		Operation: "disable", DN: "cn=Ada,dc=example,dc=com",
+	}, mock, func(string) string { return "pw" }, nil); err != nil {
+		t.Fatalf("disable against the seeded directory: %v", err)
+	}
+
+	if got := mock.URLs(); len(got) != 1 || got[0] != url {
+		t.Errorf("URLs() = %v, want the one directory that was dialled", got)
+	}
+	if got := mock.EntriesAt(url); len(got) != 1 {
+		t.Errorf("EntriesAt(%q) = %v, want its seeded account", url, got)
+	}
+	// A URL differing only in case is the same directory: scheme and host are
+	// case-insensitive, and two forests for one domain controller would be the bug this
+	// keying exists to avoid, wearing different clothes.
+	if got := mock.EntriesAt("LDAPS://DC.EXAMPLE.COM:636"); len(got) != 1 {
+		t.Errorf("a differently-cased URL found %v, want the same directory", got)
+	}
+	// Mutating the returned seed must not reach the mock: it is a template, and a
+	// caller holding a slice into it could reseed every directory dialled afterwards.
+	mock.Seed()[0].DN = "cn=Someone Else,dc=example,dc=com"
+	if got := mock.Seed(); got[0].DN != seed.DN {
+		t.Errorf("Seed() = %v after a caller edited what it returned, want the template intact", got)
 	}
 }

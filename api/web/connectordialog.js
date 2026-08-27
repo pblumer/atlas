@@ -37,6 +37,10 @@ export function connectorShape(kind, provider) {
   // it with, neither derivable from the other.
   const jira = kind === "jira";
   const entra = kind === "entra";
+  // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
+  // it with, neither derivable from the other. It is the newest kind to stop carrying
+  // its directory in the model (ADR-draft-ad-as-a-console-connector).
+  const ad = kind === "ad";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
   // shows is a redacted label the server derived from the string itself.
@@ -56,25 +60,32 @@ export function connectorShape(kind, provider) {
     // A SQL connector is created by pasting the connection string, which the server
     // seals into the vault and replaces with a reference — so the reference is one of
     // two ways in, not the only one, and the form must not insist on it.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira ? "required" : "optional")),
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad ? "required" : "optional")),
     endpointPlaceholder: mail
       ? "smtp.office365.com:587"
-      : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal")),
-    credRefLabel: jira
+      : (ad ? "ldaps://dc.example.com:636"
+        : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
+    credRefLabel: ad
+      ? "Credential reference (vault {bindDN, password})"
+      : jira
       ? "Credential reference (vault {email, apiToken} or {token})"
       : remedy
       ? "Credential reference (vault {username,password})"
       : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
         : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
-    credRefPlaceholder: jira
+    credRefPlaceholder: ad
+      ? "ad_prod_bind (vault {bindDN, password})"
+      : jira
       ? "jira_acme (vault {email, apiToken} or {token})"
       : remedy
       ? "remedy_creds (vault {username,password})"
       : (sql ? "postgres_pb_pw (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
-    hint: sql
+    hint: ad
+      ? "The directory's <b>LDAP URL</b> and a vault bundle holding the service account: <code>{\"bindDN\": \"cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com\", \"password\": \"\u2026\"}</code>. Use <b>ldaps://</b> unless you enable StartTLS \u2014 Active Directory refuses to set a password over an unencrypted channel, so an <code>ldap://</code> directory works for everything except the one thing a joiner needs. A model names this connector and says nothing else about the directory."
+      : sql
       ? "The <b>whole connection string</b> is the credential \u2014 it is sealed into the vault and the record keeps only a reference, so the Console can never show it back. Atlas supervises a worker for this kind, and it picks the database up as soon as you save; no restart and no start parameter. To replace a connection string later, overwrite its vault key under <b>Secrets</b>."
       : (!mail
       ? ""

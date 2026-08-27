@@ -1216,6 +1216,9 @@ func (b *Builder) AddSoapConnectorTask(cfg SoapConfig) int32 {
 // the process variable holding the create-user attribute object; NewPassword is the
 // set-password value.
 type AdConfig struct {
+	// Connector is the Console-configured directory this task talks to, or "" for a
+	// task that carries its own URL and bind DN the old way.
+	Connector   string
 	URL         RestExpr
 	BindDN      RestExpr
 	BindSecret  string
@@ -1247,8 +1250,11 @@ type AdConfig struct {
 func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:    b.intern(AdJobType),
-		Connector:  -1, // AD carries its endpoint in the model, not a registry name
+		JobType: b.intern(AdJobType),
+		// The Console-configured directory, when the task names one. A task using the
+		// older model-authored form leaves this -1 and carries AdURL/AdBindDN/
+		// AdBindSecret instead (ADR-draft-ad-as-a-console-connector).
+		Connector:  b.intern(cfg.Connector),
 		Subject:    -1, // not a clio task
 		EventType:  -1,
 		ClioQuery:  -1,
