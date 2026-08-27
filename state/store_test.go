@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -574,5 +575,84 @@ func TestPersistsAcrossReopen(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, ei) {
 		t.Errorf("element after reopen = %+v, want %+v", got, ei)
+	}
+}
+
+// TestSnapshotIsAReadableStoreOfItsOwn covers the checkpoint mechanism (ADR-0131),
+// and the property its comment claims: the snapshot's files provably contain every
+// write committed up to the caller's position, because Snapshot flushes first.
+//
+// Asserting that means reading the snapshot back rather than checking that files
+// appeared. A checkpoint nobody can open is not a checkpoint, and a checkpoint
+// missing the last committed batch is worse — recovery would replay from a position
+// the state does not actually hold.
+func TestSnapshotIsAReadableStoreOfItsOwn(t *testing.T) {
+	dir := t.TempDir()
+	scope := model.NewKey(1, 1)
+
+	src, err := state.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	tx := src.NewTransaction()
+	for range 4 {
+		if err := tx.IncrementActiveChildren(scope); err != nil {
+			t.Fatalf("Increment: %v", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	tx.Close()
+
+	// Into a directory that does not exist yet: pebble creates it, and a checkpoint
+	// into an existing one is refused, so this is the shape a caller must use.
+	dest := filepath.Join(t.TempDir(), "checkpoint")
+	if err := src.Snapshot(dest); err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	// The source keeps working — a snapshot is a copy, not a handover.
+	tx2 := src.NewTransaction()
+	if err := tx2.IncrementActiveChildren(scope); err != nil {
+		t.Fatalf("Increment after snapshot: %v", err)
+	}
+	if err := tx2.Commit(); err != nil {
+		t.Fatalf("Commit after snapshot: %v", err)
+	}
+	tx2.Close()
+	if err := src.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	snap, err := state.Open(dest)
+	if err != nil {
+		t.Fatalf("open the snapshot: %v", err)
+	}
+	defer snap.Close()
+	snapTx := snap.NewTransaction()
+	defer snapTx.Close()
+	// Four, not five: the snapshot holds what was committed when it was taken, and
+	// nothing that happened afterwards.
+	if n, err := snapTx.ActiveChildren(scope); err != nil || n != 4 {
+		t.Errorf("in the snapshot = %d, %v, want the 4 committed before it was taken", n, err)
+	}
+}
+
+// A snapshot into a directory that already holds one is refused rather than merged
+// into. Silently mixing two checkpoints would produce a store that recovery trusts
+// and that never existed.
+func TestSnapshotRefusesADestinationThatExists(t *testing.T) {
+	s, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	dest := filepath.Join(t.TempDir(), "checkpoint")
+	if err := s.Snapshot(dest); err != nil {
+		t.Fatalf("first Snapshot: %v", err)
+	}
+	if err := s.Snapshot(dest); err == nil {
+		t.Error("a second snapshot into the same directory was accepted")
 	}
 }

@@ -150,3 +150,52 @@ func TestRunSkipsBlankColumnNames(t *testing.T) {
 		t.Errorf("row = %v, want amount to have kept the second position despite the blank", rows[0])
 	}
 }
+
+// Result.Variables is the shared contract: what a CSV job completes with, decided in
+// one place so the in-process handler and the worker cannot disagree about it. Both
+// shapes go through it — a read's parsed rows, and a write's rendered text.
+func TestResultVariablesCarryBothShapes(t *testing.T) {
+	rows, err := csvimport.Result{
+		ResultVariable: "orders",
+		RowsJSON:       `[{"name":"Ada","amount":"12"},{"name":"Grace","amount":"7"}]`,
+		RowCount:       2,
+	}.Variables()
+	if err != nil {
+		t.Fatalf("Variables: %v", err)
+	}
+	list, ok := rows["orders"].([]any)
+	if !ok || len(list) != 2 {
+		t.Fatalf("orders = %#v, want the two parsed rows as a list", rows["orders"])
+	}
+	if first, _ := list[0].(map[string]any); first["name"] != "Ada" {
+		t.Errorf("first row = %#v, want the parsed object rather than a string", list[0])
+	}
+	if rows["rowCount"] != 2 {
+		t.Errorf("rowCount = %v, want 2", rows["rowCount"])
+	}
+
+	// A rendered file completes as text, not as a nested structure — the variable
+	// holds the CSV itself, and the row count still travels beside it.
+	text, err := csvimport.Result{
+		ResultVariable: "csvText", IsText: true, Text: "name,amount\nAda,12\n", RowCount: 1,
+	}.Variables()
+	if err != nil {
+		t.Fatalf("Variables (text): %v", err)
+	}
+	if text["csvText"] != "name,amount\nAda,12\n" || text["rowCount"] != 1 {
+		t.Errorf("variables = %#v, want the rendered text and its row count", text)
+	}
+}
+
+// Rows that are not JSON fail the job rather than completing it with nothing. An
+// empty result is the failure this connector exists to avoid, so it must not be
+// reachable through a decode that quietly yields nil.
+func TestResultVariablesRefuseRowsThatAreNotJSON(t *testing.T) {
+	_, err := csvimport.Result{ResultVariable: "orders", RowsJSON: "kaputt", RowCount: 1}.Variables()
+	if err == nil {
+		t.Fatal("rows that are not JSON completed the job")
+	}
+	if !strings.Contains(err.Error(), "csv-import") {
+		t.Errorf("error = %v, want it to name the connector", err)
+	}
+}
