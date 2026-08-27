@@ -212,6 +212,11 @@ function viewLogin() {
 // opens its menu (closing others); clicking anywhere else closes them all.
 function closeAllMenus() {
   for (const m of document.querySelectorAll(".dropdown-menu:not([hidden]):not(.submenu-menu)")) m.hidden = true;
+  // Its flyouts go with it, and now rather than after the grace period: a menu that has
+  // been dismissed must not leave one standing on screen.
+  clearTimeout(submenuTimer);
+  submenuTimer = null;
+  closeSubmenus();
   openMenu = openTrigger = null;
 }
 // placeMenu puts an open menu under its trigger, or above it when there is no room
@@ -256,25 +261,69 @@ window.addEventListener("resize", () => repositionMenus());
 
 // placeSubmenu puts an open flyout beside its row. It is position:fixed so the card's
 // overflow cannot clip it, which means CSS cannot place it — these are viewport
-// coordinates. It goes to the left of the parent menu, where the room is (a row's action
-// menu sits at the right edge of a table), falling back to the right when it would not
-// fit, and is held inside the viewport vertically so a row near the bottom of a long
-// list still shows a full list rather than a sliver.
+// coordinates. It opens to the *right*, which is where a submenu opens everywhere else
+// and therefore where the hand goes, and flips to the left only when the right would
+// run off screen (a row's action menu does sit at the right edge of a table). It is held
+// inside the viewport vertically so a row near the bottom of a long list still shows a
+// full list rather than a sliver.
+//
+// It is placed flush against the parent menu, with no gap. The flyout is shown by
+// `.submenu:hover`, and hover follows the DOM — the flyout is a child of .submenu, so
+// being over it keeps the pair open however far from its row it is painted. A gap
+// between the two is the one thing that breaks that: crossing it, the pointer is over
+// neither, and the flyout closed before the hand arrived.
 function placeSubmenu(sm) {
   const menu = sm.querySelector(".submenu-menu"), parent = sm.closest(".dropdown-menu");
   if (!menu || !parent) return;
   const row = sm.getBoundingClientRect(), box = parent.getBoundingClientRect();
   const w = menu.offsetWidth, h = menu.offsetHeight;
   if (!w || !h) return; // not displayed yet — the hover rule has not applied
-  const left = box.left - w - 5 >= 8 ? box.left - w - 5 : Math.min(box.right + 5, window.innerWidth - w - 8);
+  const toLeft = box.right + w + 8 > window.innerWidth && box.left - w - 8 >= 0;
+  const x = toLeft ? Math.max(8, box.left - w) : Math.min(box.right, window.innerWidth - w - 8);
   const top = Math.max(8, Math.min(row.top - 7, window.innerHeight - h - 8));
-  menu.style.left = `${Math.round(left)}px`;
+  // Which side it took drives the hover bridge — the few pixels of slack that keep a
+  // diagonal reach for the flyout from falling between the two boxes.
+  menu.classList.toggle("sm-left", toLeft);
+  menu.style.left = `${Math.round(x)}px`;
   menu.style.top = `${Math.round(top)}px`;
 }
+// Which flyout is open is driven here rather than by `.submenu:hover`, because a hand
+// moving from the row to the flyout cuts the corner: it crosses the rows in between, and
+// every one of those is outside the pair. Under :hover the flyout closed under the hand
+// before it arrived — reliably enough that reaching it was a knack. So it is held open
+// for a moment after the pointer leaves, and the moment is cancelled the instant the
+// pointer is back on the pair: the reach across is forgiven, and settling anywhere else
+// still closes it, only a fraction of a second later.
+const SUBMENU_GRACE_MS = 260;
+let submenuTimer = null;
+
+function closeSubmenus() {
+  for (const sm of document.querySelectorAll(".submenu.sm-open")) sm.classList.remove("sm-open");
+}
+
+function openSubmenu(sm) {
+  clearTimeout(submenuTimer);
+  submenuTimer = null;
+  for (const other of document.querySelectorAll(".submenu.sm-open")) {
+    if (other !== sm) other.classList.remove("sm-open");
+  }
+  sm.classList.add("sm-open");
+  placeSubmenu(sm);
+}
+
+// Starts the grace period, or leaves a running one alone — the pointer sweeping across
+// a dozen elements must not keep pushing the deadline back for as long as it moves.
+function closeSubmenusSoon() {
+  if (submenuTimer || !document.querySelector(".submenu.sm-open")) return;
+  submenuTimer = setTimeout(() => { submenuTimer = null; closeSubmenus(); }, SUBMENU_GRACE_MS);
+}
+
 for (const ev of ["mouseover", "focusin"]) {
   document.addEventListener(ev, (e) => {
-    const sm = e.target instanceof Element && e.target.closest(".submenu");
-    if (sm) placeSubmenu(sm);
+    const el = e.target instanceof Element ? e.target : null;
+    if (!el) return;
+    const sm = el.closest(".submenu");
+    if (sm) openSubmenu(sm); else closeSubmenusSoon();
   });
 }
 

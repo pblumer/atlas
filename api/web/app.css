@@ -462,7 +462,16 @@ tbody tr:hover { background: #fafbfc; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .tabs button { background: none; border: none; padding: 10px 12px; font: inherit; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-.empty { text-align: center; color: var(--muted); padding: 34px; }
+/* The "nothing here yet" placeholder — a centred, padded line where a list or a table
+   would be. Held off the vendored properties panels on purpose: bpmn-js, dmn-js and
+   form-js all mark a group header (and form-js a collapsible entry's title) whose
+   entries are unset with `empty`. That is their state flag, not our placeholder, and a
+   bare `.empty` reached it — 34px of padding all round turned every unset group in the
+   Form and DMN editors into a 68px block with its title pushed in and truncated, beside
+   the 27px rows of the groups that happened to be filled. Not neutralised inside the
+   panel but excluded from it, so the vendor's own styling stands rather than being
+   overridden back to something of ours. */
+.empty:not([class*="bio-properties-panel"]) { text-align: center; color: var(--muted); padding: 34px; }
 
 textarea, input[type=text], select { width: 100%; font: 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); }
 select { font-family: inherit; cursor: pointer; }
@@ -2012,8 +2021,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* A nested list inside a menu. Twenty-odd projects listed inline pushed a row's real
    actions off the bottom of the page, so the move targets live in a flyout instead. It
    opens on hover and on keyboard focus — never on the hidden attribute, which is what
-   closeAllMenus drives for top-level menus. Opens to the left because these menus sit at
-   the right edge of a table row, and scrolls rather than growing past the viewport. */
+   closeAllMenus drives for top-level menus. Opens to the right, as a submenu does
+   everywhere else, flipping left only when the right would run off screen — and scrolls
+   rather than growing past the viewport. */
 .submenu { position: relative; }
 .submenu-toggle { width: 100%; }
 .submenu-caret { margin-left: auto; padding-left: 10px; color: var(--muted); }
@@ -2022,11 +2032,15 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: none; max-width: 340px;
   max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
 }
+
 /* A project name can be long, and a menu row does not wrap by default; here it may,
    rather than pushing the flyout wider than the space it has to open into. */
 .submenu-menu button { white-space: normal; }
-.submenu:hover > .submenu-menu, .submenu:focus-within > .submenu-menu { display: block; }
-.submenu:hover > .submenu-toggle, .submenu:focus-within > .submenu-toggle { background: var(--bg); }
+/* Open is a class, not `:hover` — app.js holds it for a moment after the pointer leaves
+   so the diagonal reach for the flyout survives crossing the rows in between. Keyboard
+   focus opens it outright; there is nothing to reach across. */
+.submenu.sm-open > .submenu-menu, .submenu:focus-within > .submenu-menu { display: block; }
+.submenu.sm-open > .submenu-toggle, .submenu:focus-within > .submenu-toggle { background: var(--bg); }
 .dropdown-menu .mlabel {
   font-size: 11px; color: var(--muted); padding: 6px 10px 3px; text-transform: uppercase; letter-spacing: .04em;
 }

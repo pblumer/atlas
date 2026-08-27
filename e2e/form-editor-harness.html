@@ -2,11 +2,15 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Atlas form-editor re-entrancy e2e harness</title>
-    <!-- Drives the real api/web/form-editor.js mountFormEditor against a mock `api`,
-         so the test can supersede a mount mid-load (as a navigation would) and prove
-         it bails before building the form-js Playground. -->
+    <title>Atlas form-editor e2e harness</title>
+    <!-- Drives the real api/web/form-editor.js mountFormEditor against a mock `api`.
+         Two things are tested through it: superseding a mount mid-load (as a navigation
+         would) to prove it bails before building the form-js Playground, and — via
+         __mountReal, whose form carries an actual field — how the Playground's
+         properties panel is styled once it is up. -->
     <link rel="stylesheet" href="/app.css" />
+    <!-- The editor is mounted into a full-height page here, as the router gives it. -->
+    <style>html, body { margin: 0; height: 100%; } #view { height: 100vh; }</style>
   </head>
   <body>
     <div id="view"></div>
@@ -19,11 +23,11 @@
 
       // A mock api whose form-definition load can be stalled, so the test can
       // navigate away (call cleanup) while mountFormEditor is still awaiting it.
-      function makeApi(formsDelay) {
+      function makeApi(formsDelay, components = []) {
         return async (method, url) => {
           if (/\/forms\/[^/]+$/.test(url)) {
             if (formsDelay) await wait(formsDelay);
-            return { id: "form-x", name: "Test Form", schema: { type: "default", components: [] } };
+            return { id: "form-x", name: "Test Form", schema: { type: "default", components } };
           }
           if (url.endsWith("/projects")) return [];
           return {};
@@ -32,6 +36,17 @@
 
       window.__mount = (formsDelay) =>
         mountFormEditor(view, { api: makeApi(formsDelay), toast: noop, formId: "form-x" });
+
+      // A form with one real field, so selecting it fills the properties panel with the
+      // groups whose styling is under test. Only a text field is needed: what matters is
+      // that some of its groups have entries set (General, Validation) and some do not
+      // (Condition, Layout, Appearance, Custom properties) — form-js marks the latter
+      // `empty`, and that flag is what used to collide with a style of ours.
+      window.__mountReal = () =>
+        mountFormEditor(view, {
+          api: makeApi(0, [{ type: "textfield", key: "vorname", label: "Vorname" }]),
+          toast: noop, formId: "form-x",
+        });
       window.__cleanup = cleanup; // stands in for the navigation teardown (route → __atlasCleanup)
       window.__ready = true;
     </script>
