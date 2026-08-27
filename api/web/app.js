@@ -1389,6 +1389,46 @@ async function viewConsoleConnectors() {
       </table>
     </div>`;
 
+  // The Active-Directory mockup switch (ADR-0181). It sits with the connectors
+  // because that is where an operator goes to decide what an integration talks to —
+  // and because a worker that simulates every write looks, from everywhere else in
+  // Atlas, exactly like one that works.
+  let adMock = null;
+  try {
+    adMock = await api("GET", "/api/v1/settings/ad-mock");
+  } catch (e) {
+    adMock = null; // an older server, or unreachable: leave the card out entirely
+  }
+  const adMockCard = !adMock ? "" : `
+    <div class="card" style="margin-top:18px">
+      <div class="between"><h2>Active Directory</h2>
+        <span class="pill ${adMock.enabled ? "warn" : "ok"}"><span class="dot"></span>${
+          adMock.enabled ? "mockup" : "real directory"}</span></div>
+      <p class="muted" style="margin:6px 0 12px">In <b>mockup mode</b> the AD worker performs every
+      operation against a directory in its own memory: no domain controller is touched, and nothing
+      in a model changes. It still refuses what Active Directory refuses — creating the same account
+      twice, a password over an unencrypted connection, an account that is not there. Switching
+      restarts the worker; Atlas keeps running.</p>
+      <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+        <input type="checkbox" id="admock-on" ${adMock.enabled ? "checked" : ""}>
+        <span>Serve Active Directory tasks against a mockup</span>
+      </label>
+      <label style="display:block; margin-bottom:10px">
+        <div class="muted" style="font-size:13px; margin-bottom:4px">Seed file (optional) — an LDIF or
+        DSML file <i>on the worker's host</i>, holding the accounts and groups a process expects to
+        find. A leaver has nothing to disable in an empty directory.</div>
+        <input type="text" id="admock-seed" placeholder="/srv/atlas/forest.ldif" value="${esc(adMock.seed || "")}"
+               style="width:100%; max-width:520px">
+      </label>
+      <div class="between">
+        <button class="btn" id="admock-save">Save</button>
+        <span class="muted" id="admock-note" style="font-size:13px">${
+          adMock.configured
+            ? "Decided here."
+            : "Not decided here yet — whatever the server was started with (ATLAS_AD_MOCK) applies."}</span>
+      </div>
+    </div>`;
+
   // Encrypted secret vault (ADR-0069): credentials a connector's token reference
   // resolves to, sealed at rest. Every op is admin-gated and the vault may be
   // unconfigured (no master key), so distinguish those states from a populated list.
@@ -1448,8 +1488,10 @@ async function viewConsoleConnectors() {
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>
     ${managedCard}
+    ${adMockCard}
     ${secretsCard}`;
   wireConnectorManagement(connectors);
+  wireADMock();
   wireSecretsManagement(secrets, secretsState, connectors);
 }
 
@@ -3184,6 +3226,31 @@ async function toggleInboundSubs(row, connectorId) {
       panel.remove();
       await toggleInboundSubs(row, connectorId);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
+}
+
+// wireADMock binds the Active-Directory mockup switch: one PUT, and the supervised
+// AD worker is restarted holding the new setting (ADR-0181). Writing it is
+// admin-gated server-side, so a non-admin gets the refusal as a message rather than
+// as a control that silently does nothing.
+function wireADMock() {
+  const save = document.getElementById("admock-save");
+  if (!save) return;
+  const note = document.getElementById("admock-note");
+  save.addEventListener("click", async () => {
+    const enabled = document.getElementById("admock-on").checked;
+    const seed = document.getElementById("admock-seed").value.trim();
+    save.disabled = true;
+    try {
+      await api("PUT", "/api/v1/settings/ad-mock", { enabled, seed });
+      toast(enabled
+        ? "Mockup on — the AD worker restarts and writes to no directory."
+        : "Mockup off — the AD worker restarts and talks to the domain controller again.");
+      await viewConsoleConnectors();
+    } catch (e) {
+      if (note) note.textContent = e.message;
+      save.disabled = false;
+    }
   });
 }
 

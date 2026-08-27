@@ -226,6 +226,32 @@ _Changed_ / _Removed_ for each version.
   customer's network: a worker sitting there can serve it, and the service account can live
   only in that worker rather than in the engine.
 
+### Changed
+
+- **The Active Directory mockup is switched on in the Console now, not on the command line.**
+  [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md) gave the AD connector a mockup mode and put
+  the switch in the worker's environment. The reasoning — the operator owns this decision, not the
+  model — still holds; the ceremony did not. Since [ADR-0182](docs/adr/0182-ad-default-offload.md)
+  the AD worker is a child Atlas starts itself, so "set the variable" meant **restart the server**,
+  and restarting the worker from the Workers view did not help: it re-inherits the environment of
+  the running parent, where the variable is still absent. The switch that exists to make drafting
+  cheap cost an engine restart, and the person who most wants to flip it is the least placed to
+  take everyone else's instance down.
+
+  It now sits in **Console › Connectors**, on an Active Directory card beside the managed connectors
+  and the vault: a checkbox, an optional seed file, Save. The AD worker restarts holding the new
+  setting and Atlas keeps running — through exactly the rendering ADR-0182 already built to hand
+  that worker its bind passwords. The card also says which state it is in, which is a better answer
+  to "did that account really get created?" than reading a log.
+
+  **Nothing changes until somebody uses it.** No stored setting means the server's own
+  `ATLAS_AD_MOCK` keeps deciding, exactly as before. A stored one decides either way — a stored
+  "off" overrides an inherited "on", because a switch that says off while the worker still
+  simulates would be lying to the person who flipped it. The Console writes the same two variables
+  a hand-run worker reads, so a worker in another network is configured exactly as it was, and
+  there is no private channel between a supervised worker and its parent. The model still says
+  nothing about being mocked. See ADR-draft-ad-mock-in-the-console.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

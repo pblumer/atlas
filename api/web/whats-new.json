@@ -224,6 +224,47 @@
       }
     },
     {
+      "id": "the-active-directory-mockup-is-switched-on-in-the-console-no",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Switch the Active Directory mockup on without a restart",
+        "de": "Das Active-Directory-Mockup ohne Neustart einschalten"
+      },
+      "summary": {
+        "en": "Trying an identity process out no longer costs an engine restart. Under Connectors there is now an Active Directory card: tick the box, name a seed file if your process expects to find accounts, save. The worker that serves directory tasks comes back simulating them in its own memory, and Atlas keeps running for everyone else. The card says which state it is in — a better answer to \"was that account really created?\" than reading a log. Nothing in your models changes, and nothing changes at all until you use the switch: a server started with the old environment variable keeps behaving exactly as it did.",
+        "de": "Einen Identity-Prozess auszuprobieren kostet keinen Serverneustart mehr. Unter Connectors gibt es jetzt eine Active-Directory-Karte: Haken setzen, bei Bedarf eine Startbestand-Datei angeben, speichern. Der Worker, der die Verzeichnis-Aufgaben bedient, kommt zurück und simuliert sie in seinem eigenen Arbeitsspeicher — Atlas läuft für alle anderen weiter. Die Karte zeigt, in welchem Zustand sie ist; das ist die bessere Antwort auf „wurde das Konto wirklich angelegt?\" als ein Blick ins Log. An den Modellen ändert sich nichts, und überhaupt nichts ändert sich, solange Sie den Schalter nicht benutzen: Ein Server, der mit der alten Umgebungsvariablen gestartet wurde, verhält sich genau wie bisher."
+      },
+      "link": {
+        "label": "ADR-0181",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0181-ad-connector-mock-mode.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Connectors and find the Active Directory card.",
+          "Tick \"Serve Active Directory tasks against a mockup\" and save — the AD worker restarts within seconds.",
+          "Start your process. Operations › Workers shows the worker with a warning that it writes to no directory, then one line per simulated operation."
+        ],
+        "de": [
+          "Öffnen Sie Connectors und suchen Sie die Active-Directory-Karte.",
+          "Haken bei „Serve Active Directory tasks against a mockup\" setzen und speichern — der AD-Worker startet in Sekunden neu.",
+          "Starten Sie Ihren Prozess. Unter Betrieb › Workers steht der Worker mit der Warnung, dass er in kein Verzeichnis schreibt, danach eine Zeile je simulierter Operation."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Connectors öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
       "id": "entra-id-delta-queries-delta-users-and-delta-groups",
       "version": "0.4.0",
       "date": "2026-08-26",
@@ -278,47 +319,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-active-directory-connector-gets-a-mock-mode-so-an-identi",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Added",
-      "title": {
-        "en": "Try an Active Directory process without an Active Directory",
-        "de": "Einen Active-Directory-Prozess ohne Active Directory ausprobieren"
-      },
-      "summary": {
-        "en": "An identity process is the one kind nobody can safely try out: the directory it creates accounts in is the real one, and a test joiner leaves a real account behind. A worker can now be told to serve Active Directory tasks against a directory that exists only in its own memory — the model stays exactly as it is, no domain controller is touched, and every operation appears in the worker's log. It refuses what Active Directory refuses, so the mistakes you would otherwise meet in production you meet while drafting: a password set over an unencrypted connection, an account created twice by a repeated delivery, a group member added twice, a change read from the wrong place in the tree. An LDIF or DSML file fills it with the accounts your process expects to find, because a leaver has nothing to disable in an empty directory.",
-        "de": "Ein Identity-Prozess ist die eine Sorte, die niemand gefahrlos ausprobieren kann: Das Verzeichnis, in dem er Konten anlegt, ist das echte, und ein Test-Joiner hinterlässt ein echtes Konto. Ein Worker kann jetzt angewiesen werden, Active-Directory-Aufgaben gegen ein Verzeichnis zu bedienen, das nur in seinem eigenen Arbeitsspeicher existiert — das Modell bleibt exakt, wie es ist, kein Domain Controller wird angefasst, und jede Operation steht im Log des Workers. Es lehnt ab, was auch Active Directory ablehnt: Die Fehler, die Sie sonst erst in der Produktion treffen, treffen Sie damit schon beim Entwerfen — ein Passwort über eine unverschlüsselte Verbindung, ein durch wiederholte Zustellung zweimal angelegtes Konto, ein zweimal hinzugefügtes Gruppenmitglied, ein Änderungsabgleich an der falschen Stelle im Verzeichnisbaum. Eine LDIF- oder DSML-Datei füllt es mit den Konten, die Ihr Prozess vorzufinden erwartet — ein Leaver hat in einem leeren Verzeichnis nichts zu deaktivieren."
-      },
-      "link": {
-        "label": "ADR-0166",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Start Atlas with --offload-connectors ad, so Active Directory tasks wait for a worker instead of running in the engine.",
-          "Start a worker beside it: ATLAS_AD_MOCK=1 atlas worker --connector ad — add ATLAS_AD_MOCK_SEED=forest.ldif for the accounts that should already be there.",
-          "Run your process. Operations › Workers shows the worker, and its log lists every directory operation it simulated."
-        ],
-        "de": [
-          "Starten Sie Atlas mit --offload-connectors ad, damit Active-Directory-Aufgaben auf einen Worker warten statt in der Engine zu laufen.",
-          "Starten Sie daneben einen Worker: ATLAS_AD_MOCK=1 atlas worker --connector ad — mit ATLAS_AD_MOCK_SEED=forest.ldif für die Konten, die es schon geben soll.",
-          "Lassen Sie Ihren Prozess laufen. Unter Betrieb › Workers sehen Sie den Worker, und sein Log zeigt jede simulierte Verzeichnis-Operation."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
       }
     }
   ]
