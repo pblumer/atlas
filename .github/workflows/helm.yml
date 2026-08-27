@@ -45,8 +45,10 @@ jobs:
             --set ingress.enabled=true \
             --set persistence.existingClaim=atlas-data > /dev/null
 
-      # Auth is on by default (ADR-draft-auth-on-by-default), so the defaults render
-      # above already covers the on case. What is worth pinning is which of the two
+      # Auth is on by default, so the defaults render above already covers the on
+      # case. (The record deciding that is deliberately not cited here: the numbering
+      # job rewrites a draft citation, and its commit may not touch a workflow file —
+      # see TestNoWorkflowFileCitesADraft.) What is worth pinning is which of the two
       # credential paths each configuration takes: with no source the chart must omit
       # the admin environment entirely — there is no Secret to read, and referencing a
       # key that was never created is a pod that will not start — and the server seeds
