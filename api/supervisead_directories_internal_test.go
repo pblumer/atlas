@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// Active Directory as a Console connector (ADR-draft-ad-as-a-console-connector).
+// Active Directory as a Console connector (ADR-0206).
 //
 // AD used to be the one credential-bearing kind an operator could not create: the
 // directory lived in the model, so there was nothing to configure and nowhere

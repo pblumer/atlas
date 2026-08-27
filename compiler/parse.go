@@ -2013,7 +2013,7 @@ type xmlSoapConnector struct {
 
 // xmlAdConnector is the <atlas:adConnector> extension on a service task (ADR-0166).
 // connector names a directory configured in the Console, which is how a task should
-// address one (ADR-draft-ad-as-a-console-connector); the url/bindDN/bindSecret trio
+// address one (ADR-0206); the url/bindDN/bindSecret trio
 // below is the older, model-authored form and still compiles.
 // url is the server (ldaps://host:636 for a password set); bindDN/bindSecret
 // authenticate the bind (bindSecret a reference, never a value, ADR-0041); startTLS
@@ -2023,7 +2023,7 @@ type xmlSoapConnector struct {
 // set-password value. url/bindDN/dn/memberDN/newPassword carry literal-or-FEEL values.
 type xmlAdConnector struct {
 	// Connector names a directory an operator configured in the Console, the way every
-	// other credential-bearing kind is addressed (ADR-draft-ad-as-a-console-connector).
+	// other credential-bearing kind is addressed (ADR-0206).
 	// It replaces url/bindDN/bindSecret, which stay accepted so models written before
 	// this keep compiling — a task carries one shape or the other, never both.
 	Connector     string `xml:"connector,attr"`

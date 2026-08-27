@@ -569,7 +569,7 @@ _Changed_ / _Removed_ for each version.
   AD is a domain controller with a service account and a password, not an address like a
   REST endpoint. It had inherited the model-authored shape from the LDAP connector
   rather than from an argument
-  ([ADR-draft-ad-as-a-console-connector](docs/adr/draft-ad-as-a-console-connector.md)).
+  ([ADR-0206](docs/adr/0206-ad-as-a-console-connector.md)).
 
   Now **Console › Connectors › New connector › Active Directory**: the LDAP URL, and a
   credential reference naming a vault bundle `{"bindDN": …, "password": …}` — the Remedy

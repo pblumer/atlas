@@ -1253,7 +1253,7 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		JobType: b.intern(AdJobType),
 		// The Console-configured directory, when the task names one. A task using the
 		// older model-authored form leaves this -1 and carries AdURL/AdBindDN/
-		// AdBindSecret instead (ADR-draft-ad-as-a-console-connector).
+		// AdBindSecret instead (ADR-0206).
 		Connector:  b.intern(cfg.Connector),
 		Subject:    -1, // not a clio task
 		EventType:  -1,

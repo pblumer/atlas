@@ -681,7 +681,7 @@ func (s *Server) adWorkerEnv() []string {
 			}
 		}
 		// Directories an operator configured in the Console
-		// (ADR-draft-ad-as-a-console-connector), rendered under the names the worker
+		// (ADR-0206), rendered under the names the worker
 		// reads — the Remedy shape exactly, because the problem is the same: the URL is
 		// in a store and the bind account is in the vault, neither of which a supervised
 		// worker can read.
@@ -763,7 +763,7 @@ const (
 	adMockEnv     = "ATLAS_AD_MOCK"
 	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
 	// adDirEnvPrefix and adConnectorsEnv are where a supervised AD worker reads the
-	// directories an operator configured (ADR-draft-ad-as-a-console-connector) — the
+	// directories an operator configured (ADR-0206) — the
 	// same names an operator sets by hand for an external worker, because there is no
 	// private channel between engine and child (ADR-0157).
 	adDirEnvPrefix  = "ATLAS_AD_"

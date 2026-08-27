@@ -501,7 +501,7 @@ func TestBuiltinConnectorsInADMockMode(t *testing.T) {
 
 // Two forests, one worker, addressed by name. This is what a record buys that a
 // model-authored url could not: the same worker serves both, and a job naming one
-// never reaches the other (ADR-draft-ad-as-a-console-connector).
+// never reaches the other (ADR-0206).
 func TestTwoNamedDirectoriesAreServedSeparatelyByOneWorker(t *testing.T) {
 	dirs, names, err := adDirectoriesFromEnv(envMap(map[string]string{
 		"ATLAS_AD_CONNECTORS":    "prod,test",
@@ -625,7 +625,7 @@ func TestANamedDirectoryMissingAFieldIsRefusedAtStartup(t *testing.T) {
 // The whole point, end to end: two directories configured as records, a worker in
 // mockup mode, and a job against each. They must reach different forests — which is
 // what a mock keyed by URL buys and what one shared mock could not express
-// (ADR-draft-ad-as-a-console-connector, amended).
+// (ADR-0206, amended).
 func TestMockModeKeepsTwoNamedDirectoriesApart(t *testing.T) {
 	env := envMap(map[string]string{
 		"ATLAS_AD_MOCK":          "1",

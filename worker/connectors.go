@@ -124,7 +124,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			})
 		case "ad":
 			// Two shapes at once, because a model may carry either
-			// (ADR-draft-ad-as-a-console-connector): directories an operator configured
+			// (ADR-0206): directories an operator configured
 			// in the Console, addressed by name, and tasks that carry their own url
 			// with a per-task bind-password reference. A worker holding no directories
 			// still serves the second kind, which is every model written before records

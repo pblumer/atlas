@@ -626,7 +626,7 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	// operator configured in the Console (the way every other credential-bearing kind
 	// is addressed), or by carrying url/bindDN/bindSecret itself — the original form,
 	// still accepted so models written before this keep compiling
-	// (ADR-draft-ad-as-a-console-connector).
+	// (ADR-0206).
 	//
 	// Both at once is refused rather than resolved by precedence. Whichever rule we
 	// picked, half the readers of the model would assume the other, and the two point

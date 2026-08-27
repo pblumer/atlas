@@ -291,7 +291,7 @@ var managedConnectorKinds = []managedConnectorKind{
 	{
 		// An Active Directory connector task performs one directory operation against a
 		// domain controller an operator configured here
-		// (ADR-draft-ad-as-a-console-connector). The URL lives in the record and the
+		// (ADR-0206). The URL lives in the record and the
 		// bind account in a vault bundle behind credentialsRef, so a model names the
 		// directory and says nothing else about it.
 		//

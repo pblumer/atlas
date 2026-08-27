@@ -1148,7 +1148,7 @@ func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
 }
 
 // An Active Directory record is created with the directory's LDAP URL and a vault
-// bundle holding the service account (ADR-draft-ad-as-a-console-connector). The
+// bundle holding the service account (ADR-0206). The
 // validator is what holds that shape, and one of its rules is not obvious: the URL's
 // *scheme* is checked, because AD refuses to set a password over an unencrypted
 // channel — so an ldap:// directory works for every operation except the one a joiner

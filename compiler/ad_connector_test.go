@@ -273,7 +273,7 @@ func TestAdSyncValidation(t *testing.T) {
 
 // A task addresses its directory by naming a connector an operator configured, the way
 // every other credential-bearing kind is addressed
-// (ADR-draft-ad-as-a-console-connector). The model then carries the operation and its
+// (ADR-0206). The model then carries the operation and its
 // DNs, and nothing about where the directory is or who binds to it.
 func TestAdConnectorTaskNamesAConfiguredDirectory(t *testing.T) {
 	cp, d := adDetail(t, `connector="prod-forest" operation="disable" dn="cn=Arno,dc=example,dc=com"`)

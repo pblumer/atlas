@@ -80,7 +80,7 @@ type MockDirectory struct {
 	// most needs a mockup: a process addressing two forests found that creating the same
 	// DN in the *second* one failed with "entry already exists", something no real pair
 	// of domain controllers would ever do
-	// (ADR-draft-ad-as-a-console-connector, amended). Keying on the URL is what makes a
+	// (ADR-0206, amended). Keying on the URL is what makes a
 	// mock run over several directories mean what the same run would mean in production.
 	forests map[string]*mockForest
 	opSeq   uint64

@@ -6,7 +6,7 @@ import "github.com/pblumer/atlas/connector/clientreg"
 // is, and who binds to it.
 //
 // It exists because AD sat on the wrong side of a line this repository otherwise draws
-// cleanly (ADR-draft-ad-as-a-console-connector). A connector whose target carries
+// cleanly (ADR-0206). A connector whose target carries
 // credentials — mail, Entra, Remedy, SharePoint, the three SQL products — is a *record*
 // an operator creates, referenced from a model by name. A connector addressed per call
 // with nothing secret about the address — REST, web scrape — carries its target in the

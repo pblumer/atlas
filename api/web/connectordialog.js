@@ -39,7 +39,7 @@ export function connectorShape(kind, provider) {
   const entra = kind === "entra";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
-  // its directory in the model (ADR-draft-ad-as-a-console-connector).
+  // its directory in the model (ADR-0206).
   const ad = kind === "ad";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console

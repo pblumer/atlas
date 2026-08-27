@@ -9,7 +9,7 @@ import (
 )
 
 // Which directory a job talks to, and how it binds
-// (ADR-draft-ad-as-a-console-connector).
+// (ADR-0206).
 //
 // A task carries one of two shapes: the name of a directory an operator configured, or
 // the directory itself. The compiler refuses both at once, so there is no precedence

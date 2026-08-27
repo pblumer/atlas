@@ -257,7 +257,7 @@ func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
 // entries, which made it lie in exactly the topology that most needs a mockup: a
 // process addressing two directories found that creating an account in the *second*
 // failed with "entry already exists", something no real pair of domain controllers
-// would ever do (ADR-draft-ad-as-a-console-connector, amended).
+// would ever do (ADR-0206, amended).
 func TestTwoDirectoriesAreTwoForests(t *testing.T) {
 	const (
 		prod = "ldaps://dc-prod.example.com:636"

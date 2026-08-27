@@ -1,4 +1,4 @@
-# ADR-DRAFT: Active Directory is a connector you configure, not one you write into a model
+# ADR-0206: Active Directory is a connector you configure, not one you write into a model
 
 - **Status:** Proposed
 - **Date:** 2026-08-27

@@ -41,7 +41,7 @@ type Job struct {
 	// Connector is the Console-configured directory this job talks to. When it is set
 	// the worker holds that directory's URL and bind credentials under this name and
 	// URL/BindDN/BindSecret below are empty — the shape every other credential-bearing
-	// kind already uses (ADR-draft-ad-as-a-console-connector). When it is empty the job
+	// kind already uses (ADR-0206). When it is empty the job
 	// carries the directory itself, which is how models written before that read.
 	Connector  string `json:"connector,omitempty"`
 	URL        string `json:"url"`

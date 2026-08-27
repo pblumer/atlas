@@ -72,7 +72,7 @@ const adDirEnvPrefix = "ATLAS_AD_"
 // ATLAS_AD_CONNECTORS lists them; each name contributes ATLAS_AD_<NAME>_URL,
 // _BIND_DN and _PASSWORD — the three values [ad.Directory] is built from, so a worker
 // builds the identical target the engine would have
-// (ADR-draft-ad-as-a-console-connector).
+// (ADR-0206).
 //
 // It is the Remedy shape exactly, and for the same reason: the bind account comes from
 // the environment rather than a flag because argv is readable by anyone who can list
