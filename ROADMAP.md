@@ -787,7 +787,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
 - 🔲 **Hosted apps — an application's public face**
-  ([ADR-draft-hosted-apps-on-an-isolated-origin](docs/adr/draft-hosted-apps-on-an-isolated-origin.md)):
+  ([ADR-0204](docs/adr/0204-hosted-apps-on-an-isolated-origin.md)):
   today the only way to get a custom HTML/JS page *from Atlas* is to put the file
   in `api/web/` and rebuild — that is how `order-to-cash-live.html` and
   `reisebuchung-kunde.html` exist, and it is a product-release path, not a customer

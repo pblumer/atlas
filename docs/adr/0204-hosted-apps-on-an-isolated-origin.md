@@ -1,4 +1,4 @@
-# ADR-DRAFT: Hosted apps — user HTML/JS served from an isolated origin
+# ADR-0204: Hosted apps — user HTML/JS served from an isolated origin
 
 - **Status:** Proposed
 - **Date:** 2026-08-27

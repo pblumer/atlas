@@ -240,6 +240,7 @@ comment safe to write.
 | [0201](0201-jira-connector.md) | Atlas Jira connector | Proposed |
 | [0202](0202-atlas-manages-the-ad-mock-seed.md) | Atlas holds the AD mockup's starting entries | Proposed |
 | [0203](0203-worker-execution-model.md) | Worker execution model and integration terminology | Proposed |
+| [0204](0204-hosted-apps-on-an-isolated-origin.md) | Hosted apps — user HTML/JS served from an isolated origin | Proposed |
 
 ## Status values
 
