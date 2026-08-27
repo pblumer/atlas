@@ -43,6 +43,24 @@
       }
     },
     {
+      "id": "a-menu-s-flyout-opens-to-the-right-and-can-be-reached",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A menu's flyout opens to the right, and can be reached.",
+        "de": "A menu's flyout opens to the right, and can be reached."
+      },
+      "summary": {
+        "en": "The \"Move to\" submenu on an artifact row opened to the left, which is not where a submenu opens anywhere else, so the hand went the wrong way first; it opens right now, and flips left only when the right would run off screen.",
+        "de": "The \"Move to\" submenu on an artifact row opened to the left, which is not where a submenu opens anywhere else, so the hand went the wrong way first; it opens right now, and flips left only when the right would run off screen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "every-properties-group-in-the-form-and-dmn-editors-reads-the",
       "version": "Unreleased",
       "date": null,
@@ -311,24 +329,6 @@
       "link": {
         "label": "ADR-0028",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0028-forms-and-the-tasks-app.md"
-      }
-    },
-    {
-      "id": "connectors-are-their-own-page-in-the-console",
-      "version": "0.4.0",
-      "date": "2026-08-26",
-      "category": "Changed",
-      "title": {
-        "en": "Connectors are their own page in the Console.",
-        "de": "Connectors are their own page in the Console."
-      },
-      "summary": {
-        "en": "They live at #/console/connectors, beside Organization in the navigation.",
-        "de": "They live at #/console/connectors, beside Organization in the navigation."
-      },
-      "link": {
-        "label": "ADR-0041",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0041-connector-management-and-secret-store.md"
       }
     }
   ]

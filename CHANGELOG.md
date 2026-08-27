@@ -46,6 +46,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A menu's flyout opens to the right, and can be reached.** The "Move to" submenu on an
+  artifact row opened to the *left*, which is not where a submenu opens anywhere else, so
+  the hand went the wrong way first; it opens right now, and flips left only when the
+  right would run off screen. Reaching it was the worse half. The flyout is
+  `position: fixed` — a card's overflow would clip it otherwise — and was shown by
+  `.submenu:hover`, with a 5px gap to cross. A hand moving diagonally from the row to the
+  flyout crosses the menu rows in between, and every one of them is outside the pair, so
+  the flyout closed under the hand before it arrived: getting into it was a knack rather
+  than an action. It now sits flush against the parent menu, and which flyout is open is
+  held in a class rather than in `:hover`, so it survives a moment (260ms) after the
+  pointer leaves — the diagonal reach is forgiven, settling anywhere else still closes it,
+  and dismissing the menu closes it at once rather than after the grace period.
+
 - **Every properties group in the Form and DMN editors reads the same again.** form-js and
   dmn-js mark a group whose entries are all unset with the class `empty` — their own state
   flag, on the group's header. `app.css` carried a bare `.empty` for our "nothing here yet"
