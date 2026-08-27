@@ -125,3 +125,25 @@ func TestHasRole(t *testing.T) {
 		t.Error("a principal with no roles reported admin")
 	}
 }
+
+// TestInGroupAnswersMembership covers the group check every group-scoped
+// authorization gate calls. It fails closed on a principal with no groups, which is
+// the property that matters: a request whose identity carries nothing must not pass
+// a check for something.
+func TestInGroupAnswersMembership(t *testing.T) {
+	p := &Principal{GroupIDs: []string{"identity", "finance"}}
+	if !p.InGroup("identity") || !p.InGroup("finance") {
+		t.Errorf("a member was not recognised: groups = %v", p.GroupIDs)
+	}
+	if p.InGroup("operations") {
+		t.Error("a non-member passed the group check")
+	}
+	// Exact match, not a prefix or a fold: "ident" is a different group, and so is
+	// "Identity" — a group id is an id.
+	if p.InGroup("ident") || p.InGroup("Identity") || p.InGroup("") {
+		t.Error("the group check matched something that is not the group")
+	}
+	if (&Principal{}).InGroup("identity") {
+		t.Error("a principal with no groups passed a group check; the gate must fail closed")
+	}
+}

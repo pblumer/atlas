@@ -1118,3 +1118,31 @@ func TestConnectorProblemFallback(t *testing.T) {
 		}
 	}
 }
+
+// An Entra tenant is created in the Console with nothing but a credentials
+// reference: the tenant id, client id and client secret live together in one vault
+// bundle, never in the record and never in a model (ADR-0172). The validator is what
+// holds that shape, so it is what a test has to pin.
+func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
+	k, ok := lookupManagedConnectorKind("entra")
+	if !ok {
+		t.Fatal("entra is not a managed connector kind")
+	}
+
+	if msg := k.validateCreate(&createConnectorParams{Name: "tenant"}); msg == "" {
+		t.Error("an entra connector without a credentialsRef was accepted")
+	} else if !strings.Contains(msg, "credentialsRef") {
+		t.Errorf("message = %q, want it to name the missing field", msg)
+	}
+
+	// With the bundle it passes — and the mail-only fields are cleared rather than
+	// stored, so a record carried over from another kind cannot leave a provider or a
+	// sender behind on a directory tenant.
+	p := &createConnectorParams{Name: "tenant", CredentialsRef: "entra-bundle", Provider: "smtp", Sender: "bot@x"}
+	if msg := k.validateCreate(p); msg != "" {
+		t.Errorf("a complete entra connector was refused: %s", msg)
+	}
+	if p.Provider != "" || p.Sender != "" {
+		t.Errorf("provider/sender = %q/%q, want both cleared for an entra record", p.Provider, p.Sender)
+	}
+}

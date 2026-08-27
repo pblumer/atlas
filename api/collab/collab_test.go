@@ -422,3 +422,44 @@ func TestItoa(t *testing.T) {
 		}
 	}
 }
+
+// Events is what the SSE handler holds — the only view of a participant's stream from
+// outside this package. It has to be the same channel the broadcasts go to, and it has
+// to close when the participant leaves: that closure is how the handler learns to end
+// the response, and a stream that never closes is a hung connection per abandoned tab.
+func TestCollabEventsIsTheStreamAndClosesOnLeave(t *testing.T) {
+	reg := NewRegistry()
+	p1, _, leave1 := reg.Join("d", "u1", "Anja")
+	defer leave1()
+	p2, _, leave2 := reg.Join("d", "u2", "Ben")
+	drainType(t, p2.ch, collabEventPresence)
+
+	events := p2.Events()
+	if !reg.Change("d", p1.ID, "Task_1", "<task/>") {
+		t.Fatal("change returned false for a live participant")
+	}
+	select {
+	case frame, open := <-events:
+		if !open {
+			t.Fatal("the stream was closed while the participant was still in the session")
+		}
+		if frame.Type != collabEventChange {
+			t.Errorf("frame type = %q, want %q", frame.Type, collabEventChange)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the broadcast did not reach Events; it is not the participant's stream")
+	}
+
+	leave2()
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case _, open := <-events:
+			if !open {
+				return // closed, as the handler needs
+			}
+		case <-deadline:
+			t.Fatal("the stream was not closed after the participant left")
+		}
+	}
+}

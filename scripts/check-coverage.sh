@@ -23,16 +23,30 @@ mkdir -p "${outdir}"
 mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
 go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
 
-total="$(go tool cover -func="${profile}" | awk '/^total:/ {gsub(/%/,"",$3); print $3}')"
-
-if [ -z "${total}" ]; then
+# The total is computed from the profile rather than read off `go tool cover -func`,
+# which prints it rounded to one decimal. That rounding was not cosmetic: it is the
+# comparison this script performs, so a repository sitting at 94.918% reported "95.0"
+# and passed a 95% floor for as long as it stayed above 94.95%. A floor that a
+# below-floor repository satisfies is not a floor, and the gap it hid grew silently,
+# because every run said OK.
+#
+# The profile's own lines are the source: "file.go:l.c,l.c numStmt count", one per
+# block, so the exact ratio is two sums and needs no rounding at any step.
+read -r covered statements total < <(
+  awk '!/^mode:/ { n = $(NF-1); if ($NF + 0 > 0) k += n; s += n }
+       END { if (s == 0) exit 1; printf "%d %d %.4f\n", k, s, 100 * k / s }' "${profile}"
+) || {
   echo "check-coverage: could not determine total coverage" >&2
   exit 1
-fi
+}
 
-# Integer-safe comparison to two decimals (bash has no floats).
-awk -v t="${total}" -v min="${threshold}" 'BEGIN { exit !(t+0 >= min+0) }' || {
+awk -v t="${total}" -v min="${threshold}" 'BEGIN { exit !(t + 0 >= min + 0) }' || {
+  # Say how far, in the unit the reader can act on: statements, not percent. A tenth
+  # of a percentage point is a number nobody can plan against; "cover 42 more" is.
+  need="$(awk -v s="${statements}" -v k="${covered}" -v min="${threshold}" \
+    'BEGIN { printf "%d", (min / 100 * s) - k + 0.999999 }')"
   echo "FAIL: total statement coverage ${total}% is below the ${threshold}% floor (ADR-0018)." >&2
+  echo "      ${covered} of ${statements} statements covered; ${need} more would reach the floor." >&2
   echo "Lowest-covered functions:" >&2
   # Sort on a numeric key awk emits, not on the report's own columns: those are
   # separated by a variable number of tabs and the percentage carries a `%`, so the
@@ -47,4 +61,11 @@ awk -v t="${total}" -v min="${threshold}" 'BEGIN { exit !(t+0 >= min+0) }' || {
   exit 1
 }
 
-echo "OK: total statement coverage ${total}% meets the ${threshold}% floor."
+# Say the margin as well as the number, for the same reason the failure says how far
+# short it is: "95.0%" reads like room to spare and can be four statements. The margin
+# is how many covered statements could stop being covered before the next run fails —
+# which is the number a change is planned against.
+margin="$(awk -v s="${statements}" -v k="${covered}" -v min="${threshold}" \
+  'BEGIN { printf "%d", k - (min / 100 * s) }')"
+echo "OK: total statement coverage ${total}% meets the ${threshold}% floor (${covered}/${statements} statements)."
+echo "    Margin: ${margin} covered statements could lapse before this fails."
