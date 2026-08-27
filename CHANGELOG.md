@@ -412,6 +412,49 @@ _Changed_ / _Removed_ for each version.
   of a percent: how many more would reach the floor, or how many could lapse before it
   fails.
 
+- **The Active Directory mockup no longer asks you for a file path, and a typo in it no
+  longer takes the AD worker down.** The mockup's *starting entries* — the accounts and
+  groups a process expects to find, because a joiner creates its own account while a
+  leaver has nothing to disable in an empty directory — were configured as a **path on
+  the worker's host**, typed into an org-wide Console that cannot see that host. A
+  relative one resolved against the supervised child's working directory, which is not
+  something anybody can predict from a browser, and the field's free-text shape implied
+  a choice among several directories when there is exactly one.
+
+  Worse, it was fatal. A path that did not resolve made the worker refuse to start; the
+  supervisor restarts a child that exits, so the AD worker sat in a restart loop — the
+  Workers view showing **failed**, several hundred starts, and one log line every thirty
+  seconds. An optional field made every AD task in the instance unservable, indefinitely.
+
+  Now **Atlas holds the entries**. Pick an LDIF or DSML file or paste the content; the
+  Console parses it while you watch, refuses one it cannot read, and tells you how many
+  entries it found. Atlas writes the file the worker reads and names it after a digest of
+  its own content — which is what makes *replacing* a seed actually reach a running
+  worker, since the supervisor restarts a child only when its rendered environment
+  differs. An *Example* button fills in a small directory (an OU, two accounts, a group)
+  for the common case of not knowing what to put there. And a seed a worker cannot read
+  now starts an **empty** directory with a warning instead of refusing to start: a mock
+  touches nothing real, so an empty one costs a leaver one visible incident rather than
+  costing every AD task an outage
+  ([ADR-draft-atlas-manages-the-ad-mock-seed](docs/adr/draft-atlas-manages-the-ad-mock-seed.md)).
+
+  The request carrying it also has its own size limit now — 256 KiB, refused as too
+  large rather than silently truncated. It shared the theme's 4 KiB before and was read
+  through a truncating reader, so any real directory export came back as "invalid JSON
+  body".
+
+  `ATLAS_AD_MOCK_SEED` still takes a path for a worker you start yourself, which Atlas
+  has nowhere to write to.
+
+- **An Active Directory `create-user` with an empty entry object no longer crashes the
+  worker.** The connector wrote the default `objectClass` into the job's attribute map,
+  and a `create-user`, `create-group` or `create-contact` whose `entryVariable` resolved
+  to nothing left that map nil — so a misspelled variable name panicked the worker with
+  `assignment to entry in nil map`, against a real domain controller exactly as readily
+  as against a mockup. Such a create is now refused, saying what is empty, which also
+  prevents the quieter bad outcome: an account created in a real directory carrying an
+  objectClass and no name.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

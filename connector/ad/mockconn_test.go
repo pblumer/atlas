@@ -221,3 +221,33 @@ func TestMockIsADialerRunCanUse(t *testing.T) {
 		t.Fatalf("Run against the mock: %v", err)
 	}
 }
+
+// A create whose entry object resolved to nothing is refused, not performed and not
+// crashed on. This is a regression test for a panic, and one that reached a *real*
+// directory as readily as a mock: dispatch wrote the default objectClass into the job's
+// attribute map, and an entryVariable that resolved to nothing left that map nil, so a
+// joiner whose FEEL variable was empty or misspelled took the AD worker down with
+// "assignment to entry in nil map" instead of failing its job
+// (ADR-draft-atlas-manages-the-ad-mock-seed).
+func TestACreateWithNoAttributesIsRefusedRatherThanCrashing(t *testing.T) {
+	for _, op := range []string{"create-user", "create-group", "create-contact"} {
+		t.Run(op, func(t *testing.T) {
+			mock := ad.NewMockDirectory()
+			_, err := ad.Run(context.Background(), ad.Job{
+				URL: "ldaps://dc", Operation: op, DN: "cn=Neu,dc=example,dc=com",
+			}, mock, func(string) string { return "pw" })
+			if err == nil {
+				t.Fatal("a create with no attributes was performed")
+			}
+			if !strings.Contains(err.Error(), "no attributes") {
+				t.Errorf("error = %v, want it to name the empty entry object", err)
+			}
+			// And nothing was written on the way out: a refused create leaves the
+			// directory as it was, rather than a nameless entry carrying an
+			// objectClass and nothing else.
+			if got := mock.Entries(); len(got) != 0 {
+				t.Errorf("entries = %v, want the directory untouched", got)
+			}
+		})
+	}
+}
