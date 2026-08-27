@@ -786,6 +786,50 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   (element templates, READMEs, nested folders), and — later — **importing or
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
+- 🔲 **Hosted apps — an application's public face**
+  ([ADR-draft-hosted-apps-on-an-isolated-origin](docs/adr/draft-hosted-apps-on-an-isolated-origin.md)):
+  today the only way to get a custom HTML/JS page *from Atlas* is to put the file
+  in `api/web/` and rebuild — that is how `order-to-cash-live.html` and
+  `reisebuchung-kunde.html` exist, and it is a product-release path, not a customer
+  one. A **hosted app** makes that page an artifact of a process application
+  ([ADR-0034](docs/adr/0034-projects-and-artifacts.md) /
+  [ADR-0128](docs/adr/0128-process-applications.md)) — authored in the Console,
+  versioned, exported and released with the process it fronts, so it is the
+  "further artifact type" the projects entry above leaves open. What the record
+  really turns on is *where such a page may be served from*: the session cookie is
+  `Path=/`, `HttpOnly`, `SameSite=Lax` with no `Domain`, so a page on the Atlas
+  origin rides the visitor's session whatever its CSP says — `connect-src 'self'`
+  *is* the API — which is the case
+  [ADR-0186](docs/adr/0186-embed-public-forms-cross-origin.md) refused and
+  deferred to "a sandboxed-origin static-artifact host". A second port does not
+  help (cookies are not port-scoped), and the CSP-`sandbox` trick rests on browser
+  semantics too subtle to review. So Atlas serves hosted apps **only** from a
+  separate, operator-configured origin, off by default.
+  - 🔲 **H1 — The artifact:** a hosted-app sidecar store, the file set filed beside
+    the record under `Store.Dir()`, with the bounds part of the format (extension
+    allow-list, per-file and per-app size and count caps) and every path held to
+    the same predicate that already stops a request-supplied key addressing a file
+    outside its store.
+  - 🔲 **H2 — Authoring & import:** `/api/v1/hosted-apps` CRUD, a single-file write
+    path the Console's existing code editor drives, an all-or-nothing zip import,
+    and a publish flag so editing a draft is never editing the live page.
+  - 🔲 **H3 — The apps origin:** `--apps-origin`, unset by default. The host is a
+    wall in both directions — no Console, no `/api/v1`, no `/public/*` and no
+    `/mcp` on it, and no `/apps/…` on the Atlas origin — with the serving host
+    declared at each mount site and held to a written-out allowlist by a test, the
+    shape [ADR-0199](docs/adr/0199-route-access-classes.md) already uses for access
+    classes. A hosted app reaches Atlas through the cookieless public surface, with
+    the apps origin named in `--public-forms-cors` (ADR-0186).
+  - 🔲 **H4 — Travel:** `apps/<slug>/…` and an `apps` index in `atlas.json` in the
+    curated source tree ([ADR-0134](docs/adr/0134-git-backed-applications.md)), a
+    `"hostedApp"` artifact kind in the release bundle
+    ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)), and design-time
+    backup for free ([ADR-0107](docs/adr/0107-backup-and-restore.md)).
+  - 🔲 **Deferred, and said out loud:** authenticated hosted apps — a page that
+    needs `/api/v1/tasks`, the shape `reisebuchung-kunde.html` demonstrates —
+    require a per-app credential and a record of their own; until then such a page
+    stays a product page in `api/web/` or lives on an origin the operator runs.
+    Per-app subdomain isolation needs wildcard DNS and a wildcard certificate.
 - 🚧 **User management & the authentication boundary**
   ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)):
   accounts are a durable sidecar store with an enterprise-ready `User` model — a
@@ -848,7 +892,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
 A parallel track alongside Milestone S: turn Panorama from a placeholder into a
 standards-based architecture workspace that relates declared ArchiMate 3.2 models
 to current Atlas resources without mixing runtime observations into the model. See
-[ADR-DRAFT: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
+[ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
 
 - 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
   design-time sidecar store; import, validate, preserve, and export Open Group
