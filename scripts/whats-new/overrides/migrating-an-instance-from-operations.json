@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Move a running instance onto a fixed version, from Operations",
+    "de": "Eine laufende Instanz aus Operations heraus auf eine korrigierte Version umstellen"
+  },
+  "summary": {
+    "en": "When a model turns out to be wrong, the instances that are already running no longer have to be cancelled. Open an instance's replay and use Migrate: it shows what the move would do before anything is written — which elements pair up, and every reason it would be refused — and will not let you submit one that cannot work. A whole version's instances can be moved at once from the process list; any that cannot be moved are listed by key, still running and unchanged.",
+    "de": "Wenn sich ein Modell als falsch herausstellt, müssen die bereits laufenden Instanzen nicht mehr abgebrochen werden. Öffnen Sie den Replay einer Instanz und wählen Sie Migrieren: Vorab wird gezeigt, was die Umstellung bewirken würde — welche Elemente einander zugeordnet werden und jeder Grund, aus dem sie abgelehnt würde. Eine nicht durchführbare Umstellung lässt sich gar nicht erst abschicken. Aus der Prozessliste heraus lassen sich alle Instanzen einer Version auf einmal umstellen; was nicht umgestellt werden kann, wird mit Schlüssel aufgeführt und läuft unverändert weiter."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

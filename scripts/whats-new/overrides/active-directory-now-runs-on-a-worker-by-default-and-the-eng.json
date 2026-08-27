@@ -1,0 +1,33 @@
+{
+  "tags": [
+    "Connectors",
+    "Operations"
+  ],
+  "title": {
+    "en": "Active Directory tasks run beside the engine now",
+    "de": "Active-Directory-Aufgaben laufen jetzt neben der Engine"
+  },
+  "summary": {
+    "en": "A task that creates or disables an account talks to a domain controller over the network, and until now Atlas did that on the same thread that moves every process forward — unless you had set up a worker for it yourself. It now starts one for you and hands it the bind passwords your deployed models need, out of the same vault they were always kept in. Nothing changes in a model and nothing needs configuring; a slow or unreachable domain controller now holds up nothing but its own task.",
+    "de": "Eine Aufgabe, die ein Konto anlegt oder deaktiviert, spricht über das Netz mit einem Domain Controller — und bis jetzt tat Atlas das auf demselben Strang, der jeden Prozess vorwärtsbewegt, sofern Sie nicht selbst einen Worker dafür eingerichtet hatten. Atlas startet ihn jetzt für Sie und übergibt ihm die Bind-Passwörter, die Ihre deployten Modelle brauchen — aus demselben Tresor, in dem sie immer schon lagen. An den Modellen ändert sich nichts, einzurichten ist nichts, und ein langsamer oder nicht erreichbarer Domain Controller hält nur noch seine eigene Aufgabe auf."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations › Workers: the worker named ad is running there, started by Atlas itself.",
+      "Its log lists every directory operation it performed — and says so when it is in mock mode.",
+      "Change an AD bind secret under Organization › Secrets: the worker comes back holding the new one."
+    ],
+    "de": [
+      "Öffnen Sie Betrieb › Workers: Der Worker namens ad läuft dort, von Atlas selbst gestartet.",
+      "Sein Log zeigt jede ausgeführte Verzeichnis-Operation — und sagt es, wenn er im Mockup-Modus läuft.",
+      "Ändern Sie ein AD-Bind-Secret unter Organisation › Secrets: Der Worker kommt mit dem neuen zurück."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}

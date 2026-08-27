@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Modeler"
+  ],
+  "title": {
+    "en": "A file without a diagram no longer imports into an empty canvas",
+    "de": "Eine Datei ohne Diagramm landet nicht mehr auf einer leeren Fläche"
+  },
+  "summary": {
+    "en": "A BPMN file does not have to carry its own drawing — the standard makes that optional, and files from generators or other tools often skip it. Deployed, such a model already showed up, because Atlas draws one for it. Imported, it did not: the same file opened onto an empty canvas. Now the import draws it too, and says that it did, so you know the arrangement in front of you is Atlas's and not what your file described.",
+    "de": "Eine BPMN-Datei muss ihre Zeichnung nicht mitbringen — der Standard stellt das frei, und Dateien aus Generatoren oder anderen Werkzeugen lassen sie oft weg. Deployt wurde ein solches Modell längst angezeigt, weil Atlas eine Darstellung dafür erzeugt. Beim Import nicht: Dieselbe Datei öffnete sich auf einer leeren Fläche. Jetzt erzeugt auch der Import die Darstellung und sagt es dazu — damit klar ist, dass die Anordnung von Atlas stammt und nicht aus Ihrer Datei."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A loop no longer empties a variable it never touched",
+    "de": "Eine Schleife leert keine Variable mehr, die sie nie angefasst hat"
+  },
+  "summary": {
+    "en": "A looping activity that reshapes its result on the way out applied that rule twice: once per round, correctly, and once more for the loop as a whole — where there was nothing to reshape, so it wrote an empty value into the process, over whatever the variable of that name already held. The rule now runs where the work is, in each round.",
+    "de": "Eine Schleifen-Aktivität, die ihr Ergebnis beim Verlassen umformt, wendete diese Regel zweimal an: einmal je Durchlauf, richtig, und noch einmal für die Schleife als Ganzes — dort gab es nichts umzuformen, also schrieb sie einen leeren Wert in den Prozess, über das, was die gleichnamige Variable schon enthielt. Die Regel läuft jetzt dort, wo die Arbeit passiert: in jedem Durchlauf."
+  }
+}

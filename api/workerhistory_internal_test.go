@@ -379,3 +379,49 @@ func TestAnUnrecognisedScopeMeansEverything(t *testing.T) {
 		t.Errorf("scope = %q, want %q for an unrecognised value", e.scope, HistoryScopeAll)
 	}
 }
+
+// WithWorkerHistory names the connector on the command line, but resolves it at write
+// time. That is the whole difference between "create the clio connector before you
+// start Atlas" and "create it whenever you like": an operator who adds it in the
+// Console while the server runs gets history from that moment, not from the next
+// restart.
+func TestWorkerHistoryResolvesItsConnectorAtWriteTimeNotAtStartup(t *testing.T) {
+	srv, _ := newValidateServer(t, WithWorkerHistory("telemetry", HistoryScopeAll))
+	if srv.history == nil {
+		t.Fatal("WithWorkerHistory built no exporter")
+	}
+
+	// The server started with no such connector, so the lookup misses — and misses
+	// without blocking anything, which is what makes starting in this order safe.
+	if _, ok := srv.history.client(); ok {
+		t.Fatal("the exporter resolved a connector nobody has created yet")
+	}
+
+	// The operator creates it. Nothing restarts.
+	c := &fakeClio{}
+	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"telemetry": c}) })
+
+	got, ok := srv.history.client()
+	if !ok {
+		t.Fatal("the exporter still resolves nothing after the connector was created")
+	}
+	if got != clio.Client(c) {
+		t.Errorf("the exporter resolved %v, want the connector it was named for", got)
+	}
+
+	// And only the connector it was named for: a second one does not become the history.
+	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"somewhere-else": &fakeClio{}}) })
+	if _, ok := srv.history.client(); ok {
+		t.Error("the exporter resolved a connector it was not named for")
+	}
+}
+
+// A blank connector name means an operator asked for no history at all, and every call
+// site checks for the nil that produces — offering a run to it must stay free.
+func TestWithWorkerHistoryAndNoConnectorNameBuildsNoExporter(t *testing.T) {
+	srv, _ := newValidateServer(t, WithWorkerHistory("  ", HistoryScopeAll))
+	if srv.history != nil {
+		t.Errorf("history = %+v, want none for a blank connector name", srv.history)
+	}
+	srv.history.offer(jobRun{Outcome: jobRunFailed}) // must not panic
+}

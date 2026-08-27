@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "The MCP bridge can present a credential",
+    "de": "Die MCP-Brücke kann sich ausweisen"
+  },
+  "summary": {
+    "en": "`atlas mcp` connects a local AI assistant to an Atlas server, and against one that requires a login it had nothing to present: every tool call came back with a 401, while `atlas worker` has had a `--token` flag for some time. It now takes the same flag, defaulting to `ATLAS_TOKEN`, and trims the value — a token exported from a shell profile routinely carries a trailing newline, and a credential sent with one is refused for a reason nothing in the error explains. Startup logs whether a credential is configured, never the credential itself, because \"every tool returns 401\" and \"no token was set\" are the same incident.",
+    "de": "`atlas mcp` verbindet einen lokalen KI-Assistenten mit einem Atlas-Server — und gegenüber einem Server mit Anmeldung hatte die Brücke nichts vorzuweisen: Jeder Werkzeugaufruf kam als 401 zurück, während `atlas worker` seine `--token`-Option längst hat. Sie nimmt jetzt dieselbe Option, standardmässig aus `ATLAS_TOKEN`, und schneidet Leerraum ab — ein Token aus einem Shell-Profil trägt regelmässig einen Zeilenumbruch am Ende, und ein damit gesendeter Zugang wird aus einem Grund abgewiesen, den die Fehlermeldung nicht nennt. Beim Start wird protokolliert, ob ein Zugang konfiguriert ist, niemals der Zugang selbst — denn „jedes Werkzeug antwortet mit 401\" und „es wurde kein Token gesetzt\" sind derselbe Vorfall."
+  }
+}

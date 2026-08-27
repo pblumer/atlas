@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Organization"
+  ],
+  "title": {
+    "en": "Password guessing is slowed down, and sign-ins are recorded",
+    "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
+  },
+  "summary": {
+    "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
+    "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organisation öffnen"
+    },
+    "route": "#/console/org"
+  }
+}

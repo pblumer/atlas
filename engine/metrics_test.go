@@ -345,3 +345,59 @@ func TestRuntimeTotalsSurviveRecovery(t *testing.T) {
 		t.Fatalf("open jobs after rebuilding from the log = %d, want the live %d", rebuilt, live)
 	}
 }
+
+// What the last recovery did (ADR-0131). It is read at scrape time — /metrics reports
+// it, and /readyz waits on Done — so it has to be a fact about the replay that actually
+// happened, not a counter left over from the previous process.
+//
+// Done is the field the readiness gate turns on: a processor that has not recovered
+// must be distinguishable from one whose recovery read nothing, or a server would call
+// itself ready before its state was rebuilt.
+func TestLastRecoveryReportsTheReplayThatHappened(t *testing.T) {
+	dir := t.TempDir()
+	cp, jobType := linearProcess(t)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	if got := p1.LastRecovery(); got.Done {
+		t.Errorf("LastRecovery = %+v before Recover, want Done false", got)
+	}
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	// An empty log: a recovery happened and read nothing, which is not the same as no
+	// recovery at all.
+	if got := p1.LastRecovery(); !got.Done || got.Replayed != 0 {
+		t.Errorf("LastRecovery on an empty log = %+v, want Done with nothing replayed", got)
+	}
+
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if len(activatableJobs(t, h1.store, jobType)) != 1 {
+		t.Fatal("expected the instance to be waiting at its service task")
+	}
+	h1.close(t)
+
+	// Restart against the same directory: the replay now has records to read, and says so.
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2: %v", err)
+	}
+	rec := p2.LastRecovery()
+	if !rec.Done {
+		t.Fatalf("LastRecovery = %+v after a real replay, want Done", rec)
+	}
+	if rec.Replayed <= 0 {
+		t.Errorf("Replayed = %d, want the records the restart read", rec.Replayed)
+	}
+	if rec.Seconds < 0 {
+		t.Errorf("Seconds = %v, want the duration of the replay", rec.Seconds)
+	}
+}

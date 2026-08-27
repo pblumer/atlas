@@ -1,0 +1,29 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "summary": {
+    "en": "You can now import Microsoft Identity Manager (MIM/FIM) workflows straight into the Modeler and turn them into editable BPMN — no manual redrawing.",
+    "de": "Sie können jetzt Microsoft-Identity-Manager-Workflows (MIM/FIM) direkt in den Modeler importieren und in bearbeitbares BPMN umwandeln — kein manuelles Nachzeichnen."
+  },
+  "tutorial": {
+    "en": [
+      "Open the Modeler.",
+      "Choose the MIM/FIM import and pick your exported workflow XML.",
+      "Review the generated BPMN, then deploy it like any other model."
+    ],
+    "de": [
+      "Öffnen Sie den Modeler.",
+      "Wählen Sie den MIM/FIM-Import und Ihre exportierte Workflow-XML.",
+      "Prüfen Sie das erzeugte BPMN und deployen Sie es wie jedes andere Modell."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

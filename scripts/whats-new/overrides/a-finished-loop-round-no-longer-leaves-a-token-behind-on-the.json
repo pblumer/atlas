@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "The replay of a loop shows one round, not a pile",
+    "de": "Der Replay einer Schleife zeigt einen Durchlauf statt eines Stapels"
+  },
+  "summary": {
+    "en": "Replaying a looping task stacked one leftover token on the shape for every round it had finished, so a long loop buried its own diagram. A round that is done now disappears when it ends, leaving the loop and the round currently running.",
+    "de": "Beim Abspielen eines Schleifen-Tasks blieb für jeden beendeten Durchlauf ein Token auf der Form liegen, sodass eine lange Schleife ihr eigenes Diagramm zudeckte. Ein fertiger Durchlauf verschwindet jetzt, wenn er endet — sichtbar bleiben die Schleife und der Durchlauf, der gerade läuft."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

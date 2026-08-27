@@ -1,0 +1,16 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "The Incidents menu entry now carries a red count of how many tokens are stuck, so a problem finds you instead of waiting to be discovered.",
+    "de": "Der Menüpunkt Incidents trägt jetzt eine rote Zahl, wie viele Tokens hängen — so findet ein Problem Sie, statt darauf zu warten, entdeckt zu werden."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Betrieb öffnen"
+    },
+    "route": "#/operations"
+  }
+}

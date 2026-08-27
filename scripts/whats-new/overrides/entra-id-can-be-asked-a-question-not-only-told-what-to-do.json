@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Find accounts in Entra ID, not just change them",
+    "de": "Konten in Entra ID finden, nicht nur ändern"
+  },
+  "summary": {
+    "en": "Until now a process could create, update, enable or disable an Entra ID account — but only one it already knew by name. Asking the directory a question was not possible: which accounts belong to this department, which are still enabled, does this address exist yet. A service task can now list users, filtered the way Entra itself filters them — including the forms Entra normally refuses, such as \"every mailbox on this domain\", which a single switch unlocks in exchange for answers that may be a moment out of date. Every match arrives in one process variable. Long lists arrive whole or not at all: Atlas fetches page after page for you, and a listing that outgrows its configured limit fails the task rather than quietly handing back the first thousand — a shortened list would be a wrong answer, not half of one.",
+    "de": "Bisher konnte ein Prozess ein Entra-ID-Konto anlegen, ändern, aktivieren oder deaktivieren — aber nur eines, das er bereits beim Namen kannte. Das Verzeichnis zu befragen ging nicht: Welche Konten gehören zu dieser Abteilung, welche sind noch aktiv, gibt es diese Adresse schon. Eine Service-Aufgabe kann jetzt Benutzer auflisten, gefiltert so wie Entra selbst filtert — auch in den Formen, die Entra sonst ablehnt, etwa „jedes Postfach auf dieser Domäne\", die ein einzelner Schalter freischaltet, dafür aber Antworten liefert, die einen Moment veraltet sein dürfen. Alle Treffer kommen in einer einzigen Prozessvariablen an. Lange Listen kommen vollständig oder gar nicht: Atlas holt Seite für Seite für Sie, und eine Auflistung, die ihre eingestellte Grenze überschreitet, lässt die Aufgabe scheitern, statt stillschweigend die ersten tausend zurückzugeben — eine gekürzte Liste wäre eine falsche Antwort, keine halbe."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

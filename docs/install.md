@@ -385,6 +385,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
+| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. Worth setting behind a reverse proxy: Atlas terminates no TLS, so the origin it derives from a request is `http://…`, which is not a URL a client can use. Read today only by the OAuth protected-resource metadata and the `WWW-Authenticate` challenge ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for connector credentials |

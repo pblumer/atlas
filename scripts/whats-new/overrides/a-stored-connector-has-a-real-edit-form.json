@@ -1,0 +1,17 @@
+{
+  "tags": [
+    "Organization",
+    "Connectors"
+  ],
+  "summary": {
+    "en": "Editing a connector now uses a proper form showing only the fields that kind actually needs — including the enabled switch and the connection test — instead of two generic prompt boxes.",
+    "de": "Einen Connector zu bearbeiten läuft jetzt über ein richtiges Formular mit genau den Feldern, die diese Art tatsächlich braucht — inklusive Aktiv-Schalter und Verbindungstest — statt über zwei generische Eingabeboxen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organisation öffnen"
+    },
+    "route": "#/console/org"
+  }
+}

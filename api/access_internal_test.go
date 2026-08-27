@@ -41,6 +41,13 @@ var wantPublicRoutes = []string{
 	"OPTIONS /public/forms/{token}/schema",
 	"OPTIONS /public/forms/{token}/start",
 
+	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
+	// These are read *after* a refusal, to find out what did the refusing — behind
+	// the credential they help you obtain, nobody who needs them could read them.
+	// They carry the origin, a product name, and that a bearer goes in a header.
+	"GET /.well-known/oauth-protected-resource",
+	"GET /.well-known/oauth-protected-resource/mcp",
+
 	// The embedded web UI. Static assets; the login screen has to load.
 	"/",
 }

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Provision users over SCIM 2.0",
+    "de": "Benutzer über SCIM 2.0 bereitstellen"
+  },
+  "summary": {
+    "en": "A process can create, read, replace, patch, delete and search users or groups in any system that speaks SCIM 2.0 — the standard most cloud applications offer for user provisioning. When the far side refuses, its own explanation becomes the reason on the task instead of a bare error code.",
+    "de": "Ein Prozess kann Benutzer oder Gruppen in jedem System anlegen, lesen, ersetzen, ändern, löschen und suchen, das SCIM 2.0 spricht — den Standard, den die meisten Cloud-Anwendungen für die Benutzerbereitstellung anbieten. Lehnt die Gegenstelle ab, erscheint ihre eigene Begründung an der Aufgabe statt eines nackten Fehlercodes."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

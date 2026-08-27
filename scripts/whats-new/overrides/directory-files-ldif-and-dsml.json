@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Import"
+  ],
+  "title": {
+    "en": "Read and write directory files (LDIF, DSML)",
+    "de": "Verzeichnisdateien lesen und schreiben (LDIF, DSML)"
+  },
+  "summary": {
+    "en": "Directory entries exported to a file can be read into a process, and written back out, in either LDIF or DSML. They arrive in exactly the shape a live directory search returns, so the same process steps handle a file export and a real directory without being written twice.",
+    "de": "In eine Datei exportierte Verzeichniseinträge lassen sich in einen Prozess einlesen und wieder herausschreiben — wahlweise als LDIF oder DSML. Sie kommen in genau der Form an, die auch eine Suche im laufenden Verzeichnis liefert; dieselben Prozessschritte verarbeiten damit einen Dateiexport und ein echtes Verzeichnis, ohne zweimal geschrieben werden zu müssen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

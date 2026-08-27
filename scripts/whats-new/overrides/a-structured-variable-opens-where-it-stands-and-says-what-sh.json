@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "See the shape of a variable, not just its first thirty characters",
+    "de": "Die Struktur einer Variable sehen, nicht nur ihre ersten dreissig Zeichen"
+  },
+  "summary": {
+    "en": "A list and one element out of that list looked the same in the variables table: both previews start with the same field, and the bracket that tells them apart falls off the left edge. The summary now carries the brackets — [3 items] against {3 fields} — and a click opens the value in place, formatted, so you read the structure instead of guessing at it. Values too large for a row still open in their own window.",
+    "de": "Eine Liste und ein einzelnes Element daraus sahen in der Variablentabelle gleich aus: Beide Vorschauen beginnen mit demselben Feld, und die Klammer, die sie unterscheidet, fällt links weg. Die Zusammenfassung trägt jetzt die Klammern — [3 items] gegenüber {3 fields} — und ein Klick öffnet den Wert direkt in der Zeile, formatiert. So liest man die Struktur, statt sie zu erraten. Werte, die für eine Zeile zu groß sind, öffnen weiterhin in einem eigenen Fenster."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}
