@@ -2143,6 +2143,23 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         called <code>ad</code> runs there. Its log warns at startup that no directory is being written, then lists
         every simulated operation with its DN – passwords redacted.</p>
 
+      <p data-l="de"><b>Mehrere Verzeichnisse bleiben auch im Mockup getrennt.</b> Jede LDAP-URL bekommt ihr
+        eigenes Verzeichnis im Arbeitsspeicher, mit eigenem Bestand und eigener Änderungshistorie. Dasselbe Konto
+        im Produktiv- und im Test-Forest anzulegen gelingt also beidemal — so wie es an zwei echten Domain
+        Controllern gelänge. Der Startbestand ist dabei eine <i>Vorlage</i>: jedes Verzeichnis erhält eine eigene
+        Kopie und entwickelt sich ab dem ersten Schreibzugriff eigenständig weiter.</p>
+      <p data-l="en"><b>Several directories stay separate in the mockup too.</b> Each LDAP URL gets its own
+        in-memory directory, with its own entries and its own change history. Creating the same account in the
+        production and the test forest therefore succeeds both times — as it would against two real domain
+        controllers. The starting entries are a <i>template</i>: each directory gets its own copy and goes its own
+        way from the first write.</p>
+      <p data-l="de">Der Schalter selbst gilt weiterhin für <b>alle</b> Verzeichnisse zugleich. Das ist Absicht:
+        gleichzeitig eines zu simulieren und in ein anderes wirklich zu schreiben wäre ein Zwischenzustand, dessen
+        ganzes Risiko darin besteht, dass er wie ein vollständiger Mockup-Lauf aussieht.</p>
+      <p data-l="en">The switch itself still applies to <b>every</b> directory at once. That is deliberate:
+        simulating one while really writing to another would be a half-state whose whole risk is that it looks like
+        a full mockup run.</p>
+
       <div class="note">
         <span class="lbl" data-l="de">Es lehnt ab, was auch AD ablehnt</span><span class="lbl" data-l="en">It refuses what AD refuses</span>
         <p data-l="de" style="margin:.3em 0 0">Dasselbe Konto ein zweites Mal anlegen, ein Passwort über eine

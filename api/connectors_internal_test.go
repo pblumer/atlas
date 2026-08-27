@@ -1146,3 +1146,49 @@ func TestEntraConnectorNeedsItsCredentialBundle(t *testing.T) {
 		t.Errorf("provider/sender = %q/%q, want both cleared for an entra record", p.Provider, p.Sender)
 	}
 }
+
+// An Active Directory record is created with the directory's LDAP URL and a vault
+// bundle holding the service account (ADR-draft-ad-as-a-console-connector). The
+// validator is what holds that shape, and one of its rules is not obvious: the URL's
+// *scheme* is checked, because AD refuses to set a password over an unencrypted
+// channel — so an ldap:// directory works for every operation except the one a joiner
+// needs most, and would otherwise only say so on a real run.
+func TestADConnectorNeedsAnLDAPURLAndABindBundle(t *testing.T) {
+	k, ok := lookupManagedConnectorKind(connectorKindAD)
+	if !ok {
+		t.Fatal("ad is not a managed connector kind")
+	}
+
+	for _, tc := range []struct{ name, endpoint, ref, want string }{
+		{"no endpoint at all", "", "ad-bind", "endpoint"},
+		{"a hostname, not a URL", "dc.example.com:636", "ad-bind", "LDAP URL"},
+		{"the wrong protocol entirely", "https://dc.example.com", "ad-bind", "LDAP URL"},
+		{"no credential bundle", "ldaps://dc.example.com:636", "", "credentialsRef"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := k.validateCreate(&createConnectorParams{
+				Name: "forest", Endpoint: tc.endpoint, CredentialsRef: tc.ref,
+			})
+			if msg == "" {
+				t.Fatal("an incomplete directory was accepted")
+			}
+			if !strings.Contains(msg, tc.want) {
+				t.Errorf("message = %q, want it to mention %q", msg, tc.want)
+			}
+		})
+	}
+
+	// Both schemes are allowed: ldap:// is legitimate with StartTLS, and refusing it
+	// would rule out directories that never serve 636.
+	for _, endpoint := range []string{"ldaps://dc.example.com:636", "ldap://dc.example.com:389"} {
+		p := &createConnectorParams{Name: "forest", Endpoint: endpoint, CredentialsRef: "ad-bind", Provider: "smtp", Sender: "bot@x"}
+		if msg := k.validateCreate(p); msg != "" {
+			t.Errorf("a complete directory at %s was refused: %s", endpoint, msg)
+		}
+		// And the mail-only fields are cleared rather than stored, so a record carried
+		// over from another kind cannot leave a provider or a sender on a directory.
+		if p.Provider != "" || p.Sender != "" {
+			t.Errorf("provider/sender = %q/%q, want both cleared for a directory record", p.Provider, p.Sender)
+		}
+	}
+}

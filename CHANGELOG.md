@@ -484,6 +484,19 @@ _Changed_ / _Removed_ for each version.
   unencrypted channel, so an `ldap://` directory works for every operation except the one
   a joiner needs most, and would otherwise only say so on a real run.
 
+- **The AD mockup keeps several directories apart.** It served every URL from one set of
+  entries, so a process addressing two forests found that creating the same account in
+  the *second* failed with "entry already exists" — which no real pair of domain
+  controllers would ever do. The mockup was least trustworthy in exactly the topology
+  that most needs one. Each LDAP URL now gets its own in-memory directory, with its own
+  entries **and its own DirSync change history** — a shared counter was the subtler half
+  of the same bug, since a reconciliation loop over one forest would have reported writes
+  that happened in another, with a cookie making it look authoritative. The starting
+  entries are a template: every directory gets its own copy and diverges from the first
+  write. The switch itself stays org-wide on purpose — simulating one directory while
+  really writing to another is a half-state whose whole risk is that it looks like a full
+  mockup run.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

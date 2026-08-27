@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Connectors",
+    "Active Directory"
+  ],
+  "title": {
+    "en": "The AD mockup keeps your forests apart",
+    "de": "Das AD-Mockup hält deine Forests auseinander"
+  },
+  "summary": {
+    "en": "If a process touched two directories, the mockup put them both in one simulated forest — so creating the same account in the second one failed with \"entry already exists\", which two real domain controllers would never do. Each LDAP URL now gets its own simulated directory, with its own entries and its own change history, and the starting entries are copied into each rather than shared. The mockup was least trustworthy in exactly the setup that most needs one.",
+    "de": "Wenn ein Prozess zwei Verzeichnisse ansprach, steckte das Mockup beide in einen simulierten Forest — dasselbe Konto im zweiten anzulegen scheiterte dann mit „entry already exists\", was zwei echte Domain Controller nie täten. Jede LDAP-URL bekommt jetzt ihr eigenes simuliertes Verzeichnis, mit eigenem Bestand und eigener Änderungshistorie, und der Startbestand wird in jedes kopiert statt geteilt. Das Mockup war ausgerechnet dort am unzuverlässigsten, wo man es am nötigsten braucht."
+  }
+}

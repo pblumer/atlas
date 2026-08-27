@@ -103,29 +103,48 @@ every existing model a migration, for a form that is not itself wrong — a mode
 must carry its own directory (one per tenant, resolved by FEEL) is a real case, and the
 compatibility path is one branch in the compiler and one in the resolver.
 
-Option 1 is a strict subset of this and is where the mock fix lands, but on its own it
-leaves the other two complaints standing.
+Option 1's mock fix is included here (below); on its own it would have left the other
+two complaints standing.
 
-### What this does not yet fix
+### And the mock is keyed by directory
 
-The mock still collapses every directory into one. That is deliberate sequencing, not an
-oversight: with directories now being records, the switch and the seed have somewhere
-per-directory to live, and a mock per directory is a small step from here. This record
-is the foundation for it; a follow-up moves the switch onto the record and gives each
-directory its own in-memory forest.
+`MockDirectory` served every URL from one set of entries. That made it lie in exactly
+the topology that most needs a mockup: a process addressing two forests found that
+creating the same DN in the *second* failed with `entry already exists`, which no real
+pair of domain controllers would ever do. It is fixed here rather than later, because
+the record is what makes "two directories" expressible in the first place and shipping
+the expression without the fix would invite the wrong answer.
+
+- One `mockForest` per LDAP URL, each with its own entries **and its own DirSync change
+  counter**. A shared counter would be the subtler half of the same bug: a
+  reconciliation loop over one forest would report writes that happened in another, and
+  the cookie would make that look authoritative.
+- The seed is a **template**, not shared state. Each forest gets its own copy on first
+  contact, so "the accounts a process expects to find" apply to whichever directory that
+  process addresses, and the copies diverge once written to.
+- The journal stays shared and keeps naming the URL per operation: it is the record of
+  what *this worker* did, not what one directory holds.
+
+The **switch** stays org-wide, deliberately. Per-directory mocking would let one run
+write to a real forest while simulating another — a half-state whose whole risk is that
+it looks like a full mockup run. "Everything is simulated" and "everything is real" are
+the two states worth having, and the seam between them is the thing the switch exists to
+make unambiguous. If a per-directory switch is ever wanted, the record is now the place
+for it.
 
 ### Consequences
 
 - **Positive:** AD is created and edited like every other integration, and appears in
   the connector list with the same "configured but not working" reporting. Two forests
-  are two records, served by one worker, provably separate. A model stops carrying
-  infrastructure. The engine holds no bind account. Nothing existing breaks.
+  are two records, served by one worker, provably separate — in mockup mode too. A model
+  stops carrying infrastructure. The engine holds no bind account. Nothing existing
+  breaks.
 - **Negative / trade-offs accepted:** Two shapes exist for the same task, and will for
   as long as the older one is supported — one extra branch in the compiler, the
   resolver and the worker, plus the refusal that keeps them from being mixed. The
   Console's connector list gains a kind whose records the engine never uses itself,
   which reads oddly until you know `workerOnly`.
-- **Follow-ups / risks to watch:** The mock per directory (above). Whether the
+- **Follow-ups / risks to watch:** Whether the
   model-authored shape should eventually be deprecated in the Modeler's UI while staying
   valid in the compiler — that is a documentation decision, not a compiler one.
 

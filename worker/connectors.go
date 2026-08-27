@@ -557,7 +557,9 @@ func runREST(ctx context.Context, j Job, client rest.Client, secret rest.SecretR
 // its log is the only place the difference is visible, and the Workers console is
 // where an operator reads it (ADR-0157).
 func announceADMock(mock *ad.MockDirectory, seed string) {
-	attrs := []slog.Attr{slog.Int("seeded", len(mock.Entries()))}
+	// The *seed* count, not the entry count: every directory this worker simulates
+	// starts from these, and none of them exists until a job dials one.
+	attrs := []slog.Attr{slog.Int("seeded", len(mock.Seed()))}
 	if seed = strings.TrimSpace(seed); seed != "" {
 		attrs = append(attrs, slog.String("seed", seed))
 	}

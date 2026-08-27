@@ -338,8 +338,10 @@ func TestADMockModeSeedsFromAnLDIFFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("adDialerFromEnv: %v", err)
 	}
-	if len(mock.Entries()) != 1 {
-		t.Fatalf("entries = %v, want the seeded account", mock.Entries())
+	// The seed is what every directory starts from, and no directory exists until a job
+	// dials one — so this is the template, read back.
+	if len(mock.Seed()) != 1 {
+		t.Fatalf("seed = %v, want the account from the file", mock.Seed())
 	}
 	// The seeded account can be disabled, which is what a leaver process does first.
 	if _, err := RunADJob(context.Background(), adJob(map[string]any{
@@ -448,8 +450,8 @@ func TestADMockModeSeedsFromDSML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("adDialerFromEnv: %v", err)
 	}
-	if len(mock.Entries()) != 1 || !strings.EqualFold(mock.Entries()[0].DN, "cn=Ada,ou=users,dc=example,dc=com") {
-		t.Errorf("entries = %v, want the seeded contact", mock.Entries())
+	if got := mock.Seed(); len(got) != 1 || !strings.EqualFold(got[0].DN, "cn=Ada,ou=users,dc=example,dc=com") {
+		t.Errorf("seed = %v, want the contact from the file", got)
 	}
 }
 
@@ -617,5 +619,111 @@ func TestANamedDirectoryMissingAFieldIsRefusedAtStartup(t *testing.T) {
 				t.Errorf("error = %v, want it to name the directory and the missing %s", err, tc.want)
 			}
 		})
+	}
+}
+
+// The whole point, end to end: two directories configured as records, a worker in
+// mockup mode, and a job against each. They must reach different forests — which is
+// what a mock keyed by URL buys and what one shared mock could not express
+// (ADR-draft-ad-as-a-console-connector, amended).
+func TestMockModeKeepsTwoNamedDirectoriesApart(t *testing.T) {
+	env := envMap(map[string]string{
+		"ATLAS_AD_MOCK":          "1",
+		"ATLAS_AD_CONNECTORS":    "prod,test",
+		"ATLAS_AD_PROD_URL":      "ldaps://dc-prod.example.com:636",
+		"ATLAS_AD_PROD_BIND_DN":  "cn=svc-prod,dc=example,dc=com",
+		"ATLAS_AD_PROD_PASSWORD": "pw-prod",
+		"ATLAS_AD_TEST_URL":      "ldaps://dc-test.example.com:636",
+		"ATLAS_AD_TEST_BIND_DN":  "cn=svc-test,dc=example,dc=com",
+		"ATLAS_AD_TEST_PASSWORD": "pw-test",
+	})
+	dirs, _, err := adDirectoriesFromEnv(env)
+	if err != nil {
+		t.Fatalf("adDirectoriesFromEnv: %v", err)
+	}
+	dialer, mock, err := adDialerFromEnv(env)
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+	if mock == nil {
+		t.Fatal("ATLAS_AD_MOCK=1 did not put the connector into mock mode")
+	}
+
+	create := func(connector string) error {
+		_, err := RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+			Kind: "ad", Fields: map[string]any{
+				"connector": connector, "operation": "create-user",
+				"dn":         "cn=Ada,dc=example,dc=com",
+				"attributes": map[string]any{"sAMAccountName": []any{"ada"}},
+			},
+		}}, dialer, adSecretFromEnv(envMap(nil)), dirs)
+		return err
+	}
+
+	if err := create("prod"); err != nil {
+		t.Fatalf("create against the prod directory: %v", err)
+	}
+	// The same DN against a *different* configured directory is a different account.
+	// Before the mock was keyed by URL this failed with "entry already exists".
+	if err := create("test"); err != nil {
+		t.Fatalf("create of the same DN against another directory: %v — the mockup is not keeping them apart", err)
+	}
+	for _, url := range []string{"ldaps://dc-prod.example.com:636", "ldaps://dc-test.example.com:636"} {
+		if got := mock.EntriesAt(url); len(got) != 1 {
+			t.Errorf("%s holds %v, want exactly its own account", url, got)
+		}
+	}
+}
+
+// A seed reaches every directory a process addresses, each with its own copy. That is
+// what "the accounts a process expects to find" means when a process addresses more
+// than one — and the copies must diverge once written to, or the seed would be shared
+// state wearing a template's clothes.
+func TestTheMockSeedReachesEveryDirectoryAsItsOwnCopy(t *testing.T) {
+	seed := filepath.Join(t.TempDir(), "forest.ldif")
+	if err := os.WriteFile(seed, []byte("dn: cn=Arno,dc=example,dc=com\ncn: Arno\nuserAccountControl: 512\n"), 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	env := envMap(map[string]string{
+		"ATLAS_AD_MOCK":          "1",
+		"ATLAS_AD_MOCK_SEED":     seed,
+		"ATLAS_AD_CONNECTORS":    "prod,test",
+		"ATLAS_AD_PROD_URL":      "ldaps://dc-prod.example.com:636",
+		"ATLAS_AD_PROD_BIND_DN":  "cn=svc,dc=x",
+		"ATLAS_AD_PROD_PASSWORD": "pw",
+		"ATLAS_AD_TEST_URL":      "ldaps://dc-test.example.com:636",
+		"ATLAS_AD_TEST_BIND_DN":  "cn=svc,dc=x",
+		"ATLAS_AD_TEST_PASSWORD": "pw",
+	})
+	dirs, _, err := adDirectoriesFromEnv(env)
+	if err != nil {
+		t.Fatalf("adDirectoriesFromEnv: %v", err)
+	}
+	dialer, mock, err := adDialerFromEnv(env)
+	if err != nil {
+		t.Fatalf("adDialerFromEnv: %v", err)
+	}
+
+	// A leaver against one directory finds the seeded account there.
+	if _, err := RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ad", Fields: map[string]any{
+			"connector": "prod", "operation": "disable", "dn": "cn=Arno,dc=example,dc=com",
+		},
+	}}, dialer, adSecretFromEnv(envMap(nil)), dirs); err != nil {
+		t.Fatalf("disable against the seeded prod directory: %v", err)
+	}
+	// The other directory has its own copy, still enabled.
+	if _, err := RunADJob(context.Background(), Job{Connector: &ConnectorPayload{
+		Kind: "ad", Fields: map[string]any{
+			"connector": "test", "operation": "disable", "dn": "cn=Arno,dc=example,dc=com",
+		},
+	}}, dialer, adSecretFromEnv(envMap(nil)), dirs); err != nil {
+		t.Fatalf("the seed did not reach the second directory: %v", err)
+	}
+	for _, url := range []string{"ldaps://dc-prod.example.com:636", "ldaps://dc-test.example.com:636"} {
+		got := mock.EntriesAt(url)
+		if len(got) != 1 || got[0].Attributes["userAccountControl"][0] != "514" {
+			t.Errorf("%s holds %v, want its own seeded account, disabled", url, got)
+		}
 	}
 }
