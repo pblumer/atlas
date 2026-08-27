@@ -380,7 +380,17 @@ func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler 
 			// all, now that /mcp is gated like everything else. Bearer and not Basic
 			// on purpose: Basic is what makes a browser open its own credential
 			// dialog over the top of the login screen.
-			w.Header().Set("WWW-Authenticate", `Bearer realm="atlas"`)
+			//
+			// The challenge also points at this resource's RFC 9728 metadata, which is
+			// what turns "refused, and now guess" into "refused, and here is what
+			// refused you" (ADR-0200). Without it a hosted MCP client has nothing to go
+			// on and tries /authorize, a route Atlas does not serve — so the operator
+			// sees a 404 whose cause is nowhere in the response.
+			challenge := `Bearer realm="atlas"`
+			if metadata := s.resourceMetadataURL(r); metadata != "" {
+				challenge += `, resource_metadata="` + metadata + `"`
+			}
+			w.Header().Set("WWW-Authenticate", challenge)
 			httpapi.Error(w, http.StatusUnauthorized, "authentication required")
 			return
 		}

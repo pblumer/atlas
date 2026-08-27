@@ -38,7 +38,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
-| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | 🔲 offen — Entwurf [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md) |
+| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | ◐ zur Hälfte — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver umgesetzt (`api/oauthmeta.go`), Autorisierungsserver offen |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -434,7 +434,26 @@ Ressourcenserver-Metadaten woandershin und die Autorisierungsserver-Hälfte wird
 gelöscht. Nichts anderes bewegt sich. Genau deshalb wird die
 Ressourcenserver-Hälfte zuerst gebaut.
 
-Entscheid im Entwurf: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
+**Stand: die Ressourcenserver-Hälfte ist umgesetzt** (`api/oauthmeta.go`). Zwei
+öffentliche Dokumente unter `/.well-known/oauth-protected-resource` — eines für
+den Server, eines für `/mcp` —, der `resource_metadata`-Verweis auf jedem `401`,
+und `--external-url` für die absolute Origin, weil Atlas kein TLS terminiert und
+die aus einer Anfrage abgeleitete Origin hinter einem Proxy `http://…` lautet.
+
+Was das ändert und was nicht: Eine Abweisung ist jetzt lesbar statt stumm — der
+Client findet ein Dokument, das die Ressource benennt, die ihn abgewiesen hat,
+statt `/authorize` zu raten. **Ein gehosteter Connector funktioniert damit noch
+nicht**, und soll es auch nicht: Das Dokument nennt bewusst keinen
+Autorisierungsserver, weil einen zu nennen, dessen Token Atlas nicht prüfen kann,
+den Client durch einen ganzen Ablauf schickte, um ihn am Ende mit dem Token in der
+Hand abzuweisen.
+
+Offen bleibt die Autorisierungsserver-Hälfte: `/authorize` mit
+Zustimmungsbildschirm, `/token`, die Client-Registrierung in der Console und die
+Prüfung der Token-Zielgruppe. Das ist die Schwelle, über die dieses Dokument oben
+spricht — und die Entscheidung, die noch aussteht.
+
+Entscheid: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
 
 ---
 

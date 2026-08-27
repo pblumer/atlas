@@ -1,6 +1,7 @@
 # ADR-0200: Atlas as an OAuth resource server, so a hosted MCP client can connect
 
-- **Status:** Proposed
+- **Status:** Proposed (2026-08-27: the resource-server half is implemented; the
+  authorization-server half is still the open decision)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

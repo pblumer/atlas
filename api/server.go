@@ -495,6 +495,12 @@ type Server struct {
 	// unmounted. Set once before Handler is mounted; read-only thereafter.
 	mcpHandler http.Handler
 
+	// externalURL is the origin this server is reachable under from outside, when an
+	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
+	// documents and the WWW-Authenticate challenge build their absolute URLs from;
+	// empty means derive them from the request (ADR-0200).
+	externalURL string
+
 	// publicCORSOrigins is the allow-list of web origins permitted to call the
 	// unauthenticated /public/forms endpoints cross-origin, so a start form can be
 	// embedded in an external site (ADR-0186). Empty is the closed default — no
@@ -2087,6 +2093,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	mountFunc(accessPublic, "GET /readyz", s.handleReadyz)
+
+	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
+	// Public because it is the document a caller reads *after* being refused, to find
+	// out what refused it — behind the credential it exists to help you obtain, it
+	// could never be read by anyone who needed it. It names no secret: the origin, a
+	// product name, and that a bearer goes in a header.
+	mountFunc(accessPublic, "GET "+protectedResourceMetadataPath, s.handleProtectedResourceMetadata)
+	if s.mcpHandler != nil {
+		// The path-suffixed form, for the transport as a resource of its own. Served
+		// only when that transport is, so the document never describes something this
+		// binary does not answer on.
+		mountFunc(accessPublic, "GET "+protectedResourceMetadataPath+"/mcp", s.handleProtectedResourceMetadata)
+	}
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
 	// table, the same list openapiDoc describes, so the served surface and its
