@@ -144,7 +144,16 @@ that a compliant client will actually talk to. Concretely:
   therefore somewhere to guess one.
 - An OAuth client is registered by an operator in the Console — a name, a redirect
   URI, an id and a secret shown once — and the operator pastes id and secret into
-  the client's dialog.
+  the client's dialog. That screen is **Console → AI access**
+  (`api/web/aiaccess.js`), and it is not decoration on top of the endpoints: for a
+  while the documented way to connect a hosted client was a `curl` command, which is
+  an instruction written for whoever wrote the endpoint. It also checks the origin
+  this server publishes against the one the operator is looking at, because
+  `--external-url` unset is a mistake that otherwise surfaces much later as a
+  connector that does not work, with nothing on screen to say why. And it is where a
+  person withdraws their own approval — the one act in this record that belongs to
+  the person rather than the operator, and so the one that must not require an API
+  client.
 
 **Option 4, as built.** Dynamic client registration (RFC 7591) landed as
 `POST /oauth/register`, and the thing this record warned about — "an unauthenticated

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "Connecting an AI assistant is a screen now",
+    "de": "Einen KI-Assistenten anzuschliessen ist jetzt ein Bildschirm"
+  },
+  "summary": {
+    "en": "Letting an AI assistant work in Atlas used to mean sending a request by hand and reading the answer out of it. There is now a page for it: Console → AI access. Pick the application, press Create, and you get the three values its own dialog is asking for — the MCP server URL, a client id, and a secret shown once — each with a copy button. The page also checks the address Atlas publishes against the one you are looking at and tells you when they differ, which is the mistake that otherwise shows up much later as a connector that simply does not work, with nothing on screen to explain why. Below the form, the same page lists what is registered, marks anything that registered itself rather than being entered by someone, and shows the approvals people have given — your own, or everyone's if you administer this instance — each with the button that withdraws it. That last part matters most: an approval is the one thing here that belongs to the person rather than to the operator, and withdrawing one no longer requires anything but a click.",
+    "de": "Einem KI-Assistenten Zugang zu Atlas zu geben hiess bisher: eine Anfrage von Hand schicken und die Antwort daraus ablesen. Dafür gibt es jetzt eine Seite — Console → AI access. Anwendung auswählen, «Create» drücken, und Sie erhalten die drei Werte, nach denen deren Dialog fragt: die MCP-Server-URL, eine Client-ID und ein einmalig angezeigtes Geheimnis, jeweils mit Kopierknopf. Die Seite vergleicht ausserdem die Adresse, die Atlas veröffentlicht, mit der, die Sie gerade sehen, und sagt es Ihnen, wenn beide auseinandergehen — genau der Fehler, der sich sonst erst viel später zeigt, als Connector, der einfach nicht funktioniert, ohne dass irgendwo stünde warum. Unter dem Formular listet dieselbe Seite, was registriert ist, kennzeichnet, was sich selbst registriert hat statt von jemandem eingetragen worden zu sein, und zeigt die erteilten Zustimmungen — Ihre eigenen, oder alle, wenn Sie diese Instanz verwalten — jeweils mit dem Knopf, der sie zurückzieht. Das ist der wichtigste Teil: Eine Zustimmung ist das Einzige hier, das der Person gehört und nicht der Betreiberin, und sie zurückzuziehen braucht jetzt nichts als einen Klick."
+  },
+  "try": {
+    "label": {
+      "en": "Open AI access",
+      "de": "KI-Zugang öffnen"
+    },
+    "route": "#/console/ai-access"
+  }
+}

@@ -53,6 +53,28 @@ _Changed_ / _Removed_ for each version.
   copied one is worth one use rather than standing access. Access tokens last two
   hours.
 
+- **Connecting an AI assistant is a screen now, not a request body.**
+  **Console → AI access** asks which application, creates its credentials, and hands
+  you the three values the connector's own dialog is asking for — MCP server URL,
+  client id, and the secret, shown once, each with a copy button
+  ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
+
+  The endpoints for this shipped first and the instruction was a `curl` command in
+  the install guide. That is an instruction for whoever wrote the endpoint. The
+  question an operator actually has is *what do I paste into those three fields*,
+  and this answers exactly that.
+
+  It also **checks the address Atlas publishes** against the one you are looking at,
+  and says so when they differ — the `--external-url` mistake otherwise surfaces
+  much later, as a connector that simply does not work, with nothing on screen to
+  suggest why.
+
+  The same page lists what is registered, marks anything that registered itself, and
+  shows every approval — yours, or everyone's for an administrator — with the button
+  that withdraws one. Withdrawing an approval no longer requires the API, which
+  matters because it is the one thing in all of this that belongs to the person
+  rather than to the operator.
+
 - **A connector can now register itself — if you let it.**
   `--oauth-dynamic-registration` (or `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1`) opens
   [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html) client registration, so a

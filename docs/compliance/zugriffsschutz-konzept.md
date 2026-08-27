@@ -516,6 +516,16 @@ verschiedenen Folgen.
 Client ID Metadata Documents (CIMD), die andere Hälfte der Vollausbau-Variante,
 sind **nicht** gebaut und nicht geplant.
 
+**Bedienbar ist das Ganze über die Console:** `Console → AI access`
+(`api/web/aiaccess.js`). Dort wird eine Anwendung angelegt und liefert die drei
+Werte, nach denen der Connector-Dialog fragt — MCP-URL, Client-ID und das einmalig
+angezeigte Geheimnis —, dort steht, was registriert ist und was sich selbst
+registriert hat, und dort zieht eine Person ihre eigene Zustimmung zurück. Letzteres
+ist der Grund, warum es diese Seite geben muss und nicht nur die Endpunkte: Die
+Zustimmung ist das Einzige an diesem Entscheid, das der Person gehört und nicht der
+Betreiberin, und was nur über einen API-Aufruf widerrufbar ist, ist für die meisten
+Menschen nicht widerrufbar.
+
 Föderation hängt nicht am Wollen, sondern an ihrer Voraussetzung: Sie ordnet
 Claims Rollen zu und wartet damit auf **M9**. Was sie ersetzt, ist der in Schritt
 eins gebaute Autorisierungsserver — die Ressourcenserver-Hälfte bleibt in jedem

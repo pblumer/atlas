@@ -22,6 +22,10 @@ import { migrateProcessFlow } from "./migrationdialog.js";
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
+// Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
+// is a self-contained page and this file is long enough; it takes its dependencies
+// as arguments so the import stays one-directional, like every other module here.
+import { viewAIAccess } from "./aiaccess.js";
 
 const view = document.getElementById("view");
 
@@ -430,6 +434,7 @@ const TOPNAV = {
     { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
     { name: "Connectors", route: "#/console/connectors" },
+    { name: "AI access", route: "#/console/ai-access" },
     { name: "Audit log", route: "#/console/audit" },
   ],
   modeler: [
@@ -6351,6 +6356,10 @@ async function route() {
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/console/connectors") return await viewConsoleConnectors();
+    if (path === "#/console/ai-access") {
+      const gen = navGen;
+      return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
