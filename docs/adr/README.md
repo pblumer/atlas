@@ -236,7 +236,7 @@ comment safe to write.
 | [0197](0197-login-throttle-and-audit-log.md) | A throttle on the login, and a security audit trail | Proposed |
 | [0198](0198-metrics-behind-the-boundary.md) | The Prometheus exposition moves behind the boundary | Proposed |
 | [0199](0199-route-access-classes.md) | Every mounted route declares its access class | Proposed |
-| [0200](0200-mcp-oauth-resource-server.md) | Atlas as an OAuth resource server, so a hosted MCP client can connect | Proposed |
+| [0200](0200-mcp-oauth-resource-server.md) | Atlas as an OAuth resource server, so a hosted MCP client can connect | Accepted |
 
 ## Status values
 

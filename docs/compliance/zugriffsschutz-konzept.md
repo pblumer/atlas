@@ -38,7 +38,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
-| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | 🔲 offen — Entwurf [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md) |
+| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | ◐ zur Hälfte — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md) **angenommen**: Ressourcenserver umgesetzt (`api/oauthmeta.go`), Autorisierungsserver als Nächstes |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -434,7 +434,41 @@ Ressourcenserver-Metadaten woandershin und die Autorisierungsserver-Hälfte wird
 gelöscht. Nichts anderes bewegt sich. Genau deshalb wird die
 Ressourcenserver-Hälfte zuerst gebaut.
 
-Entscheid im Entwurf: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
+**Stand: die Ressourcenserver-Hälfte ist umgesetzt** (`api/oauthmeta.go`). Zwei
+öffentliche Dokumente unter `/.well-known/oauth-protected-resource` — eines für
+den Server, eines für `/mcp` —, der `resource_metadata`-Verweis auf jedem `401`,
+und `--external-url` für die absolute Origin, weil Atlas kein TLS terminiert und
+die aus einer Anfrage abgeleitete Origin hinter einem Proxy `http://…` lautet.
+
+Was das ändert und was nicht: Eine Abweisung ist jetzt lesbar statt stumm — der
+Client findet ein Dokument, das die Ressource benennt, die ihn abgewiesen hat,
+statt `/authorize` zu raten. **Ein gehosteter Connector funktioniert damit noch
+nicht**, und soll es auch nicht: Das Dokument nennt bewusst keinen
+Autorisierungsserver, weil einen zu nennen, dessen Token Atlas nicht prüfen kann,
+den Client durch einen ganzen Ablauf schickte, um ihn am Ende mit dem Token in der
+Hand abzuweisen.
+
+**Der Entscheid ist angenommen**, samt Reihenfolge: erst die gewählte Variante
+(Ressourcenserver plus kleinster Autorisierungsserver), dann die dynamische
+Client-Registrierung, und Föderation, wenn sie sich lohnt.
+
+Als Nächstes steht damit die Autorisierungsserver-Hälfte an: `/authorize` mit
+Zustimmungsbildschirm, `/token`, die Client-Registrierung in der Console und die
+Prüfung der Token-Zielgruppe. Das ist die Schwelle, über die dieses Dokument oben
+spricht — Atlas wird damit zum Autorisierungsserver, und M7 und M8 müssen die
+neuen Routen vom ersten Commit an abdecken.
+
+Danach die dynamische Client-Registrierung: Sie entfernt den Betreiberschritt vor
+der Person, und sie ist erst dann eine begrenzte Entscheidung, wenn es einen
+funktionierenden Ablauf gibt, in den hinein registriert wird.
+
+Föderation hängt nicht am Wollen, sondern an ihrer Voraussetzung: Sie ordnet
+Claims Rollen zu und wartet damit auf **M9**. Was sie ersetzt, ist der in Schritt
+eins gebaute Autorisierungsserver — die Ressourcenserver-Hälfte bleibt in jedem
+Fall stehen. Deshalb gilt für alles, was jetzt gebaut wird: nichts darf
+voraussetzen, dass Atlas der Aussteller bleibt.
+
+Entscheid: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
 
 ---
 
@@ -505,7 +539,7 @@ Dann zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter.
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
 | TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
 | Verschlüsselung ruhender Daten (O-06) | Unabhängige Achse; ändert nichts an der Zugriffsfrage. |
-| Dynamische Client-Registrierung (RFC 7591) und CIMD | Teil der MCP-Spezifikation, dort aber *optional* (MAY), und die Reihenfolge beginnt mit vorregistrierten Zugangsdaten. Sie erspart einen Betreiberschritt, sie stellt keine Verbindung her — und ein unauthentisierter Registrierungs-Endpunkt ist ein Entscheid für sich. Folgearbeit zu M10, nicht Teil davon. |
+| Dynamische Client-Registrierung (RFC 7591) und CIMD | Teil der MCP-Spezifikation, dort aber *optional* (MAY), und die Reihenfolge beginnt mit vorregistrierten Zugangsdaten. Sie erspart einen Betreiberschritt, sie stellt keine Verbindung her — und ein unauthentisierter Registrierungs-Endpunkt ist ein Entscheid für sich. **Angenommene Folgearbeit zu M10** (Schritt zwei), nicht Teil des ersten Schritts. |
 
 Begründung für den Schnitt: jeder dieser Punkte ist gross, und **keiner ist nötig,
 damit die Aussage «jede Schnittstelle verlangt einen Login» wahr wird.**

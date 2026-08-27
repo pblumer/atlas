@@ -14,6 +14,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **A refused request now says what refused it.** Atlas answers `401` with
+  `WWW-Authenticate: Bearer realm="atlas"` and, from now on, a `resource_metadata`
+  pointer to an [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)
+  protected-resource document — the discovery mechanism the MCP authorization
+  specification makes mandatory for a server behind a login
+  ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
+
+  It closes a failure with no visible cause. A hosted MCP client — a connector
+  running on somebody else's infrastructure, driven by a person in a browser — has
+  nowhere to put an API token, so when it is refused it goes looking for an
+  authorization flow. With nothing to go on it guesses `/authorize`, which Atlas
+  does not serve, and the operator sees a `404` that explains nothing. Now it finds
+  a document naming the resource that refused it.
+
+  Two new public routes serve that document: `GET
+  /.well-known/oauth-protected-resource` for the server, and
+  `/.well-known/oauth-protected-resource/mcp` for the transport, which is the one
+  an MCP client looks for. They carry the origin, the product name, and that a
+  bearer goes in a header — no secret, and nothing that is not already public. A
+  `401` from `/mcp` points at the second; everything else points at the first.
+
+  **`--external-url` (or `ATLAS_EXTERNAL_URL`) is new**, and worth setting on
+  anything behind a proxy: Atlas terminates no TLS, so the origin it derives from a
+  request is `http://…`, which is not a URL a client can use. Stated once, it fixes
+  the documents and the challenge together, and a forged `X-Forwarded-Proto` cannot
+  move it. Left unset, the scheme follows `X-Forwarded-Proto` and the host follows
+  the request — right for direct access, and right behind a proxy that sets the
+  header.
+
+  **This does not yet make a hosted connector work, and is not meant to.** Atlas
+  issues no tokens and accepts none from a foreign issuer, so the document names no
+  authorization server — deliberately, because sending a client through an entire
+  flow only to refuse the token at the end is worse than saying at the outset that
+  there is nowhere to go. What changes is that the refusal is legible instead of
+  silent. The other half of ADR-0200 — an authorization server and a consent screen
+  — remains an open decision.
+
 - **`/metrics` moved behind the boundary — the last route that had not.** The
   Prometheus exposition was served without authentication since
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), for a reason that has since

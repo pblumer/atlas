@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "A refused request now says what refused it",
+    "de": "Eine abgewiesene Anfrage sagt jetzt, wer sie abgewiesen hat"
+  },
+  "summary": {
+    "en": "When Atlas turns a request away for want of a credential, it now points at a short public document describing what did the turning away — the discovery mechanism the Model Context Protocol requires of a server behind a login. That closes a failure with no visible cause: an AI connector running on somebody else's infrastructure has nowhere to keep a token, so on being refused it goes looking for a login procedure, guesses an address Atlas does not serve, and leaves you staring at a \"not found\" that explains nothing. If Atlas sits behind a reverse proxy, put your public address in --external-url: Atlas terminates no TLS itself, so the address it would otherwise work out is the wrong one. Plainly said: this does not yet make such a connector work. Atlas hands out no tokens of that kind, and the document says so instead of sending a client through a whole procedure to be turned away at the end. What changes is that the refusal can be read.",
+    "de": "Weist Atlas eine Anfrage mangels Zugangs ab, verweist es jetzt auf ein kurzes öffentliches Dokument, das beschreibt, wer da abgewiesen hat — der Auffindungsmechanismus, den das Model Context Protocol von einem Server hinter einer Anmeldung verlangt. Das schliesst einen Fehler, der bisher keine sichtbare Ursache hatte: Ein KI-Connector, der bei einem Dritten läuft, hat keinen Ort für ein Token; wird er abgewiesen, sucht er nach einem Anmeldeverfahren, rät eine Adresse, die Atlas nicht bedient, und zurück bleibt ein «nicht gefunden», das nichts erklärt. Steht Atlas hinter einem Reverse Proxy, tragen Sie Ihre öffentliche Adresse in --external-url ein: Atlas terminiert selbst kein TLS, die sonst ermittelte Adresse wäre also die falsche. Offen gesagt: Ein solcher Connector funktioniert damit noch nicht. Atlas stellt Tokens dieser Art nicht aus, und das Dokument sagt das, statt einen Client durch ein ganzes Verfahren zu schicken, um ihn am Ende abzuweisen. Was sich ändert, ist, dass die Abweisung lesbar wird."
+  }
+}
