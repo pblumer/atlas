@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "On the live process diagram, a token that is stuck now carries an overlay explaining why it is not moving — no need to dig through logs.",
+    "de": "Im Live-Prozessdiagramm trägt ein hängendes Token jetzt eine Einblendung, die erklärt, warum es sich nicht bewegt — kein Wühlen in Logs mehr nötig."
+  }
+}

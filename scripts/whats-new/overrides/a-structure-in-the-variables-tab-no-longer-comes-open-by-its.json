@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Structures in the Variables tab stay closed until you open them",
+    "de": "Strukturen im Variablen-Tab bleiben zu, bis Sie sie öffnen"
+  },
+  "summary": {
+    "en": "Every list and object in the Variables tab came open on its own and would not stay shut: a click closed one for a moment and the next refresh, a second and a half later, opened it again. \"Collapse all\" watches what you opened, and you had opened nothing, so it never showed up either — a tab that unfolded itself and offered no way back. The cause was the shared table helper, which sorts and filters every table in the app and treated the opened-value rows as ordinary data. It now leaves them to the view that owns them. The per-worker log in the Workers view stops springing open with it.",
+    "de": "Jede Liste und jedes Objekt im Variablen-Tab ging von selbst auf und blieb nicht zu: Ein Klick schloss eines für einen Moment, die nächste Aktualisierung anderthalb Sekunden später öffnete es wieder. „Collapse all“ richtet sich danach, was Sie geöffnet haben — und Sie hatten nichts geöffnet, also erschien auch dieser Weg zurück nie. Ursache war die gemeinsame Tabellenhilfe, die in der ganzen Anwendung sortiert und filtert und die aufgeklappten Zeilen für gewöhnliche Datenzeilen hielt. Sie überlässt sie jetzt der Ansicht, der sie gehören. Das Worker-Log in der Workers-Ansicht klappt damit ebenfalls nicht mehr von allein auf."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

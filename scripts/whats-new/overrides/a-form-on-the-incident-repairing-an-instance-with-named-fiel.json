@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Repair a stuck task through named fields, not raw JSON",
+    "de": "Eine hängende Aufgabe über benannte Felder reparieren statt über rohes JSON"
+  },
+  "summary": {
+    "en": "In the Modeler you can now give a task a repair form: the fields worth looking at if that task ever gets stuck. When it does, the incident offers Repair — the form, already filled in with the instance's current values — instead of the whole variable set as a JSON document. Only the fields on the form are written, and the change is recorded with your name as before. Tasks without a repair form are unchanged; Fix variables… is still there for anything nobody saw coming.",
+    "de": "Im Modeler können Sie einer Aufgabe jetzt ein Reparaturformular mitgeben: die Felder, die zählen, falls diese Aufgabe einmal hängen bleibt. Passiert das, bietet der Incident „Reparieren“ an — das Formular, bereits mit den aktuellen Werten der Instanz gefüllt — statt des gesamten Variablensatzes als JSON-Dokument. Geschrieben werden nur die Felder des Formulars, und die Änderung wird wie bisher mit Ihrem Namen protokolliert. Aufgaben ohne Reparaturformular bleiben unverändert; „Variablen korrigieren…“ gibt es weiterhin für alles, was niemand vorhergesehen hat."
+  },
+  "try": {
+    "label": {
+      "en": "Open Incidents",
+      "de": "Incidents öffnen"
+    },
+    "route": "#/operations/incidents"
+  }
+}

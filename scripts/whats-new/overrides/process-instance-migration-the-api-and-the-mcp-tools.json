@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Move a running instance onto a newer version of its process",
+    "de": "Eine laufende Instanz auf eine neuere Version ihres Prozesses umstellen"
+  },
+  "summary": {
+    "en": "A running instance no longer has to be cancelled when its model is fixed. It can be rebound to another deployed version and keeps its variables, its tasks and everything already done. A dry run says first exactly which tokens would move where, and anything that cannot be mapped safely is refused rather than guessed. Available over the HTTP API and as MCP tools; the Operations screen for it follows.",
+    "de": "Eine laufende Instanz muss nicht mehr abgebrochen werden, wenn das Modell korrigiert wird. Sie lässt sich auf eine andere bereitgestellte Version umstellen und behält dabei ihre Variablen, ihre Aufgaben und alles bereits Erledigte. Ein Probelauf zeigt vorab genau, welche Tokens wohin wandern; was sich nicht sicher zuordnen lässt, wird abgelehnt statt geraten. Verfügbar über die HTTP-API und als MCP-Tools; die Oberfläche in Operations folgt."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "The step-by-step replay of a process instance now shows why it stopped — including who changed a variable by hand — so you can retrace exactly what happened.",
+    "de": "Das Schritt-für-Schritt-Replay einer Prozessinstanz zeigt jetzt, warum sie gestoppt ist — inklusive wer eine Variable von Hand geändert hat — damit Sie genau nachvollziehen können, was passiert ist."
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A loop's replay says why it went round again — or stopped",
+    "de": "Der Replay einer Schleife sagt, warum sie erneut lief — oder aufhörte"
+  },
+  "summary": {
+    "en": "A looping task used to be a column of identical rows: it ran nine times, and nothing said whether that was the model or a mistake. Each round now shows the condition as you wrote it, the values that condition read for that round, the maximum, and what the loop did next — ran again, or stopped, with the bound that stopped it. The task itself carries the same reading for the whole loop. A model that runs to its maximum because it states no condition now says so.",
+    "de": "Ein Schleifen-Task war bisher eine Spalte gleich aussehender Zeilen: Er lief neun Mal, und nichts sagte, ob das so gemeint war oder ein Fehler. Jeder Durchlauf zeigt jetzt die Bedingung so, wie Sie sie geschrieben haben, die Werte, die diese Bedingung in diesem Durchlauf gelesen hat, das Maximum und was die Schleife danach tat — noch einmal laufen oder aufhören, mitsamt der Grenze, die sie gestoppt hat. Der Task selbst trägt dieselbe Lesart für die ganze Schleife. Ein Modell, das bis zum Maximum läuft, weil es gar keine Bedingung nennt, sagt das jetzt auch."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Active Directory as ready-made process steps",
+    "de": "Active Directory als fertige Prozessschritte"
+  },
+  "summary": {
+    "en": "A process can now create a user or a group in Active Directory, set a password, enable, disable, move or delete an account, and add or remove a group member — picked from a list instead of hand-built from LDAP rules that are easy to get subtly wrong. A sync step reads only what has changed since the last run, so a process can react to the directory instead of re-reading all of it.",
+    "de": "Ein Prozess kann jetzt in Active Directory Benutzer oder Gruppen anlegen, Passwörter setzen, Konten aktivieren, deaktivieren, verschieben oder löschen und Gruppenmitglieder hinzufügen oder entfernen — auswählbar aus einer Liste statt zusammengebaut aus LDAP-Regeln, bei denen sich leicht unbemerkt Fehler einschleichen. Ein Sync-Schritt liest nur, was sich seit dem letzten Lauf geändert hat, sodass ein Prozess auf das Verzeichnis reagieren kann, statt es jedes Mal komplett zu lesen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "A repeated step reached through a gateway keeps its collected results",
+    "de": "Ein wiederholter Schritt hinter einem Gateway behält seine gesammelten Ergebnisse"
+  },
+  "summary": {
+    "en": "An activity that repeats once per list entry collects what each round produced into a list for the steps that follow. When the only way into that activity was an exclusive gateway, every round still ran and still produced its result — but the collected list was thrown away as the activity finished, so the next step read nothing at all. It is kept now.",
+    "de": "Eine Aktivität, die sich je Listeneintrag wiederholt, sammelt die Ergebnisse der Durchläufe für die folgenden Schritte in einer Liste. Führte der einzige Weg in diese Aktivität über ein exklusives Gateway, liefen zwar alle Durchläufe und lieferten ihr Ergebnis — die gesammelte Liste wurde beim Abschluss der Aktivität aber verworfen, und der nächste Schritt las nichts. Sie bleibt jetzt erhalten."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

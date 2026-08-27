@@ -1,0 +1,33 @@
+{
+  "tags": [
+    "Connectors",
+    "Operations"
+  ],
+  "title": {
+    "en": "Try an Active Directory process without an Active Directory",
+    "de": "Einen Active-Directory-Prozess ohne Active Directory ausprobieren"
+  },
+  "summary": {
+    "en": "An identity process is the one kind nobody can safely try out: the directory it creates accounts in is the real one, and a test joiner leaves a real account behind. A worker can now be told to serve Active Directory tasks against a directory that exists only in its own memory — the model stays exactly as it is, no domain controller is touched, and every operation appears in the worker's log. It refuses what Active Directory refuses, so the mistakes you would otherwise meet in production you meet while drafting: a password set over an unencrypted connection, an account created twice by a repeated delivery, a group member added twice, a change read from the wrong place in the tree. An LDIF or DSML file fills it with the accounts your process expects to find, because a leaver has nothing to disable in an empty directory.",
+    "de": "Ein Identity-Prozess ist die eine Sorte, die niemand gefahrlos ausprobieren kann: Das Verzeichnis, in dem er Konten anlegt, ist das echte, und ein Test-Joiner hinterlässt ein echtes Konto. Ein Worker kann jetzt angewiesen werden, Active-Directory-Aufgaben gegen ein Verzeichnis zu bedienen, das nur in seinem eigenen Arbeitsspeicher existiert — das Modell bleibt exakt, wie es ist, kein Domain Controller wird angefasst, und jede Operation steht im Log des Workers. Es lehnt ab, was auch Active Directory ablehnt: Die Fehler, die Sie sonst erst in der Produktion treffen, treffen Sie damit schon beim Entwerfen — ein Passwort über eine unverschlüsselte Verbindung, ein durch wiederholte Zustellung zweimal angelegtes Konto, ein zweimal hinzugefügtes Gruppenmitglied, ein Änderungsabgleich an der falschen Stelle im Verzeichnisbaum. Eine LDIF- oder DSML-Datei füllt es mit den Konten, die Ihr Prozess vorzufinden erwartet — ein Leaver hat in einem leeren Verzeichnis nichts zu deaktivieren."
+  },
+  "tutorial": {
+    "en": [
+      "Start Atlas with --offload-connectors ad, so Active Directory tasks wait for a worker instead of running in the engine.",
+      "Start a worker beside it: ATLAS_AD_MOCK=1 atlas worker --connector ad — add ATLAS_AD_MOCK_SEED=forest.ldif for the accounts that should already be there.",
+      "Run your process. Operations › Workers shows the worker, and its log lists every directory operation it simulated."
+    ],
+    "de": [
+      "Starten Sie Atlas mit --offload-connectors ad, damit Active-Directory-Aufgaben auf einen Worker warten statt in der Engine zu laufen.",
+      "Starten Sie daneben einen Worker: ATLAS_AD_MOCK=1 atlas worker --connector ad — mit ATLAS_AD_MOCK_SEED=forest.ldif für die Konten, die es schon geben soll.",
+      "Lassen Sie Ihren Prozess laufen. Unter Betrieb › Workers sehen Sie den Worker, und sein Log zeigt jede simulierte Verzeichnis-Operation."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}

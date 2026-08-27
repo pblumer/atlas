@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Connectors"
+  ],
+  "summary": {
+    "en": "Before a connector runs real work, you can test its configuration and see whether it can actually reach the target system.",
+    "de": "Bevor ein Connector echte Arbeit ausführt, können Sie seine Konfiguration testen und sehen, ob er das Zielsystem tatsächlich erreicht."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console › Organization and pick a connector.",
+      "Use its Check / Test action.",
+      "Read the result — a green check, or the exact reason it cannot connect."
+    ],
+    "de": [
+      "Öffnen Sie Console › Organisation und wählen Sie einen Connector.",
+      "Nutzen Sie dessen Prüfen-/Test-Aktion.",
+      "Lesen Sie das Ergebnis — ein grüner Haken oder der genaue Grund, warum keine Verbindung zustande kommt."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organisation öffnen"
+    },
+    "route": "#/console/org"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "The link from the incidents table now opens the right instance, so you land on the process that is actually stuck.",
+    "de": "Der Link aus der Incidents-Tabelle öffnet jetzt die richtige Instanz — Sie landen beim tatsächlich hängenden Prozess."
+  }
+}

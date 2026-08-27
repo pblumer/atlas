@@ -1,0 +1,16 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "The Instances overview now flags, per process, how many instances are stuck behind an unresolved incident, so you see where to look first.",
+    "de": "Die Instanzen-Übersicht kennzeichnet jetzt pro Prozess, wie viele Instanzen hinter einem ungelösten Incident hängen — so sehen Sie, wo Sie zuerst hinschauen müssen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Instances",
+      "de": "Instanzen öffnen"
+    },
+    "route": "#/operations"
+  }
+}

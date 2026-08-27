@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Operations",
+    "Connectors"
+  ],
+  "title": {
+    "en": "A task's work can run outside the engine",
+    "de": "Die Arbeit einer Aufgabe kann außerhalb der Engine laufen"
+  },
+  "summary": {
+    "en": "The work behind a service task no longer has to run inside Atlas itself. The same binary, started as a worker, asks Atlas for the jobs it was told to handle, does them and reports back — so a slow or unreachable system occupies the worker instead of the engine. A worker that dies mid-job does not lose it: the job is offered again once its hold expires, and a worker that comes back too late can no longer complete work that has been given to someone else.",
+    "de": "Die Arbeit hinter einer Service-Aufgabe muss nicht mehr in Atlas selbst laufen. Dieselbe Binärdatei, als Worker gestartet, fragt Atlas nach den Aufgabentypen, für die sie zuständig ist, erledigt sie und meldet das Ergebnis zurück — ein langsames oder nicht erreichbares System blockiert damit den Worker statt die Engine. Stirbt ein Worker mitten in der Arbeit, geht sie nicht verloren: Der Job wird nach Ablauf seiner Reservierung erneut angeboten, und ein zu spät zurückkehrender Worker kann Arbeit, die inzwischen jemand anderem gehört, nicht mehr abschließen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}

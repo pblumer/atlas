@@ -47,7 +47,7 @@ cover:
 check: build vet fmt-check race cover
 
 # Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
-# and scripts/whats-new/overrides.json. Commit the regenerated JSON. See
+# and scripts/whats-new/overrides/. Commit the regenerated JSON. See
 # scripts/whats-new/README.md.
 whats-new:
 	node scripts/whats-new/gen.mjs

@@ -1,0 +1,29 @@
+{
+  "tags": [
+    "Operations",
+    "Connectors"
+  ],
+  "summary": {
+    "en": "When a step is stuck because the system it calls is unreachable, you can now fix that connector directly from the incident — test the connection, save, and retry in one place. The change takes effect immediately, no redeploy.",
+    "de": "Wenn ein Schritt hängt, weil das angesprochene System nicht erreichbar ist, können Sie den Connector jetzt direkt aus dem Incident heraus korrigieren — Verbindung testen, speichern und erneut versuchen an einer Stelle. Die Änderung wirkt sofort, ohne erneutes Deployment."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations › Incidents and find the stuck incident.",
+      "Click ⚙ Connector… — its configuration opens prefilled, with the reason it failed.",
+      "Correct the settings, use Test connection, then Save & retry."
+    ],
+    "de": [
+      "Öffnen Sie Betrieb › Incidents und suchen Sie den hängenden Incident.",
+      "Klicken Sie auf ⚙ Connector… — die Konfiguration öffnet sich vorausgefüllt, samt Fehlergrund.",
+      "Einstellungen korrigieren, Verbindung testen, dann Speichern & erneut versuchen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Incidents",
+      "de": "Incidents öffnen"
+    },
+    "route": "#/operations/incidents"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "tags": [
+    "Organization",
+    "Connectors"
+  ],
+  "summary": {
+    "en": "Each connector now shows which processes use it and how many instances are running on them, and deleting one that is still in use is refused instead of quietly breaking those processes.",
+    "de": "Jeder Connector zeigt jetzt, welche Prozesse ihn nutzen und wie viele Instanzen darauf laufen. Einen noch benutzten Connector zu löschen wird abgelehnt, statt diese Prozesse stillschweigend lahmzulegen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organisation öffnen"
+    },
+    "route": "#/console/org"
+  }
+}

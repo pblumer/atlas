@@ -4,16 +4,16 @@
 // CHANGELOG.md is the single source of truth: this reads its version sections and
 // Added/Changed/Fixed bullets and derives the *structure* of each entry — a stable
 // id, the headline, the version/date, and a link to the ADR or PR it names. It then
-// merges a curated overrides file (scripts/whats-new/overrides.json) that supplies
-// the layman-friendly, bilingual (DE/EN) summary, tags, optional step-by-step
-// tutorial and an optional "Try it" deep link. Entries without an override still
+// merges the curated overrides in scripts/whats-new/overrides/ — one file per entry,
+// named for the id it applies to — that supply the layman-friendly, bilingual (DE/EN)
+// summary, tags, optional step-by-step tutorial and an optional "Try it" deep link. Entries without an override still
 // appear (English CHANGELOG title + first-sentence summary; German falls back to
 // English), so a new CHANGELOG entry surfaces automatically and the CHANGELOG never
 // has to carry marketing prose.
 //
 // The output is committed and embedded (api/server.go's //go:embed web), so the web
 // UI stays buildless (ADR-0012): this generator runs at authoring time, never at
-// runtime. Re-run it after editing CHANGELOG.md or overrides.json:
+// runtime. Re-run it after editing CHANGELOG.md or an override:
 //
 //     node scripts/whats-new/gen.mjs        (or: make whats-new)
 
@@ -24,7 +24,20 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
 const CHANGELOG = resolve(ROOT, "CHANGELOG.md");
-const OVERRIDES = resolve(HERE, "overrides.json");
+// One file per entry, rather than one file holding all of them.
+//
+// The overrides used to be a single JSON object, and it made this the most
+// collision-prone file in the repository: every branch that shipped a user-facing
+// change added a key, every branch added it at the top, and git merged the two
+// insertions by interleaving their bodies — twice producing an entry with one
+// change's title and another's summary. Nothing about that is git being wrong. Two
+// people adding two unrelated records to one file *is* a conflict.
+//
+// A directory makes it not one. Two branches adding entries touch two different
+// files and merge cleanly; two branches editing the *same* entry still conflict, in a
+// small file where the conflict is readable and the resolution obvious. The file name
+// is the key, so a duplicate key cannot be written at all.
+const OVERRIDES_DIR = resolve(HERE, "overrides");
 const OUT = resolve(ROOT, "api", "web", "whats-new.json");
 const ADR_DIR = resolve(ROOT, "docs", "adr");
 
@@ -212,14 +225,35 @@ function merge(entry, ov) {
   return out;
 }
 
-function main() {
-  const changelog = readFileSync(CHANGELOG, "utf8");
-  let overrides = {};
+// readOverrides loads scripts/whats-new/overrides/<id>.json into one object keyed by
+// id. A file that is not valid JSON fails the run naming the file: it would otherwise
+// drop one entry's curated prose silently, and an entry that renders from the
+// CHANGELOG's own wording looks exactly like one nobody has curated yet.
+function readOverrides() {
+  const out = {};
+  let names = [];
   try {
-    overrides = JSON.parse(readFileSync(OVERRIDES, "utf8"));
+    names = readdirSync(OVERRIDES_DIR).filter((n) => n.endsWith(".json"));
   } catch (e) {
     console.warn(`whats-new: no usable overrides (${e.message}); using CHANGELOG only`);
+    return out;
   }
+  names.sort(); // a stable read order, so a malformed file is reported the same way every run
+  for (const name of names) {
+    const file = resolve(OVERRIDES_DIR, name);
+    try {
+      out[name.slice(0, -".json".length)] = JSON.parse(readFileSync(file, "utf8"));
+    } catch (e) {
+      console.error(`whats-new: ${name} is not valid JSON: ${e.message}`);
+      process.exit(1);
+    }
+  }
+  return out;
+}
+
+function main() {
+  const changelog = readFileSync(CHANGELOG, "utf8");
+  const overrides = readOverrides();
 
   const parsed = parseChangelog(changelog);
 

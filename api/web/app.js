@@ -434,6 +434,11 @@ const CONNECTORS = [
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
+  {
+    id: "ad", name: "Active Directory", kind: "Directory",
+    desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta — on a worker, off the processor loop. Unlike the connectors below, an AD task carries its own server URL and bind DN: the directory is model data, so there is nothing to configure here beyond the bind password's vault secret. The Active Directory card below switches those tasks to a directory in the worker's memory instead.",
+    refs: "ADR-0166 · ADR-0181 · ADR-0182", status: "active", statusLabel: "model-authored",
+  },
 ];
 
 // ---------- Shell ----------
