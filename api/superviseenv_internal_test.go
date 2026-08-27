@@ -1,13 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/worker"
 )
 
@@ -423,4 +428,175 @@ func TestAHostConfiguredRemedyInstanceSurvivesAStoreOne(t *testing.T) {
 			t.Errorf("ATLAS_REMEDY_CONNECTORS = %q, want it to keep %q", got, want)
 		}
 	}
+}
+
+// A connector name with no letter or digit in it folds to no variable name at all.
+// Rendered anyway it would become ATLAS_MAIL__ENDPOINT — a variable no operator could
+// ever set, and one the next such name would collide with.
+func TestAMailConnectorNameThatFoldsToNothingIsLeftOut(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "---", Kind: connectorKindMail, Provider: "smtp",
+		Endpoint: "mx:587", Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if env := srv.mailWorkerEnv(); len(env) != 0 {
+		t.Errorf("environment = %v, want nothing for a name with no variable name in it", env)
+	}
+}
+
+// Two Remedy names that fold to one variable would give one instance the other's
+// service account — the mail collision, on the kind whose credential opens a ticket
+// system. The second is left out; the Workers view then shows it served nowhere.
+func TestTwoRemedyConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for _, c := range []connector{
+		{ID: "1", Name: "helix itsm", Kind: connectorKindRemedy, Endpoint: "https://a:8008", CredentialsRef: "creds-a", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "helix-itsm", Kind: connectorKindRemedy, Endpoint: "https://b:8008", CredentialsRef: "creds-b", Enabled: true, CreatedAt: 2},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("Save(%s): %v", c.Name, err)
+		}
+	}
+	t.Setenv("ATLAS_CONNECTOR_CREDS_A_TOKEN", `{"username":"svc-a","password":"pw-a"}`)
+	t.Setenv("ATLAS_CONNECTOR_CREDS_B_TOKEN", `{"username":"svc-b","password":"pw-b"}`)
+
+	env := envOf(t, srv.remedyWorkerEnv())
+	names := strings.Split(env["ATLAS_REMEDY_CONNECTORS"], ",")
+	if len(names) != 1 {
+		t.Fatalf("ATLAS_REMEDY_CONNECTORS = %q, want exactly one of the two colliding names", env["ATLAS_REMEDY_CONNECTORS"])
+	}
+	// Whichever one won, the account handed over is its own and not the other's.
+	want := map[string]string{"helix itsm": "svc-a", "helix-itsm": "svc-b"}[names[0]]
+	if got := env["ATLAS_REMEDY_HELIX_ITSM_USERNAME"]; got != want {
+		t.Errorf("username = %q, want %q — the surviving connector's own", got, want)
+	}
+}
+
+// The same fold-to-nothing rule on the Remedy renderer.
+func TestARemedyConnectorNameThatFoldsToNothingIsLeftOut(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "...", Kind: connectorKindRemedy, Endpoint: "https://a:8008",
+		CredentialsRef: "good-creds", Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("ATLAS_CONNECTOR_GOOD_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+
+	if env := srv.remedyWorkerEnv(); len(env) != 0 {
+		t.Errorf("environment = %v, want nothing for a name with no variable name in it", env)
+	}
+}
+
+// The three SQL products are provisioned through one shared renderer parameterised by
+// product. A copy-paste in that map would hand one product's connection strings to
+// another product's worker, which would then try to connect with a DSN it cannot even
+// parse — so each entry is checked to render its own records and only its own.
+func TestEachSQLProductIsProvisionedFromItsOwnRecords(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	kinds := []string{connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	for i, kind := range kinds {
+		ref := "sql/" + kind + "/dsn"
+		if _, err := srv.vault.Set(ref, kind+"://u:p@db.example/hr"); err != nil {
+			t.Fatalf("vault.Set(%s): %v", ref, err)
+		}
+		if err := srv.connectors.Save(connector{
+			ID: strconv.Itoa(i + 1), Name: "hr-db", Kind: kind,
+			CredentialsRef: ref, Enabled: true, CreatedAt: int64(i + 1),
+		}); err != nil {
+			t.Fatalf("connectors.Save(%s): %v", kind, err)
+		}
+	}
+
+	provisioned := srv.provisionedConnectorKinds()
+	for _, kind := range kinds {
+		render, ok := provisioned[kind]
+		if !ok {
+			t.Fatalf("%s is not in provisionedConnectorKinds; a supervised worker would hold no database", kind)
+		}
+		env := envOf(t, render())
+		prefix := "ATLAS_" + strings.ToUpper(kind) + "_"
+		if got, want := env[prefix+"HR_DB_DSN"], kind+"://u:p@db.example/hr"; got != want {
+			t.Errorf("%sHR_DB_DSN = %q, want %q", prefix, got, want)
+		}
+		// And nothing from a sibling product: that is the copy-paste this test is for.
+		for _, other := range kinds {
+			if other == kind {
+				continue
+			}
+			if _, handed := env["ATLAS_"+strings.ToUpper(other)+"_HR_DB_DSN"]; handed {
+				t.Errorf("the %s renderer handed over a %s connection string", kind, other)
+			}
+		}
+	}
+}
+
+// ATLAS_TOKEN set to a value this server does not accept is the quietest way to break
+// every supervised worker at once: the children are handed it instead of the server's
+// own credential, and are then refused at every poll. It is worth saying at startup,
+// because the alternative is reading it out of a worker's poll errors.
+func TestAnUnknownATLASTOKENIsSaidOutLoudAtStartup(t *testing.T) {
+	const good = apiTokenPrefix + "known-to-this-server"
+
+	for _, tc := range []struct {
+		name  string
+		auth  bool
+		token string
+		warn  bool
+	}{
+		{name: "auth off, so nothing is handed to anybody", token: "whatever"},
+		{name: "auth on and no ATLAS_TOKEN set", auth: true},
+		{name: "auth on and a token this server accepts", auth: true, token: good},
+		{name: "auth on and a token this server does not accept", auth: true, token: apiTokenPrefix + "stale", warn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sink := captureWarnings(t)
+			srv, _ := newValidateServer(t)
+			srv.authEnabled = tc.auth
+			srv.apiTokens.add(apiToken{ID: "1", Name: "worker", Hash: hashAPIToken(good), Scope: apiScopeWorker})
+			t.Setenv("ATLAS_TOKEN", tc.token)
+
+			srv.checkWorkerTokenEnv()
+
+			warned := strings.Contains(sink.String(), logging.AuthWorkerTokenUnknown.String())
+			if warned != tc.warn {
+				t.Errorf("warned = %v, want %v; log was %q", warned, tc.warn, sink.String())
+			}
+		})
+	}
+}
+
+// captureWarnings points the process logger at a buffer, so a test can assert on a
+// warning that has no other observable effect, and restores stderr afterwards.
+func captureWarnings(t *testing.T) *lockedBuffer {
+	t.Helper()
+	sink := &lockedBuffer{}
+	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+		t.Fatalf("logging.Setup: %v", err)
+	}
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	return sink
+}
+
+// lockedBuffer is a log sink safe to write from a server's run loop and read from the
+// test goroutine — the process logger is global, so anything else running logs into it
+// too.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

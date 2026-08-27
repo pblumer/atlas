@@ -290,6 +290,23 @@ _Changed_ / _Removed_ for each version.
   own styling stands rather than being replaced by more of ours; our placeholders elsewhere
   are untouched.
 
+- **The coverage floor is a floor again.** `scripts/check-coverage.sh` compared the total
+  that `go tool cover -func` prints, and that number is rounded to one decimal. The
+  rounding was not cosmetic — it *was* the comparison, so a repository sitting at
+  94.918% reported `95.0` and passed the 95% floor
+  ([ADR-0018](docs/adr/0018-test-driven-development.md)), and went on passing for as long
+  as it stayed above 94.95%. A floor that a below-floor repository satisfies is not a
+  floor, and the gap it hid grew in silence, because every run said OK. The total is now
+  computed from the merged profile itself — two sums over the per-block statement counts,
+  with no rounding at any step. The repository was brought back over the real line with
+  tests for behaviour that had none rather than with filler: the connector-name collisions
+  that would hand one supervised worker another's credential (mail's was covered, Entra's
+  and Remedy's were not), an `ATLAS_TOKEN` set to something this server will not accept,
+  a resolved job detail a worker cannot read, and what the last recovery actually
+  replayed. Both outcomes now say where the line is in statements rather than in tenths
+  of a percent: how many more would reach the floor, or how many could lapse before it
+  fails.
+
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives

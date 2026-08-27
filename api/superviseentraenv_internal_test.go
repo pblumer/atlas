@@ -256,3 +256,73 @@ func TestEntraBundleParse(t *testing.T) {
 		}
 	}
 }
+
+// Two tenant names that fold to one variable would silently give one of them the
+// other's client secret — the mail and AD collision, on the kind whose credential is a
+// whole OAuth application. The second is left out and said out loud.
+func TestTwoEntraConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	for ref, bundle := range map[string]string{
+		"entra-a": `{"tenantId":"tid-a","clientId":"cid-a","clientSecret":"sec-a"}`,
+		"entra-b": `{"tenantId":"tid-b","clientId":"cid-b","clientSecret":"sec-b"}`,
+	} {
+		if _, err := srv.vault.Set(ref, bundle); err != nil {
+			t.Fatalf("vault.Set(%s): %v", ref, err)
+		}
+	}
+	for _, c := range []connector{
+		{ID: "1", Name: "blumer ag", Kind: connectorKindEntra, CredentialsRef: "entra-a", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "blumer-ag", Kind: connectorKindEntra, CredentialsRef: "entra-b", Enabled: true, CreatedAt: 2},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("connectors.Save(%s): %v", c.Name, err)
+		}
+	}
+
+	env := envOf(t, srv.entraWorkerEnv())
+	names := strings.Split(env["ATLAS_ENTRA_CONNECTORS"], ",")
+	if len(names) != 1 {
+		t.Fatalf("ATLAS_ENTRA_CONNECTORS = %q, want exactly one of the two colliding names", env["ATLAS_ENTRA_CONNECTORS"])
+	}
+	// Whichever one won, all three variables are its own bundle and not the other's.
+	want := map[string]string{"blumer ag": "a", "blumer-ag": "b"}[names[0]]
+	for suffix, prefix := range map[string]string{"TENANT_ID": "tid-", "CLIENT_ID": "cid-", "CLIENT_SECRET": "sec-"} {
+		if got := env["ATLAS_ENTRA_BLUMER_AG_"+suffix]; got != prefix+want {
+			t.Errorf("ATLAS_ENTRA_BLUMER_AG_%s = %q, want %q — the surviving tenant's own", suffix, got, prefix+want)
+		}
+	}
+}
+
+// A tenant name with no letter or digit in it folds to no variable name at all.
+// Rendered anyway it would become ATLAS_ENTRA__CLIENT_SECRET — a variable no operator
+// could ever set, and one the next such name would collide with. Both halves of the
+// renderer drop it: the tenants an operator set on the host, and those from the store.
+func TestAnEntraTenantNameThatFoldsToNothingIsLeftOut(t *testing.T) {
+	t.Run("set on the host", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		if _, err := srv.vault.Set("entra-nameless", "s3cr3t"); err != nil {
+			t.Fatalf("vault.Set: %v", err)
+		}
+		t.Setenv("ATLAS_ENTRA_CONNECTORS", "---")
+		t.Setenv("ATLAS_ENTRA__CLIENT_SECRET_REF", "entra-nameless")
+
+		if env := srv.entraWorkerEnv(); len(env) != 0 {
+			t.Errorf("environment = %v, want nothing for a name with no variable name in it", env)
+		}
+	})
+	t.Run("added in the Console", func(t *testing.T) {
+		srv, _ := newValidateServer(t)
+		if _, err := srv.vault.Set("entra-nameless", `{"tenantId":"t","clientId":"c","clientSecret":"s"}`); err != nil {
+			t.Fatalf("vault.Set: %v", err)
+		}
+		if err := srv.connectors.Save(connector{
+			ID: "1", Name: "---", Kind: connectorKindEntra, CredentialsRef: "entra-nameless", Enabled: true, CreatedAt: 1,
+		}); err != nil {
+			t.Fatalf("connectors.Save: %v", err)
+		}
+
+		if env := srv.entraWorkerEnv(); len(env) != 0 {
+			t.Errorf("environment = %v, want nothing for a name with no variable name in it", env)
+		}
+	})
+}
