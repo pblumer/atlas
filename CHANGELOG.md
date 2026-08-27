@@ -331,6 +331,52 @@ _Changed_ / _Removed_ for each version.
   customer's network: a worker sitting there can serve it, and the service account can live
   only in that worker rather than in the engine.
 
+- **A web-scrape task can read an RSS or Atom feed.** The web-scraping connector
+  ([ADR-0118](docs/adr/0118-web-scraping-connector.md)) shipped with exactly one way to
+  read a document: a CSS selector over static HTML, yielding an array of strings. It now
+  carries an explicit `format="html|rss|atom"` and an optional `maxItems="N"`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)). In a feed mode one entry
+  arrives as one object — `title`, `link`, `description` and `published`, and all four
+  keys are always there — so a later step addresses `=schlagzeilen[1].link` instead of
+  zipping four unrelated arrays back together. A field the source omits is empty; a
+  publication date is passed through as the publisher wrote it, because reformatting it
+  would turn a source value into an Atlas interpretation.
+
+  **The format is model intent, and it is decided at deployment.** Atlas does not
+  inspect the response to pick a parser. Feeds are routinely served as
+  `application/xml` or worse, and a URL that answers differently after a redirect would
+  otherwise silently change the *shape of a process variable* — exactly the runtime
+  interpretation the compile-don't-interpret invariant exists to prevent. What the
+  authored format does change is the Accept header the fetch sends, which is content
+  negotiation, not detection.
+
+  **A misleading combination is refused rather than half-ignored.** A feed mode with a
+  CSS `selector` or an `attribute` fails at deploy, as do an unknown format and a
+  negative or non-numeric `maxItems`. `maxItems` cuts after extraction in document
+  order — the first N selector matches, or the first N feed entries.
+
+  **Nothing about an existing model changes.** `html` is the default and no bound is
+  the default, so a web-scrape task authored before this returns the same `[]string` it
+  returned before. The trade-off worth knowing when you write a new one: the element
+  type of the result variable now depends on the authored format — strings for HTML,
+  objects for a feed — and Atlas has no static variable schema to check that against, so
+  the Modeler says which you get and this note says it too.
+
+  Nothing moved onto the engine to make this work: the fetch and the XML decoding happen
+  on the web-scrape worker, after fsync, and a document that will not decode as the
+  authored format fails the job and retries like any other scrape. Authored in the
+  Modeler through a **Format** choice on the Web Scraping Connector, which hides
+  Selector and Attribute in the feed modes because the compiler rejects them there.
+  [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn) is the
+  end-to-end example: a news feed into a process variable, filtered by a FEEL script,
+  routed on by a gateway.
+
+  Deliberately out of scope for this slice, and worth knowing before you plan around it:
+  extension namespaces such as Dublin Core and Media RSS are ignored, and there is no
+  conditional request (`ETag`/`If-Modified-Since`), no feed discovery from a page's
+  `<link rel="alternate">`, and no cross-run deduplication. A scrape stays a read-once
+  GET; what has already been seen is the process's business, not the connector's.
+
 ### Changed
 
 - **The Active Directory mockup is switched on in the Console now, not on the command line.**
