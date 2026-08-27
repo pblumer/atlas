@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Connectors"
+  ],
+  "title": {
+    "en": "A connector belongs to somebody now",
+    "de": "Ein Konnektor gehört jetzt jemandem"
+  },
+  "summary": {
+    "en": "Until now a connector belonged to nobody, and that turned out to mean more than it sounds: any account that could sign in was able to list every connector with its address and sender mailbox, change one, delete somebody else's, and point somebody else's incoming connector at a name of its choosing. A connector now has an owner — whoever created it — and only they, the people they share it with, and administrators can see or change its configuration. Sharing works the way sharing already works elsewhere in Atlas: add a person or a whole group, as may-see-it or may-change-it, and withdraw it again whenever you like, right beside the connector under Console → Connectors. Ownership can be handed on, so a connector outlives the person who set it up. Two things stay exactly as they were, on purpose. Everyone still sees that a connector exists, because that is what you need to build a task against it — what is now private is the address, the credential and the settings, not the name. And nothing here touches a running process: a deployed model reaches its connector whoever started it. One thing is still open and worth knowing: this protects a connector's settings, not yet the events an incoming connector brings in.",
+    "de": "Bisher gehörte ein Konnektor niemandem, und das hiess mehr, als es klingt: Jedes Konto, das sich anmelden konnte, durfte alle Konnektoren samt Adresse und Absenderpostfach auflisten, einen ändern, einen fremden löschen und einen fremden eingehenden Konnektor auf einen selbst gewählten Namen richten. Ein Konnektor hat jetzt eine Eigentümerin — die Person, die ihn angelegt hat — und nur sie, die Personen, mit denen sie ihn teilt, und Administratorinnen sehen oder ändern seine Konfiguration. Geteilt wird, wie in Atlas ohnehin geteilt wird: eine Person oder eine ganze Gruppe hinzufügen, als «darf sehen» oder «darf ändern», und jederzeit wieder zurückziehen — direkt neben dem Konnektor unter Console → Konnektoren. Das Eigentum lässt sich übergeben, damit ein Konnektor die Person überdauert, die ihn eingerichtet hat. Zwei Dinge bleiben mit Absicht genau wie bisher: Alle sehen weiterhin, dass ein Konnektor existiert — das braucht man, um eine Aufgabe dagegen zu bauen; privat sind Adresse, Zugangsdaten und Einstellungen, nicht der Name. Und an laufenden Prozessen ändert sich nichts: Ein deploytes Modell erreicht seinen Konnektor, wer immer es gestartet hat. Eines ist noch offen und sollte man wissen: Geschützt sind die Einstellungen eines Konnektors, noch nicht die Ereignisse, die ein eingehender Konnektor hereinbringt."
+  },
+  "try": {
+    "label": {
+      "en": "Open Connectors",
+      "de": "Konnektoren öffnen"
+    },
+    "route": "#/console/connectors"
+  }
+}

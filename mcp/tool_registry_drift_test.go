@@ -277,6 +277,14 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/oauth-grants/{id}":    "withdrawing a person's approval is theirs or an administrator's to do",
 	"GET /api/v1/oauth/authorize-context": "backs the consent screen in a browser; nothing for an agent to call",
 	"POST /api/v1/oauth/authorize":        "a person's consent decision, made on a screen — an agent must never record one",
+	// Connector ownership (ADR-0205). Who may reach a connector's configuration is a
+	// person's decision about their own thing, made on a screen by whoever owns it.
+	// An agent acting as them could make it, which is the argument for exposing it —
+	// and is exactly why it is not: a share is not undone by noticing it later.
+	"PUT /api/v1/connectors/{id}/members/{principalId}":    "sharing a connector is the owner's decision, not an agent action",
+	"DELETE /api/v1/connectors/{id}/members/{principalId}": "withdrawing somebody's access is the owner's decision, not an agent action",
+	"PUT /api/v1/connectors/{id}/visibility":               "sealing or opening a connector is the owner's decision, not an agent action",
+	"PUT /api/v1/connectors/{id}/owner/{userId}":           "handing a connector to somebody else is the owner's decision, not an agent action",
 
 	// Deployment targets and promotion (ADR-0129, sending side): a target names
 	// another server and the credential to reach it — admin config in the same

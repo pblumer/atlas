@@ -289,6 +289,52 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
+### Who may configure a connector
+
+A connector has an **owner**: whoever created it. They, whoever they share it with,
+and administrators can see its endpoint and credential reference, change it, delete
+it, or give it an inbound subscription
+([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)). Everybody else
+still sees that it exists — its name, kind and whether it is usable — because that
+is what the modeler needs to author a task against it.
+
+Sharing is in **Console → Connectors**, beside each connector: add a person or a
+whole group as *may see it* or *may change it*, and withdraw either at any time.
+Ownership can be handed on, which is how a connector survives the person who made
+it — an ownerless connector is administrators-only.
+
+Two things this does **not** do. It does not reach the runtime: a deployed process
+resolves its connector by name whoever started it. And it does not yet bound who
+receives the *events* an inbound connector brings in — a process that names the
+right message still gets them; that half is specified in the record and not built.
+
+**Upgrading:** connectors stored before this carry no owner and become
+administrators-only until one is assigned. An administrator can hand each to its
+real owner from the same page.
+
+### Who may configure a connector
+
+A connector has an **owner**: whoever created it. They, whoever they share it with,
+and administrators can see its endpoint and credential reference, change it, delete
+it, or give it an inbound subscription
+([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)). Everybody else
+still sees that it exists — its name, kind and whether it is usable — because that
+is what the modeler needs to author a task against it.
+
+Sharing is in **Console → Connectors**, beside each connector: add a person or a
+whole group as *may see it* or *may change it*, and withdraw either at any time.
+Ownership can be handed on, which is how a connector survives the person who made
+it — an ownerless connector is administrators-only.
+
+Two things this does **not** do. It does not reach the runtime: a deployed process
+resolves its connector by name whoever started it. And it does not yet bound who
+receives the *events* an inbound connector brings in — a process that names the
+right message still gets them; that half is specified in the record and not built.
+
+**Upgrading:** connectors stored before this carry no owner and become
+administrators-only until one is assigned. An administrator can hand each to its
+real owner from the same page.
+
 ### Connecting a hosted AI connector
 
 A connector that runs on somebody else's infrastructure — claude.ai's, for

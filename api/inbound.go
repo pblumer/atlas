@@ -26,6 +26,13 @@ func feelExpr(s string) string {
 // connector, oldest first.
 func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
+	// A subscription list is every message name this connector publishes under, and
+	// a message name is the whole key an inbound event is delivered by. Reading it is
+	// therefore reading the connector's configuration, and needs viewer (ADR-0205).
+	if _, code, msg := s.authorizeConnector(r, connID, ScopeRoleViewer); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	var (
 		out     []inboundSubscription
 		loadErr error
@@ -58,6 +65,13 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 // time, not left to fail on every poll.
 func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
+	// Pointing a connector at a message name is the act this whole measure exists
+	// for: it decides which processes its events start. Editor on the connector
+	// (ADR-0205).
+	if _, code, msg := s.authorizeConnector(r, connID, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -158,6 +172,14 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	// Authorized after the body is parsed, which is the order the project handlers
+	// use (ADR-0071) and the one that leaks nothing: a malformed body is answered the
+	// same way for everyone, and every well-formed request past this point is
+	// answered by access alone.
+	if code, msg := s.authorizeSubscription(r, id, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	if p.CorrelationKey != nil && feelExpr(*p.CorrelationKey) != "" {
 		if _, err := expr.CompileAuto(feelExpr(*p.CorrelationKey)); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
@@ -214,6 +236,10 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 // it.
 func (s *Server) handleDeleteInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if code, msg := s.authorizeSubscription(r, id, ScopeRoleEditor); code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	var delErr error
 	s.do(func() { delErr = s.inboundSubs.Delete(id) })
 	if delErr != nil {
@@ -221,4 +247,31 @@ func (s *Server) handleDeleteInboundSubscription(w http.ResponseWriter, r *http.
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// authorizeSubscription authorizes a request against the connector a subscription
+// belongs to (ADR-0205). A subscription is governed by its connector's scope, the
+// way an artifact is governed by its project's — it has no sharing of its own,
+// because "who may point this mailbox somewhere" is a fact about the mailbox.
+//
+// A subscription that does not exist passes: there is no connector to authorize
+// against and nothing to protect, and the handler behind this already has its own
+// answer for a missing record — its own 404, or an idempotent delete. Refusing here
+// would replace those with an answer about access, which is the wrong thing to tell
+// somebody whose id is a typo.
+func (s *Server) authorizeSubscription(r *http.Request, subID, minRole string) (int, string) {
+	var (
+		sub    inboundSubscription
+		found  bool
+		getErr error
+	)
+	s.do(func() { sub, found, getErr = s.inboundSubs.Get(subID) })
+	if getErr != nil {
+		return http.StatusInternalServerError, "read subscription: " + getErr.Error()
+	}
+	if !found {
+		return 0, ""
+	}
+	_, code, msg := s.authorizeConnector(r, sub.ConnectorID, minRole)
+	return code, msg
 }

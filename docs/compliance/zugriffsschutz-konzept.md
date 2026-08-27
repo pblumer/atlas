@@ -39,7 +39,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
-| **M11** — Berechtigungen auf Konnektor-Ebene | 🔲 offen — Konzept und Entwurf [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md); siehe 3/M11 |
+| **M11** — Berechtigungen auf Konnektor-Ebene | 🚧 Schritt 1 umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md), `api/connectorscope.go`: Eigentümer, Freigabe (auch an Gruppen) und Rollenprüfung auf Konnektor und Abonnements. Offen: der Anspruch auf den Nachrichtennamen (Schritt 2) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -198,7 +198,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
-| M11 | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
+| M11 🚧 | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -637,20 +637,56 @@ davor, damit ein persönliches Postfach nie — auch nicht vorübergehend —
 installationsweit ist. Zu M9 steht es quer: M9 ordnet Rollen Endpunktgruppen zu,
 M11 ordnet einem Objekt einen Eigentümer zu. Beide zahlen auf O-02 ein, keines wartet auf das andere.
 
+**Stand: Schritt 1 ist umgesetzt** (`api/connectorscope.go`). Der Konnektor trägt
+Eigentümer, Sichtbarkeit und Mitgliederliste; die Handler für Konnektor *und*
+Abonnements prüfen die Rolle; Freigeben, Zurückziehen, Versiegeln und Übergeben
+gibt es als Endpunkte **und** in der Console neben jedem Konnektor. Zwei Dinge kamen
+beim Bauen dazu, die im Entwurf nicht standen und dort jetzt nachgetragen sind:
+
+- **Existenz ist nicht Konfiguration.** Der Modeler füllt seine Konnektor-Auswahl
+  aus derselben Liste. Hätte man die Liste schlicht eingeschränkt, stünde jede
+  Person ohne Eigentum vor einem leeren Auswahlfeld — eine Freigaberegel, die
+  Menschen an der Arbeit hindert, ist keine Freigaberegel. Die Liste hat deshalb
+  zwei Formen: ab *viewer* der Datensatz, darunter ein Katalogeintrag aus Name, Art
+  und Zustand. Geschützt sind Endpunkt, Absender, Zugangsdaten-Verweis,
+  Mitgliederliste und die Inbound-Abonnements.
+- **Die Konnektor-Prüfung darf kein fremdes Geheimnis borgen.**
+  `POST /api/v1/connectors/test` löst den Zugangsdaten-Verweis auf, den der Body
+  nennt, und verschickt damit echte Mail. Das war bis jetzt für **jedes** Konto ein
+  «Mail versenden als irgendwer, mit irgendwessen Zugangsdaten». Den Datensatz zu
+  sperren und das stehen zu lassen wäre Theater gewesen. Die Regel: Ein Verweis darf
+  nur nennen, wer einen Konnektor bearbeiten darf, der ihn schon benutzt.
+
+**Offen bleibt Schritt 2**, der Anspruch auf den Nachrichtennamen. Bis dahin
+schützt M11 die *Konfiguration* eines Konnektors und nicht die Ereignisse, die er
+hereinbringt: Wer den richtigen Nachrichtennamen kennt, bekommt sie weiterhin.
+
 **Abnahme** — dieselbe Regel wie in Kapitel 6, der Nachweis ist Code:
 
-1. Ein gewöhnliches Konto sieht einen fremden privaten Konnektor nicht, ändert ihn
-   nicht und löscht ihn nicht; es legt darauf kein Abonnement an. Genau die fünf
-   Zeilen aus 1.5, jede als Test — heute gehen alle fünf durch, und das ist der
-   Befund.
-2. Eine Freigabe an eine **Gruppe** wirkt für jedes Mitglied und endet mit der
+1. ✅ Ein gewöhnliches Konto sieht einen fremden privaten Konnektor nicht, ändert
+   ihn nicht und löscht ihn nicht; es legt darauf kein Abonnement an und liest seine
+   Abonnements nicht. Genau die fünf Zeilen aus 1.5, jede als Test:
+   `TestAConnectorBelongsToWhoeverMadeIt`.
+2. ✅ Eine Freigabe an eine **Gruppe** wirkt für jedes Mitglied und endet mit der
    Mitgliedschaft — dieselbe Eigenschaft, die ADR-0180 für Projekte hat.
-3. Ein Deploy, dessen Definition einen beanspruchten Nachrichtennamen fängt, wird
-   abgewiesen; die Abweisung nennt die Nachricht und **nicht** die Gegenpartei.
-4. Der Anspruch wird auch gegen **bereits deployte** Definitionen geprüft, nicht
-   nur gegen künftige — sonst genügt es, zuerst zu deployen.
-5. Mit `--auth=false` ist alles davon wirkungslos: der Server ist per Deklaration
+   `TestSharingAConnectorWithAGroup`, dazu `TestSharingAConnectorFollowsTheRoles`
+   für viewer/editor/owner.
+3. ✅ Der Modeler kann weiterhin gegen jeden Konnektor autorisieren, auch gegen
+   einen fremden: `TestEveryoneCanStillAuthorAgainstAConnector`.
+4. ✅ Die **Laufzeit** fragt den Geltungsbereich nicht: ein privater Konnektor steht
+   in der Registry, sonst würde jedes Modell parken, das ihn nennt.
+   `TestTheRuntimeResolvesAConnectorNobodyIsSignedInFor`.
+5. ✅ Ein Konnektor ohne Eigentümer (aus der Zeit davor) ist administrativ, sein
+   Katalogeintrag bleibt sichtbar: `TestAConnectorFromBeforeOwnershipIsAdminOnly`.
+6. ✅ Kein fremdes Geheimnis über die Konnektor-Prüfung:
+   `TestBorrowingAnotherConnectorsCredentialIsRefused`.
+7. ✅ Mit `--auth=false` ist alles davon wirkungslos: der Server ist per Deklaration
    offen, und M11 fügt dort keine einzige Verweigerung hinzu.
+   `TestAnOpenServerSharesEverything`.
+8. 🔲 *(Schritt 2)* Ein Deploy, dessen Definition einen beanspruchten
+   Nachrichtennamen fängt, wird abgewiesen; die Abweisung nennt die Nachricht und
+   **nicht** die Gegenpartei. Der Anspruch wird auch gegen **bereits deployte**
+   Definitionen geprüft — sonst genügt es, zuerst zu deployen.
 
 ---
 
