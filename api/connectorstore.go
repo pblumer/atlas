@@ -26,12 +26,19 @@ import (
 // (username/password JSON) is read from the vault. Like clio and mail, its base URL
 // and credentials are managed here, never in the model; only the form and its field
 // values are model-authored.
+// connectorKindJira is the Atlassian Jira connector kind (ADR-draft-jira-connector): a
+// managed record of this kind resolves to a live Jira REST client whose credential
+// bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal
+// access token — is read from the vault. Like Remedy, its base URL and credential are
+// managed here, never in the model; only the operation and its values are
+// model-authored.
 const (
 	connectorKindTemis      = "temis"
 	connectorKindClio       = "clio"
 	connectorKindMail       = "mail"
 	connectorKindSharePoint = "sharepoint"
 	connectorKindRemedy     = "remedy"
+	connectorKindJira       = "jira"
 	connectorKindEntra      = "entra"
 )
 

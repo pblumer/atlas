@@ -196,6 +196,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Jira connector.** Atlassian Jira is a first-class connector kind
+  ([ADR-draft-jira-connector](docs/adr/draft-jira-connector.md)): a service task marked
+  `<atlas:jiraConnector connector operation …>` performs one issue-tracker operation
+  against a server-registered Jira instance, off the processor loop and after fsync like
+  every other connector. Seven operations cover the loop a process actually runs —
+  `create-issue`, `get-issue`, `update-issue`, `transition-issue`, `add-comment`,
+  `assign-issue` and `search` (JQL) — and every authored value is literal-or-FEEL,
+  evaluated over the variables the task sees.
+
+  What it saves is the four things a REST task had to do by hand: the URL, the auth
+  block, Jira's nested body shape (`{"fields":{"project":{"key":…}}}`), and knowing that
+  a transition and an assignment are sub-resources at all. A transition may be named by
+  the button a person reads in Jira — the connector resolves its id first, so the model
+  is not pinned to one workflow configuration — a search follows Jira's paging and hands
+  back the issues rather than one page of an envelope, and an extra field keeps the JSON
+  shape its FEEL value had, so `labels` stays a list and `priority` an object.
+
+  The site URL and the credential live in the managed connector store and the vault, so a
+  move from a test Jira to production is a Console edit rather than a redeploy. Two
+  credential shapes are accepted and neither needs a flag to say which it is: `{email,
+  apiToken}` is Jira Cloud (HTTP Basic, the way Atlassian documents an API token) and
+  `{token}` a Data Center personal access token (bearer). The same fact decides how an
+  account is addressed when assigning an issue — `accountId` on Cloud, a username on Data
+  Center — so a model never has to know which product it is talking to. The transport is
+  Jira's REST API v2, which both products serve and which takes a description as a
+  string; v3 would make every model build an Atlassian Document Format tree to write one
+  sentence. Authored via a first-class **Jira Connector** service-task type in the
+  Modeler.
+
 - **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job
   handler only ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)), which is the
   arrangement [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) exists to end: a

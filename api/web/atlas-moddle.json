@@ -343,6 +343,36 @@
       ]
     },
     {
+      "name": "JiraConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "issueKey", "type": "String", "isAttr": true },
+        { "name": "project", "type": "String", "isAttr": true },
+        { "name": "issueType", "type": "String", "isAttr": true },
+        { "name": "summary", "type": "String", "isAttr": true },
+        { "name": "description", "type": "String", "isAttr": true },
+        { "name": "transition", "type": "String", "isAttr": true },
+        { "name": "comment", "type": "String", "isAttr": true },
+        { "name": "assignee", "type": "String", "isAttr": true },
+        { "name": "jql", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "fields", "type": "JiraField", "isMany": true }
+      ]
+    },
+    {
+      "name": "JiraField",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

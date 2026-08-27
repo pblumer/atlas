@@ -14,6 +14,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
@@ -282,6 +283,45 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 		clients[c.Name] = client
 	}
 	noteForeignKinds(problems, recs, connectorKindSharePoint, clients)
+	return clients, problems, nil
+}
+
+// buildJiraClients assembles the Jira connector clients from the enabled managed
+// connector instances of kind "jira", resolving each instance's credential bundle from
+// its credentialsRef via the vault (ADR-draft-jira-connector, ADR-0041). It reads the
+// connector store, so callers run it on the run-loop goroutine (the store's owner). It
+// mirrors buildSharePointClients: credential dispatch — which of the two bundle shapes
+// an operator stored, and so which authentication scheme this instance uses — lives in
+// jira.NewProviderClient, and a record with no base URL or an unusable bundle is
+// skipped with its reason (its tasks park, ADR-0158) rather than failing the whole
+// rebuild. The resolved secret is the JSON bundle held in the vault (I6), never a value
+// in a model.
+func (s *Server) buildJiraClients() (map[string]jira.Client, map[string]string, error) {
+	clients := map[string]jira.Client{}
+	problems := map[string]string{}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range recs {
+		if c.Kind != connectorKindJira {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
+			continue
+		}
+		client, err := jira.NewProviderClient(jira.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			problems[c.Name] = err.Error() // its tasks park until it is fixed
+			continue
+		}
+		clients[c.Name] = client
+	}
+	noteForeignKinds(problems, recs, connectorKindJira, clients)
 	return clients, problems, nil
 }
 

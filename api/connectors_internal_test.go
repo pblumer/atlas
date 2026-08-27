@@ -52,7 +52,7 @@ func TestManagedConnectorKindsRegistry(t *testing.T) {
 		t.Error("http.rest should not be a managed connector kind")
 	}
 	// The whitelist error lists exactly the registered kinds, in order.
-	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"entra\", \"postgres\", \"mariadb\", or \"mssql\""
+	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", \"remedy\", \"jira\", \"entra\", \"postgres\", \"mariadb\", or \"mssql\""
 	if got := managedConnectorKindsError(); got != want {
 		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
 	}

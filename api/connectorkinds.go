@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -243,6 +244,38 @@ var managedConnectorKinds = []managedConnectorKind{
 		jobTypes: []int32{compiler.RemedyJobTypeIndex},
 	},
 	{
+		// A Jira connector task performs one issue-tracker operation against a
+		// server-registered Atlassian Jira instance (ADR-draft-jira-connector) and
+		// writes what Jira returned into the task's result variable
+		// (HandleWithOutput) — for the operations Jira answers with something. The
+		// base URL and credential bundle live in the managed connector store; the
+		// bundle is resolved from the vault at build time (ADR-0041), so a model
+		// carries neither a URL nor a secret.
+		name:           connectorKindJira,
+		validateCreate: validateJiraConnector,
+		newRegistry:    func(s *Server) { s.jiraRegistry = jira.NewRegistry() },
+		registerHandlers: func(s *Server, store *state.Store) {
+			s.jobRunner.HandleWithOutput(compiler.JiraJobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return jira.Handler(rd, s.processLookup, s.jiraRegistry)
+			})
+		},
+		rebuild: func(s *Server) error {
+			clients, problems, err := s.buildJiraClients()
+			if err != nil {
+				return err
+			}
+			s.jiraRegistry.ReplaceWith(clients, problems)
+			return nil
+		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.jiraRegistry == nil {
+				return "", false
+			}
+			return s.jiraRegistry.Problem(name)
+		},
+		jobTypes: []int32{compiler.JiraJobTypeIndex},
+	},
+	{
 		// A Microsoft Entra ID connector task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
@@ -327,6 +360,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindMail:       {compiler.MailJobTypeIndex},
 	connectorKindSharePoint: {compiler.SharePointJobTypeIndex},
 	connectorKindRemedy:     {compiler.RemedyJobTypeIndex},
+	connectorKindJira:       {compiler.JiraJobTypeIndex},
 	"csv":                   {compiler.CsvImportJobTypeIndex},
 	"ldif":                  {compiler.LdifJobTypeIndex},
 	"rest":                  {compiler.RestJobTypeIndex},
@@ -487,6 +521,24 @@ func validateRemedyConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a remedy connector requires a credentialsRef naming a vault {username,password} bundle"
+	}
+	return ""
+}
+
+// validateJiraConnector validates a Jira create request: like Remedy it needs both an
+// endpoint — the Jira site, e.g. https://acme.atlassian.net — and a credentialsRef
+// naming a vault bundle. Which of the two bundle shapes it is ({email, apiToken} for
+// Cloud, {token} for a Data Center personal access token) is not decided here: the
+// record holds only the reference, and the bundle behind it is read at build time
+// (I6), where being wrong becomes a problem on the connector rather than a refused
+// form. Provider/Sender are mail-only.
+func validateJiraConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender = "", ""
+	if p.Endpoint == "" {
+		return "connector endpoint is required (the Jira site, e.g. https://acme.atlassian.net)"
+	}
+	if p.CredentialsRef == "" {
+		return "a jira connector requires a credentialsRef naming a vault bundle: {email, apiToken} for Jira Cloud, or {token} for a Data Center personal access token"
 	}
 	return ""
 }

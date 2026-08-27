@@ -116,6 +116,29 @@ test("a Remedy credential is checked against its own two fields", async ({ page 
   await expect(error(page)).toContainText('"password"');
 });
 
+// Jira takes either of two bundles — a Cloud API token or a Data Center personal
+// access token — so the check cannot simply demand a field list. What it must not do
+// is answer "wrong shape": the useful message names the field missing from whichever
+// shape the operator was clearly aiming at.
+test("a Jira credential is accepted in either shape, and a half-typed one names its own missing field", async ({ page }) => {
+  await name(page, "jira_acme");
+  await expect(page.locator(".secret-hint")).toContainText("Jira Cloud");
+
+  await value(page, JSON.stringify({ email: "bot@acme.example" }));
+  await save(page);
+  await expect(error(page)).toContainText('"apiToken"');
+
+  await value(page, JSON.stringify({ email: "bot@acme.example", apiToken: "ATATT" }));
+  await save(page);
+  await expect(error(page)).toBeHidden();
+
+  // The Data Center shape is a different set of fields and equally valid.
+  await value(page, JSON.stringify({ token: "pat" }));
+  await save(page);
+  await expect(error(page)).toBeHidden();
+  await expect(page.locator("#saved")).toHaveText("saved");
+});
+
 test("a JSON list is not a bundle", async ({ page }) => {
   await name(page, "sharepoint_auth");
   await value(page, '["a","b"]');

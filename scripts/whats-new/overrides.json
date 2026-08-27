@@ -1,4 +1,39 @@
 {
+  "a-jira-connector": {
+    "tags": [
+      "Connectors",
+      "Modeler"
+    ],
+    "title": {
+      "en": "Jira issues from a process, without writing a REST call",
+      "de": "Jira-Vorgänge aus einem Prozess, ohne einen REST-Aufruf zu schreiben"
+    },
+    "summary": {
+      "en": "A process step can now open a Jira issue, read one, change it, move it to the next status, comment on it, assign it, or search with JQL — picked from a list in the Modeler instead of assembled as a REST call. You give the task a project, an issue type and a summary; Atlas builds what Jira expects and writes the created issue into a variable, so a later step can address it as =ticket.key. The site address and the credential live under Connectors, not in the model, which is what makes moving from a test Jira to the real one a change in one place. Both Jira Cloud and Jira Data Center work, and the model does not have to know which one it is talking to.",
+      "de": "Ein Prozessschritt kann jetzt einen Jira-Vorgang anlegen, lesen, ändern, in den nächsten Status weiterschalten, kommentieren, zuweisen oder per JQL suchen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Sie geben dem Task Projekt, Vorgangstyp und Zusammenfassung; Atlas baut daraus, was Jira erwartet, und schreibt den angelegten Vorgang in eine Variable, sodass ein späterer Schritt ihn als =ticket.key ansprechen kann. Adresse und Zugangsdaten der Jira-Instanz liegen unter Konnektoren, nicht im Modell — deshalb ist der Wechsel von der Test- zur echten Jira eine Änderung an einer Stelle. Jira Cloud und Jira Data Center funktionieren beide, und das Modell muss nicht wissen, mit welchem es spricht."
+    },
+    "tutorial": {
+      "en": [
+        "Under Console › Connectors, add a connector of kind jira: its site address (https://acme.atlassian.net) and a vault credential — {\"email\": …, \"apiToken\": …} for Jira Cloud, or {\"token\": …} for a Data Center personal access token.",
+        "In the Modeler, drop a service task and pick Jira Connector, then choose an operation — start with Create issue.",
+        "Name your connector, fill in the project key, the issue type and a summary (the fx toggle makes any of them a FEEL expression over the instance's variables), and give it a result variable such as ticket.",
+        "A later task can then address =ticket.key — Transition issue moves that same issue on by the name of the button you see in Jira."
+      ],
+      "de": [
+        "Legen Sie unter Console › Konnektoren einen Konnektor der Art jira an: die Adresse Ihrer Jira (https://acme.atlassian.net) und ein Vault-Secret — {\"email\": …, \"apiToken\": …} für Jira Cloud oder {\"token\": …} für ein Personal Access Token in Data Center.",
+        "Ziehen Sie im Modeler einen Service-Task auf und wählen Sie Jira Connector, dann eine Operation — fangen Sie mit Vorgang anlegen an.",
+        "Tragen Sie Ihren Konnektornamen, den Projektschlüssel, den Vorgangstyp und eine Zusammenfassung ein (der fx-Schalter macht aus jedem davon eine FEEL-Expression über die Variablen der Instanz) und geben Sie eine Ergebnisvariable an, etwa ticket.",
+        "Ein späterer Task spricht dann =ticket.key an — Vorgang weiterschalten bewegt denselben Vorgang weiter, benannt nach dem Knopf, den Sie in Jira sehen."
+      ]
+    },
+    "try": {
+      "label": {
+        "en": "Open Connectors",
+        "de": "Konnektoren öffnen"
+      },
+      "route": "#/console/connectors"
+    }
+  },
   "_comment": "Curated, layman-friendly DE/EN polish for the Console 'What's New' section. Keyed by the title slug the generator derives from CHANGELOG.md (run `node scripts/whats-new/gen.mjs` to see ids). Every field is optional: an entry with no override still appears with its English CHANGELOG title and first sentence. Use `hidden: true` to keep a dev/API-only bullet out of the user-facing list. `route` values must start with a known hash route (#/console, #/modeler, #/operations, #/tasks).",
   "metrics-moved-behind-the-boundary-the-last-route-that-had-no": {
     "tags": [

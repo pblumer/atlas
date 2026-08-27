@@ -458,6 +458,10 @@ type UserTaskDetail struct {
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
+//   - Jira (JobType == JiraJobType): Connector names the server-registered Jira
+//     instance; JiraOp is the issue-tracker operation and the Jira* fields below are
+//     the values it takes (all literal-or-FEEL); ResultVar, if set, receives what Jira
+//     returned (ADR-draft-jira-connector).
 //   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
@@ -755,6 +759,42 @@ type ConnectorTaskDetail struct {
 	LdifOperation int32
 	LdifSource    int32
 	LdifResult    int32
+	// Jira connector fields (JobType == JiraJobType, ADR-draft-jira-connector).
+	// Connector (above) names the server-registered Jira instance — its base URL and
+	// credential live in the managed connector store and the vault, never in a model.
+	// JiraOp is the interned operation ("create-issue"|"get-issue"|"update-issue"|
+	// "transition-issue"|"add-comment"|"assign-issue"|"search"), and it decides which
+	// of the rest are populated; the compiler refuses a value on an operation that
+	// does not use it, so a field can never be quietly ignored at call time.
+	//
+	// JiraIssue addresses one issue by key or id (every operation but create and
+	// search). JiraProject, JiraIssueType, JiraSummary and JiraDescription are the
+	// created issue's core fields — summary and description also carry an update.
+	// JiraTransition names the workflow transition to perform, by id or by the name
+	// shown in Jira; JiraComment is a comment body (its own operation, and optionally
+	// alongside a transition); JiraAssignee is the account the issue is handed to.
+	// JiraJQL is a search's query and JiraMaxResults the cap on what may land in the
+	// result variable — the compiler has already applied the default, so the runtime
+	// interprets nothing (I5).
+	//
+	// JiraFields are extra issue fields as name/literal-or-FEEL pairs (create, update
+	// and transition), which is how a custom field or a field this connector does not
+	// name is set. Each RestExpr is a literal-or-FEEL value evaluated over the
+	// variables the task sees at call time; all are the zero value for a non-Jira task.
+	// ResultVar (above) receives what Jira returned, for the operations that return
+	// anything.
+	JiraOp          int32
+	JiraIssue       RestExpr
+	JiraProject     RestExpr
+	JiraIssueType   RestExpr
+	JiraSummary     RestExpr
+	JiraDescription RestExpr
+	JiraTransition  RestExpr
+	JiraComment     RestExpr
+	JiraAssignee    RestExpr
+	JiraJQL         RestExpr
+	JiraMaxResults  int32
+	JiraFields      []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

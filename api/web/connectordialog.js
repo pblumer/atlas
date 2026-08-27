@@ -33,6 +33,9 @@ export function connectorShape(kind, provider) {
   const native = mail && provider !== "smtp" && !preview;
   const sharepoint = kind === "sharepoint";
   const remedy = kind === "remedy";
+  // Jira is Remedy's shape exactly: a site to reach and a credential bundle to reach
+  // it with, neither derivable from the other.
+  const jira = kind === "jira";
   const entra = kind === "entra";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
@@ -53,16 +56,20 @@ export function connectorShape(kind, provider) {
     // A SQL connector is created by pasting the connection string, which the server
     // seals into the vault and replaces with a reference — so the reference is one of
     // two ways in, not the only one, and the form must not insist on it.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy ? "required" : "optional")),
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira ? "required" : "optional")),
     endpointPlaceholder: mail
       ? "smtp.office365.com:587"
-      : (remedy ? "https://helix.example.com:8008" : "https://temis.internal"),
-    credRefLabel: remedy
+      : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal")),
+    credRefLabel: jira
+      ? "Credential reference (vault {email, apiToken} or {token})"
+      : remedy
       ? "Credential reference (vault {username,password})"
       : (sql ? "\u2026 or a credential reference (a vault key already holding the DSN)"
         : (entra ? "Credential reference (vault {tenantId, clientId, clientSecret})"
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
-    credRefPlaceholder: remedy
+    credRefPlaceholder: jira
+      ? "jira_acme (vault {email, apiToken} or {token})"
+      : remedy
       ? "remedy_creds (vault {username,password})"
       : (sql ? "postgres_pb_pw (a vault key holding the whole connection string)"
         : (entra ? "entra_blumer (vault {tenantId, clientId, clientSecret})"
