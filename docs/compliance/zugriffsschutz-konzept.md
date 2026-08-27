@@ -38,7 +38,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M8** — Sicherheits-Audit-Log | ✅ umgesetzt — im selben Entscheid, `api/audit.go` |
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
-| **M10** — OAuth-Ressourcenserver für gehostete MCP-Clients | ◐ zur Hälfte — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md) **angenommen**: Ressourcenserver umgesetzt (`api/oauthmeta.go`), Autorisierungsserver als Nächstes |
+| **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`) und Autorisierungsserver (`api/oauthserver.go`) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -161,7 +161,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M7 ✅ | Anmelde-Härtung: Drosselung je Adresse *und* je Konto | S | O-04, R-12 | — |
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
-| M10 | OAuth-Ressourcenserver für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
+| M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -371,7 +371,7 @@ Vier Rollen statt einer: `admin`, `modeler` (Design-Time und Deploy), `operator`
 «jeder Angemeldete darf deployen» auf einer Produktion die falsche Vorgabe. Details
 in O-02; wegen G4 gilt jede Regel automatisch auch für MCP.
 
-### M10 — OAuth-Ressourcenserver, damit ein gehosteter MCP-Client anschliessen kann *(offen)*
+### M10 — OAuth, damit ein gehosteter MCP-Client anschliessen kann ✅
 
 M2 hat `/mcp` hinter die Grenze gebracht und M4 dem stdio-Adapter ein Credential
 gegeben. Der Fall, den beide nicht abdecken: ein **gehosteter** Client. Ein
@@ -448,18 +448,33 @@ Autorisierungsserver, weil einen zu nennen, dessen Token Atlas nicht prüfen kan
 den Client durch einen ganzen Ablauf schickte, um ihn am Ende mit dem Token in der
 Hand abzuweisen.
 
-**Der Entscheid ist angenommen**, samt Reihenfolge: erst die gewählte Variante
-(Ressourcenserver plus kleinster Autorisierungsserver), dann die dynamische
-Client-Registrierung, und Föderation, wenn sie sich lohnt.
+**Der Entscheid ist angenommen und beide Hälften sind umgesetzt**, in der
+festgelegten Reihenfolge: erst die gewählte Variante (Ressourcenserver plus
+kleinster Autorisierungsserver), dann die dynamische Client-Registrierung, und
+Föderation, wenn sie sich lohnt.
 
-Als Nächstes steht damit die Autorisierungsserver-Hälfte an: `/authorize` mit
-Zustimmungsbildschirm, `/token`, die Client-Registrierung in der Console und die
-Prüfung der Token-Zielgruppe. Das ist die Schwelle, über die dieses Dokument oben
-spricht — Atlas wird damit zum Autorisierungsserver, und M7 und M8 müssen die
-neuen Routen vom ersten Commit an abdecken.
+Damit ist der Ablauf vollständig: `/oauth/authorize` mit Zustimmungsbildschirm,
+`/oauth/token` mit Authorization Code, PKCE (`S256`) und rotierenden
+Refresh-Tokens, Client-Registrierung über `POST /api/v1/oauth-clients`, und die
+Prüfung der Token-Zielgruppe bei der Ausstellung. Kein impliziter Ablauf, kein
+Passwort-Grant, kein Client-Credentials-Grant — was nicht angeboten wird, gibt es
+nicht. Atlas ist damit ein Autorisierungsserver; die neuen öffentlichen Routen
+sind von M7 (Drosselung) und M8 (Audit, sechs `auth.oauth_*`-Ereignisse) vom
+ersten Commit an abgedeckt.
 
-Danach die dynamische Client-Registrierung: Sie entfernt den Betreiberschritt vor
-der Person, und sie ist erst dann eine begrenzte Entscheidung, wenn es einen
+Die entscheidende Eigenschaft: **Der ausgestellte Token trägt eine Person.** Damit
+überlebt die Zusage aus M2 einen Client, den niemand konfigurieren kann — ein
+Werkzeugaufruf hat genau die Rechte dessen, der zugestimmt hat. Was der Token
+erreicht, folgt dem, was zugestimmt wurde: Eine Zustimmung für `/mcp` bedient den
+Transport und wird auf `/api/v1` abgewiesen.
+
+Eine Zustimmung ist widerrufbar, und zwar von der Person selbst. Ein deaktiviertes
+oder gelöschtes Konto verliert seine Zustimmungen — ein Connector darf das Konto
+dahinter nicht überleben —, und eine Rollen- oder Gruppenänderung schreibt sie um,
+statt sie fallen zu lassen.
+
+Als Nächstes die dynamische Client-Registrierung: Sie entfernt den Betreiberschritt
+vor der Person, und sie ist erst jetzt eine begrenzte Entscheidung — weil es einen
 funktionierenden Ablauf gibt, in den hinein registriert wird.
 
 Föderation hängt nicht am Wollen, sondern an ihrer Voraussetzung: Sie ordnet
@@ -516,16 +531,12 @@ M9 (Rollen, O-02) → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
 dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten
 (O-06).
 
-**M10 steht quer dazu** und hat eine eigene Reihenfolge. Seine
-Ressourcenserver-Hälfte — die beiden Well-Known-Dokumente, der
-`resource_metadata`-Verweis auf dem `401`, die Prüfung der Token-Zielgruppe — ist
-klein, ohnehin geschuldet und kann jederzeit vorgezogen werden: Sie macht aus einem
-Client, der rät und mit `404` scheitert, einen, der erfährt, warum er nicht
-weiterkommt. Die Autorisierungsserver-Hälfte ist die eigentliche Schwelle und
-gehört terminlich neben M9 — nicht weil sie davon abhängt, sondern weil beide
-darüber entscheiden, wer im Namen wessen was darf, und man sie besser zusammen
-denkt. Wer zuerst föderiert (O-01), baut die Autorisierungsserver-Hälfte gar nicht:
-Dann zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter.
+**M10 stand quer dazu** und ist umgesetzt — beide Hälften, in der Reihenfolge des
+Entscheids. Offen bleibt daraus die dynamische Client-Registrierung (Schritt zwei).
+Wer zuerst föderiert (O-01), löscht die Autorisierungsserver-Hälfte wieder: Dann
+zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter, und alles andere
+bleibt stehen. Deshalb setzt nichts im heutigen Code voraus, dass Atlas der
+Aussteller bleibt.
 
 ---
 

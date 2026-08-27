@@ -14,6 +14,45 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **A person can now let an application act as them.** Atlas is an OAuth
+  authorization server: a hosted client — a connector on somebody else's
+  infrastructure, driven by a person in a browser — sends that person here, they
+  see who is asking and what it will reach, and what comes back is a token that is
+  exactly as privileged as they are
+  ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
+
+  This is what makes such a connector work at all. It had nowhere to put an API
+  token, and handing it one would have meant a long-lived credential sitting in a
+  third party's configuration store. Now nothing is handed over: the person
+  approves, and the token that results carries **them**, so a tool call is
+  attributed to them and inherits every rule their account has — the property
+  [ADR-0196](docs/adr/0196-authenticated-mcp-transport.md) established, surviving a
+  client nobody can configure.
+
+  The shape is deliberately the smallest a compliant client will talk to.
+  Authorization code with PKCE (`S256`) and refresh, and **no other grant type** —
+  no implicit flow, no password grant, no client-credentials grant. Registration is
+  an administrator's act (`POST /api/v1/oauth-clients`); dynamic client
+  registration is accepted follow-up work, not part of this.
+
+  **What a token reaches follows what was approved.** A grant for `/mcp` drives the
+  transport and is refused at `/api/v1` — the audience made into something enforced
+  rather than merely recorded. A grant for the server reaches what its person
+  reaches.
+
+  **An approval is a person's to withdraw**, and theirs to see: `GET
+  /api/v1/oauth-grants` lists your own, an administrator's lists everyone's, and
+  `DELETE` takes effect on the next request. Removing a client revokes every grant
+  approved for it. Disabling or deleting an account revokes its grants — a
+  connector must not outlive the account behind it — and a role or group change
+  rewrites them rather than dropping them, so an administrative edit does not knock
+  somebody's connector over. Six `auth.oauth_*` events record all of it, and carry
+  no secret.
+
+  Refresh tokens **rotate**: renewing invalidates the token you renewed with, so a
+  copied one is worth one use rather than standing access. Access tokens last two
+  hours.
+
 - **A refused request now says what refused it.** Atlas answers `401` with
   `WWW-Authenticate: Bearer realm="atlas"` and, from now on, a `resource_metadata`
   pointer to an [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html)

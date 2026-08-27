@@ -42,6 +42,14 @@ const (
 	// zone, and its whole job is four calls.
 	apiScopeWorker = "worker"
 
+	// apiScopeMCP reaches the Model Context Protocol transport and nothing else. It
+	// is what a person's OAuth grant carries when they approved a client for the
+	// transport rather than for the whole server (ADR-0200) — an audience made real:
+	// a token minted to talk to /mcp has no business driving /api/v1 directly. Like
+	// apiScopeDeploy it is not mintable, because nothing asks for it: it follows from
+	// which resource the person approved.
+	apiScopeMCP = "mcp"
+
 	// apiScopeMetrics reaches the Prometheus exposition and nothing else. It is what
 	// let /metrics move behind the boundary at all: a scraper is a machine that needs
 	// exactly one GET forever, which is the narrowest scope there is and the easiest
@@ -75,6 +83,14 @@ var apiScopeAllowed = map[string][]string{
 	// what makes it able to cover this at all.
 	apiScopeMetrics: {
 		"GET /metrics",
+	},
+	// The transport, both the exact path and everything under it, because that is
+	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
+	// for the event stream, and confining a scope to one of them would break the
+	// other half of the same protocol.
+	apiScopeMCP: {
+		"/mcp",
+		"/mcp/",
 	},
 }
 

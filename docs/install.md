@@ -289,6 +289,42 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
+### Connecting a hosted AI connector
+
+A connector that runs on somebody else's infrastructure — claude.ai's, for
+instance — has nowhere for you to paste a token. Those connect over OAuth
+([ADR-0200](adr/0200-mcp-oauth-resource-server.md)): you register the application
+once, and each person who uses it approves it in their own browser and gets a
+token that carries *them*.
+
+Two things have to be right first. Set `--external-url` to the address people
+reach Atlas at — behind a TLS proxy Atlas cannot work it out, and every URL it
+publishes would name `http://`. Then register the client, as an administrator:
+
+```bash
+curl -fsS -X POST https://atlas.example.com/api/v1/oauth-clients \
+  -H 'Content-Type: application/json' -b cookies.txt \
+  -d '{"name":"Claude Connector",
+       "redirectUris":["https://claude.ai/api/mcp/auth_callback"]}'
+```
+
+The response carries a client id and a **secret shown exactly once** — only its
+fingerprint is stored, so a lost secret is reissued rather than looked up. Put
+both into the connector's dialog, alongside the MCP URL
+(`https://atlas.example.com/mcp`). The redirect URI must match what the connector
+uses, character for character: it is where the authorization code is sent, so it
+is matched whole and never by prefix.
+
+What each person then gets is confined to what they approved. A connector set up
+against `/mcp` drives the MCP tools and is refused at `/api/v1`; the token expires
+in two hours and renews itself silently. Anyone can see their own approvals at
+`GET /api/v1/oauth-grants` and withdraw one with `DELETE`; an administrator sees
+and can withdraw everyone's, and deleting the client withdraws all of them at
+once. Disabling an account revokes its approvals with it.
+
+Registering a client is not the same as being able to use it: an application may
+*ask*, and only a person can say yes.
+
 ## Windows Server
 
 The release includes a `windows_amd64` build. Note that this is the **binary** on
@@ -385,7 +421,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--addr` | `:8080` | HTTP listen address |
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
-| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. Worth setting behind a reverse proxy: Atlas terminates no TLS, so the origin it derives from a request is `http://…`, which is not a URL a client can use. Read today only by the OAuth protected-resource metadata and the `WWW-Authenticate` challenge ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
+| `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** Atlas terminates no TLS, so the origin it derives from a request is `http://…`, and every absolute URL it publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_EXTERNAL_URL` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for connector credentials |

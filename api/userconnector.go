@@ -210,6 +210,7 @@ func (s *Server) provisionDisableUser(username string, now int64) error {
 		return err
 	}
 	s.sessions.destroyUser(u.ID)
+	s.revokeUserGrants(u.ID)
 	return nil
 }
 

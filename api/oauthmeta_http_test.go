@@ -82,22 +82,22 @@ func TestProtectedResourceMetadataNamesItsResource(t *testing.T) {
 	}
 }
 
-// TestProtectedResourceMetadataNamesNoAuthorizationServer pins a deliberate
-// omission, so that adding the field later is a decision rather than a slip.
+// TestProtectedResourceMetadataNamesItsAuthorizationServer: the field this test
+// used to pin as *absent*.
 //
-// authorization_servers is optional in RFC 9728, and Atlas issues no tokens and
-// accepts none from a foreign issuer. Naming an authorization server it cannot
-// actually honour would send a client all the way through a flow to be refused at
-// the end — strictly worse than being told, at the start, that there is nowhere to
-// go. The field arrives with the ability to validate what it points at.
-func TestProtectedResourceMetadataNamesNoAuthorizationServer(t *testing.T) {
+// It was absent while Atlas issued no tokens, because naming an authorization
+// server it could not honour would send a client through a whole flow to refuse it
+// at the end. Atlas issues them now, so the pointer is the truth — and it has to
+// be there, because it is the only thing that tells a refused client where to go.
+func TestProtectedResourceMetadataNamesItsAuthorizationServer(t *testing.T) {
 	ts := newMCPServer(t)
 
 	_, _, doc := getJSON(t, ts.URL+"/.well-known/oauth-protected-resource")
-	if _, ok := doc["authorization_servers"]; ok {
-		t.Error("the document names an authorization server, but Atlas can validate no token from one")
+	servers, ok := doc["authorization_servers"].([]any)
+	if !ok || len(servers) != 1 || servers[0] != ts.URL {
+		t.Errorf("authorization_servers = %v, want [%q]", doc["authorization_servers"], ts.URL)
 	}
-	// The other fields are what make it a useful document without that one.
+	// The other fields are what make it a document rather than a pointer.
 	if got := doc["bearer_methods_supported"]; got == nil {
 		t.Error("the document does not say how a bearer is presented")
 	}

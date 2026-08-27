@@ -459,6 +459,14 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 	default:
 		if disabling {
 			s.sessions.destroyUser(id)
+			// A disabled account must stop acting everywhere, not only where it holds a
+			// session: an OAuth grant can stand for months (ADR-0200).
+			s.revokeUserGrants(id)
+		} else {
+			// Roles changed but the account stands: rewrite what its grants may do
+			// rather than dropping them, so an administrative edit does not knock a
+			// person's connector over.
+			s.setUserGrantRoles(id, updated.Roles)
 		}
 		// Roles and the disabled flag are the two fields that change what an account
 		// can do, so they are the two the line carries; the rest is a display change.
@@ -566,6 +574,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, "cannot delete the last enabled admin")
 	default:
 		s.sessions.destroyUser(id)
+		s.revokeUserGrants(id)
 		audit(r, logging.AuthUserDeleted, "user deleted", slog.String("user_id", id))
 		w.WriteHeader(http.StatusNoContent)
 	}
