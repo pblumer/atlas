@@ -874,7 +874,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
 A parallel track alongside Milestone S: turn Panorama from a placeholder into a
 standards-based architecture workspace that relates declared ArchiMate 3.2 models
 to current Atlas resources without mixing runtime observations into the model. See
-[ADR-DRAFT: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
+[ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
 
 - 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
   design-time sidecar store; import, validate, preserve, and export Open Group
