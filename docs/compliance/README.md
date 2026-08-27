@@ -7,7 +7,7 @@ die **schweizerische Bundesverwaltung** (ISG/ISV, DSG, HERMES, BIT-Vorgaben).
 |----------|--------|
 | [`isds-konzept.md`](isds-konzept.md) | Antworten auf die Vorlage **P042-Hi01 — ISDS-Konzept** (BIT-Template V120 / NCSC V4.4): Systembeschreibung, Datenbeschreibung, Kommunikationsmatrix, Risiken und Schutzmassnahmen, Wiederherstellung, Ausserbetriebnahme |
 | [`isds-offene-punkte.md`](isds-offene-punkte.md) | Was **am Produkt** fehlt, bevor eine Einführung im Bund vertretbar ist — priorisiert, mit Bezug auf die Restrisiken des Konzepts |
-| [`zugriffsschutz-konzept.md`](zugriffsschutz-konzept.md) | **Konzept**: jede Schnittstelle hinter einen authentisierten Prinzipal — Schnittstelleninventar, der `/mcp`-Befund im Detail, acht Massnahmen und ein Stufenplan bis zur Tauglichkeit für einen produktiven PoC (schliesst R-08 / O-07) |
+| [`zugriffsschutz-konzept.md`](zugriffsschutz-konzept.md) | **Konzept**: jede Schnittstelle hinter einen authentisierten Prinzipal — Schnittstelleninventar, der `/mcp`-Befund im Detail, acht Massnahmen und ein Stufenplan bis zur Tauglichkeit für einen produktiven PoC (schliesst R-08 / O-07). Dazu M10 (OAuth für gehostete MCP-Clients, umgesetzt) und M11 (Berechtigungen auf Konnektor-Ebene, offen) |
 
 ## Gebrauchsanweisung
 

@@ -39,16 +39,22 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
+| **M11** — Berechtigungen auf Konnektor-Ebene | 🔲 offen — Konzept und Entwurf [`ADR-draft-connector-ownership-and-event-delivery`](../adr/draft-connector-ownership-and-event-delivery.md); siehe 3/M11 |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
-M10 kam später dazu und ist keine Lücke in R-08: Jede Schnittstelle verlangt einen
-Prinzipal. Sie ist die Antwort auf einen Fall, den M2 und M4 nicht bedacht haben —
-einen Client, den niemand konfigurieren kann, weil er bei einem Dritten läuft.
+M10 und M11 kamen später dazu, und **keines ist eine Lücke in R-08**: Jede
+Schnittstelle verlangt einen Prinzipal. M10 ist die Antwort auf einen Fall, den M2
+und M4 nicht bedacht haben — einen Client, den niemand konfigurieren kann, weil er
+bei einem Dritten läuft. M11 ist die Antwort auf eine Frage *hinter* der Haustür:
+Ein Konto ist angemeldet, aber alle Konten dürfen dasselbe. Das gehört zu O-02
+(feingranulare Autorisierung), nicht zu R-08.
 
-Kapitel 1 beschreibt weiterhin den **Befund**, also den Zustand vor diesen beiden
-Massnahmen. Das ist Absicht: es ist der Beleg dafür, was behoben wurde, und die
-Begründung für die restlichen Massnahmen. Was heute gilt, steht in Kapitel 6.
+Kapitel 1 beschreibt den **Befund**, also den Zustand vor diesen Massnahmen. Das
+ist Absicht: es ist der Beleg dafür, was behoben wurde, und die Begründung für die
+restlichen. Die eine Ausnahme ist **1.5**, und sie ist als solche gekennzeichnet:
+Dieser Befund ist heute noch wahr und wird von M11 beantwortet. Was sonst heute
+gilt, steht in Kapitel 6.
 
 ---
 
@@ -131,6 +137,36 @@ sein statt durch Audit jedes Handlers. Dieses Prinzip fehlt eine Ebene höher �
 die Frage, welche Route überhaupt ohne Prinzipal erreichbar ist. Massnahme M1
 trägt es genau dorthin.
 
+### 1.5 Neubefund: Ein Konnektor gehört niemandem
+
+Dieser Punkt kam nach der ersten Fassung dazu, aus einer Frage aus dem Betrieb:
+«Wenn ich einen Inbound-E-Mail-Konnektor habe, darf ausser mir niemand diese
+Ereignisse nutzen.» Nachgemessen an einem Server mit `--auth`, mit einem
+gewöhnlichen Konto, das nur die Rolle `user` trägt:
+
+| Es kann | Weil |
+|---|---|
+| einen Konnektor anlegen | `handleCreateConnector` hat keine Rollenprüfung |
+| **alle** Konnektoren auflisten, mit Endpunkt und Absenderpostfach | `handleListConnectors` ebenso wenig |
+| **fremde** Konnektoren ändern und löschen | dito; `DELETE …?force=true` antwortete `204` |
+| **alle** Inbound-Abonnements lesen — also jeden Nachrichtennamen | `handleListInboundSubscriptions` ebenso wenig |
+| ein Abonnement auf einem **fremden** Konnektor anlegen, unter einem selbst gewählten Nachrichtennamen | `handleCreateInboundSubscription` ebenso wenig |
+
+`requireAdmin` steht auf genau einem dieser Endpunkte:
+`POST /api/v1/connectors/{id}/provision-clio-key`. Der Rest lautet «irgendein
+authentisierter Prinzipal», was seit M5 heisst: irgendein Konto der Installation.
+
+Hinter der Konfiguration liegt die Zustellung, und dort ist es grundsätzlicher.
+`Processor.PublishInbound` trägt **einen Nachrichtennamen und einen
+Korrelationsschlüssel** — sonst nichts. Jede deployte Definition mit passendem
+Nachrichten-Startereignis startet. **Der Nachrichtenname ist die ganze
+Autorisierung**, und er ist aus der Liste oben für jeden lesbar.
+
+Das ist keine Lücke in R-08 — jede dieser Routen verlangt einen Prinzipal, die
+Haustür ist zu. Es ist eine Lücke *dahinter*, also in O-02 (feingranulare
+Autorisierung), und sie fällt erst auf, seit ein Konnektor nicht mehr nur
+hinausgreift, sondern hereinlässt (ADR-0075). Massnahme **M11** beantwortet sie.
+
 ---
 
 ## 2 Zielbild — fünf Grundsätze
@@ -162,6 +198,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
+| M11 | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -534,6 +571,87 @@ voraussetzen, dass Atlas der Aussteller bleibt.
 
 Entscheid: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
 
+### M11 — Berechtigungen auf Konnektor-Ebene
+
+**Problem.** Ein Konnektor gehört niemandem (1.5). Der Datensatz kennt Name, Art,
+Endpunkt und Zugangsdaten-Verweis — aber kein Feld, das sagt, wessen er ist. Das
+war eine zutreffende Beschreibung, solange ein Konnektor Infrastruktur war: eine
+Jira-Instanz, ein SMTP-Relay, einmal für die Installation eingerichtet.
+
+Seit ADR-0075 ist ein Konnektor auch ein Weg **herein**: Ein Inbound-Abonnement
+beobachtet ein externes Subjekt und veröffentlicht, was ankommt, als
+Atlas-Nachricht — die Prozesse startet.
+
+Der auslösende Fall existiert noch nicht: Inbound ist heute nur clio, der
+Mail-Konnektor ist ausgehend (ADR-0079/0093), ein *eingehender* ist weder gebaut
+noch geplant. Er ist das, wonach gefragt wurde — und ein Postfach ist persönlich,
+wie eine Jira-Instanz es nie war. Genau deshalb wird jetzt entschieden: Solange das
+Postfach hypothetisch ist, kostet die Antwort nichts; sobald Menschen eines haben,
+kostet jede Antwort eine Migration.
+
+**Zwei Fragen, nicht eine.** Die Konfiguration zu schützen beantwortet die
+gestellte Frage nicht. Selbst wenn niemand mehr ein Abonnement auf meinem
+Konnektor anlegen kann, kann weiterhin jede Person einen Prozess deployen, dessen
+Nachrichten-Startereignis `mail-eingegangen` heisst — und meine Ereignisse starten
+ihn, weil der Name der ganze Schlüssel ist.
+
+**Vorschlag** (Entwurf:
+[`ADR-draft-connector-ownership-and-event-delivery`](../adr/draft-connector-ownership-and-event-delivery.md)):
+
+1. **Der Konnektor bekommt die drei Felder, die ein Projekt schon hat** —
+   `ownerId`, `visibility`, `members[{ref, role}]` aus ADR-0071. Wörtlich
+   dieselben, damit Gruppen (ADR-0180) ohne weiteres Zutun funktionieren: «teile
+   es mit meiner Frau» und «teile es mit dem Team» sind derselbe Handgriff.
+   Durchgesetzt wird es dort, wo ADR-0071 seine eigenen Regeln durchsetzt — in den
+   HTTP-Handlern am aufgelösten Prinzipal, nicht in der Engine. Ein Abonnement
+   erbt den Geltungsbereich seines Konnektors, wie ein Artefakt den seines
+   Projekts erbt.
+2. **Ein Abonnement beansprucht seinen Nachrichtennamen.** Solange der Anspruch
+   steht, ist dieser Name nur an Definitionen im Geltungsbereich des Anspruchs
+   zustellbar. Geprüft an **beiden** Türen, weil eine Prüfung zu einem Zeitpunkt
+   keine Regel ist: beim Anlegen des Abonnements gegen bereits deployte
+   Definitionen, und beim Deployen gegen bestehende Ansprüche. Beide Abweisungen
+   nennen die Nachricht, nie die Gegenpartei — es geht darum, die Zustellung zu
+   verhindern, nicht darum, fremde Postfächer offenzulegen.
+
+**Ehrlich dazugesagt — was das ist und was nicht.** Es ist ein **Tor an zwei
+Türen**, keine Isolation. Es stoppt den Unfall und den beiläufigen Zugriff, also
+genau den gemeldeten Fall. Es überlebt keine Administratorin, und es hängt daran,
+dass beide Prüfungen laufen; fehlt eine, ist es Dekoration. Die *echte* Isolation
+wäre, dass die veröffentlichte Nachricht ihren Geltungsbereich mitträgt und die
+Korrelation ihn vergleicht — das ändert den Nachrichtenwert und berührt
+`applyToState`, ist also ein eigener Entscheid mit eigener Wiederanlauf-Geschichte.
+Sie ist im Entwurf als Nachfolger benannt, nicht als Absicht verschwiegen.
+
+**Der Preis, ebenfalls benannt.** Nachrichtennamen werden zu einem Namensraum mit
+Ansprüchen: Ein Deploy kann künftig aus einem Grund abgewiesen werden, der in
+einer Konfiguration liegt, die die deployende Person nicht sehen darf. Und
+Konnektoren aus der Zeit vor M11 tragen keinen Eigentümer; sie werden unter
+`--auth` **administrativ**, bis eine Administratorin ihnen einen zuweist. Das
+weicht von ADR-0071 ab, das altlastige Artefakte offen liess — dort wurde eine
+Fähigkeit ergänzt, hier wird eine Lücke geschlossen, und eine Sicherheitsmassnahme,
+die jede bestehende Installation ausnimmt, schliesst nichts.
+
+**Reihenfolge.** Wann immer ein Inbound-E-Mail-Konnektor gebaut wird, gehört M11
+davor, damit ein persönliches Postfach nie — auch nicht vorübergehend —
+installationsweit ist. Zu M9 steht es quer: M9 ordnet Rollen Endpunktgruppen zu,
+M11 ordnet einem Objekt einen Eigentümer zu. Beide zahlen auf O-02 ein, keines wartet auf das andere.
+
+**Abnahme** — dieselbe Regel wie in Kapitel 6, der Nachweis ist Code:
+
+1. Ein gewöhnliches Konto sieht einen fremden privaten Konnektor nicht, ändert ihn
+   nicht und löscht ihn nicht; es legt darauf kein Abonnement an. Genau die fünf
+   Zeilen aus 1.5, jede als Test — heute gehen alle fünf durch, und das ist der
+   Befund.
+2. Eine Freigabe an eine **Gruppe** wirkt für jedes Mitglied und endet mit der
+   Mitgliedschaft — dieselbe Eigenschaft, die ADR-0180 für Projekte hat.
+3. Ein Deploy, dessen Definition einen beanspruchten Nachrichtennamen fängt, wird
+   abgewiesen; die Abweisung nennt die Nachricht und **nicht** die Gegenpartei.
+4. Der Anspruch wird auch gegen **bereits deployte** Definitionen geprüft, nicht
+   nur gegen künftige — sonst genügt es, zuerst zu deployen.
+5. Mit `--auth=false` ist alles davon wirkungslos: der Server ist per Deklaration
+   offen, und M11 fügt dort keine einzige Verweigerung hinzu.
+
 ---
 
 ## 4 Stufenplan
@@ -583,6 +701,12 @@ dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender 
 **M10 stand quer dazu** und ist umgesetzt — beide Hälften und die dynamische
 Client-Registrierung, in der Reihenfolge des Entscheids. Offen bleibt daraus nur
 noch die Föderation, und die wartet auf M9.
+
+**M11 steht ebenfalls quer dazu** und wartet auf nichts. Es ordnet einem Objekt
+einen Eigentümer zu, wo M9 einer Rolle eine Endpunktgruppe zuordnet; beide zahlen
+auf O-02 ein, keines setzt auf dem anderen auf. Seine eigene Reihenfolge ist die
+einzige, die zählt: vor einem Inbound-E-Mail-Konnektor, falls und sobald einer
+gebaut wird.
 Wer zuerst föderiert (O-01), löscht die Autorisierungsserver-Hälfte wieder: Dann
 zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter, und alles andere
 bleibt stehen. Deshalb setzt nichts im heutigen Code voraus, dass Atlas der
@@ -596,7 +720,8 @@ Aussteller bleibt.
 |-------|-------------|
 | OIDC/SAML/eIAM (O-01) | Braucht zuerst die Rollen, denen Claims zugewiesen werden — sonst entsteht ein Mapping ins Leere. Stufe 2. |
 | MFA | Folgt sinnvollerweise der Föderation, nicht dem lokalen Passwort. |
-| Vollständiges RBAC (O-02) | Stufe 2. M1 und M2 sind so gebaut, dass es später an genau einer Stelle andockt. |
+| Vollständiges RBAC (O-02) | Stufe 2. M1 und M2 sind so gebaut, dass es später an genau einer Stelle andockt. M9 und M11 sind zwei Scheiben davon, kein Ersatz dafür. |
+| Isolation der Zustellung in der Engine | Der echte Nachfolger von M11: Die veröffentlichte Nachricht trüge ihren Geltungsbereich mit, und die Korrelation verglicht ihn. Das ändert den Nachrichtenwert und berührt `applyToState` — ein eigener Entscheid mit eigener Wiederanlauf-Geschichte, nicht ein Detail von M11. Bis dahin ist M11 ausdrücklich ein Tor und keine Isolation. |
 | Mandantenfähigkeit (O-09) | Betriebsmuster «eine Installation je Schutzbedarfsklasse» bleibt die Aussage. |
 | TLS im Produkt (R-02) | Bleibt Aufgabe des vorgelagerten Proxys. |
 | Verschlüsselung ruhender Daten (O-06) | Unabhängige Achse; ändert nichts an der Zugriffsfrage. |
@@ -672,6 +797,9 @@ reproduzierbar (O-15).
 | [ADR-0129](../adr/0129-remote-deployment-targets.md) | Deploy-Tokens als Sonderfall | Speicher und Muster werden zu API-Tokens verallgemeinert (M3); Deploy-Tokens werden ein Geltungsbereich davon. |
 | [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | `openapi.json` vor dem Login lesbar | Hinter die Schranke, sobald Auth aktiv ist (M5). |
 | [ADR-0142](../adr/0142-prometheus-metrics.md) | `/metrics` ungated wie `/healthz` | Hinter der Schranke, mit Geltungsbereich `metrics` (M6). Was ADR-0142 über *Inhalt* und Kosten der Exposition sagt, bleibt unverändert. |
+| [ADR-0041](../adr/0041-connector-management-and-secret-store.md) | Ein Konnektor ist Betriebskonfiguration ohne Eigentümer | Bekommt Eigentümer und Freigabeliste (M11). Was ADR-0041 über den Geheimnisverweis sagt (nie der Wert, nur die Referenz), bleibt unverändert. |
+| [ADR-0071](../adr/0071-sharing-scopes.md) | Freigabe gilt für **Entwurfszeit-Inhalte**; Laufzeit ausdrücklich draussen | M11 trägt dieselben drei Felder über diese Linie — auf den Konnektor und, per Anspruch auf den Nachrichtennamen, auf die Zustellung. Die Linie selbst fällt nicht: die Isolation *in* der Engine bleibt draussen. |
+| [ADR-0075](../adr/0075-clio-inbound-event-bridge.md) | Ein Abonnement veröffentlicht unter einem frei gewählten Nachrichtennamen | Der Name wird beansprucht und an zwei Türen geprüft (M11). **Neuer Entscheid nötig.** |
 
 Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
@@ -698,6 +826,11 @@ Neu und noch offen:
   Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
   sich für die neuen öffentlichen Routen auf die Zugriffsklassen aus ADR-0199 sowie
   für deren Drosselung und Protokollierung auf ADR-0197.
+- 🔲 [`draft-connector-ownership-and-event-delivery.md`](../adr/draft-connector-ownership-and-event-delivery.md)
+  — M11. Trägt die Freigabe-Sprache aus ADR-0071 und die Gruppen aus ADR-0180 auf
+  den Konnektor und auf die Zustellung seiner Ereignisse. Er nimmt ADR-0071 seine
+  Linie nicht weg: die Isolation *in* der Engine bleibt ausdrücklich ein eigener,
+  späterer Entscheid.
 
 ---
 
