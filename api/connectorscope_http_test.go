@@ -479,3 +479,248 @@ func newOpenConnectorServer(t *testing.T) *httptest.Server {
 	})
 	return ts
 }
+
+// TestSealingAConnectorAndOpeningItAgain: an owner can shut a shared connector
+// without losing the list of who it was shared with.
+//
+// Keeping the members through a seal is the point. If sealing cleared them, an
+// owner who wanted to close a connector for an afternoon would have to rebuild the
+// list afterwards — which is a good reason never to seal it, and a rule people
+// route around is not a rule.
+func TestSealingAConnectorAndOpeningItAgain(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	bertID := createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+	id := createConnector(t, anna, ts.URL, "zeitweise-offen")
+	shareConnector(t, anna, ts.URL, id, bertID, "user", "editor", http.StatusOK)
+	if listConnectors(t, bert, ts.URL)[id]["endpoint"] == nil {
+		t.Fatal("the member cannot see the connector they were just shared")
+	}
+
+	visibility := ts.URL + "/api/v1/connectors/" + id + "/visibility"
+	if got := statusOf(t, anna, http.MethodPut, visibility, `{"visibility":"private"}`); got != http.StatusOK {
+		t.Fatalf("seal = %d, want 200", got)
+	}
+	if listConnectors(t, bert, ts.URL)[id]["endpoint"] != nil {
+		t.Error("sealing the connector left its member with access")
+	}
+
+	if got := statusOf(t, anna, http.MethodPut, visibility, `{"visibility":"shared"}`); got != http.StatusOK {
+		t.Fatalf("reopen = %d, want 200", got)
+	}
+	if listConnectors(t, bert, ts.URL)[id]["endpoint"] == nil {
+		t.Error("reopening it did not restore the member — the list was lost in the seal")
+	}
+
+	t.Run("only the owner decides", func(t *testing.T) {
+		// Bert is an editor, which is as far as anybody gets without being the owner.
+		if got := statusOf(t, bert, http.MethodPut, visibility, `{"visibility":"private"}`); got != http.StatusForbidden {
+			t.Errorf("= %d, want 403: an editor sealed somebody else's connector", got)
+		}
+	})
+
+	t.Run("refuses what it cannot mean", func(t *testing.T) {
+		for _, tc := range []struct{ name, body string }{
+			{"not JSON", "{"},
+			{"an unknown visibility", `{"visibility":"public"}`},
+			{"no visibility at all", `{}`},
+		} {
+			if got := statusOf(t, anna, http.MethodPut, visibility, tc.body); got != http.StatusBadRequest {
+				t.Errorf("%s = %d, want 400", tc.name, got)
+			}
+		}
+	})
+}
+
+// TestHandingAConnectorOn: a connector outlives the person who made it.
+//
+// It exists because an ownerless connector is administrators-only. Without a
+// transfer, one person leaving would make an administrator the owner of every
+// connector they ever configured — and the fix would be editing JSON on disk.
+func TestHandingAConnectorOn(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	bertID := createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+	id := createConnector(t, anna, ts.URL, "uebergabe")
+	// Bert is an editor first, so the transfer has a stale member grant to clean up.
+	shareConnector(t, anna, ts.URL, id, bertID, "user", "editor", http.StatusOK)
+
+	owner := ts.URL + "/api/v1/connectors/" + id + "/owner/"
+	t.Run("a stranger cannot hand on what is not theirs", func(t *testing.T) {
+		if got := statusOf(t, bert, http.MethodPut, owner+bertID, ""); got != http.StatusForbidden {
+			t.Errorf("= %d, want 403: an editor handed a connector to themselves", got)
+		}
+	})
+	t.Run("and not to somebody who does not exist", func(t *testing.T) {
+		if got := statusOf(t, anna, http.MethodPut, owner+"usr_nobody", ""); got != http.StatusBadRequest {
+			t.Errorf("= %d, want 400", got)
+		}
+	})
+
+	if got := statusOf(t, anna, http.MethodPut, owner+bertID, ""); got != http.StatusOK {
+		t.Fatalf("transfer = %d, want 200", got)
+	}
+
+	// Bert owns it: he can do the one thing only an owner can.
+	bert = signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+	if seen := listConnectors(t, bert, ts.URL)[id]; seen == nil || seen["role"] != "owner" {
+		t.Errorf("the new owner does not hold the connector: %v", seen)
+	}
+	if got := statusOf(t, bert, http.MethodPut, ts.URL+"/api/v1/connectors/"+id+"/visibility",
+		`{"visibility":"private"}`); got != http.StatusOK {
+		t.Errorf("the new owner cannot seal it: %d", got)
+	}
+	// And the stale member grant went with the transfer: an owner listed as their own
+	// editor reads as a restriction that is not there.
+	seen := listConnectors(t, bert, ts.URL)[id]
+	if members, _ := seen["members"].([]any); len(members) != 0 {
+		t.Errorf("the new owner is still listed as a member of their own connector: %v", members)
+	}
+	// Anna handed it over, so she has it no longer.
+	if seen := listConnectors(t, anna, ts.URL)[id]; seen != nil && seen["endpoint"] != nil {
+		t.Error("the previous owner kept access after handing the connector on")
+	}
+}
+
+// TestSharingRefusesWhatItCannotMean covers the ways a share request is wrong, and
+// one that is merely pointless.
+func TestSharingRefusesWhatItCannotMean(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	annaID := createUser(t, admin, ts.URL, "anna")
+	bertID := createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+
+	id := createConnector(t, anna, ts.URL, "grenzfaelle")
+	at := func(principal string) string {
+		return ts.URL + "/api/v1/connectors/" + id + "/members/" + principal
+	}
+
+	for _, tc := range []struct {
+		name, principal, body string
+		want                  int
+	}{
+		{"not JSON", bertID, "{", http.StatusBadRequest},
+		{"no role", bertID, `{}`, http.StatusBadRequest},
+		{"owner is not a grantable role", bertID, `{"role":"owner"}`, http.StatusBadRequest},
+		{"an unknown member type", bertID, `{"role":"viewer","type":"robot"}`, http.StatusBadRequest},
+		{"a user who does not exist", "usr_nobody", `{"role":"viewer"}`, http.StatusBadRequest},
+		{"a group that does not exist", "grp_nobody", `{"role":"viewer","type":"group"}`, http.StatusBadRequest},
+		// Not an error in the world, but an instruction with no meaning: the owner
+		// already has everything a member role could grant, and storing it would make
+		// their own connector list them as its editor.
+		{"the owner as their own member", annaID, `{"role":"editor"}`, http.StatusBadRequest},
+		{"a connector that is not theirs", bertID, `{"role":"viewer"}`, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := statusOf(t, anna, http.MethodPut, at(tc.principal), tc.body); got != tc.want {
+				t.Errorf("= %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("withdrawing is idempotent", func(t *testing.T) {
+		// Removing somebody who is not a member succeeds: an owner tidying up should
+		// not have to know the current list to be allowed to shorten it.
+		if got := statusOf(t, anna, http.MethodDelete, at("usr_never-was"), ""); got != http.StatusOK {
+			t.Errorf("= %d, want 200", got)
+		}
+	})
+
+	t.Run("a connector that does not exist is not there", func(t *testing.T) {
+		gone := ts.URL + "/api/v1/connectors/nope/members/" + bertID
+		if got := statusOf(t, anna, http.MethodPut, gone, `{"role":"viewer"}`); got != http.StatusNotFound {
+			t.Errorf("= %d, want 404", got)
+		}
+		if got := statusOf(t, anna, http.MethodDelete, gone, ""); got != http.StatusNotFound {
+			t.Errorf("delete = %d, want 404", got)
+		}
+	})
+}
+
+// TestAnAdministratorMayUseAnyCredential: the borrow rule has to leave the operator
+// who owns the vault able to check a connector. Otherwise an administrator
+// diagnosing somebody else's mail connector would be refused by a measure meant to
+// stop a stranger.
+func TestAnAdministratorMayUseAnyCredential(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+
+	body := `{"name":"annas-mail","kind":"mail","provider":"smtp","sender":"anna@example.com",` +
+		`"endpoint":"smtp.example.com:587","credentialsRef":"annas-secret","enabled":true}`
+	resp, err := anna.Post(ts.URL+"/api/v1/connectors", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create = %d", resp.StatusCode)
+	}
+
+	// The preview provider clears the reference before anything is resolved, so this
+	// asks only the question this test is about and dials nothing.
+	probe := `{"name":"pruefung","kind":"mail","provider":"preview","sender":"anna@example.com"}`
+	if got := statusOf(t, admin, http.MethodPost, ts.URL+"/api/v1/connectors/test", probe); got != http.StatusOK {
+		t.Errorf("= %d, want 200: an administrator was refused a connector check", got)
+	}
+}
+
+// TestConnectorSharingSurvivesABrokenDataDirectory: what the ownership endpoints
+// answer when the disk beneath them is not what it was.
+//
+// 500 and no change, rather than an answer that reads as a decision. A sharing
+// endpoint that reported "no connector with that id" for an unreadable store would
+// look exactly like a connector somebody had deleted.
+func TestConnectorSharingSurvivesABrokenDataDirectory(t *testing.T) {
+	dir := t.TempDir()
+	ts := newServerOn(t, dir)
+	admin := signedInClient(t, ts.URL)
+	bertID := createUser(t, admin, ts.URL, "bert")
+	createUser(t, admin, ts.URL, "carla")
+	carla := signInAs(t, ts.URL, "carla", "a-password-that-is-long")
+	id := createConnector(t, admin, ts.URL, "kaputt")
+
+	// Broken under a running server, because a server cannot start on one: New
+	// creates the store's directory and fails if something else is in its place. A
+	// plain file where the directory belongs then fails every read and every write
+	// the store makes, and fails for root too — which chmod would not achieve here.
+	p := filepath.Join(dir, "connectors")
+	if err := os.RemoveAll(p); err != nil {
+		t.Fatalf("remove %s: %v", p, err)
+	}
+	if err := os.WriteFile(p, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write %s: %v", p, err)
+	}
+
+	base := ts.URL + "/api/v1/connectors/" + id
+	for _, tc := range []struct{ name, method, url, body string }{
+		{"share", http.MethodPut, base + "/members/" + bertID, `{"role":"viewer"}`},
+		{"unshare", http.MethodDelete, base + "/members/" + bertID, ""},
+		{"visibility", http.MethodPut, base + "/visibility", `{"visibility":"private"}`},
+		{"transfer", http.MethodPut, base + "/owner/" + bertID, ""},
+		{"list subscriptions", http.MethodGet, base + "/inbound-subscriptions", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := statusOf(t, admin, tc.method, tc.url, tc.body); got != http.StatusInternalServerError {
+				t.Errorf("= %d, want 500 — an unreadable store must not read as a decision", got)
+			}
+		})
+	}
+	// The connector check reads the same store to decide whether a credential may be
+	// borrowed, and an unreadable store is not a permission answer either.
+	probe := `{"name":"x","kind":"mail","provider":"smtp","sender":"a@example.com",` +
+		`"endpoint":"smtp.example.com:587","credentialsRef":"irgendein-verweis"}`
+	if got := statusOf(t, carla, http.MethodPost, ts.URL+"/api/v1/connectors/test", probe); got != http.StatusInternalServerError {
+		t.Errorf("connector check = %d, want 500", got)
+	}
+}
