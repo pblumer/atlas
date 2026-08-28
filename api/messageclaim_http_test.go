@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -354,4 +356,113 @@ func deployedProcessIDs(t *testing.T, c *http.Client, base string) map[string]bo
 		seen[p.ProcessID] = true
 	}
 	return seen
+}
+
+// TestTheClaimDoorsSurviveABrokenDataDirectory: what the two doors answer when the
+// stores they read are not there.
+//
+// 500 and no change, never a decision. A claim check that reported "nothing in the
+// way" for an unreadable subscription store would let a deploy through on the
+// strength of a disk error, which is the one outcome this measure exists to
+// prevent.
+func TestTheClaimDoorsSurviveABrokenDataDirectory(t *testing.T) {
+	breakDir := func(t *testing.T, dir, name string) {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.RemoveAll(p); err != nil {
+			t.Fatalf("remove %s: %v", p, err)
+		}
+		if err := os.WriteFile(p, []byte("not a directory"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+
+	t.Run("an unreadable subscription store stops a deploy", func(t *testing.T) {
+		dir := t.TempDir()
+		ts := newServerOn(t, dir)
+		admin := signedInClient(t, ts.URL)
+		createUser(t, admin, ts.URL, "bert")
+		bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+		breakDir(t, dir, "inbound-subscriptions")
+
+		status, body := deployAs(t, bert, ts.URL, messageStartBPMN("blind", "irgendein-name"))
+		if status != http.StatusInternalServerError {
+			t.Errorf("= %d, want 500: the deploy door decided on the strength of a disk error\n%s", status, body)
+		}
+	})
+
+	t.Run("an unreadable project store stops a claim", func(t *testing.T) {
+		dir := t.TempDir()
+		ts := newServerOn(t, dir)
+		admin := signedInClient(t, ts.URL)
+		createUser(t, admin, ts.URL, "anna")
+		createUser(t, admin, ts.URL, "bert")
+		anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+		bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+		// A definition to check the claim against — without one the door short-circuits
+		// before it ever reads a project.
+		if status, body := deployAs(t, bert, ts.URL, messageStartBPMN("bertsLauscher", "umkaempft")); status != http.StatusOK {
+			t.Fatalf("deploy = %d: %s", status, body)
+		}
+		connID := createConnector(t, anna, ts.URL, "annas-posteingang")
+		breakDir(t, dir, "projects")
+
+		status, body := subscribeAs(t, anna, ts.URL, connID, "umkaempft")
+		if status != http.StatusInternalServerError {
+			t.Errorf("= %d, want 500: the claim door decided on the strength of a disk error\n%s", status, body)
+		}
+	})
+}
+
+// TestAClaimOnAConnectorThatIsGoneHoldsNothing: a subscription whose connector was
+// deleted is an orphan the bridge already ignores, so it must not go on holding a
+// message name against everybody.
+func TestAClaimOnAConnectorThatIsGoneHoldsNothing(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+	connID := createConnector(t, anna, ts.URL, "kurzlebig")
+	if status, body := subscribeAs(t, anna, ts.URL, connID, "verwaister-name"); status != http.StatusOK {
+		t.Fatalf("subscribe = %d: %s", status, body)
+	}
+	// Deleting the connector cascades its grants but leaves the subscription record;
+	// the claim it carried must fall with the connector, not outlive it.
+	if got := statusOf(t, anna, http.MethodDelete, ts.URL+"/api/v1/connectors/"+connID+"?force=true", ""); got != http.StatusNoContent {
+		t.Fatalf("delete connector = %d", got)
+	}
+	if status, body := deployAs(t, bert, ts.URL, messageStartBPMN("nachzuegler", "verwaister-name")); status != http.StatusOK {
+		t.Errorf("= %d, want 200: an orphaned subscription still held a message name\n%s", status, body)
+	}
+}
+
+// TestADisabledSubscriptionClaimsNothing: a subscription that is off publishes
+// nothing, so holding a name would be a hold on nobody's behalf — and switching one
+// off would be a way to reserve a name indefinitely.
+func TestADisabledSubscriptionClaimsNothing(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+
+	connID := createConnector(t, anna, ts.URL, "annas-posteingang")
+	status, body := subscribeAs(t, anna, ts.URL, connID, "schlafender-name")
+	if status != http.StatusOK {
+		t.Fatalf("subscribe = %d: %s", status, body)
+	}
+	subID := decodeField(t, body, "id")
+	if got := statusOf(t, anna, http.MethodPatch, ts.URL+"/api/v1/inbound-subscriptions/"+subID,
+		`{"enabled":false}`); got != http.StatusOK {
+		t.Fatalf("disable = %d", got)
+	}
+
+	if status, body := deployAs(t, bert, ts.URL, messageStartBPMN("wacher", "schlafender-name")); status != http.StatusOK {
+		t.Errorf("= %d, want 200: a switched-off subscription still held the name\n%s", status, body)
+	}
 }
