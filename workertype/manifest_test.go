@@ -40,13 +40,13 @@ func TestManifestValidateRejectsInvalidContracts(t *testing.T) {
 	valid := Manifest{
 		APIVersion: APIVersionV1Alpha1,
 		Kind:       KindWorkerType,
-		Metadata: Metadata{ID: "com.example.mail", Version: "1.2.3", Name: "Mail"},
+		Metadata:   Metadata{ID: "com.example.mail", Version: "1.2.3", Name: "Mail"},
 		Spec: Spec{
-			AtlasCompatibility: ">=1.0.0 <2.0.0",
-			WorkerProtocol:     WorkerProtocolV1,
-			Runtime:            Runtime{Mode: RuntimeExternal},
-			JobTypes:           []string{"io.example.mail"},
-			Operations:         []Operation{{ID: "send", JobType: "io.example.mail"}},
+			AtlasCompatibility:  ">=1.0.0 <2.0.0",
+			WorkerProtocol:      WorkerProtocolV1,
+			Runtime:             Runtime{Mode: RuntimeExternal},
+			JobTypes:            []string{"io.example.mail"},
+			Operations:          []Operation{{ID: "send", JobType: "io.example.mail"}},
 			ConfigurationSchema: "config.schema.json",
 			ModelerTemplate:     "template.json",
 			Artifact: &Artifact{
