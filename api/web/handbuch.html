@@ -2042,6 +2042,50 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         </div>
       </div>
 
+      <h3 data-l="de">Ein Verzeichnis einrichten</h3>
+      <h3 data-l="en">Configuring a directory</h3>
+      <p data-l="de">Ein Active Directory richtest du wie jeden anderen Konnektor ein:
+        <a href="/#/console/connectors">Konsole &rsaquo; Connectors</a> → <b>New connector</b> → Art
+        <b>Active Directory</b>. Zwei Angaben braucht es: die <b>LDAP-URL</b> des Domain Controllers
+        (<code>ldaps://dc.example.com:636</code>) und eine <b>Credentials-Referenz</b> auf ein Vault-Bündel mit
+        dem Dienstkonto:</p>
+      <p data-l="en">You configure an Active Directory the way you configure every other connector:
+        <a href="/#/console/connectors">Console &rsaquo; Connectors</a> → <b>New connector</b> → kind
+        <b>Active Directory</b>. It takes two things: the domain controller's <b>LDAP URL</b>
+        (<code>ldaps://dc.example.com:636</code>) and a <b>credential reference</b> naming a vault bundle that
+        holds the service account:</p>
+      <pre><code>{"bindDN": "cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com", "password": "…"}</code></pre>
+      <p data-l="de">Ein Task nennt dann nur noch den Namen des Konnektors — wo das Verzeichnis steht und wer sich
+        anmeldet, steht nicht mehr im Modell:</p>
+      <p data-l="en">A task then names the connector and nothing else — where the directory is and who binds to it
+        no longer live in the model:</p>
+      <pre><code>&lt;atlas:adConnector connector="prod-forest" operation="disable" dn="=benutzerDN"/&gt;</code></pre>
+      <p data-l="de"><b>Mehrere Verzeichnisse sind mehrere Konnektoren.</b> Ein Prozess für den Produktiv-Forest
+        und einer für den Test-Forest nennen einfach unterschiedliche Namen; <b>ein</b> AD-Worker bedient beide,
+        denn er ist an kein Verzeichnis gebunden. Mehrere Worker brauchst du dafür nicht — und sie würden auch
+        nichts trennen, weil Jobs nach Typ und nicht nach Ziel verteilt werden.</p>
+      <p data-l="en"><b>Several directories are several connectors.</b> A process for the production forest and one
+        for the test forest simply name different connectors; <b>one</b> AD worker serves both, because it is bound
+        to no directory. You do not need several workers for this — and they would not separate anything anyway,
+        since jobs are handed out by type and not by target.</p>
+      <p data-l="de">Verwende <b>ldaps://</b>, sofern du nicht StartTLS aktivierst: Active Directory weigert sich,
+        ein Passwort über eine unverschlüsselte Verbindung zu setzen. Ein <code>ldap://</code>-Verzeichnis
+        funktioniert also für alles ausser für genau das, was ein Joiner am nötigsten braucht.</p>
+      <p data-l="en">Use <b>ldaps://</b> unless you enable StartTLS: Active Directory refuses to set a password
+        over an unencrypted connection. So an <code>ldap://</code> directory works for everything except the one
+        thing a joiner needs most.</p>
+      <div class="note">
+        <span class="lbl" data-l="de">Ältere Modelle laufen weiter</span><span class="lbl" data-l="en">Older models keep working</span>
+        <p data-l="de" style="margin:.3em 0 0">Tasks, die ihre <code>url</code>, ihren <code>bindDN</code> und ihren
+          <code>bindSecret</code> selbst tragen, kompilieren und laufen unverändert. Nur <b>beides zugleich</b> wird
+          abgelehnt: ein Task nennt entweder einen Konnektor oder trägt das Verzeichnis selbst — sonst zeigen zwei
+          Angaben auf zwei verschiedene Forests und ein stiller Sieger schreibt in den falschen.</p>
+        <p data-l="en" style="margin:.3em 0 0">Tasks carrying their own <code>url</code>, <code>bindDN</code> and
+          <code>bindSecret</code> compile and run unchanged. Only <b>both at once</b> is refused: a task either
+          names a connector or carries the directory itself — otherwise two settings point at two different forests
+          and a silent winner writes to the wrong one.</p>
+      </div>
+
       <h3 data-l="de">Active Directory ausprobieren, ohne ein Active Directory</h3>
       <h3 data-l="en">Trying Active Directory without an Active Directory</h3>
       <p data-l="de">Ein Identity-Prozess ist die eine Sorte, die niemand gefahrlos ausprobieren kann: Das
@@ -2098,6 +2142,23 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="en">You watch it under <a href="/#/operations/workers">Operations &rsaquo; Workers</a>: the worker
         called <code>ad</code> runs there. Its log warns at startup that no directory is being written, then lists
         every simulated operation with its DN – passwords redacted.</p>
+
+      <p data-l="de"><b>Mehrere Verzeichnisse bleiben auch im Mockup getrennt.</b> Jede LDAP-URL bekommt ihr
+        eigenes Verzeichnis im Arbeitsspeicher, mit eigenem Bestand und eigener Änderungshistorie. Dasselbe Konto
+        im Produktiv- und im Test-Forest anzulegen gelingt also beidemal — so wie es an zwei echten Domain
+        Controllern gelänge. Der Startbestand ist dabei eine <i>Vorlage</i>: jedes Verzeichnis erhält eine eigene
+        Kopie und entwickelt sich ab dem ersten Schreibzugriff eigenständig weiter.</p>
+      <p data-l="en"><b>Several directories stay separate in the mockup too.</b> Each LDAP URL gets its own
+        in-memory directory, with its own entries and its own change history. Creating the same account in the
+        production and the test forest therefore succeeds both times — as it would against two real domain
+        controllers. The starting entries are a <i>template</i>: each directory gets its own copy and goes its own
+        way from the first write.</p>
+      <p data-l="de">Der Schalter selbst gilt weiterhin für <b>alle</b> Verzeichnisse zugleich. Das ist Absicht:
+        gleichzeitig eines zu simulieren und in ein anderes wirklich zu schreiben wäre ein Zwischenzustand, dessen
+        ganzes Risiko darin besteht, dass er wie ein vollständiger Mockup-Lauf aussieht.</p>
+      <p data-l="en">The switch itself still applies to <b>every</b> directory at once. That is deliberate:
+        simulating one while really writing to another would be a half-state whose whole risk is that it looks like
+        a full mockup run.</p>
 
       <div class="note">
         <span class="lbl" data-l="de">Es lehnt ab, was auch AD ablehnt</span><span class="lbl" data-l="en">It refuses what AD refuses</span>

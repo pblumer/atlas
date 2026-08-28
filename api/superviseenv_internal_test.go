@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -599,4 +600,76 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// A connector store that cannot be read hands over nothing and says so, rather than
+// handing a worker a partial set of connectors or taking the server down.
+//
+// Every renderer is checked, because they each read the store separately and a new one
+// is easy to write without the guard: a worker spawned with half its connectors is
+// worse than one spawned with none, since the missing half looks configured in the
+// Console and simply never serves.
+func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	for ref, bundle := range map[string]string{
+		"ad-good":     `{"bindDN":"cn=svc,dc=x","password":"pw"}`,
+		"remedy-good": `{"username":"svc","password":"pw"}`,
+		"entra-good":  `{"tenantId":"t","clientId":"c","clientSecret":"s"}`,
+	} {
+		if _, err := srv.vault.Set(ref, bundle); err != nil {
+			t.Fatalf("vault.Set(%s): %v", ref, err)
+		}
+	}
+	for _, c := range []connector{
+		{ID: "1", Name: "forest", Kind: connectorKindAD, Endpoint: "ldaps://dc:636", CredentialsRef: "ad-good", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "post", Kind: connectorKindMail, Provider: "smtp", Endpoint: "mx:587", Enabled: true, CreatedAt: 2},
+		{ID: "3", Name: "helix", Kind: connectorKindRemedy, Endpoint: "https://helix:8008", CredentialsRef: "remedy-good", Enabled: true, CreatedAt: 3},
+		{ID: "4", Name: "tenant", Kind: connectorKindEntra, CredentialsRef: "entra-good", Enabled: true, CreatedAt: 4},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("connectors.Save(%s): %v", c.Name, err)
+		}
+	}
+
+	renderers := map[string]struct {
+		render func() []string
+		lists  string
+	}{
+		"mail":   {srv.mailWorkerEnv, "ATLAS_MAIL_CONNECTORS"},
+		"remedy": {srv.remedyWorkerEnv, "ATLAS_REMEDY_CONNECTORS"},
+		"entra":  {srv.entraWorkerEnv, "ATLAS_ENTRA_CONNECTORS"},
+		"ad":     {srv.adWorkerEnv, "ATLAS_AD_CONNECTORS"},
+	}
+	// Each renders its own connector while the store is readable, so "nothing" below is
+	// a decision rather than an empty store.
+	for name, r := range renderers {
+		if envOf(t, r.render())[r.lists] == "" {
+			t.Fatalf("%s rendered no connector before the store broke", name)
+		}
+	}
+
+	// Now break it, in the way a store actually breaks: the directory is gone, replaced
+	// by something that is not one. A malformed record file would not do it — the store
+	// skips a name that is not an id, so LoadAll would happily succeed.
+	conns := filepath.Join(dir, "connectors")
+	if err := os.RemoveAll(conns); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := os.WriteFile(conns, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	sink := captureWarnings(t)
+	for name, r := range renderers {
+		t.Run(name, func(t *testing.T) {
+			if got := envOf(t, r.render())[r.lists]; got != "" {
+				t.Errorf("%s = %q, rendered from a store that cannot be read", r.lists, got)
+			}
+		})
+	}
+	// And it is said out loud: an operator whose workers quietly lost their connectors
+	// has nothing else to go on.
+	if !strings.Contains(sink.String(), logging.WorkerSupervisorFailed.String()) {
+		t.Errorf("nothing was logged; the log was %q", sink.String())
+	}
 }

@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Connectors",
+    "Active Directory"
+  ],
+  "title": {
+    "en": "Active Directory is configured in the Console now",
+    "de": "Active Directory wird jetzt in der Konsole eingerichtet"
+  },
+  "summary": {
+    "en": "AD was the one integration with credentials that you could not create like the others — the domain controller's address and the service account lived in every model that touched it. Now you add a directory under Connectors, with its LDAP URL and a vault bundle holding the bind account, and a task simply names it. Several directories are several connectors, and one worker serves them all. Models that carry their own url keep working unchanged.",
+    "de": "AD war die einzige Integration mit Zugangsdaten, die du nicht wie die anderen anlegen konntest — die Adresse des Domain Controllers und das Dienstkonto standen in jedem Modell, das damit arbeitete. Jetzt legst du ein Verzeichnis unter Connectors an, mit seiner LDAP-URL und einem Vault-Bündel für das Bind-Konto, und ein Task nennt es einfach beim Namen. Mehrere Verzeichnisse sind mehrere Konnektoren, und ein Worker bedient sie alle. Modelle, die ihre url selbst tragen, laufen unverändert weiter."
+  },
+  "tutorial": {
+    "en": [
+      "Under Secrets, add a vault entry holding {\"bindDN\": \"cn=svc-atlas,…\", \"password\": \"…\"}.",
+      "Open Console › Connectors and press New connector.",
+      "Pick kind Active Directory, give it a name, and enter the LDAP URL (ldaps://dc.example.com:636).",
+      "Point the credential reference at the vault entry from step 1, then Add.",
+      "In a model, set the AD task's connector attribute to that name — and drop its url, bindDN and bindSecret."
+    ],
+    "de": [
+      "Unter Secrets einen Vault-Eintrag anlegen mit {\"bindDN\": \"cn=svc-atlas,…\", \"password\": \"…\"}.",
+      "Konsole › Connectors öffnen und New connector drücken.",
+      "Art Active Directory wählen, einen Namen vergeben und die LDAP-URL eintragen (ldaps://dc.example.com:636).",
+      "Die Credentials-Referenz auf den Vault-Eintrag aus Schritt 1 zeigen lassen, dann Add.",
+      "Im Modell beim AD-Task das Attribut connector auf diesen Namen setzen — und url, bindDN und bindSecret entfernen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Connectors",
+      "de": "Connectors öffnen"
+    },
+    "route": "#/console/connectors"
+  }
+}

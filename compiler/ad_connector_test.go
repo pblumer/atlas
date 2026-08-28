@@ -270,3 +270,73 @@ func TestAdSyncValidation(t *testing.T) {
 		})
 	}
 }
+
+// A task addresses its directory by naming a connector an operator configured, the way
+// every other credential-bearing kind is addressed
+// (ADR-0206). The model then carries the operation and its
+// DNs, and nothing about where the directory is or who binds to it.
+func TestAdConnectorTaskNamesAConfiguredDirectory(t *testing.T) {
+	cp, d := adDetail(t, `connector="prod-forest" operation="disable" dn="cn=Arno,dc=example,dc=com"`)
+	if got := cp.Intern(d.Connector); got != "prod-forest" {
+		t.Errorf("connector = %q, want prod-forest", got)
+	}
+	// And nothing about the directory itself: those slots stay empty, so nothing
+	// downstream can quietly prefer a stale url the model happens to still carry.
+	if d.AdURL.Literal != "" || d.AdBindDN.Literal != "" || d.AdBindSecret != -1 {
+		t.Errorf("url/bindDN/bindSecret = %q / %q / %d, want none of them authored",
+			d.AdURL.Literal, d.AdBindDN.Literal, d.AdBindSecret)
+	}
+}
+
+// The older shape still compiles, and carries no connector reference — which is what
+// keeps the deploy-time "a connector of kind ad is required here" check off models
+// written before records existed.
+func TestAdConnectorTaskStillCompilesWithItsOwnURL(t *testing.T) {
+	cp, d := adDetail(t, `url="ldaps://dc" bindDN="cn=svc,dc=x" bindSecret="AD_BIND" operation="disable" dn="cn=a"`)
+	if d.Connector != -1 {
+		t.Errorf("connector = %d, want none for a task carrying its own url", d.Connector)
+	}
+	if d.AdURL.Literal != "ldaps://dc" || cp.Intern(d.AdBindSecret) != "AD_BIND" {
+		t.Errorf("url/bindSecret = %q / %q", d.AdURL.Literal, cp.Intern(d.AdBindSecret))
+	}
+	// The reference view agrees: no connector to check against the store.
+	if _, ok := cp.NodeConnectorRef(0); ok {
+		if ref, _ := cp.NodeConnectorRef(0); ref.Connector != "" {
+			t.Errorf("NodeConnectorRef = %+v, want no connector reference", ref)
+		}
+	}
+}
+
+// Naming a connector *and* carrying a url is refused rather than resolved by
+// precedence. Whichever rule we picked, half the readers of the model would assume the
+// other — and the two point at different directories, so a silent winner writes to the
+// wrong forest.
+func TestAdConnectorTaskRefusesBothShapesAtOnce(t *testing.T) {
+	for _, attrs := range []string{
+		`connector="prod" url="ldaps://dc" operation="disable" dn="cn=a"`,
+		`connector="prod" bindDN="cn=svc,dc=x" operation="disable" dn="cn=a"`,
+		`connector="prod" bindSecret="AD_BIND" operation="disable" dn="cn=a"`,
+	} {
+		_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(attrs)))
+		if err == nil {
+			t.Fatalf("a task carrying both shapes compiled: %s", attrs)
+		}
+		if !strings.Contains(err.Error(), "keep one") {
+			t.Errorf("error = %v, want it to say which to keep", err)
+		}
+	}
+}
+
+// A task carrying neither is refused, naming both ways out — the message is the only
+// place a modeler learns that a Console connector is now an option.
+func TestAdConnectorTaskNeedsADirectoryOneWayOrTheOther(t *testing.T) {
+	_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(`operation="disable" dn="cn=a"`)))
+	if err == nil {
+		t.Fatal("a task naming no directory at all compiled")
+	}
+	for _, want := range []string{"connector", "url"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to mention %q", err, want)
+		}
+	}
+}

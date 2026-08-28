@@ -495,8 +495,8 @@ const CONNECTORS = [
   },
   {
     id: "ad", name: "Active Directory", kind: "Directory",
-    desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta — on a worker, off the processor loop. Unlike the connectors below, an AD task carries its own server URL and bind DN: the directory is model data, so there is nothing to configure here beyond the bind password's vault secret. The Active Directory card below switches those tasks to a directory in the worker's memory instead.",
-    refs: "ADR-0166 · ADR-0181 · ADR-0182", status: "active", statusLabel: "model-authored",
+    desc: "Creates a user, group or contact, sets a password, enables or disables an account, moves or deletes an entry, manages group membership and reads a DirSync delta \u2014 on a worker, off the processor loop. Configure each directory below: its LDAP URL and a vault bundle holding the service account. A model then names the connector and says nothing else about the directory. Tasks written before this that carry their own url and bindDN keep working.",
+    refs: "ADR-0166 \u00b7 ADR-0181", status: "active", statusLabel: "configured below",
   },
 ];
 
@@ -3085,7 +3085,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">SQL Server</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option><option value="preview">Preview (in-app outbox)</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>

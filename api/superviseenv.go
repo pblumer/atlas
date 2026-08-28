@@ -434,6 +434,92 @@ func remedyBundleParse(raw string) (remedyCredentials, bool) {
 	return c, true
 }
 
+// adDirectoryEnvLocked renders the Console-configured AD directories a supervised
+// worker builds its registry from: ATLAS_AD_CONNECTORS naming them, and per name an
+// ATLAS_AD_<NAME>_URL, _BIND_DN and _PASSWORD out of the record and the vault bundle.
+//
+// "Locked" because it reads the connector store and the vault and must run on the run
+// loop; its caller is already inside s.do, so it does not open a second one.
+func (s *Server) adDirectoryEnvLocked() []string {
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		logging.Warn(logging.WorkerSupervisorFailed, "could not read the connector store for a supervised ad worker",
+			slog.String("error", err.Error()))
+		return nil
+	}
+	sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+	var (
+		env   []string
+		names []string
+	)
+	taken := map[string]string{}
+	for _, c := range recs {
+		if c.Kind != connectorKindAD || !c.Enabled {
+			continue
+		}
+		envKey := connectorEnvKey(c.Name)
+		if envKey == "" {
+			continue
+		}
+		// Two names folding to one variable would give one directory the other's
+		// service account — the mail/entra/remedy collision, left out for the reason
+		// they are, and worse here: the credential opens a forest.
+		if first, dup := taken[envKey]; dup {
+			logging.Warn(logging.WorkerSupervisorFailed,
+				"two active directory connectors share one environment name; the second is not handed to the supervised worker",
+				slog.String("connector", c.Name), slog.String("collidesWith", first))
+			continue
+		}
+		url := strings.TrimSpace(c.Endpoint)
+		creds, ok := adBundleParse(s.resolveConnectorSecret(c.CredentialsRef))
+		// A directory with no URL, or whose bundle does not resolve yet, is left out
+		// whole rather than handed over half-filled: the worker refuses to start on a
+		// *named* directory missing a field, which would take down every other kind it
+		// serves. Left out, it is simply not served, and the Console shows the record as
+		// configured-not-working.
+		if url == "" || !ok {
+			continue
+		}
+		taken[envKey] = c.Name
+		key := adDirEnvPrefix + envKey + "_"
+		env = append(env,
+			key+"URL="+url,
+			key+"BIND_DN="+creds.BindDN,
+			key+"PASSWORD="+creds.Password)
+		names = append(names, c.Name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return append(env, adConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// adCredentials is the vault bundle an AD connector's credentialsRef names: the
+// service account's DN and its password together, so the record holds neither
+// (ADR-0041 / I6). Both halves are required — a bind DN with no password is an
+// *anonymous* bind to Active Directory, which succeeds and then fails on permissions
+// somewhere far from the cause.
+type adCredentials struct {
+	BindDN   string `json:"bindDN"`
+	Password string `json:"password"`
+}
+
+// adBundleParse parses that bundle. ok is false when it is absent, invalid JSON, or
+// missing a field.
+func adBundleParse(raw string) (adCredentials, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return adCredentials{}, false
+	}
+	var c adCredentials
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		return adCredentials{}, false
+	}
+	if strings.TrimSpace(c.BindDN) == "" || strings.TrimSpace(c.Password) == "" {
+		return adCredentials{}, false
+	}
+	return c, true
+}
+
 // splitConnectorList splits a comma-separated connector-names value, trimming spaces
 // and dropping empties — the same shape the worker's own splitAndTrim produces.
 func splitConnectorList(v string) []string {
@@ -594,6 +680,12 @@ func (s *Server) adWorkerEnv() []string {
 				env = append(env, adMockSeedEnv+"="+seed)
 			}
 		}
+		// Directories an operator configured in the Console
+		// (ADR-0206), rendered under the names the worker
+		// reads — the Remedy shape exactly, because the problem is the same: the URL is
+		// in a store and the bind account is in the vault, neither of which a supervised
+		// worker can read.
+		env = append(env, s.adDirectoryEnvLocked()...)
 		keys := make([]uint64, 0, len(s.deployments))
 		for key := range s.deployments {
 			keys = append(keys, key)
@@ -670,6 +762,12 @@ func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
 const (
 	adMockEnv     = "ATLAS_AD_MOCK"
 	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
+	// adDirEnvPrefix and adConnectorsEnv are where a supervised AD worker reads the
+	// directories an operator configured (ADR-0206) — the
+	// same names an operator sets by hand for an external worker, because there is no
+	// private channel between engine and child (ADR-0157).
+	adDirEnvPrefix  = "ATLAS_AD_"
+	adConnectorsEnv = adDirEnvPrefix + "CONNECTORS"
 )
 
 // boolEnv renders a switch as the yes/no the worker parses.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	goldap "github.com/go-ldap/ldap/v3"
 
@@ -37,6 +38,12 @@ import (
 // BindSecret is a *reference*, not a password — the same reference the model authored
 // (ADR-0041). Whoever runs the job resolves it against whatever secret store it has.
 type Job struct {
+	// Connector is the Console-configured directory this job talks to. When it is set
+	// the worker holds that directory's URL and bind credentials under this name and
+	// URL/BindDN/BindSecret below are empty — the shape every other credential-bearing
+	// kind already uses (ADR-0206). When it is empty the job
+	// carries the directory itself, which is how models written before that read.
+	Connector  string `json:"connector,omitempty"`
 	URL        string `json:"url"`
 	BindDN     string `json:"bindDN,omitempty"`
 	BindSecret string `json:"bindSecretRef,omitempty"`
@@ -83,6 +90,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
 	op := cp.Intern(detail.AdOp)
 	j := Job{
+		Connector:   cp.Intern(detail.Connector),
 		URL:         resolveValue(detail.AdURL, piKey, scopeVars),
 		BindDN:      resolveValue(detail.AdBindDN, piKey, scopeVars),
 		BindSecret:  cp.Intern(detail.AdBindSecret),
@@ -130,18 +138,12 @@ func needsEntry(op string) bool {
 // secret store, dials and binds, performs the operation, and closes. It is the whole
 // of the worker's half, and the in-process path calls it too, so there is one
 // definition of what a resolved AD task means rather than two that drift.
-func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver) (map[string]any, error) {
-	if j.URL == "" {
-		return nil, fmt.Errorf("ad: %s has an empty url", j.Operation)
+func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver, dirs *Registry) (map[string]any, error) {
+	url, bindDN, bindPassword, startTLS, err := target(j, secret, dirs)
+	if err != nil {
+		return nil, err
 	}
-	bindPassword := ""
-	if j.BindSecret != "" {
-		bindPassword = resolveSecret(secret, j.BindSecret)
-		if bindPassword == "" {
-			return nil, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN where this job runs)", j.BindSecret)
-		}
-	}
-	conn, err := dialer.Dial(j.URL, j.BindDN, bindPassword, j.StartTLS)
+	conn, err := dialer.Dial(url, bindDN, bindPassword, startTLS)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +152,40 @@ func Run(_ context.Context, j Job, dialer Dialer, secret SecretResolver) (map[st
 		return runSync(j, conn)
 	}
 	return nil, dispatch(j, conn)
+}
+
+// target resolves which directory this job talks to and how it binds, from whichever
+// of the two shapes the task carries.
+//
+// A named connector is looked up in the registry the worker was built with; a task
+// that carries its own url resolves its bind password out of the worker's secrets, as
+// it always did. The two are deliberately not blended — a task compiles as one or the
+// other (the compiler refuses both), so there is no precedence rule here for a reader
+// to get wrong.
+func target(j Job, secret SecretResolver, dirs *Registry) (url, bindDN, password string, startTLS bool, err error) {
+	if name := strings.TrimSpace(j.Connector); name != "" {
+		if dirs == nil {
+			return "", "", "", false, fmt.Errorf("ad: this job names the directory %q, but no directories are configured where it runs; is this server offloading the ad kind to a worker that holds them?", name)
+		}
+		d, ok := dirs.Client(name)
+		if !ok {
+			return "", "", "", false, dirs.Unresolved("ad", name)
+		}
+		if d.URL == "" {
+			return "", "", "", false, fmt.Errorf("ad: directory %q has no url", name)
+		}
+		return d.URL, d.BindDN, d.Password, d.StartTLS, nil
+	}
+	if j.URL == "" {
+		return "", "", "", false, fmt.Errorf("ad: %s has an empty url", j.Operation)
+	}
+	if j.BindSecret != "" {
+		password = resolveSecret(secret, j.BindSecret)
+		if password == "" {
+			return "", "", "", false, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN where this job runs)", j.BindSecret)
+		}
+	}
+	return j.URL, j.BindDN, password, j.StartTLS, nil
 }
 
 // runSync performs one DirSync pass and returns the variables it completes with: the

@@ -32,6 +32,9 @@ func TestAResolvedDetailThisWorkerCannotReadFailsTheJobByName(t *testing.T) {
 		}},
 		{"script", "resultVariable", func(j Job) (map[string]any, error) { return runScript(context.Background(), j, nil) }},
 		{"rest", "resultVariable", func(j Job) (map[string]any, error) { return runREST(context.Background(), j, nil, nil) }},
+		{"ad", "dn", func(j Job) (map[string]any, error) {
+			return RunADJob(context.Background(), j, nil, adSecretFromEnv(envMap(nil)), nil)
+		}},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			// The clients handed in above are nil. That is the second half of the
