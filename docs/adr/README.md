@@ -243,6 +243,7 @@ comment safe to write.
 | [0204](0204-hosted-apps-on-an-isolated-origin.md) | Hosted apps — user HTML/JS served from an isolated origin | Proposed |
 | [0205](0205-connector-ownership-and-event-delivery.md) | Who owns a connector, and who may use the events it brings in | Accepted |
 | [0206](0206-ad-as-a-console-connector.md) | Active Directory is a connector you configure, not one you write into a model | Proposed |
+| [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Proposed |
 
 ## Status values
 
