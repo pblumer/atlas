@@ -1,4 +1,4 @@
-# ADR-draft-worker-type-packaging: Package Worker Types as signed external runtime artifacts
+# ADR-DRAFT: Package Worker Types as signed external runtime artifacts
 
 - **Status:** Proposed
 - **Date:** 2026-08-28
