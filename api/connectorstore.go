@@ -48,15 +48,15 @@ const (
 	connectorKindAD = "ad"
 )
 
-// worker is an operator-managed Worker (ADR-0203): an instance of a Worker Type
-// configured with the endpoint, provider and credential reference Atlas uses to
-// execute job-backed work. It is the canonical in-process name for what the legacy
-// HTTP/API surface still calls a connector instance.
+// configuredWorker is an operator-managed Worker (ADR-0203): an instance of a
+// Worker Type configured with the endpoint, provider and credential reference Atlas
+// uses to execute job-backed work. The explicit name distinguishes this durable
+// design-time configuration from runtime Worker Instances and from the worker package.
 //
 // Persisted JSON deliberately stays byte-compatible with the historical connector
 // record. CredentialsRef is only a reference to secret material, never the secret
 // value itself (I6); disabled Workers remain durable but are not registered.
-type worker struct {
+type configuredWorker struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	Kind           string `json:"kind"`
@@ -78,28 +78,28 @@ type worker struct {
 
 // connector is the compatibility name used by the existing connector-oriented API
 // and implementation while ADR-0203 is migrated incrementally. It is an alias, not a
-// second record type, so connector and Worker code share one JSON representation and
-// one durable store.
-type connector = worker
+// second record type, so connector and configured-Worker code share one JSON
+// representation and one durable store.
+type connector = configuredWorker
 
-// workerStore is the durable store for configured Workers. The directory and JSON
-// shape intentionally remain the historical connector-store format: this migration
-// changes terminology only and must not fork or rewrite persisted design-time state.
-// Like every design-time store it is owned solely by the server run loop and needs no
-// locking of its own (I3).
-type workerStore = sidecar.Store[worker]
+// configuredWorkerStore is the durable store for configured Workers. The directory
+// and JSON shape intentionally remain the historical connector-store format: this
+// migration changes terminology only and must not fork or rewrite persisted
+// design-time state. Like every design-time store it is owned solely by the server
+// run loop and needs no locking of its own (I3).
+type configuredWorkerStore = sidecar.Store[configuredWorker]
 
 // connectorStore is the compatibility name retained for existing callers until the
 // connector-management API migration in ADR-0203 is complete.
-type connectorStore = workerStore
+type connectorStore = configuredWorkerStore
 
-// newWorkerStore opens (creating if needed) the configured-Worker directory. The
-// on-disk store name remains "connectorstore" so existing error text and operational
-// diagnostics do not change during the compatibility window.
-func newWorkerStore(dir string) (*workerStore, error) {
+// newConfiguredWorkerStore opens (creating if needed) the configured-Worker
+// directory. The on-disk store name remains "connectorstore" so existing error text
+// and operational diagnostics do not change during the compatibility window.
+func newConfiguredWorkerStore(dir string) (*configuredWorkerStore, error) {
 	return sidecar.NewStore(dir, "connectorstore",
-		func(rec worker) string { return rec.ID },
-		sidecar.Order(func(a, b worker) bool {
+		func(rec configuredWorker) string { return rec.ID },
+		sidecar.Order(func(a, b configuredWorker) bool {
 			if a.CreatedAt != b.CreatedAt {
 				return a.CreatedAt < b.CreatedAt
 			}
@@ -109,8 +109,8 @@ func newWorkerStore(dir string) (*workerStore, error) {
 }
 
 // newConnectorStore is the compatibility constructor used by the existing Server
-// wiring. It delegates to the canonical Worker store and therefore cannot create a
-// second source of truth.
+// wiring. It delegates to the canonical configured-Worker store and therefore cannot
+// create a second source of truth.
 func newConnectorStore(dir string) (*connectorStore, error) {
-	return newWorkerStore(dir)
+	return newConfiguredWorkerStore(dir)
 }
