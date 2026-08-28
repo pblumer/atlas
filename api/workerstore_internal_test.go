@@ -2,22 +2,22 @@ package api
 
 import "testing"
 
-// TestWorkerStoreSharesConnectorPersistence pins ADR-0203's staged migration:
-// Worker is the canonical in-process term, while connector remains only a
-// compatibility name over the same persisted record and store.
-func TestWorkerStoreSharesConnectorPersistence(t *testing.T) {
+// TestConfiguredWorkerStoreSharesConnectorPersistence pins ADR-0203's staged
+// migration: configured Worker is the canonical in-process term, while connector
+// remains only a compatibility name over the same persisted record and store.
+func TestConfiguredWorkerStoreSharesConnectorPersistence(t *testing.T) {
 	dir := t.TempDir()
 
-	workers, err := newWorkerStore(dir)
+	workers, err := newConfiguredWorkerStore(dir)
 	if err != nil {
-		t.Fatalf("new worker store: %v", err)
+		t.Fatalf("new configured worker store: %v", err)
 	}
 	legacy, err := newConnectorStore(dir)
 	if err != nil {
 		t.Fatalf("new connector store: %v", err)
 	}
 
-	want := worker{
+	want := configuredWorker{
 		ID:             "jira-production-patrick",
 		Name:           "Jira Production Patrick",
 		Kind:           connectorKindJira,
@@ -27,7 +27,7 @@ func TestWorkerStoreSharesConnectorPersistence(t *testing.T) {
 		CreatedAt:      42,
 	}
 	if err := workers.Save(want); err != nil {
-		t.Fatalf("save worker: %v", err)
+		t.Fatalf("save configured worker: %v", err)
 	}
 
 	got, ok, err := legacy.Get(want.ID)
@@ -35,7 +35,7 @@ func TestWorkerStoreSharesConnectorPersistence(t *testing.T) {
 		t.Fatalf("get through connector compatibility store: %v", err)
 	}
 	if !ok {
-		t.Fatal("worker saved through canonical store is not visible through connector compatibility store")
+		t.Fatal("configured worker saved through canonical store is not visible through connector compatibility store")
 	}
 	if got != want {
 		t.Fatalf("connector compatibility record = %+v, want %+v", got, want)
@@ -47,9 +47,9 @@ func TestWorkerStoreSharesConnectorPersistence(t *testing.T) {
 	}
 	updated, ok, err := workers.Get(want.ID)
 	if err != nil {
-		t.Fatalf("get worker after legacy update: %v", err)
+		t.Fatalf("get configured worker after legacy update: %v", err)
 	}
 	if !ok || updated.Name != got.Name {
-		t.Fatalf("worker after legacy update = %+v ok=%v, want name %q", updated, ok, got.Name)
+		t.Fatalf("configured worker after legacy update = %+v ok=%v, want name %q", updated, ok, got.Name)
 	}
 }
