@@ -616,17 +616,34 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
+		// ADR-0203: configured Workers are the design-time configuration resource;
+		// /api/v1/workers remains the existing runtime/Operations view above.
+		{"GET", "/api/v1/configured-workers", s.handleListConnectors, apiOp{
+			summary: "List configured Workers", tag: "Workers", resp: jsonBody("Configured Workers", tArray())}},
+		{"POST", "/api/v1/configured-workers", s.handleCreateConnector, apiOp{
+			summary: "Create a configured Worker", tag: "Workers", req: jsonBody("Configured Worker", tObject()), resp: jsonBody("Created configured Worker", tObject())}},
+		{"PATCH", "/api/v1/configured-workers/{id}", s.handleUpdateConnector, apiOp{
+			summary: "Update a configured Worker (endpoint, provider, sender, credential reference, enabled)", tag: "Workers", req: jsonBody("Configured Worker update", tObject()), resp: jsonBody("Updated configured Worker", tObject())}},
+		{"DELETE", "/api/v1/configured-workers/{id}", s.handleDeleteConnector, apiOp{
+			summary: "Delete a configured Worker; refused while deployed models still reference it unless ?force=true", tag: "Workers", status: http.StatusNoContent}},
+		{"GET", "/api/v1/worker-types", s.handleConnectorKinds, apiOp{
+			summary: "List available Worker Types and where this server runs them", tag: "Workers",
+			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
+
+		// Legacy connector names remain compatibility aliases during the ADR-0203
+		// migration. They bind to the same handlers and stores, so no second source
+		// of truth is introduced.
 		{"GET", "/api/v1/connectors", s.handleListConnectors, apiOp{
-			summary: "List managed connector instances", tag: "Connectors", resp: jsonBody("Connectors", tArray())}},
+			summary: "List managed connector instances (deprecated: use GET /api/v1/configured-workers)", tag: "Connectors", deprecated: true, resp: jsonBody("Connectors", tArray())}},
 		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
-			summary: "Create a managed connector instance", tag: "Connectors", req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
+			summary: "Create a managed connector instance (deprecated: use POST /api/v1/configured-workers)", tag: "Connectors", deprecated: true, req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
 		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a managed connector instance (endpoint, provider, sender, credential reference, enabled), re-validated as a create would be (ADR-0160)", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Update a managed connector instance (deprecated: use PATCH /api/v1/configured-workers/{id})", tag: "Connectors", deprecated: true, req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
-			summary: "Delete a managed connector instance; refused with 409 and the referencing processes when deployed models still reference it, unless ?force=true (ADR-0163)", tag: "Connectors", status: http.StatusNoContent}},
+			summary: "Delete a managed connector instance (deprecated: use DELETE /api/v1/configured-workers/{id})", tag: "Connectors", deprecated: true, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connector-kinds", s.handleConnectorKinds, apiOp{
-			summary: "Where this server runs each service-task connector kind — in its own process, or on a worker (ADR-0164/0168/0173). The Modeler's connector picker reads this so its badge describes this install rather than a compiled-in assumption", tag: "Connectors",
+			summary: "List connector kinds (deprecated: use GET /api/v1/worker-types)", tag: "Connectors", deprecated: true,
 			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
