@@ -9,11 +9,11 @@ import (
 
 // TestConfiguredWorkerAliasMirrorsConnectors pins ADR-0203's public migration:
 // configured Workers are the canonical resource, while /connectors remains a
-// compatibility alias over the same store and handlers.
+// compatibility name over the same store and handlers.
 func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 	ts := newTestServer(t)
 
-	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers", `{"name":"jira-prod","kind":"jira","endpoint":"https://jira.example.test","enabled":true}`, "application/json")
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers", `{"name":"temis-prod","kind":"temis","endpoint":"https://temis.example.test","enabled":true}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("create configured worker status=%d body=%s", code, body)
 	}
@@ -29,17 +29,19 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 
 	for _, path := range []string{"/api/v1/configured-workers", "/api/v1/connectors"} {
 		code, body = doReq(t, ts, http.MethodGet, path, "", "")
-		if code != http.StatusOK || !strings.Contains(string(body), `"name":"jira-prod"`) {
+		if code != http.StatusOK || !strings.Contains(string(body), `"name":"temis-prod"`) {
 			t.Fatalf("list via %s status=%d body=%s", path, code, body)
 		}
 	}
 
-	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"name":"jira-prod-renamed"}`, "application/json")
-	if code != http.StatusOK || !strings.Contains(string(body), `"name":"jira-prod-renamed"`) {
+	// Connector names and kinds are deliberately immutable because deployed models
+	// reference the logical name. Exercise an allowed compatibility mutation instead.
+	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":false}`, "application/json")
+	if code != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
 		t.Fatalf("update via legacy connector path status=%d body=%s", code, body)
 	}
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/configured-workers", "", "")
-	if code != http.StatusOK || !strings.Contains(string(body), `"name":"jira-prod-renamed"`) {
+	if code != http.StatusOK || !strings.Contains(string(body), `"enabled":false`) {
 		t.Fatalf("legacy update not visible via configured workers status=%d body=%s", code, body)
 	}
 
@@ -47,7 +49,7 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 		t.Fatalf("delete configured worker status=%d body=%s", code, body)
 	}
 	if _, body = doReq(t, ts, http.MethodGet, "/api/v1/connectors", "", ""); strings.Contains(string(body), created.ID) {
-		t.Fatalf("deleted configured worker still visible through connector alias: %s", body)
+		t.Fatalf("deleted configured worker still visible through connector compatibility path: %s", body)
 	}
 }
 
