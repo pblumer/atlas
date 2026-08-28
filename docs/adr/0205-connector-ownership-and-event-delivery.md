@@ -1,6 +1,7 @@
 # ADR-0205: Who owns a connector, and who may use the events it brings in
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-08-27: the configuration half is implemented; the
+  message-name claim is not built yet)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 
@@ -116,10 +117,32 @@ connector {
 ```
 
 Enforced in the handlers off the principal, exactly where ADR-0071 enforces its
-own: **viewer** to see a connector and its subscriptions, **editor** to change
-them or to add a subscription, **owner** to delete it or to change who may reach
-it. An administrator sees and may act on all of them — that is what admin means
-here, as it does in ADR-0071.
+own: **viewer** to see a connector's configuration and its subscriptions,
+**editor** to change them or to add a subscription, **owner** to delete it, to share
+it, or to hand it on. An administrator sees and may act on all of them — that is
+what admin means here, as it does in ADR-0071.
+
+**Existence is not configuration**, and this record did not say so until the code
+did. The modeler fills its connector picker from the same listing
+(`api/web/editor.js`), so scoping the listing outright would leave every non-owner
+authoring against an empty dropdown — a sharing rule that stops people doing their
+work is not a sharing rule. So the listing has two shapes: at viewer or above, the
+record; below it, a *catalog entry* — id, name, kind, enabled, and whether the
+runtime could build its client. What ownership governs is the endpoint, the sender,
+the credential reference, the member list and the inbound subscriptions. A separate
+shape rather than the record with its fields blanked, because a blank endpoint is
+indistinguishable from an unconfigured one and would tell an operator something
+false about the connector instead of something true about their own access.
+
+**The connector check must not borrow a credential.**
+`POST /api/v1/connectors/test` resolves whatever credential reference its body
+names and, given a recipient, sends real mail with it — so before this it was a
+"send mail as anyone, with anyone's credential" endpoint for every account on the
+installation. Locking the record while that stood would be theatre. The rule is
+exact: a credential reference may be named only by somebody who may already edit a
+connector that uses it; naming none resolves nothing and stays open. Found while
+implementing this, not while writing it, and fixed here rather than filed, because
+the rest of the measure depends on it.
 
 An inbound subscription is governed by its connector's scope, the way an artifact
 is governed by its project's (ADR-0071's inheritance rule, `api/artifactscope.go`).
@@ -198,10 +221,25 @@ problem.
 - **Negative:** legacy connectors change behaviour under `--auth` (above).
 - **Negative:** it is a gate, and a gate is only as good as its two checks. The
   record says so out loud so that nobody reads it as isolation.
-- **Follow-ups / risks to watch:** option 5 as the successor; the Console needs a
-  share control for connectors, or this ships as an API-only capability and the
-  M10 lesson repeats itself; and the claim check must run against *already
-  deployed* definitions when a claim is made, not only against future deploys.
+- **Follow-ups / risks to watch:** option 5 as the successor; and the claim check
+  must run against *already deployed* definitions when a claim is made, not only
+  against future deploys.
+
+### As built, step one
+
+The configuration half is implemented (`api/connectorscope.go`): the three fields,
+the two-shape listing, the role checks on the connector and inbound-subscription
+handlers, the credential-borrow rule, and `auth.connector_shared` /
+`auth.connector_unshared`. Sharing is in the Console beside each connector — the
+follow-up this section used to list, done in the same change, because ADR-0200
+already taught what an API-only capability is worth. Transfer of ownership came
+with it, unplanned: an ownerless connector is admin-only, so without it "Anna left"
+would mean an administrator inherits every connector Anna ever made.
+
+The delivery half — the claim on the message name — is **not** built. Until it is,
+this measure protects a connector's configuration and not the events it brings in:
+a process that names the right message still receives them. That is the gap the
+record opened with, and it stays open until the second step lands.
 
 ## Pros and cons of the options
 

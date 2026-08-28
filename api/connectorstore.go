@@ -74,6 +74,24 @@ type configuredWorker struct {
 	// (client secret, refresh token, or service-account key), never a value (I6).
 	Provider string `json:"provider,omitempty"`
 	Sender   string `json:"sender,omitempty"`
+
+	// Ownership and sharing (ADR-0205, measure M11). The three fields are ADR-0071's
+	// for a project, reused verbatim rather than reinvented, so a group grant
+	// (ADR-0180) works here with no further thought and there is one sharing
+	// vocabulary in the product instead of two.
+	//
+	// A record written before this carries none of them, and that is a meaningful
+	// state rather than a gap: an ownerless connector is an administrator's to manage
+	// until one is assigned. See connectorRole for why this departs from ADR-0071's
+	// treatment of legacy artifacts.
+	//
+	// Nothing the runtime does consults these. A service task resolving a connector
+	// by name, the registries and the inbound bridge read the store directly:
+	// execution is not authoring.
+	OwnerID    string          `json:"ownerId,omitempty"`
+	Visibility string          `json:"visibility,omitempty"` // "private" | "shared"
+	Members    []projectMember `json:"members,omitempty"`
+	UpdatedAt  int64           `json:"updatedAt,omitempty"`
 }
 
 // connector is the compatibility name used by the existing connector-oriented API

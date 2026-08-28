@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestConfiguredWorkerStoreSharesConnectorPersistence pins ADR-0203's staged
 // migration: configured Worker is the canonical in-process term, while connector
@@ -37,7 +40,11 @@ func TestConfiguredWorkerStoreSharesConnectorPersistence(t *testing.T) {
 	if !ok {
 		t.Fatal("configured worker saved through canonical store is not visible through connector compatibility store")
 	}
-	if got != want {
+	// reflect.DeepEqual rather than !=: the record carries a member list since
+	// ADR-0205 gave a connector an owner, so the struct is no longer comparable.
+	// What this test is about — that both names read and write the same persisted
+	// record — is unchanged.
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("connector compatibility record = %+v, want %+v", got, want)
 	}
 

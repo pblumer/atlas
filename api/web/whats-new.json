@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-connector-belongs-to-somebody-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "A connector belongs to somebody now",
+        "de": "Ein Konnektor gehört jetzt jemandem"
+      },
+      "summary": {
+        "en": "Until now a connector belonged to nobody, and that turned out to mean more than it sounds: any account that could sign in was able to list every connector with its address and sender mailbox, change one, delete somebody else's, and point somebody else's incoming connector at a name of its choosing. A connector now has an owner — whoever created it — and only they, the people they share it with, and administrators can see or change its configuration. Sharing works the way sharing already works elsewhere in Atlas: add a person or a whole group, as may-see-it or may-change-it, and withdraw it again whenever you like, right beside the connector under Console → Connectors. Ownership can be handed on, so a connector outlives the person who set it up. Two things stay exactly as they were, on purpose. Everyone still sees that a connector exists, because that is what you need to build a task against it — what is now private is the address, the credential and the settings, not the name. And nothing here touches a running process: a deployed model reaches its connector whoever started it. One thing is still open and worth knowing: this protects a connector's settings, not yet the events an incoming connector brings in.",
+        "de": "Bisher gehörte ein Konnektor niemandem, und das hiess mehr, als es klingt: Jedes Konto, das sich anmelden konnte, durfte alle Konnektoren samt Adresse und Absenderpostfach auflisten, einen ändern, einen fremden löschen und einen fremden eingehenden Konnektor auf einen selbst gewählten Namen richten. Ein Konnektor hat jetzt eine Eigentümerin — die Person, die ihn angelegt hat — und nur sie, die Personen, mit denen sie ihn teilt, und Administratorinnen sehen oder ändern seine Konfiguration. Geteilt wird, wie in Atlas ohnehin geteilt wird: eine Person oder eine ganze Gruppe hinzufügen, als «darf sehen» oder «darf ändern», und jederzeit wieder zurückziehen — direkt neben dem Konnektor unter Console → Konnektoren. Das Eigentum lässt sich übergeben, damit ein Konnektor die Person überdauert, die ihn eingerichtet hat. Zwei Dinge bleiben mit Absicht genau wie bisher: Alle sehen weiterhin, dass ein Konnektor existiert — das braucht man, um eine Aufgabe dagegen zu bauen; privat sind Adresse, Zugangsdaten und Einstellungen, nicht der Name. Und an laufenden Prozessen ändert sich nichts: Ein deploytes Modell erreicht seinen Konnektor, wer immer es gestartet hat. Eines ist noch offen und sollte man wissen: Geschützt sind die Einstellungen eines Konnektors, noch nicht die Ereignisse, die ein eingehender Konnektor hereinbringt."
+      },
+      "link": {
+        "label": "ADR-0205",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
+      },
+      "tags": [
+        "Security",
+        "Connectors"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Connectors",
+          "de": "Konnektoren öffnen"
+        },
+        "route": "#/console/connectors"
+      }
+    },
+    {
       "id": "a-person-can-now-let-an-application-act-as-them",
       "version": "Unreleased",
       "date": null,
@@ -254,27 +283,6 @@
       "tags": [
         "Security",
         "Operations"
-      ]
-    },
-    {
-      "id": "every-mounted-route-declares-who-may-reach-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Every address the server answers on says who may reach it",
-        "de": "Jede Adresse des Servers sagt, wer sie erreichen darf"
-      },
-      "summary": {
-        "en": "Whether a request needed a login used to be decided by whether its path began with `/api/v1`, so a route was public by omission: anything registered elsewhere was open because of where it sat, not because anyone had decided it should be. That is how the MCP connection and the monitoring endpoint came to be reachable without one. Each route now states its access class where it is registered, a request is classified by the pattern that will actually serve it, and an undeclared pattern is closed — so mounting something off to the side fails safe instead of quietly inheriting the UI's open catch-all. The resulting public set is held against a written-out list by a test, which makes opening a route a reviewable change rather than a side effect. Because those patterns carry the method, so does the class: reading the login screen's own theme and logo stays public, while writing them is now refused at the boundary. Minor change: an anonymous write to one of those answers 401 rather than 403 — nothing was presented, which is what 401 means.",
-        "de": "Ob eine Anfrage eine Anmeldung brauchte, entschied bisher, ob ihr Pfad mit `/api/v1` begann. Eine Route war damit öffentlich durch Unterlassung: Was anderswo registriert war, stand offen, weil es dort hing — nicht, weil das jemand entschieden hätte. So kam es, dass der MCP-Zugang und der Monitoring-Endpunkt ohne Anmeldung erreichbar waren. Jede Route nennt ihre Zugriffsklasse jetzt dort, wo sie registriert wird; eine Anfrage wird nach dem Muster eingeordnet, das sie tatsächlich bedienen wird; und ein nicht deklariertes Muster ist geschlossen — etwas abseits einzuhängen scheitert also sicher, statt stillschweigend den offenen Auffangpfad der Oberfläche zu erben. Was am Ende öffentlich ist, hält ein Test gegen eine ausgeschriebene Liste: Eine Route zu öffnen ist damit eine überprüfbare Änderung und kein Nebeneffekt. Weil diese Muster die HTTP-Methode enthalten, gilt das auch für die Klasse: Farbschema und Logo des Anmeldebildschirms zu lesen bleibt öffentlich, sie zu ändern wird jetzt schon an der Grenze abgewiesen. Kleine Änderung: Ein anonymer Schreibzugriff darauf antwortet mit 401 statt mit 403 — es wurde nichts vorgezeigt, und genau das heisst 401."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security"
       ]
     }
   ]

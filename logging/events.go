@@ -137,6 +137,13 @@ var (
 	// A setting that widens what an unauthenticated caller may do is one nobody
 	// should be able to inherit without being told (ADR-0200).
 	AuthOAuthRegistrationOpen = newEvent("auth.oauth_registration_open")
+	// Connector ownership (ADR-0205). Who may reach a connector's configuration —
+	// its endpoint, its credential reference and its inbound subscriptions — is now
+	// somebody's decision rather than everybody's, so the decision is recorded.
+	// Sharing and withdrawing are separate events because "who was let in" and "who
+	// was shut out" are separate questions in an incident.
+	AuthConnectorShared   = newEvent("auth.connector_shared")
+	AuthConnectorUnshared = newEvent("auth.connector_unshared")
 	// AuthWorkerTokenUnknown is an operator-set ATLAS_TOKEN that this server does
 	// not accept. The supervisor honours the variable and stops injecting its own,
 	// so the workers it starts would hold a credential refused at every poll — a

@@ -1413,12 +1413,39 @@ async function viewConsoleConnectors() {
   // secret references only. Today the runtime wires the temis decision connector.
   let connectors = [];
   try { connectors = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
-  const managedRow = (c) => `<tr data-id="${esc(c.id)}">
+  // What a connector's row shows depends on what this caller may do with it
+  // (ADR-0205). The server sends the full record with a `role` to anybody at viewer
+  // or above, and a catalog entry — name, kind, enabled — to everybody else, so that
+  // a modeller can still author against a connector whose configuration is not
+  // theirs. `role` is absent exactly in that second case.
+  const connScope = (c) => ({
+    role: c.role || "",
+    configurable: !!c.role,
+    editor: c.role === "editor" || c.role === "owner",
+    owner: c.role === "owner",
+  });
+  const ownershipPill = (c) => {
+    const sc = connScope(c);
+    if (!sc.configurable) {
+      return `<span class="pill vis" title="Somebody else configures this connector. You can still reference it by name in a model.">not yours</span>`;
+    }
+    if (!sc.owner) {
+      return `<span class="pill vis" title="Shared with you as ${esc(sc.role)}">shared with you</span>`;
+    }
+    const shared = (c.members || []).length;
+    return shared
+      ? `<span class="pill vis" title="Shared with ${shared} other ${shared === 1 ? "principal" : "principals"}">shared · ${shared}</span>`
+      : `<span class="pill vis" title="Only you (and administrators) can configure this">private</span>`;
+  };
+  const managedRow = (c) => connScope(c).configurable
+    ? `<tr data-id="${esc(c.id)}">
       <td><span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
+        ${ownershipPill(c)}
         <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
           c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div>
-        ${connectorUsageHTML(c.usedBy)}</td>
+        ${connectorUsageHTML(c.usedBy)}
+        <div class="conn-share" id="share-${esc(c.id)}" hidden></div></td>
       <td>${!c.enabled
         ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
         : c.problem
@@ -1432,10 +1459,24 @@ async function viewConsoleConnectors() {
       <td style="text-align:right; white-space:nowrap">
         ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision" title="Mint a scoped clio key and store it as this connector\'s credential">Provision access</button><button class="btn ghost" data-cact="subs" title="Manage inbound event subscriptions for this connector">Events</button>' : ""}
         ${c.kind === "mail" ? '<button class="btn ghost" data-cact="test" title="Check this connector — connect and authenticate, or send a test message">Test</button>' : ""}
-        <button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
-        <button class="btn ghost" data-cact="toggle" title="${c.enabled ? "Disable this connector (its tasks will park)" : "Enable this connector"}">${c.enabled ? "Disable" : "Enable"}</button>
-        <button class="btn ghost danger" data-cact="delete" title="Delete this connector">Delete</button>
-      </td></tr>`;
+        ${connScope(c).owner ? '<button class="btn ghost" data-cact="share" title="Decide who else may configure this connector">Share</button>' : ""}
+        ${connScope(c).editor ? `<button class="btn ghost" data-cact="edit" title="Edit this connector’s settings">Edit</button>
+        <button class="btn ghost" data-cact="toggle" title="${c.enabled ? "Disable this connector (its tasks will park)" : "Enable this connector"}">${c.enabled ? "Disable" : "Enable"}</button>` : ""}
+        ${connScope(c).owner ? '<button class="btn ghost danger" data-cact="delete" title="Delete this connector">Delete</button>' : ""}
+      </td></tr>`
+    : `<tr data-id="${esc(c.id)}" class="conn-foreign">
+      <td><span class="chip">${esc(c.name)}</span>
+        <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
+        ${ownershipPill(c)}
+        <div class="muted" style="font-size:12px; margin-top:3px">Configured by somebody else.
+        A model can still reference it by name — what it connects to is theirs to see.</div></td>
+      <td>${!c.enabled
+        ? '<span class="pill warn"><span class="dot"></span>disabled</span>'
+        : c.problem
+          ? `<span class="pill err"><span class="dot"></span>not usable</span>
+             <div class="conn-problem" title="${esc(c.problem)}">${esc(c.problem)}</div>`
+          : '<span class="pill ok"><span class="dot"></span>enabled</span>'}</td>
+      <td></td></tr>`;
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0">
@@ -3161,6 +3202,9 @@ function wireConnectorManagement(connectors) {
         if (btn.dataset.cact === "subs") {
           await toggleInboundSubs(btn.closest("tr"), id);
           return;
+        } else if (btn.dataset.cact === "share") {
+          await toggleConnectorShare(c, viewConsoleConnectors);
+          return;
         } else if (btn.dataset.cact === "provision") {
           toggleProvisionClio(btn.closest("tr"), id, c.name);
           return;
@@ -3251,6 +3295,87 @@ function toggleProvisionClio(row, connectorId, connectorName) {
 // delete. A subscription watches a clio subject and republishes each new event as an
 // Atlas message that starts/wakes processes; the correlation key is a FEEL expression
 // over the event body (blank = keyless).
+// toggleConnectorShare opens the panel that decides who else may configure one
+// connector (ADR-0205).
+//
+// It exists because the endpoints alone are not the feature. Ownership landed on
+// connectors so that a person can own a mailbox and share it with whom they choose;
+// "whom they choose" through a curl command is a capability only its author has.
+// The same shape as an application's sharing, deliberately: a person who has shared
+// one has already learned this one.
+async function toggleConnectorShare(c, reload) {
+  const slot = document.getElementById("share-" + c.id);
+  if (!slot) return;
+  if (!slot.hidden) { slot.hidden = true; slot.innerHTML = ""; return; }
+
+  // The directories are admin-only, so a non-admin owner shares by pasting an id
+  // rather than picking from a list they may not read. Said out loud in the panel
+  // rather than left as an empty dropdown that looks broken.
+  let users = [];
+  let groups = [];
+  try { users = (await api("GET", "/api/v1/users")) || []; } catch { /* not an admin */ }
+  try { groups = (await api("GET", "/api/v1/groups")) || []; } catch { /* not an admin */ }
+  const byID = new Map([
+    ...users.map((u) => [u.id, u.displayName || u.username]),
+    ...groups.map((g) => [g.id, g.name]),
+  ]);
+  const canPick = users.length > 0 || groups.length > 0;
+
+  const memberChip = (m) => `<span class="chip">${esc(m.ref.type === "group" ? "👥 " : "")}${
+    esc(byID.get(m.ref.id) || m.ref.id)} · ${esc(m.role)}<button type="button" class="chip-x"
+    data-unshare="${esc(m.ref.id)}" title="Withdraw this access">✕</button></span>`;
+  const members = (c.members || []).length
+    ? (c.members || []).map(memberChip).join(" ")
+    : `<span class="muted" style="font-size:12px">Nobody else. Only you and administrators can configure it.</span>`;
+
+  const picker = canPick
+    ? `<select class="field" id="share-who-${esc(c.id)}" style="margin:0; min-width:180px">
+         ${users.map((u) => `<option value="user:${esc(u.id)}">${esc(u.displayName || u.username)}</option>`).join("")}
+         ${groups.map((g) => `<option value="group:${esc(g.id)}">👥 ${esc(g.name)}</option>`).join("")}
+       </select>`
+    : `<input class="field" id="share-who-${esc(c.id)}" style="margin:0; min-width:180px"
+         placeholder="user:usr_… or group:grp_…" />`;
+
+  slot.hidden = false;
+  slot.innerHTML = `
+    <div class="conn-share-head">Who else may configure <b>${esc(c.name)}</b></div>
+    <div style="margin:6px 0">${members}</div>
+    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px">
+      ${picker}
+      <select class="field" id="share-role-${esc(c.id)}" style="margin:0">
+        <option value="viewer">may see it</option>
+        <option value="editor">may change it</option>
+      </select>
+      <button type="button" class="btn ghost" data-share-add="${esc(c.id)}">Share</button>
+    </div>
+    ${canPick ? "" : `<p class="muted" style="font-size:12px; margin:8px 0 0">Paste the id of the
+      person or group. The directory is administrators-only, so it cannot be offered as a list here.</p>`}
+    <p class="muted" style="font-size:12px; margin:8px 0 0">Sharing never reaches a running
+    process: a deployed model resolves this connector by name whoever started it.</p>`;
+
+  slot.querySelector("[data-share-add]").addEventListener("click", async () => {
+    const raw = String(document.getElementById("share-who-" + c.id).value || "").trim();
+    const role = document.getElementById("share-role-" + c.id).value;
+    const [type, id] = raw.includes(":") ? [raw.slice(0, raw.indexOf(":")), raw.slice(raw.indexOf(":") + 1)] : ["user", raw];
+    if (!id) { toast("Name who to share it with", "warn"); return; }
+    try {
+      await api("PUT", `/api/v1/connectors/${encodeURIComponent(c.id)}/members/${encodeURIComponent(id)}`,
+        { role, type });
+      toast("Shared");
+      reload();
+    } catch (e) { toast(e.message, "err"); }
+  });
+  slot.addEventListener("click", async (e) => {
+    const x = e.target.closest("button[data-unshare]");
+    if (!x) return;
+    try {
+      await api("DELETE", `/api/v1/connectors/${encodeURIComponent(c.id)}/members/${encodeURIComponent(x.dataset.unshare)}`);
+      toast("Access withdrawn");
+      reload();
+    } catch (err) { toast(err.message, "err"); }
+  });
+}
+
 async function toggleInboundSubs(row, connectorId) {
   const existing = row.nextElementSibling;
   if (existing && existing.classList.contains("subs-row")) {

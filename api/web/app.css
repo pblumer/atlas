@@ -3132,3 +3132,9 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   background: var(--warn-soft); border: 1px solid var(--warn); color: var(--text); font-size: 13px;
 }
 .warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* Connector ownership (ADR-0205): who else may configure one, inline in its row. */
+.conn-share { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.conn-share-head { font-size: 13px; font-weight: 600; }
+/* A connector somebody else configures: present, referenceable, and visibly not yours. */
+.conn-foreign td { opacity: .72; }

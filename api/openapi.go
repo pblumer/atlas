@@ -667,6 +667,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Connectors", status: http.StatusNoContent}},
 
+		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
+			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},
+		{"DELETE", "/api/v1/connectors/{id}/members/{principalId}", s.handleRemoveConnectorMember, apiOp{
+			summary: "Withdraw a user's or a group's access to a connector (ADR-0205); owner only", tag: "Connectors", resp: jsonBody("Updated connector", tObject())}},
+		{"PUT", "/api/v1/connectors/{id}/visibility", s.handleSetConnectorVisibility, apiOp{
+			summary: "Seal a connector again, or open it to its member list (ADR-0205); owner only", tag: "Connectors", req: jsonBody("Visibility", tObject()), resp: jsonBody("Updated connector", tObject())}},
+		{"PUT", "/api/v1/connectors/{id}/owner/{userId}", s.handleTransferConnector, apiOp{
+			summary: "Hand a connector to another account (ADR-0205); owner only", tag: "Connectors", resp: jsonBody("Updated connector", tObject())}},
 		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
 			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
 

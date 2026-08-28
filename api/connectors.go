@@ -404,12 +404,17 @@ func (s *Server) rebuildConnectorRegistries() error {
 // handleListConnectors lists the managed connector instances, oldest first. The
 // records carry only credential *references*, never secrets, so nothing is
 // redacted.
-func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
 	var (
 		recs    []connector
 		loadErr error
 	)
-	var views []connectorView
+	// Two shapes, by what this caller may see (ADR-0205). At viewer or above, the
+	// record and what the runtime made of it. Below that, the catalog entry — name,
+	// kind, enabled — because the modeler builds its connector picker from this same
+	// listing, and a modeller who cannot see that a connector exists cannot author
+	// against it. See connectorscope.go for why existence is not configuration.
+	views := []any{}
 	// The store read and the registry reads happen in the same closure: the registries
 	// are owned by the run-loop goroutine (rebuild swaps them there), so asking them
 	// anywhere else would race a rebuild (invariant I3).
@@ -419,12 +424,20 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 			return
 		}
 		uses := s.connectorUseIndex()
-		views = make([]connectorView, 0, len(recs))
+		views = make([]any, 0, len(recs))
 		for _, c := range recs {
+			problem := s.connectorProblem(c.Kind, c.Name)
+			if code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer); code != 0 {
+				views = append(views, catalogEntry(c, problem))
+				continue
+			}
 			views = append(views, connectorView{
 				connector: c,
-				Problem:   s.connectorProblem(c.Kind, c.Name),
-				UsedBy:    uses[c.Kind+"/"+c.Name],
+				Role:      connectorRole(c, httpapi.PrincipalFrom(r.Context()), s.authEnabled),
+				Problem:   problem,
+				// UsedBy is an operator's view of the blast radius of a delete, so it
+				// travels with the configuration rather than with the catalog entry.
+				UsedBy: uses[c.Kind+"/"+c.Name],
 			})
 		}
 	})
@@ -433,7 +446,7 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	if views == nil {
-		views = []connectorView{}
+		views = []any{}
 	}
 	httpapi.JSON(w, http.StatusOK, views)
 }
@@ -443,6 +456,12 @@ func (s *Server) handleListConnectors(w http.ResponseWriter, _ *http.Request) {
 // empty when the connector is usable — and is derived on read, never stored (ADR-0158).
 type connectorView struct {
 	connector
+	// Role is what this caller may do with it — "viewer", "editor" or "owner"
+	// (ADR-0205). Derived per request, never stored. The Console needs it to decide
+	// which buttons to draw at all: offering Share to somebody the server will refuse
+	// is a worse experience than not offering it, and guessing from ownerId cannot
+	// tell an editor from a viewer.
+	Role    string `json:"role,omitempty"`
 	Problem string `json:"problem,omitempty"`
 	// UsedBy is every deployed definition whose model references this connector, so the
 	// operator page can say what a delete would park *before* they try it (ADR-0163).
@@ -540,6 +559,14 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender,
 		CreatedAt: time.Now().Unix(),
+		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
+		// only defensible default for a thing that may hold a personal mailbox; what
+		// it costs — a colleague not seeing the endpoint until it is shared — is
+		// bounded by the catalog entry everybody keeps seeing.
+		Visibility: VisibilityPrivate,
+	}
+	if pr := httpapi.PrincipalFrom(r.Context()); pr != nil {
+		rec.OwnerID = pr.UserID
 	}
 
 	var (
@@ -609,10 +636,12 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		rec        connector
-		found      bool
-		saveErr    error
-		badRequest string
+		rec         connector
+		found       bool
+		saveErr     error
+		badRequest  string
+		refusedCode int
+		refusedMsg  string
 	)
 	s.doAndRefresh(func() {
 		var e error
@@ -622,6 +651,13 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !found {
+			return
+		}
+		// Changing a connector's endpoint or credential is an editor's act (ADR-0205).
+		// Checked inside this closure, on the record just loaded, so there is no second
+		// round-trip and no window between the check and the write.
+		if code, msg := s.checkConnectorRole(r, rec, ScopeRoleEditor); code != 0 {
+			refusedCode, refusedMsg = code, msg
 			return
 		}
 		if p.Endpoint != nil {
@@ -657,6 +693,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
 		return
+	case refusedCode != 0:
+		httpapi.Error(w, refusedCode, refusedMsg)
+		return
 	case badRequest != "":
 		httpapi.Error(w, http.StatusBadRequest, badRequest)
 		return
@@ -670,10 +709,27 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	force := r.URL.Query().Get("force") == "true"
 	var (
-		delErr error
-		inUse  []connectorUse
+		delErr      error
+		inUse       []connectorUse
+		refusedCode int
+		refusedMsg  string
 	)
 	s.doAndRefresh(func() {
+		rec, found, e := s.connectors.Get(id)
+		if e != nil {
+			delErr = e
+			return
+		}
+		// Deleting is the owner's, not an editor's (ADR-0205): it is the one act here
+		// that cannot be undone, and it takes every inbound subscription with it. A
+		// connector that is already gone is left to the delete below, which is
+		// idempotent — refusing an absent record at a role check would leak whether it
+		// ever existed.
+		if found {
+			if refusedCode, refusedMsg = s.checkConnectorRole(r, rec, ScopeRoleOwner); refusedCode != 0 {
+				return
+			}
+		}
 		// Deleting a connector deployed models still reference parks every one of their
 		// tasks, with a message that reads as if it had never been configured. A deploy
 		// has warned about a reference it cannot resolve since ADR-0158; removing the
@@ -681,16 +737,9 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		// made silently. So the reference check runs here too, and here it refuses
 		// (ADR-0163) — deleting is not reversible the way deploying a model early is,
 		// which is the asymmetry that makes a warning right there and a refusal here.
-		if !force {
-			rec, found, e := s.connectors.Get(id)
-			if e != nil {
-				delErr = e
+		if !force && found {
+			if inUse = s.connectorUsers(rec.Name, rec.Kind); len(inUse) > 0 {
 				return
-			}
-			if found {
-				if inUse = s.connectorUsers(rec.Name, rec.Kind); len(inUse) > 0 {
-					return
-				}
 			}
 		}
 		if delErr = s.connectors.Delete(id); delErr != nil {
@@ -700,6 +749,10 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	if delErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())
+		return
+	}
+	if refusedCode != 0 {
+		httpapi.Error(w, refusedCode, refusedMsg)
 		return
 	}
 	if len(inUse) > 0 {
@@ -947,8 +1000,29 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var secret string
-	s.do(func() { secret = s.resolveConnectorSecret(req.CredentialsRef) })
+	var (
+		secret    string
+		mayUse    bool
+		lookupErr error
+	)
+	s.do(func() {
+		if mayUse, lookupErr = s.mayUseCredentialRef(r, req.CredentialsRef); !mayUse || lookupErr != nil {
+			return
+		}
+		secret = s.resolveConnectorSecret(req.CredentialsRef)
+	})
+	if lookupErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read connectors: "+lookupErr.Error())
+		return
+	}
+	if !mayUse {
+		// Named somebody else's credential. Refused rather than silently checked
+		// without it: the second would report a failure that says nothing about the
+		// connector and everything about a permission (ADR-0205).
+		httpapi.Error(w, http.StatusForbidden,
+			"that credential reference belongs to a connector you may not edit")
+		return
+	}
 
 	client, err := mail.NewProviderClient(mail.ProviderConfig{
 		Provider: req.Provider,

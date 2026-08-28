@@ -14,6 +14,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **A connector belongs to somebody now.** It has an owner, and only they — plus
+  whoever they share it with, and administrators — can see its endpoint and
+  credential reference, change it, delete it, or point it at a message name
+  ([ADR-0205](docs/adr/0205-connector-ownership-and-event-delivery.md)).
+
+  **What it replaces was worse than it sounds.** Measured on a running server with
+  a login required, an account holding only the base `user` role could list every
+  connector with its endpoint and sender mailbox, edit one, **delete somebody
+  else's**, read every inbound subscription — which is every message name — and add
+  a subscription to somebody else's connector under a name it chose. Exactly one
+  endpoint on that surface required an administrator.
+
+  Sharing is the vocabulary you already know: an owner, viewer/editor roles, and a
+  member list that takes a **group** as easily as a person
+  ([ADR-0180](docs/adr/0180-groups-as-members.md)), so "share it with my colleague"
+  and "share it with the team" are one action. It is in the Console beside each
+  connector, not only in the API. Ownership can be handed on, which matters because
+  a connector nobody owns is an administrator's — so without it, one person leaving
+  would make an administrator the owner of everything they ever configured.
+
+  **Authoring is untouched, and so is running.** Every signed-in person still sees
+  that a connector exists — its name, kind and whether it is usable — because the
+  modeler builds its picker from that list, and a modeller staring at an empty
+  dropdown is an outage, not a security measure. And nothing here reaches the
+  runtime: a deployed process resolves its connector by name whoever started it,
+  because execution is not authoring.
+
+  Also closed, found while building this: `POST /api/v1/connectors/test` resolved
+  whatever credential reference its body named and sent real mail with it — a "send
+  mail as anyone, with anyone's credential" endpoint for every account. A credential
+  reference may now be named only by somebody who may already edit a connector that
+  uses it.
+
+  **Two costs, both deliberate.** A connector stored before this carries no owner
+  and becomes an administrator's to manage until one is assigned — the opposite of
+  what [ADR-0071](docs/adr/0071-sharing-scopes.md) chose for legacy artifacts,
+  because that record was adding a capability and this one is closing a hole. And
+  this protects a connector's *configuration*, not yet the events it brings in: a
+  process that names the right message still receives them. That second half is
+  specified in the record and not built.
+
 - **A person can now let an application act as them.** Atlas is an OAuth
   authorization server: a hosted client — a connector on somebody else's
   infrastructure, driven by a person in a browser — sends that person here, they
