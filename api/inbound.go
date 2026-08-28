@@ -125,6 +125,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	}
 	var (
 		notClio bool
+		claimed bool
 		saveErr error
 	)
 	s.do(func() {
@@ -137,6 +138,12 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			notClio = true
 			return
 		}
+		// The claim on a message name, from the other side (ADR-0205): pointing this
+		// connector at a name some definition the claimant cannot reach already
+		// listens for would deliver their events to it, silently.
+		if claimed, saveErr = s.definitionBlockingClaim(r, rec.MessageName); saveErr != nil || claimed {
+			return
+		}
 		saveErr = s.inboundSubs.Save(rec)
 	})
 	switch {
@@ -145,6 +152,10 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		return
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
+		return
+	case claimed:
+		claimRefusal(w, rec.MessageName, "A deployed process you cannot reach already listens for this "+
+			"message name, and would receive these events. Publish under a different name.")
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, rec)
@@ -179,6 +190,44 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	if code, msg := s.authorizeSubscription(r, id, ScopeRoleEditor); code != 0 {
 		httpapi.Error(w, code, msg)
 		return
+	}
+	// Renaming the message, or switching a disabled subscription back on, is a fresh
+	// claim and is checked like one (ADR-0205). Without this the update endpoint
+	// would be the way around the create endpoint's door.
+	var (
+		reclaimed string
+		claimErr  error
+	)
+	if p.MessageName != nil || (p.Enabled != nil && *p.Enabled) {
+		s.do(func() {
+			cur, found, e := s.inboundSubs.Get(id)
+			if e != nil || !found {
+				claimErr = e
+				return
+			}
+			want := cur.MessageName
+			if p.MessageName != nil {
+				want = strings.TrimSpace(*p.MessageName)
+			}
+			// Already claimed by this very subscription while it was enabled — leaving it
+			// alone must not read as somebody claiming it afresh.
+			if cur.Enabled && want == cur.MessageName {
+				return
+			}
+			var blocked bool
+			if blocked, claimErr = s.definitionBlockingClaim(r, want); blocked {
+				reclaimed = want
+			}
+		})
+		if claimErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read subscriptions: "+claimErr.Error())
+			return
+		}
+		if reclaimed != "" {
+			claimRefusal(w, reclaimed, "A deployed process you cannot reach already listens for this "+
+				"message name, and would receive these events. Publish under a different name.")
+			return
+		}
 	}
 	if p.CorrelationKey != nil && feelExpr(*p.CorrelationKey) != "" {
 		if _, err := expr.CompileAuto(feelExpr(*p.CorrelationKey)); err != nil {

@@ -729,6 +729,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		compErr        error
 		persistErr     error
 		projErr        error
+		claimed        string
+		e              error
 		unknownProject bool
 	)
 	s.do(func() {
@@ -747,8 +749,17 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// The claim on a message name, checked before anything is persisted (ADR-0205):
+		// a definition that would be delivered somebody else's inbound events must not
+		// exist even briefly.
+		if claimed, e = s.claimBlockingModel(r, body); e != nil {
+			persistErr = e
+			return
+		} else if claimed != "" {
+			return
+		}
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix(), projectID)
+		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix(), projectID, principalID(r))
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -776,6 +787,9 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	case claimed != "":
+		claimRefusal(w, claimed, "An inbound connector you cannot reach publishes under this "+
+			"message name. Rename the message in your model, or ask whoever owns that connector to share it.")
 	default:
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
@@ -801,7 +815,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // projectID files every process the model deploys under a project, so the Modeler
 // home can group deployed definitions the way it groups design-time artifacts
 // (ADR-0034). Empty for a deploy made outside a project.
-func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID string) (deployed []deployedProcess, compErr, persistErr error) {
+//
+// deployedBy is the account doing it (ADR-0205). An ungrouped definition has no
+// other identity, and the claim on a message name needs one to ask "is this
+// yours"; empty — a system deploy, or authentication off — reads as ownerless,
+// which is open.
+func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID, deployedBy string) (deployed []deployedProcess, compErr, persistErr error) {
 	// Set while registering: whether any process in this model binds to a directory,
 	// which is what a supervised AD worker may need a fresh credential for.
 	var namesADBindSecret bool
@@ -833,6 +852,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			Version:    version,
 			DeployedAt: deployedAt,
 			ProjectID:  projectID,
+			DeployedBy: deployedBy,
 			XML:        string(body),
 			DMNXMLs:    dmnStrings,
 		}); err != nil {
@@ -871,6 +891,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			Version:    version,
 			DeployedAt: deployedAt,
 			ProjectID:  projectID,
+			DeployedBy: deployedBy,
 			xml:        body,
 			cp:         cp,
 		}

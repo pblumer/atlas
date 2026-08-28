@@ -303,37 +303,24 @@ whole group as *may see it* or *may change it*, and withdraw either at any time.
 Ownership can be handed on, which is how a connector survives the person who made
 it — an ownerless connector is administrators-only.
 
-Two things this does **not** do. It does not reach the runtime: a deployed process
-resolves its connector by name whoever started it. And it does not yet bound who
-receives the *events* an inbound connector brings in — a process that names the
-right message still gets them; that half is specified in the record and not built.
+**Its events reach only the processes you allow.** An inbound subscription claims
+the message name it publishes under: a process deployed by somebody who cannot
+reach the connector will not be delivered those events, and pointing a connector at
+a name somebody else's process already listens for is refused rather than silently
+forwarding your post to them. Both refusals name the message, never the other
+party. If a deploy or a subscription is refused this way, rename the message in
+your model — or ask whoever owns the connector to share it with you.
+
+One thing this does **not** do: it does not reach the runtime. A deployed process
+resolves its connector by name whoever started it, and while a message correlates
+the engine still matches on name and key alone. This is a gate at the two points
+where a model and a connector meet, not isolation inside the engine.
 
 **Upgrading:** connectors stored before this carry no owner and become
 administrators-only until one is assigned. An administrator can hand each to its
-real owner from the same page.
-
-### Who may configure a connector
-
-A connector has an **owner**: whoever created it. They, whoever they share it with,
-and administrators can see its endpoint and credential reference, change it, delete
-it, or give it an inbound subscription
-([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)). Everybody else
-still sees that it exists — its name, kind and whether it is usable — because that
-is what the modeler needs to author a task against it.
-
-Sharing is in **Console → Connectors**, beside each connector: add a person or a
-whole group as *may see it* or *may change it*, and withdraw either at any time.
-Ownership can be handed on, which is how a connector survives the person who made
-it — an ownerless connector is administrators-only.
-
-Two things this does **not** do. It does not reach the runtime: a deployed process
-resolves its connector by name whoever started it. And it does not yet bound who
-receives the *events* an inbound connector brings in — a process that names the
-right message still gets them; that half is specified in the record and not built.
-
-**Upgrading:** connectors stored before this carry no owner and become
-administrators-only until one is assigned. An administrator can hand each to its
-real owner from the same page.
+real owner from the same page. Processes deployed before this carry no deployer
+either, so they keep any message name they already listen for until they are
+redeployed — deploy them again to bring them under the claim.
 
 ### Connecting a hosted AI connector
 

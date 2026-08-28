@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Incoming events reach only the processes you allow",
+    "de": "Eingehende Ereignisse erreichen nur die Prozesse, die Sie erlauben"
+  },
+  "summary": {
+    "en": "Giving a connector an owner stopped other people changing it. It did not stop them receiving what it brings in: an incoming connector hands its events to whichever process listens for the message name, and a name is not a secret. Now the subscription claims that name. A process deployed by somebody who cannot reach your connector will not be given those events, and if you try to point a connector at a name somebody else's process already listens for, Atlas refuses instead of quietly forwarding your post to them. Both refusals tell you the message name so you can rename it or ask for access, and neither tells you whose process or whose connector is on the other side — that would give away exactly what a private connector keeps to itself. Renaming a subscription or switching a disabled one back on goes through the same check, and deploying a whole project is refused before anything is registered, so you never end up half-deployed. Two limits worth knowing: an administrator passes both checks, and a process deployed before this update keeps any name it already listens for until you deploy it again.",
+    "de": "Einem Konnektor eine Eigentümerin zu geben, hat andere davon abgehalten, ihn zu ändern. Es hat sie nicht davon abgehalten, zu empfangen, was er hereinbringt: Ein eingehender Konnektor übergibt seine Ereignisse an jeden Prozess, der auf den Nachrichtennamen hört — und ein Name ist kein Geheimnis. Jetzt beansprucht das Abonnement diesen Namen. Ein Prozess, den jemand deployt hat, der Ihren Konnektor nicht erreichen darf, bekommt diese Ereignisse nicht mehr. Und wenn Sie einen Konnektor auf einen Namen richten wollen, auf den bereits der Prozess einer anderen Person hört, weist Atlas das ab, statt Ihre Post stillschweigend dorthin weiterzuleiten. Beide Abweisungen nennen Ihnen den Nachrichtennamen, damit Sie ihn ändern oder um Zugriff bitten können — und keine nennt Ihnen, wessen Prozess oder wessen Konnektor auf der anderen Seite steht; das würde genau das preisgeben, was ein privater Konnektor für sich behält. Ein Abonnement umzubenennen oder ein abgeschaltetes wieder einzuschalten geht durch dieselbe Prüfung, und ein ganzes Projekt wird abgewiesen, bevor irgendetwas registriert ist — halb deployt landen Sie also nie. Zwei Grenzen, die man kennen sollte: Eine Administratorin kommt durch beide Prüfungen, und ein Prozess, der vor dieser Aktualisierung deployt wurde, behält jeden Namen, auf den er schon hört, bis Sie ihn erneut deployen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Connectors",
+      "de": "Konnektoren öffnen"
+    },
+    "route": "#/console/connectors"
+  }
+}

@@ -185,7 +185,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			for _, x := range a.DMNXMLs {
 				dmnXMLs = append(dmnXMLs, []byte(x))
 			}
-			dps, _, pErr := s.deployModel([]byte(a.XML), dmnXMLs, deployedAt, appID)
+			dps, _, pErr := s.deployModel([]byte(a.XML), dmnXMLs, deployedAt, appID, principalID(r))
 			if pErr != nil {
 				opErr = pErr
 				return

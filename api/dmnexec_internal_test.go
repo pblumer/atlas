@@ -55,7 +55,7 @@ func TestDeployModelBadDMN(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	var persistErr error
 	srv.do(func() {
-		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), [][]byte{[]byte("<not-dmn")}, 123, "")
+		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), [][]byte{[]byte("<not-dmn")}, 123, "", "")
 	})
 	if persistErr == nil {
 		t.Fatal("deployModel with an uncompilable DMN snapshot: want an error")

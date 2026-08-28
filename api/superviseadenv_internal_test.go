@@ -174,7 +174,7 @@ func TestSupervisedADEnvUsesTheWorkersOwnNames(t *testing.T) {
 func deployADModel(t *testing.T, srv *Server, xml string) {
 	t.Helper()
 	var compErr, persistErr error
-	srv.do(func() { _, compErr, persistErr = srv.deployModel([]byte(xml), nil, 1, "") })
+	srv.do(func() { _, compErr, persistErr = srv.deployModel([]byte(xml), nil, 1, "", "") })
 	if compErr != nil {
 		t.Fatalf("compile: %v", compErr)
 	}

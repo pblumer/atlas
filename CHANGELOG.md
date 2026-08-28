@@ -14,6 +14,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **An inbound connector's events reach only the processes you allow.** A
+  subscription now **claims** the message name it publishes under: a process
+  deployed by somebody who cannot reach that connector can no longer be delivered
+  those events, and pointing a connector at a name somebody else's process already
+  listens for is refused instead of silently forwarding your post to them
+  ([ADR-0205](docs/adr/0205-connector-ownership-and-event-delivery.md)).
+
+  This is what the previous entry deliberately left open. Giving a connector an
+  owner stopped a stranger *configuring* it; the message name was still the whole
+  authorization, and a name is not a secret.
+
+  **Checked at both doors**, because a check at one moment is not a rule: deploying
+  is refused when the definition could be delivered a claimed name its deployer
+  cannot reach, and claiming is refused when a definition the claimant cannot reach
+  already listens for that name. Renaming a subscription, or switching a disabled
+  one back on, goes through the same door — otherwise the update endpoint would be
+  the way around the create endpoint. A project bundle is refused before anything
+  registers, so it stays all-or-nothing.
+
+  **Both refusals name the message and nothing else.** Naming it is what makes it
+  actionable; naming the other party would hand over exactly what a private
+  connector was hiding.
+
+  What counts as "could be delivered" is every way a definition can receive a
+  message — a start event, an intermediate catch, a receive task, a boundary event,
+  a message-triggered event subprocess. Not just start events: a catch in a process
+  somebody starts themselves receives the payload just as well.
+
+  **Limits, stated rather than implied.** An administrator passes both doors. A
+  definition deployed before this carries no deployer, reads as ownerless, and so
+  keeps any name it already listens for until it is redeployed — the alternative
+  would break every upgrade where somebody claims a name their own long-standing
+  process uses. And this governs delivery to a *definition*, never to a running
+  instance: while a message correlates, the engine still matches on name and key
+  alone.
+
 - **A connector belongs to somebody now.** It has an owner, and only they — plus
   whoever they share it with, and administrators — can see its endpoint and
   credential reference, change it, delete it, or point it at a message name

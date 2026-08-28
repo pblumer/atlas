@@ -39,7 +39,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
-| **M11** — Berechtigungen auf Konnektor-Ebene | 🚧 Schritt 1 umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md), `api/connectorscope.go`: Eigentümer, Freigabe (auch an Gruppen) und Rollenprüfung auf Konnektor und Abonnements. Offen: der Anspruch auf den Nachrichtennamen (Schritt 2) |
+| **M11** — Berechtigungen auf Konnektor-Ebene | ✅ umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md): Eigentümer und Freigabe am Konnektor (`api/connectorscope.go`) und der Anspruch auf den Nachrichtennamen an beiden Türen (`api/messageclaim.go`) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -50,11 +50,10 @@ bei einem Dritten läuft. M11 ist die Antwort auf eine Frage *hinter* der Haust�
 Ein Konto ist angemeldet, aber alle Konten dürfen dasselbe. Das gehört zu O-02
 (feingranulare Autorisierung), nicht zu R-08.
 
-Kapitel 1 beschreibt den **Befund**, also den Zustand vor diesen Massnahmen. Das
-ist Absicht: es ist der Beleg dafür, was behoben wurde, und die Begründung für die
-restlichen. Die eine Ausnahme ist **1.5**, und sie ist als solche gekennzeichnet:
-Dieser Befund ist heute noch wahr und wird von M11 beantwortet. Was sonst heute
-gilt, steht in Kapitel 6.
+Kapitel 1 beschreibt durchgehend den **Befund**, also den Zustand vor diesen
+Massnahmen — auch 1.5, das zuletzt dazukam und inzwischen ebenfalls behoben ist.
+Das ist Absicht: Kapitel 1 ist der Beleg dafür, was behoben wurde. Was heute gilt,
+steht in Kapitel 6.
 
 ---
 
@@ -165,7 +164,8 @@ Autorisierung**, und er ist aus der Liste oben für jeden lesbar.
 Das ist keine Lücke in R-08 — jede dieser Routen verlangt einen Prinzipal, die
 Haustür ist zu. Es ist eine Lücke *dahinter*, also in O-02 (feingranulare
 Autorisierung), und sie fällt erst auf, seit ein Konnektor nicht mehr nur
-hinausgreift, sondern hereinlässt (ADR-0075). Massnahme **M11** beantwortet sie.
+hinausgreift, sondern hereinlässt (ADR-0075). Massnahme **M11** beantwortet sie und
+ist umgesetzt; dieser Abschnitt beschreibt den Zustand davor.
 
 ---
 
@@ -198,7 +198,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
-| M11 🚧 | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
+| M11 ✅ | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -657,9 +657,31 @@ beim Bauen dazu, die im Entwurf nicht standen und dort jetzt nachgetragen sind:
   sperren und das stehen zu lassen wäre Theater gewesen. Die Regel: Ein Verweis darf
   nur nennen, wer einen Konnektor bearbeiten darf, der ihn schon benutzt.
 
-**Offen bleibt Schritt 2**, der Anspruch auf den Nachrichtennamen. Bis dahin
-schützt M11 die *Konfiguration* eines Konnektors und nicht die Ereignisse, die er
-hereinbringt: Wer den richtigen Nachrichtennamen kennt, bekommt sie weiterhin.
+**Schritt 2 ist ebenfalls umgesetzt** (`api/messageclaim.go`): Ein Abonnement
+beansprucht seinen Nachrichtennamen, geprüft an beiden Türen — beim Deployen gegen
+bestehende Ansprüche, beim Anlegen eines Abonnements gegen bereits deployte
+Definitionen. Auch das Umbenennen eines Abonnements und das Wiedereinschalten eines
+abgeschalteten gehen durch dieselbe Tür, sonst wäre der Änderungs-Endpunkt der Weg
+um den Anlege-Endpunkt herum. Beide Abweisungen nennen die Nachricht und sonst
+nichts.
+
+**Beim Bauen kam heraus, dass die beiden Türen verschiedene Fragen stellen** — der
+Entwurf hatte das nicht gesehen. Ein Konnektor hat einen Geltungsbereich, ein
+*Deployment* hatte gar keine Identität: ADR-0071 hat die Laufzeit ausdrücklich
+draussengelassen, und nirgends stand, wer eine Definition deployt hat. Die zweite
+Tür brauchte genau diese eine Tatsache, und sie gibt es jetzt (`deployedBy`). Sie
+ist bewusst *kein* Geltungsbereich, sondern das eine Feld, mit dem eine
+projektlose Definition die Frage «gehört die dir» beantworten kann — geprüft mit
+derselben Regel, die jedes andere projektlose Artefakt schon benutzt.
+
+**Ehrlich dazugesagt, was weiterhin gilt:** Es bleibt ein **Tor an zwei Türen**,
+keine Isolation. Eine Administratorin kommt durch beide. Eine Definition aus der
+Zeit davor trägt weder Deployer noch Projekt, gilt damit als herrenlos und offen —
+ihr Anspruch auf einen Namen steht, bis sie neu deployt wird; das Gegenteil würde
+jede Aktualisierung brechen, bei der jemand einen Namen beansprucht, auf den sein
+eigener alter Prozess hört. Und geprüft wird die Zustellung *an eine Definition*,
+nie an eine laufende Instanz: Während eine Nachricht korreliert, wird nichts davon
+befragt.
 
 **Abnahme** — dieselbe Regel wie in Kapitel 6, der Nachweis ist Code:
 
@@ -683,10 +705,17 @@ hereinbringt: Wer den richtigen Nachrichtennamen kennt, bekommt sie weiterhin.
 7. ✅ Mit `--auth=false` ist alles davon wirkungslos: der Server ist per Deklaration
    offen, und M11 fügt dort keine einzige Verweigerung hinzu.
    `TestAnOpenServerSharesEverything`.
-8. 🔲 *(Schritt 2)* Ein Deploy, dessen Definition einen beanspruchten
-   Nachrichtennamen fängt, wird abgewiesen; die Abweisung nennt die Nachricht und
-   **nicht** die Gegenpartei. Der Anspruch wird auch gegen **bereits deployte**
-   Definitionen geprüft — sonst genügt es, zuerst zu deployen.
+8. ✅ Ein Deploy, dessen Definition einen beanspruchten Nachrichtennamen empfangen
+   kann, wird abgewiesen; die Abweisung nennt die Nachricht und **nicht** die
+   Gegenpartei. `TestAStrangerCannotDeployIntoSomebodyElsesMessage`.
+9. ✅ Der Anspruch wird auch gegen **bereits deployte** Definitionen geprüft — sonst
+   genügt es, zuerst zu deployen.
+   `TestAClaimIsRefusedWhenSomebodyElseIsAlreadyListening`.
+10. ✅ Der Änderungs-Endpunkt ist kein Weg um den Anlege-Endpunkt herum:
+    `TestTheUpdateEndpointIsNotTheWayAround`.
+11. ✅ Ein Projekt-Deploy bleibt Alles-oder-nichts: Wird der dritte Entwurf
+    abgewiesen, ist auch der erste nicht registriert.
+    `TestDeployingAProjectStopsBeforeItStarts`.
 
 ---
 

@@ -1,7 +1,7 @@
 # ADR-0205: Who owns a connector, and who may use the events it brings in
 
-- **Status:** Accepted (2026-08-27: the configuration half is implemented; the
-  message-name claim is not built yet)
+- **Status:** Accepted (2026-08-28: both halves implemented — the configuration
+  scope and the message-name claim)
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 
@@ -236,10 +236,46 @@ already taught what an API-only capability is worth. Transfer of ownership came
 with it, unplanned: an ownerless connector is admin-only, so without it "Anna left"
 would mean an administrator inherits every connector Anna ever made.
 
-The delivery half — the claim on the message name — is **not** built. Until it is,
-this measure protects a connector's configuration and not the events it brings in:
-a process that names the right message still receives them. That is the gap the
-record opened with, and it stays open until the second step lands.
+### As built, step two
+
+The claim is implemented (`api/messageclaim.go`), at both doors: a deploy is
+refused when the definition can be delivered a claimed name the deployer cannot
+reach, and a claim is refused when a definition the claimant cannot reach can
+already be delivered that name. Both refusals name the message and nothing else.
+Renaming a subscription's message, or switching a disabled one back on, is a fresh
+claim and goes through the same door — otherwise the update endpoint would be the
+way around the create endpoint.
+
+**The two doors ask different questions, and this record did not notice that until
+the code did.** A connector has a sharing scope, so "can this person reach that
+subscription" is the question step one already answers. A *deployment* had no
+identity at all: ADR-0071 put runtime visibility out of scope, and nothing recorded
+who deployed a definition. So the second door needed one fact that did not exist,
+and now does — `deployedBy` on the deployment record. It is deliberately *not* a
+sharing scope: it is the single field that lets an ungrouped definition answer "is
+this yours", run through `canViewArtifact`, the same rule every other ungrouped
+artifact already uses. A definition filed into a project defers to that project's
+scope, as its drafts do.
+
+What "can be delivered" means is `CompiledProcess.ReceivableMessageNames()`, new on
+the compiler: message start events, intermediate catches, receive tasks, boundary
+message events and message-triggered event subprocesses. Throws are absent — a
+throw sends. Restricting the claim to *start* events would have been cheaper and
+wrong: a catch in a process somebody starts themselves receives the payload just
+as well, with one extra step.
+
+**Limits, stated so nobody reads this as more than it is.** An administrator passes
+both doors, because an administrator reaches everything. A definition deployed
+before this carries neither a deployer nor a project, so it reads as ownerless,
+which is open — a claim on a name it already catches is allowed, and its
+pre-emption stands until it is redeployed; refusing instead would break every
+upgrade where somebody claims a name their own long-standing process listens for.
+And it governs delivery *to a definition*, never a running instance: nothing here is
+consulted while a message correlates, and the engine still matches on name and key
+alone.
+
+That last limit is the one that keeps option 5 on the table. It remains the real
+isolation, and it remains unbuilt.
 
 ## Pros and cons of the options
 
