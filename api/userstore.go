@@ -16,13 +16,48 @@ const (
 )
 
 // Well-known roles. Roles are a free-form list on the user, not a single "admin"
-// bool, so richer RBAC can grow here without reshaping the record (ADR-0044). The
-// MVP only enforces RoleAdmin (managing users requires it); every other role is
-// stored and returned but not yet consulted.
+// bool, so richer RBAC can grow here without reshaping the record (ADR-0044).
+//
+// Four of them, and each route says which one it needs
+// (ADR-draft-roles-per-endpoint-group). They are a list, not a lattice: an account
+// carries several, and the question asked at the boundary is only "does this
+// principal hold the role this route names". So a modeller who is also to start
+// test instances holds `modeler` *and* `operator` — deliberately, because the
+// alternative is a rank order in which every widening of one role silently widens
+// the ones above it.
 const (
+	// RoleAdmin administers the instance: accounts, groups, credentials, secrets,
+	// settings, backup and restore. It is the one role that is a superset — an admin
+	// reaches every route, because every route a role names is one an admin may need
+	// on the day the person who normally does it is unreachable.
 	RoleAdmin = "admin"
-	RoleUser  = "user"
+
+	// RoleModeler authors: drafts, forms, decisions, documentation, projects and
+	// applications — and deploys them. Deploying is code execution (risk R-09), which
+	// is why it sits behind a role at all rather than behind being signed in.
+	RoleModeler = "modeler"
+
+	// RoleOperator runs what is deployed: start, cancel, terminate and repair
+	// instances, work incidents, read runtime data.
+	RoleOperator = "operator"
+
+	// RoleUser works on tasks and reads what it is given. It is what a new account
+	// gets, and on its own it reaches nothing that changes a definition or an
+	// instance.
+	RoleUser = "user"
 )
+
+// legacyRoles is what an identity that predates the role model holds: everything a
+// signed-in account could do before there were roles, which was everything except
+// what requireAdmin guarded.
+//
+// It is the upgrade rule in one place, used for three kinds of identity — an
+// account written before this shipped, an API token minted before it, and the
+// server's own internal credential. Existing installations are running work, and an
+// upgrade that stops that work is one nobody applies, which protects nobody. The
+// narrowing is then an operator's deliberate act on a screen
+// (ADR-draft-roles-per-endpoint-group).
+func legacyRoles() []string { return []string{RoleModeler, RoleOperator, RoleUser} }
 
 // User is a person (or, later, an external identity) known to this Atlas
 // instance. It is operator/config data, not engine state: it never flows through
@@ -52,6 +87,19 @@ type User struct {
 	PasswordHash string   `json:"passwordHash,omitempty"`
 	CreatedAt    int64    `json:"createdAt"`
 	UpdatedAt    int64    `json:"updatedAt"`
+
+	// RolesUpgradedAt is when this record's Roles were last written under the role
+	// model (ADR-draft-roles-per-endpoint-group). Zero means the record predates it,
+	// and its roles are therefore not a statement about anything except admin —
+	// nothing else was enforced when they were written.
+	//
+	// The marker is on the record rather than instance-wide because it describes one
+	// account and has to travel with it: a full snapshot carries users and settings
+	// together, but a design-time backup carries neither, and an instance-wide flag
+	// restored without the accounts it describes would silently skip the upgrade for
+	// them. Set at creation from then on, so an account deliberately narrowed to
+	// `user` is never re-widened on the next start (upgradeLegacyRoles).
+	RolesUpgradedAt int64 `json:"rolesUpgradedAt,omitempty"`
 }
 
 // hasRole reports whether the user carries the given role.

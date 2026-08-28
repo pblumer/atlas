@@ -293,9 +293,6 @@ func historyAt(row map[string]any) int64 {
 // store rather than in this process changes where it is kept, not who may read it
 // through here.
 func (s *Server) handleWorkerHistory(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return // requireAdmin wrote 403
-	}
 	if s.history == nil {
 		// Not an error: this server was simply not asked to keep one. Saying which
 		// flag turns it on is more use than a 404 that leaves an operator guessing.

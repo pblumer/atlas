@@ -150,21 +150,13 @@ func TestNormalizeAccent(t *testing.T) {
 // TestThemeWritesRequireAdmin: with auth enabled, PUT and DELETE demand the admin
 // role. The gate runs before any store access, so a bare Server (no run loop)
 // suffices — mirroring TestBackupRestoreRequireAdmin.
+// The brand accent is read by the login screen and written by an administrator.
+// Asserted at the boundary, where the role is decided now (routeroles.go).
 func TestThemeWritesRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
-	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
-	}{
-		{"set", s.handleSetTheme, http.MethodPut},
-		{"delete", s.handleDeleteTheme, http.MethodDelete},
-	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.meth, "/api/v1/settings/theme", nil)
-		tc.fn(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s theme without an admin principal: status=%d, want 403", tc.name, rec.Code)
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		if got := boundaryStatus(t, ordinary, method, "/api/v1/settings/theme"); got != http.StatusForbidden {
+			t.Errorf("%s theme without an admin principal: status=%d, want 403", method, got)
 		}
 	}
 }
@@ -282,20 +274,11 @@ func TestSetLogoRejectsUnreadableBody(t *testing.T) {
 // TestLogoWritesRequireAdmin: with auth enabled, PUT and DELETE demand the admin
 // role, and GET stays public so the login screen can show the mark before sign-in.
 func TestLogoWritesRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
-	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
-	}{
-		{"set", s.handleSetLogo, http.MethodPut},
-		{"delete", s.handleDeleteLogo, http.MethodDelete},
-	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.meth, "/api/v1/settings/logo", nil)
-		tc.fn(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s logo without an admin principal: status=%d, want 403", tc.name, rec.Code)
+	// Refused at the boundary, where the role is decided now (routeroles.go).
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		got := boundaryStatus(t, []string{RoleModeler, RoleOperator, RoleUser}, method, "/api/v1/settings/logo")
+		if got != http.StatusForbidden {
+			t.Errorf("%s logo without an admin principal: status=%d, want 403", method, got)
 		}
 	}
 	if classifyPath(t, http.MethodGet, "/api/v1/settings/logo") != accessPublic {

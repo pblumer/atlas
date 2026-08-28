@@ -231,9 +231,6 @@ func clipJobRunField(s string) string {
 // Like the outbox read it does not go through s.do for the response: the registry is
 // run-loop state, so the read itself does, and nothing else here touches the engine.
 func (s *Server) handleWorkerJobs(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return // requireAdmin wrote 403
-	}
 	// An empty id is a real worker: one that leased without giving a name. The view
 	// labels it, and it must be reachable here for the same reason it is listed there.
 	worker := strings.TrimSpace(r.PathValue("id"))

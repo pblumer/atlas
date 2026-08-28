@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Security
 
+- **Not every account may deploy any more.** Each of the 199 `/api/v1` routes now
+  names the role it requires, and one check at the boundary enforces it for every
+  credential there is — a browser session, an API token, a deploy token, an OAuth
+  grant and, because a tool call runs as its caller, every MCP tool
+  ([ADR-draft-roles-per-endpoint-group](docs/adr/draft-roles-per-endpoint-group.md)).
+
+  Four roles, and an account carries several: **admin** (accounts, credentials,
+  secrets, settings, backup and restore), **modeler** (author drafts, forms and
+  decisions — and deploy them), **operator** (start, cancel and repair
+  instances; read runtime data) and **user** (work on tasks and read what they are
+  given). Deploying a model is code execution, and until now every signed-in
+  account could do it.
+
+  **Your upgrade takes nothing away.** Every existing account keeps what it could
+  do — modeler, operator and user, so everything except administration — and each
+  record is marked so this happens exactly once: what you narrow afterwards stays
+  narrow. New accounts get `user`. An API token minted before this keeps its reach
+  too, and one minted now carries its minter's roles, never admin.
+
+  Grant the roles on the account screen under Organization, which lists each one
+  with what it lets the person do. The navigation then offers only the apps and
+  screens that person's roles reach.
+
 - **An inbound connector's events reach only the processes you allow.** A
   subscription now **claims** the message name it publishes under: a process
   deployed by somebody who cannot reach that connector can no longer be delivered

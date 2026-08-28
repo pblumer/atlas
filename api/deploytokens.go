@@ -43,9 +43,6 @@ func (s *Server) loadDeployTokens() error {
 // handleCreateDeployToken mints a token. Body: {"name": "..."} — a label naming
 // the peer it is for, so an operator can tell two credentials apart when revoking.
 func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -107,9 +104,6 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 // handleListDeployTokens lists the tokens by identity and provenance. The secret is
 // absent because the server does not have it.
 func (s *Server) handleListDeployTokens(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	out := []deployTokenView{}
 	var loadErr error
 	s.do(func() {
@@ -133,9 +127,6 @@ func (s *Server) handleListDeployTokens(w http.ResponseWriter, r *http.Request) 
 // failure mid-way leaves the credential *revoked in memory* rather than silently
 // still valid — the safe direction for a credential.
 func (s *Server) handleRevokeDeployToken(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var delErr error
 	s.do(func() {

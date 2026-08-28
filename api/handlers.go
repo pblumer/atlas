@@ -516,9 +516,6 @@ type logsResp struct {
 // is enforced it is admin-only; with auth off (open single-user mode) it is open
 // like the rest of the API. Reports an empty list when no buffer was wired.
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	lines := []string{}
 	if s.logs != nil {
 		lines = s.logs.Lines()
@@ -2248,9 +2245,6 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 // timeline as the audit trail, and it does NOT re-evaluate any gateway a token has
 // already passed — only the stored values change.
 func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")

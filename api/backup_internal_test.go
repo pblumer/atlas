@@ -123,21 +123,26 @@ func TestHandleBackupLogsStreamFailure(t *testing.T) {
 	s.handleBackup(&failRW{}, req)
 }
 
+// TestBackupRestoreRequireAdmin: a backup is every draft, form, decision and
+// connector of the whole installation in one file, and a restore overwrites them.
+// Both are an administrator's act.
+//
+// Asserted at the boundary, because that is where it is decided now: the routes
+// name the admin role and withAuth refuses before the handler is entered
+// (routeroles.go). The handlers used to open with requireAdmin; a check that can no
+// longer be reached is not one, so it is gone rather than kept as decoration.
 func TestBackupRestoreRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
 	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
+		name, method, path string
 	}{
-		{"backup", s.handleBackup, http.MethodGet},
-		{"restore", s.handleRestore, http.MethodPost},
+		{"backup", http.MethodGet, "/api/v1/backup"},
+		{"restore", http.MethodPost, "/api/v1/restore"},
+		{"full backup", http.MethodGet, "/api/v1/backup/full"},
+		{"full restore", http.MethodPost, "/api/v1/restore/full"},
 	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.meth, "/", nil)
-		tc.fn(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s without an admin principal: status=%d, want 403", tc.name, rec.Code)
+		if got := boundaryStatus(t, ordinary, tc.method, tc.path); got != http.StatusForbidden {
+			t.Errorf("%s without an admin principal: status=%d, want 403", tc.name, got)
 		}
 	}
 }

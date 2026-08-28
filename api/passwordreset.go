@@ -92,13 +92,14 @@ func ResetPassword(opts ResetPasswordOptions) (ResetPasswordResult, error) {
 			return ResetPasswordResult{}, fmt.Errorf("reset-password: %w", err)
 		}
 		u = User{
-			ID:           id,
-			Username:     username,
-			Roles:        []string{RoleAdmin},
-			Source:       SourceLocal,
-			PasswordHash: hash,
-			CreatedAt:    opts.Now,
-			UpdatedAt:    opts.Now,
+			ID:              id,
+			Username:        username,
+			Roles:           []string{RoleAdmin},
+			Source:          SourceLocal,
+			PasswordHash:    hash,
+			CreatedAt:       opts.Now,
+			UpdatedAt:       opts.Now,
+			RolesUpgradedAt: opts.Now,
 		}
 		if err := store.Save(u); err != nil {
 			return ResetPasswordResult{}, fmt.Errorf("reset-password: save: %w", err)

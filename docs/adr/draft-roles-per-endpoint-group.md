@@ -1,6 +1,6 @@
 # ADR-DRAFT: Roles per endpoint group
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
 
@@ -18,6 +18,11 @@ Measured against the route table on `main`:
 | API routes under `/api/v1` | 199 |
 | Gated on `admin` | 53 |
 | **Reachable by any signed-in account** | **146** |
+
+(Of those 53, 51 are admin outright; two ask a finer question inside the handler —
+installing a repository package needs admin only when the package carries code, and
+the AD-mockup read returns the seed to an administrator and the switch to everyone.
+Both keep their in-handler check, because a route-level role cannot express either.)
 
 Among those 146: `POST /api/v1/deployments`, `POST /api/v1/scripts/run`,
 `DELETE /api/v1/instances/{key}`, `POST /api/v1/instances/terminate`,
@@ -116,14 +121,23 @@ next to `POST /api/v1/restore/full`; `Incidents` holds the worker job endpoints;
 
 ### The roles
 
-Four, ranked, each a superset of the next in the *reading* direction only:
+Four. Only `admin` is a superset — it reaches every route, because an instance
+where the administrator cannot reach an endpoint to fix it on the day its usual
+holder is unreachable is not administered. The other three overlap in what they
+read, but none contains another:
 
 | Role | May |
 |---|---|
 | `admin` | everything, including accounts, credentials, secrets, backup and restore |
 | `modeler` | author drafts, forms and decisions; validate; **deploy** |
-| `operator` | start, cancel, terminate, migrate and repair instances; read runtime data |
+| `operator` | start, cancel, terminate and repair instances; read runtime data |
 | `user` | work on tasks, read what they are given, manage their own credentials |
+
+Migrating a population of instances onto another definition, rewriting a running
+instance's variables and reading a worker's job history stay with `admin` — not
+because an operator could not be trusted with them, but because they were
+admin-only before this and no route may become reachable by somebody who could not
+reach it yesterday. Widening is the one direction this record does not take.
 
 They are a list, not a lattice: an account carries several, and the check is "does
 this principal hold the role this route names". That is the shape ADR-0044 already
@@ -143,6 +157,16 @@ Existing accounts are migrated to `modeler` + `operator` + `user` — exactly wh
 they can do today — and new accounts default to `user`. Tightening is then an
 operator's deliberate act on a screen, with nothing broken in the meantime.
 
+The migration runs once, at startup, and each account carries a marker
+(`rolesUpgradedAt`) saying its roles were written under this model. Without one, an
+account an operator narrows would be widened straight back on the next restart —
+the upgrade would be a standing policy rather than a one-off, and every decision
+made on the screen would last until the next deployment. The marker sits on the
+record rather than instance-wide because it describes one account and has to travel
+with it: a full snapshot carries accounts and settings together, but a design-time
+backup carries neither, and an instance-wide flag restored without the accounts it
+describes would silently skip them.
+
 This is the opposite of what ADR-0205 chose for ownerless connectors, and the
 difference is the point. There, the current behaviour was a **hole**: an ordinary
 account could delete somebody else's connector, and a measure that exempted every
@@ -155,14 +179,28 @@ nobody.
 ### Credentials that are not sessions
 
 - **API token**: carries the roles of the account that minted it, snapshotted at
-  mint time, intersected with its scope. A credential is never more privileged
-  than whoever created it, and the record already carries `CreatedBy`. A token
-  minted before this reads as `modeler` + `operator` + `user`, by the same
-  migration rule as the accounts.
-- **Deploy token**: `deploy-agent` already reaches exactly two routes through
-  ADR-0129's allowlist. It gains no role; the allowlist stays the narrower answer.
+  mint time, and never `admin` — a machine that administers accounts is not a case
+  Atlas has, and a leaked credential that could would be a much worse leak. Minting
+  is itself an administrator's act, so in practice the token gets the whole non-admin
+  set, which is exactly what an API token could reach the day before this shipped;
+  the rule is written for the minter's roles so that it stays true if a narrower
+  account is ever allowed to mint. Both halves are then enforced — the scope says
+  which routes, the roles say which kinds of operation. A token minted before this
+  reads as `modeler` + `operator` + `user`, by the same rule as the accounts.
+- **Deploy token**: a publisher, so it carries `modeler` — publishing a bundle is
+  the same act a person performs by deploying one, and a credential whose role said
+  otherwise would be lying about what it does. It keeps `deploy-agent` beside it,
+  which is what ADR-0071 reads to decide what a peer sees of a project, and its
+  ADR-0129 allowlist — two routes — stays the narrower answer of the two.
+- **The server's own internal token**: the credential Atlas hands the processes it
+  supervises. It carries the legacy set for the same reason an existing account
+  does: a supervised worker that stops leasing jobs on upgrade is precisely the
+  outage this record set out not to cause.
 - **OAuth grant**: already snapshots the person's roles (ADR-0200) and already has
-  the maintenance that keeps them honest. Nothing changes.
+  the maintenance that keeps them honest — so the upgrade joins that maintenance and
+  rewrites the snapshot on a standing grant when it widens the account behind it.
+  Skipping that would leave somebody's connector able to do less than they can, for
+  a change they never made.
 - **Auth off**: no principal, no roles, nothing enforced — as with every rule since
   ADR-0195.
 
@@ -178,9 +216,20 @@ nobody.
   inventory test makes the set reviewable; it cannot make each choice right.
 - **Negative:** an upgrade grants three roles to every existing account, so nothing
   is safer until an operator narrows it. Named here rather than discovered later.
-- **Follow-ups / risks to watch:** the Console needs role editing on the account
-  screen, or this ships as an API-only capability, which ADR-0200 already taught is
-  no capability at all. Federation (O-01) maps external claims onto exactly these
+- **Negative:** one route in the runtime group stays open to every signed-in
+  identity — reading a single instance's variables. A task form is prefilled from
+  the variables of the instance its task belongs to, so the operator role the rest
+  of that group carries would have handed a task worker an empty form. The rule that
+  belongs there is the other axis — may you see *this instance* — which is the open
+  work O-02 already names, not something a role per endpoint group can express.
+- **Positive:** the Console's account screen grants the four roles by name, each
+  with what it lets the person do, and its navigation offers only the apps and
+  screens the signed-in person's roles reach — so a narrowed account meets a shorter
+  menu rather than a wall of 403s. Shipping the rule without either would have made
+  it an API-only capability, which ADR-0200 already taught is no capability at all.
+- **Follow-ups / risks to watch:** the navigation is a courtesy, not a boundary —
+  the server refuses regardless, and a screen reached by typing its URL will simply
+  fail its calls. Federation (O-01) maps external claims onto exactly these
   roles, so the names are a public contract from the day they ship. And `deployer`
   as a fifth role should be a one-line change when somebody asks — if it is not,
   this record chose wrong.

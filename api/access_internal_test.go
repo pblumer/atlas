@@ -261,7 +261,7 @@ func TestUndeclaredRouteIsGated(t *testing.T) {
 
 	// The UI catch-all, declared public, exactly as the real server has it.
 	mux.Handle("/", nop)
-	policy.declare("/", accessPublic)
+	policy.declare("/", accessPublic, roleAny)
 
 	// A route mounted straight onto the mux, bypassing mount() — the mistake.
 	mux.Handle("/sidecar", nop)

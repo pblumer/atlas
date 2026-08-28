@@ -311,7 +311,17 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if tok, ok := bearerToken(r); ok {
 		if s.internalToken != "" &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			return &httpapi.Principal{UserID: servicePrincipalName, Username: servicePrincipalName}
+			// The server's own credential, handed to the processes it supervises
+			// (superviseenv.go). It carries the legacy roles — everything a signed-in
+			// account could do before roles existed, and still not admin — because that
+			// is exactly what it could do the day before this shipped, and a supervised
+			// worker that stops leasing jobs on upgrade is the outage this whole record
+			// set out not to cause.
+			return &httpapi.Principal{
+				UserID:   servicePrincipalName,
+				Username: servicePrincipalName,
+				Roles:    legacyRoles(),
+			}
 		}
 		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
 		// index is an in-memory, mutex-guarded mirror of the durable records, so this
@@ -320,8 +330,12 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 			return &httpapi.Principal{
 				UserID:   deployAgentPrincipalPrefix + rec.ID,
 				Username: rec.Name,
-				Roles:    []string{RoleDeployAgent},
-				Scope:    apiScopeDeploy,
+				// A publisher, so it holds the role publishing needs — and its scope
+				// allowlist, two routes, stays the narrower answer of the two
+				// (ADR-0129). RoleDeployAgent rides along because scopes.go reads it to
+				// decide what a peer may see of a project.
+				Roles: []string{RoleDeployAgent, RoleModeler},
+				Scope: apiScopeDeploy,
 			}
 		}
 		// An API token identifies a machine an administrator issued a credential to:
@@ -333,7 +347,13 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 			return &httpapi.Principal{
 				UserID:   apiTokenPrincipalPrefix + rec.ID,
 				Username: rec.Name,
-				Scope:    rec.scope(),
+				// The roles of whoever minted it, snapshotted at mint time (apitokens.go),
+				// so a credential is never more privileged than the person who created it
+				// — and never admin, which the mint refuses to copy: a machine that
+				// administers accounts is not a case Atlas has, and a leaked token that
+				// could would be a much worse leak.
+				Roles: rec.roles(),
+				Scope: rec.scope(),
 			}
 		}
 		// An OAuth access token identifies a *person* who approved an application to
@@ -427,6 +447,22 @@ func (s *Server) withAuth(policy *accessPolicy, next http.Handler) http.Handler 
 				"this credential's scope ("+p.Scope+") does not permit "+r.Method+" "+r.URL.Path)
 			return
 		}
+		// What this identity may *do*, as opposed to whether it is one. Every route
+		// names a role where it is mounted; this is the single place that reads it, so
+		// a tool call over /mcp, a worker's token and a browser session are all held to
+		// the same rule without any of them being asked twice (routeroles.go).
+		//
+		// Only when enforcement is on: with --auth=false there is no principal to have
+		// a role, and a rule that pretended otherwise would be enforcing a policy
+		// against nobody.
+		if s.authEnabled {
+			if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+				if required := policy.requiredRole(r); !mayReach(p, required) {
+					refuseRole(w, r, required)
+					return
+				}
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -446,10 +482,18 @@ func (s *Server) isAdmin(r *http.Request) bool {
 	return p != nil && p.HasRole(RoleAdmin)
 }
 
-// requireAdmin enforces the one authorization rule the MVP ships: managing users
-// needs the admin role. When auth is disabled the server is open (single-user
-// mode), so there is nothing to check and it returns true. When enabled it
-// demands an admin principal, writing 403 and returning false otherwise.
+// requireAdmin demands the admin role inside a handler, writing 403 and returning
+// false otherwise. When auth is disabled the server is open (single-user mode), so
+// there is nothing to check and it returns true.
+//
+// It used to be the whole authorization system, called from 52 handlers. It is not
+// any more: every route names the role it needs and the boundary enforces it
+// (routeroles.go), which is why those 52 calls are gone — a check that cannot fail
+// is not a check, and one scattered across handlers cannot be enumerated.
+//
+// What is left is the case a route-level role cannot express: installing a
+// repository package needs admin only when the package carries code. The question
+// is about the *request*, not the route, so it stays where the request is read.
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if !s.authEnabled {
 		return true
@@ -504,13 +548,14 @@ func (s *Server) bootstrapAdmin(now int64) error {
 		return err
 	}
 	u := User{
-		ID:           id,
-		Username:     username,
-		Roles:        []string{RoleAdmin},
-		Source:       SourceLocal,
-		PasswordHash: hash,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              id,
+		Username:        username,
+		Roles:           []string{RoleAdmin},
+		Source:          SourceLocal,
+		PasswordHash:    hash,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		RolesUpgradedAt: now,
 	}
 	if err := s.users.Save(u); err != nil {
 		return err

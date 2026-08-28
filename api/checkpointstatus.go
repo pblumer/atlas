@@ -64,9 +64,6 @@ type checkpointPassResp = checkpointPass
 // and what they have actually done (ADR-0131). It reads the filesystem rather than the
 // processor, so it never touches the run loop.
 func (s *Server) handleCheckpointStatus(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	resp := checkpointStatusResp{
 		Enabled:     s.checkpointInterval > 0,
 		Compaction:  s.compactWAL,
@@ -138,9 +135,6 @@ func (s *Server) walFootprint() (int, int64) {
 // by construction and is the very same code. With no checkpointing configured there is
 // no goroutine to ask, which is a 409 rather than a hang or a silent no-op.
 func (s *Server) handleCheckpointNow(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	if s.checkpointRequests == nil {
 		httpapi.Error(w, http.StatusConflict,
 			"checkpointing is disabled on this server; start it with --checkpoint-interval to take one (ADR-0131)")

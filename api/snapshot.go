@@ -103,9 +103,6 @@ const (
 // vault key — everything needed to reconstitute this engine elsewhere, minus the
 // derivable state store. Admin-gated when auth is on.
 func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	// Hold off WAL compaction for the duration (ADR-0131). This is raised *before* the
 	// checkpoint below is chosen, which is what makes the guard sound rather than
 	// merely likely: a compaction pass that reads zero here is one whose deletion
@@ -201,9 +198,6 @@ func writeFileInto(tw *tar.Writer, fsys fs.FS, name string) error {
 // path (ApplyPendingRestore) moves it into place and lets recovery rebuild state
 // from the restored WAL. Admin-gated when auth is on.
 func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)
 	defer r.Body.Close()
 

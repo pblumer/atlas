@@ -253,14 +253,14 @@ func TestProvisionClioKey(t *testing.T) {
 }
 
 // TestProvisionClioKeyRequireAdmin proves the provisioning endpoint refuses a
-// non-admin when auth is enabled.
+// non-admin when auth is enabled — at the boundary, where the role is decided
+// (routeroles.go): minting a clio key is an administrator's act because the key it
+// writes into the vault is one every process then uses.
 func TestProvisionClioKeyRequireAdmin(t *testing.T) {
-	srv := newVaultServer(t)
-	srv.authEnabled = true
-	rec := httptest.NewRecorder()
-	srv.handleProvisionClioKey(rec, httptest.NewRequest(http.MethodPost, "/api/v1/connectors/x/provision-clio-key", nil))
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("provision without admin: code=%d, want 403", rec.Code)
+	got := boundaryStatus(t, []string{RoleModeler, RoleOperator, RoleUser},
+		http.MethodPost, "/api/v1/connectors/x/provision-clio-key")
+	if got != http.StatusForbidden {
+		t.Errorf("provision without admin: code=%d, want 403", got)
 	}
 }
 
@@ -445,25 +445,20 @@ func TestSetSecretValidation(t *testing.T) {
 	}
 }
 
-// TestSecretHandlersRequireAdmin proves each handler refuses a non-admin when auth is
-// enforced. Called directly so the per-handler guard is what returns 403 (the global
-// middleware would return 401 first through the mux).
+// TestSecretHandlersRequireAdmin proves a signed-in non-admin reaches none of the
+// three. It is asserted at the boundary, where the role is decided now
+// (routeroles.go): the routes name the admin role, so no request gets as far as a
+// handler and the handlers carry no gate of their own.
 func TestSecretHandlersRequireAdmin(t *testing.T) {
-	srv := newVaultServer(t)
-	srv.authEnabled = true
-	forbidden := func(fn func(http.ResponseWriter, *http.Request), method, path string) int {
-		rec := httptest.NewRecorder()
-		fn(rec, httptest.NewRequest(method, path, nil))
-		return rec.Code
-	}
-	if code := forbidden(srv.handleListSecrets, http.MethodGet, "/api/v1/secrets"); code != http.StatusForbidden {
-		t.Errorf("list without admin: code=%d, want 403", code)
-	}
-	if code := forbidden(srv.handleSetSecret, http.MethodPut, "/api/v1/secrets/k"); code != http.StatusForbidden {
-		t.Errorf("set without admin: code=%d, want 403", code)
-	}
-	if code := forbidden(srv.handleDeleteSecret, http.MethodDelete, "/api/v1/secrets/k"); code != http.StatusForbidden {
-		t.Errorf("delete without admin: code=%d, want 403", code)
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, tc := range []struct{ name, method, path string }{
+		{"list", http.MethodGet, "/api/v1/secrets"},
+		{"set", http.MethodPut, "/api/v1/secrets/k"},
+		{"delete", http.MethodDelete, "/api/v1/secrets/k"},
+	} {
+		if code := boundaryStatus(t, ordinary, tc.method, tc.path); code != http.StatusForbidden {
+			t.Errorf("%s without admin: code=%d, want 403", tc.name, code)
+		}
 	}
 }
 

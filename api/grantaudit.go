@@ -95,9 +95,6 @@ const (
 // action to one kind (share/unshare/visibility/transfer); limit caps the window
 // (default 200, max 1000). GET /api/v1/audit.
 func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	q := r.URL.Query()
 	appFilter := q.Get("applicationId")
 	actionFilter := q.Get("action")

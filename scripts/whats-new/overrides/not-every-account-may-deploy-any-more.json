@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Console"
+  ],
+  "title": {
+    "en": "Accounts now have roles, and not every account may deploy",
+    "de": "Konten haben jetzt Rollen — und nicht jedes Konto darf deployen"
+  },
+  "summary": {
+    "en": "Until now, being signed in was the whole answer: any account could deploy a model, cancel somebody's instances or run a script. Deploying is code execution, so that was the wrong default for anything but a workshop. Every endpoint now names the role it needs — admin, modeler, operator or user — and the server checks it before the request reaches anything, whether it arrives from a browser, an API token or an AI assistant over MCP. An account carries several roles; they are a list, not a ladder. Your upgrade takes nothing away: every existing account keeps modeler, operator and user, so everything except administration, and what you narrow afterwards stays narrow. New accounts get user. Grant the roles under Organization, where each one says what it lets the person do.",
+    "de": "Bisher war «angemeldet» die ganze Antwort: Jedes Konto konnte ein Modell deployen, fremde Instanzen abbrechen oder ein Skript ausführen. Deployen ist Codeausführung — für alles ausser einem Workshop war das die falsche Vorgabe. Jetzt nennt jeder Endpunkt die Rolle, die er verlangt — admin, modeler, operator oder user —, und der Server prüft sie, bevor die Anfrage irgendetwas erreicht: aus dem Browser, mit einem API-Token oder über MCP von einem KI-Assistenten. Ein Konto trägt mehrere Rollen; sie sind eine Liste, keine Rangfolge. Die Aktualisierung nimmt nichts weg: Jedes bestehende Konto behält modeler, operator und user — also alles ausser der Administration —, und was Sie danach enger stellen, bleibt eng. Neue Konten bekommen user. Vergeben werden die Rollen unter «Organization»; dort steht bei jeder, was sie erlaubt."
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organization öffnen"
+    },
+    "route": "#/console/org"
+  }
+}

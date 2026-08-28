@@ -548,10 +548,23 @@ func TestDeletingAClientRevokesItsGrants(t *testing.T) {
 	}
 }
 
-// createUser adds an ordinary account and returns its id.
+// createUser adds an ordinary working account and returns its id.
+//
+// "Ordinary" is the three non-admin roles, which is what every account on an
+// installation that upgrades into the role model keeps
+// (ADR-draft-roles-per-endpoint-group) and what these tests mean by a person who
+// models and operates. The role rule itself is exercised in routeroles_http_test.go;
+// here it would only be scenery in front of the question each test is actually
+// asking.
 func createUser(t *testing.T, admin *http.Client, base, username string) string {
 	t.Helper()
-	body := `{"username":"` + username + `","password":"a-password-that-is-long","roles":["user"]}`
+	return createUserWithRoles(t, admin, base, username, `["modeler","operator","user"]`)
+}
+
+// createUserWithRoles adds an account with exactly the roles given, as a JSON array.
+func createUserWithRoles(t *testing.T, admin *http.Client, base, username, roles string) string {
+	t.Helper()
+	body := `{"username":"` + username + `","password":"a-password-that-is-long","roles":` + roles + `}`
 	resp, err := admin.Post(base+"/api/v1/users", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("create user: %v", err)

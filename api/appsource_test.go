@@ -395,7 +395,7 @@ func TestApplicationSourceUnderAuth(t *testing.T) {
 	}
 	for _, u := range []string{"alice", "bob"} {
 		if code, body := cReq(t, admin, ts, "POST", "/api/v1/users",
-			`{"username":"`+u+`","password":"password1"}`); code != http.StatusCreated {
+			`{"username":"`+u+`","password":"password1","roles":["modeler","operator","user"]}`); code != http.StatusCreated {
 			t.Fatalf("create %s: %d %s", u, code, body)
 		}
 	}

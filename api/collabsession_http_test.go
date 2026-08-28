@@ -45,7 +45,7 @@ func TestDraftSessionScopeEnforcement(t *testing.T) {
 	}
 
 	mkUser := func(name string) string {
-		_, b := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"`+name+`","password":"password1"}`)
+		_, b := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"`+name+`","password":"password1","roles":["modeler","operator","user"]}`)
 		return idOf(t, b)
 	}
 	editorID := mkUser("editor")

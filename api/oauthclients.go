@@ -55,9 +55,6 @@ func (s *Server) loadOAuth() error {
 // handleRegisterOAuthClient registers an application. Body:
 // {"name": "...", "redirectUris": ["https://…/callback"]}.
 func (s *Server) handleRegisterOAuthClient(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var payload struct {
 		Name         string   `json:"name"`
 		RedirectURIs []string `json:"redirectUris"`
@@ -162,9 +159,6 @@ func (s *Server) principalIsAdmin(p *httpapi.Principal) bool {
 // handleListOAuthClients lists the registered applications. Secrets are absent
 // because the server does not have them.
 func (s *Server) handleListOAuthClients(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	out := []oauthClientView{}
 	var loadErr error
 	s.do(func() {
@@ -191,9 +185,6 @@ func (s *Server) handleListOAuthClients(w http.ResponseWriter, r *http.Request) 
 // exact shape of a credential nobody knows exists. Deleting the client is how an
 // operator says "this application is done", and it has to mean it.
 func (s *Server) handleDeleteOAuthClient(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var (
 		delErr  error

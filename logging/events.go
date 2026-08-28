@@ -114,6 +114,11 @@ var (
 	AuthPasswordSet  = newEvent("auth.password_set")
 	AuthTokenMinted  = newEvent("auth.token_minted")
 	AuthTokenRevoked = newEvent("auth.token_revoked")
+	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
+	// group shipped, naming how many accounts kept what they could already do. It is
+	// the line an operator needs to see: nothing is narrower than it was yesterday
+	// until somebody narrows it.
+	AuthRolesUpgraded = newEvent("auth.roles_upgraded")
 	// The OAuth authorization server (ADR-0200). Registering a client is an admin
 	// act like minting a token; the rest is one person deciding, which is the event
 	// an audit of "who let that application in" is looking for. AuthOAuthDenied

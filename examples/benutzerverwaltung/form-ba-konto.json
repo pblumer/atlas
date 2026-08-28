@@ -28,10 +28,12 @@
       "key": "rolle",
       "type": "radio",
       "label": "Rolle",
-      "description": "Der Antragsteller wählt die Rolle nicht selbst — der Administrator vergibt sie bei der Freigabe.",
+      "description": "Der Antragsteller wählt die Rolle nicht selbst — der Administrator vergibt sie bei der Freigabe. Später änderbar unter Organization.",
       "values": [
-        { "label": "Benutzer (user)", "value": "user" },
-        { "label": "Administrator (admin)", "value": "admin" }
+        { "label": "Benutzer (user) — Aufgaben bearbeiten", "value": "user" },
+        { "label": "Modellierer (modeler) — Modelle erstellen und deployen", "value": "modeler,user" },
+        { "label": "Betrieb (operator) — Instanzen starten, abbrechen, reparieren", "value": "operator,user" },
+        { "label": "Administrator (admin) — alles, inkl. Konten und Zugangsdaten", "value": "admin" }
       ],
       "value": "user",
       "conditional": { "hide": "=entscheidung != \"anlegen\"" },

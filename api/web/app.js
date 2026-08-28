@@ -99,6 +99,20 @@ async function loadAuth() {
   }
 }
 
+// mayUse reports whether the signed-in person holds a role, which is what the
+// server asks of every route they are about to reach
+// (ADR-draft-roles-per-endpoint-group). It drives the navigation only: the API is
+// the authority, and this keeps the Console from offering a screen whose every
+// call would come back 403.
+//
+// With enforcement off there is nobody to hold a role and nothing is enforced, so
+// everything is offered — the same answer the server gives.
+const mayUse = (role) => {
+  if (!role || role === "any" || !AUTH.enabled) return true;
+  const roles = (AUTH.user && AUTH.user.roles) || [];
+  return roles.includes("admin") || roles.includes(role);
+};
+
 const initials = (name) => {
   const s = String(name || "").trim();
   if (!s) return "?";
@@ -417,39 +431,46 @@ async function deployDemo() {
 }
 
 // ---------- Apps (Atlas naming; reference product names removed) ----------
+// Each app names the role its screens need, and the drawer offers only the ones
+// this person holds. The Console itself is "any": its dashboard, connectors and AI
+// access are everybody's, and the admin screens inside it say so individually
+// below.
 const APPS = [
-  { id: "console", name: "Console", route: "#/console", on: true },
-  { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
-  { id: "tasks", name: "Tasks", route: "#/tasks", on: true },
-  { id: "operations", name: "Operations", route: "#/operations", on: true },
-  { id: "panorama", name: "Panorama", route: "#/panorama", on: false },
+  { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
+  { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
+  { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
+  { id: "panorama", name: "Panorama", route: "#/panorama", on: false, role: "any" },
 ];
 
 // Secondary (in-app) navigation.
 const TOPNAV = {
   console: [
-    { name: "Dashboard", route: "#/console" },
-    { name: "Engine", route: "#/console/engine" },
-    { name: "Logs", route: "#/console/logs" },
-    { name: "Backup", route: "#/console/backup" },
-    { name: "Organization", route: "#/console/org" },
-    { name: "Connectors", route: "#/console/connectors" },
-    { name: "AI access", route: "#/console/ai-access" },
-    { name: "Audit log", route: "#/console/audit" },
+    { name: "Dashboard", route: "#/console", role: "any" },
+    { name: "Engine", route: "#/console/engine", role: "admin" },
+    { name: "Logs", route: "#/console/logs", role: "admin" },
+    { name: "Backup", route: "#/console/backup", role: "admin" },
+    { name: "Organization", route: "#/console/org", role: "admin" },
+    { name: "Connectors", route: "#/console/connectors", role: "any" },
+    { name: "AI access", route: "#/console/ai-access", role: "any" },
+    { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
   modeler: [
-    { name: "Home", route: "#/modeler" },
-    { name: "Repository", route: "#/modeler/repository" },
+    { name: "Home", route: "#/modeler", role: "modeler" },
+    { name: "Repository", route: "#/modeler/repository", role: "modeler" },
   ],
   operations: [
-    { name: "Instances", route: "#/operations" },
-    { name: "Incidents", route: "#/operations/incidents", badge: "incidents" },
-    { name: "Workers", route: "#/operations/workers" },
-    { name: "Outbox", route: "#/operations/outbox" },
-    { name: "Decisions", route: "#/operations/decisions" },
-    { name: "Call activities", route: "#/operations/call-activities" },
+    { name: "Instances", route: "#/operations", role: "operator" },
+    { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
+    { name: "Workers", route: "#/operations/workers", role: "operator" },
+    { name: "Outbox", route: "#/operations/outbox", role: "operator" },
+    { name: "Decisions", route: "#/operations/decisions", role: "operator" },
+    { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
-  tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], panorama: [],
+  tasks: [
+    { name: "Inbox", route: "#/tasks", role: "user" },
+    { name: "Start", route: "#/tasks/start", role: "operator" },
+  ], panorama: [],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -648,9 +669,7 @@ function initShell() {
   });
 
   const nav = document.getElementById("drawer-apps");
-  nav.innerHTML = APPS.map((a) =>
-    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
-  ).join("");
+  paintApps();
   nav.addEventListener("click", closeDrawer);
 
   // Turn the static avatar into an account dropdown (reusing the delegated
@@ -795,11 +814,24 @@ function syncIncidentBadge(appId) {
   if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
 }
 
+// paintApps fills the drawer with the apps this person may use. It runs at boot,
+// before /auth/me has answered — when nothing is known and everything is offered —
+// and again on every navigation, which is the first paint that knows the roles.
+// The click handler lives on the container, so repainting never loses it.
+function paintApps() {
+  const nav = document.getElementById("drawer-apps");
+  if (!nav) return;
+  nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
+    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
+  ).join("");
+}
+
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
+  paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
     `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
@@ -1260,9 +1292,24 @@ async function viewConsoleBackup() {
 // userForm renders the create or edit form for a user. In edit mode the username
 // is immutable (it identifies existing sessions and references) and the password
 // has its own action, so neither appears here.
+// GRANTABLE_ROLES is the four roles an account can be given, in the order the form
+// offers them, each with what it lets the person do. The wording matters more than
+// it looks: an administrator picking roles is deciding who may deploy a model,
+// which is code execution, and "modeler" alone does not say that.
+const GRANTABLE_ROLES = [
+  { id: "admin", name: "Administrator", what: "accounts, credentials, secrets, settings, backup and restore" },
+  { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
+  { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
+  { id: "user", name: "User", what: "work on tasks and read what they are given" },
+];
+
 function userForm(u) {
   const isEdit = !!u;
-  const admin = isEdit && (u.roles || []).includes("admin");
+  const held = (isEdit && u.roles) || ["user"];
+  const boxes = GRANTABLE_ROLES.map((r) =>
+    `<label class="field inline" title="${esc(r.what)}">` +
+    `<input type="checkbox" name="role-${r.id}"${held.includes(r.id) ? " checked" : ""}> ` +
+    `${r.name} <span class="muted">— ${esc(r.what)}</span></label>`).join("");
   return `<div class="card" style="margin:0 0 14px; background:var(--bg)">
     <h3 style="margin:0 0 8px">${isEdit ? "Edit user" : "New user"}</h3>
     <form class="user-form">
@@ -1270,15 +1317,23 @@ function userForm(u) {
       <label class="field">Display name<input name="displayName" value="${isEdit ? esc(u.displayName || "") : ""}"></label>
       <label class="field">Email<input name="email" type="email" value="${isEdit ? esc(u.email || "") : ""}"></label>
       ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
-      <label class="field inline"><input type="checkbox" name="admin"${admin ? " checked" : ""}> Administrator</label>
+      <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
     </form></div>`;
 }
 
-// rolesFrom maps the admin checkbox to a stored role list. Every account keeps the
-// base "user" role; ticking Administrator adds "admin" on top.
-const rolesFrom = (fd) => fd.get("admin") ? ["admin", "user"] : ["user"];
+// rolesFrom reads the ticked roles back off the form.
+//
+// It keeps any role the form does not offer. Roles are a free-form list on the
+// record — an installation may carry one of its own for its own reporting — and an
+// edit dialog that silently dropped it would be an edit nobody made.
+const rolesFrom = (fd, u) => {
+  const picked = GRANTABLE_ROLES.filter((r) => fd.get("role-" + r.id)).map((r) => r.id);
+  const known = new Set(GRANTABLE_ROLES.map((r) => r.id));
+  const kept = ((u && u.roles) || []).filter((r) => !known.has(r));
+  return picked.concat(kept);
+};
 
 async function createUser(fd, reload) {
   try {
@@ -1294,12 +1349,12 @@ async function createUser(fd, reload) {
   } catch (e) { toast("could not create user: " + e.message, "err"); }
 }
 
-async function saveUser(id, fd, reload) {
+async function saveUser(id, fd, reload, u) {
   try {
     await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, {
       displayName: (fd.get("displayName") || "").trim(),
       email: (fd.get("email") || "").trim(),
-      roles: rolesFrom(fd),
+      roles: rolesFrom(fd, u),
       disabled: !!fd.get("disabled"),
     });
     toast("User updated", "ok");
@@ -1752,7 +1807,7 @@ async function viewConsoleOrg() {
         slot.innerHTML = userForm(u);
         slot.querySelector(".user-form").addEventListener("submit", (ev) => {
           ev.preventDefault();
-          saveUser(u.id, new FormData(ev.target), reload);
+          saveUser(u.id, new FormData(ev.target), reload, u);
         });
         slot.scrollIntoView({ block: "nearest" });
         break;
@@ -6582,6 +6637,7 @@ async function route() {
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "Atlas";
     document.getElementById("topnav").innerHTML = "";
+    paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     updateAccount();
     return viewLogin();

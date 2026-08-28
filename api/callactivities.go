@@ -202,9 +202,6 @@ func (s *Server) loadCallOverrides() error {
 // process id (ADR-0105). Admin-gated, like connector config. The override is persisted
 // durably before it is applied to the processor (I2), both on the run-loop goroutine.
 func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return // requireAdmin wrote 403
-	}
 	pid := r.PathValue("processId")
 	if strings.TrimSpace(pid) == "" {
 		httpapi.Error(w, http.StatusBadRequest, "missing called process id")
@@ -258,9 +255,6 @@ func (s *Server) handleSetCallOverride(w http.ResponseWriter, r *http.Request) {
 // default `latest` resolution (ADR-0105). Admin-gated; idempotent (a missing override
 // is a no-op). The durable record is removed before the engine directive is cleared.
 func (s *Server) handleDeleteCallOverride(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return // requireAdmin wrote 403
-	}
 	pid := r.PathValue("processId")
 	var delErr error
 	s.do(func() {

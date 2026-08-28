@@ -1102,6 +1102,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.bootstrapAdmin(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		// And bring accounts written before roles were enforced up to the model, so an
+		// upgrade takes nothing away from an installation that is running work
+		// (rolesupgrade.go). Same goroutine, same reason, and idempotent: each record
+		// carries the marker that says it has been through this.
+		if err := s.upgradeLegacyRoles(time.Now().Unix()); err != nil {
+			return nil, err
+		}
 		token, err := randomHex(32)
 		if err != nil {
 			return nil, err
@@ -2126,12 +2133,16 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mux := http.NewServeMux()
 	policy := newAccessPolicy(mux)
-	mount := func(class accessClass, pattern string, h http.Handler) {
+	// Two declarations per route, both required by the signature: who may reach it
+	// without a principal (access.go) and which role a principal needs
+	// (routeroles.go). Neither has a default here, so a route cannot be mounted
+	// without both being decided at the mount site.
+	mount := func(class accessClass, role, pattern string, h http.Handler) {
 		mux.Handle(pattern, h)
-		policy.declare(pattern, class)
+		policy.declare(pattern, class, role)
 	}
-	mountFunc := func(class accessClass, pattern string, h http.HandlerFunc) {
-		mount(class, pattern, h)
+	mountFunc := func(class accessClass, role, pattern string, h http.HandlerFunc) {
+		mount(class, role, pattern, h)
 	}
 
 	// The Prometheus exposition sits beside the probes — same process, same port
@@ -2141,45 +2152,45 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// API token scoped "metrics", which reaches this one route and nothing else
 	// (ADR-0198).
 	if s.metricsEnabled {
-		mountFunc(accessAuthenticated, "GET /metrics", s.handleMetrics)
+		mountFunc(accessAuthenticated, roleAny, "GET /metrics", s.handleMetrics)
 	}
 	// Liveness: is this process alive. Unconditional on purpose — the only remedy a
 	// liveness probe has is a restart, so it must not fail for anything a restart would
 	// not fix (a long recovery above all). Readiness is the separate question, and it is
 	// answered separately, at /readyz (ADR-0142). Both are public because a probe that
 	// needs a credential does not work in the incident it exists for.
-	mountFunc(accessPublic, "GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mountFunc(accessPublic, roleAny, "GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	mountFunc(accessPublic, "GET /readyz", s.handleReadyz)
+	mountFunc(accessPublic, roleAny, "GET /readyz", s.handleReadyz)
 
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// Public because it is the document a caller reads *after* being refused, to find
 	// out what refused it — behind the credential it exists to help you obtain, it
 	// could never be read by anyone who needed it. It names no secret: the origin, a
 	// product name, and that a bearer goes in a header.
-	mountFunc(accessPublic, "GET "+protectedResourceMetadataPath, s.handleProtectedResourceMetadata)
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
 	// not an answer a person can act on — and the page it serves shows nothing until
 	// it asks, while /oauth/token authenticates the client from its own body.
-	mountFunc(accessPublic, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
-	mountFunc(accessPublic, "GET "+oauthAuthorizePath, s.handleAuthorize)
-	mountFunc(accessPublic, "POST "+oauthTokenPath, s.handleToken)
+	mountFunc(accessPublic, roleAny, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
+	mountFunc(accessPublic, roleAny, "GET "+oauthAuthorizePath, s.handleAuthorize)
+	mountFunc(accessPublic, roleAny, "POST "+oauthTokenPath, s.handleToken)
 	if s.dynamicRegistration {
 		// RFC 7591 self-registration, when an operator opened it. Public because a
 		// client that has nothing yet is the entire caller — and mounted only when it
 		// is on, so a server that did not open it answers 404 rather than refusing
 		// something it appears to offer (ADR-0200, oauthregister.go).
-		mountFunc(accessPublic, "POST "+oauthRegisterPath, s.handleRegisterDynamicClient)
+		mountFunc(accessPublic, roleAny, "POST "+oauthRegisterPath, s.handleRegisterDynamicClient)
 	}
 	if s.mcpHandler != nil {
 		// The path-suffixed form, for the transport as a resource of its own. Served
 		// only when that transport is, so the document never describes something this
 		// binary does not answer on.
-		mountFunc(accessPublic, "GET "+protectedResourceMetadataPath+"/mcp", s.handleProtectedResourceMetadata)
+		mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+"/mcp", s.handleProtectedResourceMetadata)
 	}
 
 	// Every /api/v1 route is registered from the single-source-of-truth route
@@ -2192,10 +2203,10 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		if s.traceRoutes {
 			// The span is named for the *pattern*, which is fixed by this table, so the
 			// set of span names is bounded by the code rather than by traffic (ADR-0142).
-			mount(class, route, tracing.Handler(route, r.handler))
+			mount(class, r.op.role, route, tracing.Handler(route, r.handler))
 			continue
 		}
-		mountFunc(class, route, r.handler)
+		mountFunc(class, r.op.role, route, r.handler)
 	}
 
 	// The MCP transport, when the binary supplied one (ADR-0016). It is mounted
@@ -2204,8 +2215,8 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// wiring is not a place where that decision should be makeable
 	// (ADR-0196).
 	if s.mcpHandler != nil {
-		mount(accessAuthenticated, "/mcp", s.mcpHandler)
-		mount(accessAuthenticated, "/mcp/", s.mcpHandler)
+		mount(accessAuthenticated, roleAny, "/mcp", s.mcpHandler)
+		mount(accessAuthenticated, roleAny, "/mcp/", s.mcpHandler)
 	}
 
 	// Anything under /api/v1 that no route above claimed. Without this the UI's "/"
@@ -2213,7 +2224,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// it public on the way in, which is the shape of the bug this whole boundary is
 	// about. Registering it keeps such a path gated, and answers it in the API's own
 	// error envelope rather than with the file server's 404.
-	mountFunc(accessAuthenticated, "/api/v1/", func(w http.ResponseWriter, r *http.Request) {
+	mountFunc(accessAuthenticated, roleAny, "/api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no such endpoint: "+r.Method+" "+r.URL.Path)
 	})
 
@@ -2229,26 +2240,26 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// them together matters: an explorer whose document is refused is a page that
 	// renders and then cannot load what it is for.
 	if s.docsEnabled {
-		mountFunc(accessAuthenticated, "GET /api/v1/openapi.json", s.handleOpenAPI)
-		mountFunc(accessAuthenticated, "GET /api/docs", s.handleDocs)
-		mountFunc(accessAuthenticated, "GET /api/docs/", s.handleDocs)
+		mountFunc(accessAuthenticated, roleAny, "GET /api/v1/openapi.json", s.handleOpenAPI)
+		mountFunc(accessAuthenticated, roleAny, "GET /api/docs", s.handleDocs)
+		mountFunc(accessAuthenticated, roleAny, "GET /api/docs/", s.handleDocs)
 	}
 
 	// Public, unauthenticated share links (ADR-0029/0143). These expose exactly one
 	// thing each: the start form, or the documentation version, that one token
 	// names. The token in the URL is the whole authorization, and the handlers rate
 	// limit them.
-	mountFunc(accessPublic, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
-	mountFunc(accessPublic, "GET /public/forms/{token}", s.handlePublicFormPage)
-	mountFunc(accessPublic, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
-	mountFunc(accessPublic, "POST /public/forms/{token}/start", s.handlePublicFormStart)
+	mountFunc(accessPublic, roleAny, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
+	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}", s.handlePublicFormPage)
+	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
+	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/start", s.handlePublicFormStart)
 	// CORS preflight for the two JSON endpoints above, so an allow-listed external
 	// site can embed the start form as a custom widget (ADR-0186). A cross-origin
 	// GET /schema is a "simple" request needing no preflight (its handler sets the
 	// header); a POST /start of application/json is preflighted, so it needs this.
 	// A preflight carries no credentials by definition, so it is public with them.
-	mountFunc(accessPublic, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
-	mountFunc(accessPublic, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.
@@ -2257,7 +2268,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		// webFS is compiled in, so this only fails on a broken build.
 		panic("api: embedded web assets missing: " + err.Error())
 	}
-	mount(accessPublic, "/", revalidated(sub, http.FileServerFS(sub)))
+	mount(accessPublic, roleAny, "/", revalidated(sub, http.FileServerFS(sub)))
 
 	return mux, policy
 }
