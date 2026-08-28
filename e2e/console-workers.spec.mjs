@@ -12,7 +12,12 @@ function installMock(page) {
       return route.fulfill({ json: { id: "c1", enabled: state.enabled } });
     }
     if (path.endsWith("/connectors")) {
-      return route.fulfill({ json: [{ id: "c1", name: "clio-prod", kind: "clio", endpoint: "https://clio.example", credentialsRef: "clio_token", enabled: state.enabled }] });
+      // `role` is what the caller may do with this connector (ADR-0205), and it is
+      // what decides whether the row draws its actions at all. A server with auth
+      // off answers "owner" for every connector, which is what this mock stands in
+      // for; leaving it out would make the row read as somebody else's, and the
+      // page would correctly draw no buttons.
+      return route.fulfill({ json: [{ id: "c1", name: "clio-prod", kind: "clio", role: "owner", endpoint: "https://clio.example", credentialsRef: "clio_token", enabled: state.enabled }] });
     }
     return route.fulfill({ json: [] });
   });
