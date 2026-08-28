@@ -189,12 +189,25 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	// Phase 3 (on-loop): deploy each draft with its matched DMN model.
 	var (
 		persistErr error
+		claimed    string
 		deployed   []deployedProcess
 	)
 	s.do(func() {
+		// Every draft's claim first, then any deploy: a bundle is "validate all, then
+		// deploy all", and a claim refusal in the third draft must not leave the first
+		// two registered (ADR-0205).
+		for _, d := range drafts {
+			var e error
+			if claimed, e = s.claimBlockingModel(r, []byte(d.XML)); e != nil {
+				persistErr = e
+				return
+			} else if claimed != "" {
+				return
+			}
+		}
 		deployedAt := time.Now().Unix()
 		for i, d := range drafts {
-			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID)
+			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID, principalID(r))
 			if pErr != nil {
 				persistErr = pErr
 				return
@@ -204,6 +217,15 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	})
 	if persistErr != nil {
 		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "persist deployment: " + persistErr.Error(), proj: proj}
+	}
+	if claimed != "" {
+		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
+			ID: proj.ID, Name: proj.Name, Deployed: false,
+			Reason: "a draft can be delivered the message name " + claimed +
+				", which an inbound connector you cannot reach publishes under. Rename the message, " +
+				"or ask whoever owns that connector to share it.",
+			Definitions: []deployedProcess{}, References: refReports,
+		}}
 	}
 	if deployed == nil {
 		deployed = []deployedProcess{}

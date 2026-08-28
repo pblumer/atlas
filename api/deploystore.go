@@ -20,7 +20,14 @@ type persistedDeployment struct {
 	// design-time artifacts (ADR-0034). Empty for a deployment made outside a project
 	// (a raw-XML or pre-grouping deploy), which the UI shows under "Ungrouped".
 	ProjectID string `json:"projectId,omitempty"`
-	XML       string `json:"xml"`
+	// DeployedBy is the account that deployed it (ADR-0205). It is not a sharing
+	// scope — runtime visibility stays out of ADR-0071 — it is the one fact that
+	// makes an ungrouped definition answerable to "is this yours", which the claim on
+	// a message name has to ask. Empty on a deployment made before this, and with
+	// authentication off; both then read as ownerless, which is open, exactly as an
+	// ownerless artifact does.
+	DeployedBy string `json:"deployedBy,omitempty"`
+	XML        string `json:"xml"`
 	// DMNXMLs are the resolved DMN models this process's business rule tasks evaluate
 	// against, snapshotted at deploy time so the deployment is self-contained and
 	// re-registers on restart without re-resolving the temis references

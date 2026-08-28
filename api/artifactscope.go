@@ -22,6 +22,17 @@ import (
 // a running task (handleGetForm) is not gated here — that is execution, not
 // authoring.
 
+// principalID is the acting account's id, or "" when there is none — an
+// unauthenticated request on an open server, or a deploy the server makes for
+// itself. Everything that records who did something reads it through here, so
+// "nobody in particular" has one spelling.
+func principalID(r *http.Request) string {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		return p.UserID
+	}
+	return ""
+}
+
 // projectsByID loads every project into an id→project map so a list handler can
 // resolve many artifacts' scopes without a store read per artifact. It must be
 // called on the run-loop goroutine (inside s.do), like the store it reads.

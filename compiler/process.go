@@ -11,6 +11,7 @@ package compiler
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -1532,6 +1533,48 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 
 // ConnectorRefs returns every connector reference the process makes, in node order.
 // An element that names no connector is left out; see NodeConnectorRef.
+// ReceivableMessageNames returns every message name this definition can be
+// *delivered* on, sorted and without duplicates: a message start event, an
+// intermediate catch, a receive task, a boundary message event, and a
+// message-triggered event subprocess.
+//
+// Message *throws* are deliberately absent. A throw sends; this answers the
+// question "what would arrive here", which is what an operator deciding who may
+// receive an inbound event needs (ADR-0205). Computed by scanning the detail
+// tables, so it belongs off the hot path — a deploy-time or console question, never
+// a per-message one.
+func (p *CompiledProcess) ReceivableMessageNames() []string {
+	seen := map[string]bool{}
+	add := func(name string) {
+		if name != "" {
+			seen[name] = true
+		}
+	}
+	for _, tables := range [][]MessageDetail{p.messageStarts, p.messageCatches, p.receiveTasks} {
+		for _, d := range tables {
+			add(d.MessageName)
+		}
+	}
+	// A boundary event and an event subprocess carry a message name only when they
+	// wait on one; the same struct serves timers, signals, errors and the rest.
+	for _, d := range p.boundaryEventDets {
+		if d.Kind == BoundaryMessage {
+			add(d.MessageName)
+		}
+	}
+	for _, d := range p.eventSubProcesses {
+		if d.Kind == BoundaryMessage {
+			add(d.MessageName)
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (p *CompiledProcess) ConnectorRefs() []ConnectorRef {
 	var out []ConnectorRef
 	for i := range p.nodes {
