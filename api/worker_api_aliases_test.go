@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // TestConfiguredWorkerAliasMirrorsConnectors pins ADR-0203's public migration:
@@ -106,6 +108,37 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 	if !seenSupervised {
 		t.Fatal("worker type catalog has no atlas-supervised built-in")
 	}
+}
+
+func TestWorkerTypeRuntimeModeDoesNotFollowManualPlacement(t *testing.T) {
+	ts := newTestServerWith(t, api.WithOffloadedConnectorKinds([]string{"jira"}))
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("worker types status=%d body=%s", code, body)
+	}
+	var catalog struct {
+		Kinds []struct {
+			ID          string `json:"id"`
+			RuntimeMode string `json:"runtimeMode"`
+			Placement   string `json:"placement"`
+		} `json:"kinds"`
+	}
+	if err := json.Unmarshal(body, &catalog); err != nil {
+		t.Fatalf("decode worker types: %v (%s)", err, body)
+	}
+	for _, workerType := range catalog.Kinds {
+		if workerType.ID != "jira" {
+			continue
+		}
+		if workerType.Placement != "worker" {
+			t.Fatalf("jira placement=%q, want worker after explicit offload", workerType.Placement)
+		}
+		if workerType.RuntimeMode != "atlas-embedded" {
+			t.Fatalf("jira runtimeMode=%q, want atlas-embedded: placement must not rewrite the Worker Type contract", workerType.RuntimeMode)
+		}
+		return
+	}
+	t.Fatal("worker type catalog has no jira entry")
 }
 
 // TestOpenAPIAdvertisesWorkerAliasesAndDeprecatesConnectorCore checks that new
