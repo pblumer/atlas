@@ -68,19 +68,25 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 		t.Fatalf("worker types still mirror legacy connector kinds: %s", newBody)
 	}
 
-	var workerTypes []map[string]any
-	if err := json.Unmarshal(newBody, &workerTypes); err != nil {
+	var catalog struct {
+		Kinds []map[string]any `json:"kinds"`
+	}
+	if err := json.Unmarshal(newBody, &catalog); err != nil {
 		t.Fatalf("decode worker types: %v (%s)", err, newBody)
 	}
-	if len(workerTypes) == 0 {
+	if len(catalog.Kinds) == 0 {
 		t.Fatal("worker type catalog is empty")
 	}
 
 	seenEmbedded := false
 	seenSupervised := false
-	for _, workerType := range workerTypes {
+	for _, workerType := range catalog.Kinds {
 		if _, legacy := workerType["workerOnly"]; legacy {
 			t.Fatalf("worker type leaks legacy workerOnly compatibility flag: %v", workerType)
+		}
+		workerTypeID, ok := workerType["workerTypeId"].(string)
+		if !ok || !strings.HasPrefix(workerTypeID, "atlas.") {
+			t.Fatalf("worker type has no stable Atlas-namespaced identity: %v", workerType)
 		}
 		switch workerType["runtimeMode"] {
 		case "atlas-embedded":
