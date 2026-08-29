@@ -211,7 +211,13 @@ func (s *Server) placementOfCatalogKind(id string) string {
 
 // handleConnectorKinds tells the Modeler where this server runs each connector kind,
 // so the picker's badge describes this install rather than the arrangement that held
-// when it was written.
-func (s *Server) handleConnectorKinds(w http.ResponseWriter, _ *http.Request) {
+// when it was written. The Worker Type route was initially a direct alias; while the
+// legacy route remains byte-compatible, ADR-0208 now projects the same authority into
+// canonical Worker Type vocabulary.
+func (s *Server) handleConnectorKinds(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/v1/worker-types" {
+		s.handleWorkerTypes(w, r)
+		return
+	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{"kinds": s.connectorPlacements()})
 }
