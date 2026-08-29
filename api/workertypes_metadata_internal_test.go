@@ -8,11 +8,15 @@ import (
 var workerTypeSemverPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
 
 func TestEveryManagedConnectorKindHasBuiltInWorkerTypeMetadata(t *testing.T) {
+	if len(builtInManagedWorkerTypes) != len(managedConnectorKinds) {
+		t.Fatalf("built-in Worker Types=%d, managed connector kinds=%d: metadata and runtime registry must remain a bijection", len(builtInManagedWorkerTypes), len(managedConnectorKinds))
+	}
+
 	seenIDs := make(map[string]string, len(managedConnectorKinds))
 	for _, kind := range managedConnectorKinds {
-		meta := kind.workerType
-		if meta.ID == "" {
-			t.Errorf("managed connector kind %q has no Worker Type id", kind.name)
+		meta, ok := lookupBuiltInManagedWorkerType(kind.name)
+		if !ok {
+			t.Errorf("managed connector kind %q has no built-in Worker Type metadata", kind.name)
 			continue
 		}
 		if meta.ID != "atlas."+kind.name {
@@ -42,16 +46,26 @@ func TestEveryManagedConnectorKindHasBuiltInWorkerTypeMetadata(t *testing.T) {
 			t.Errorf("managed connector kind %q has invalid Worker Type runtime mode %q", kind.name, meta.RuntimeMode)
 		}
 	}
+
+	for _, meta := range builtInManagedWorkerTypes {
+		if _, ok := lookupManagedConnectorKind(meta.ConnectorKind); !ok {
+			t.Errorf("built-in Worker Type %q references unknown managed connector kind %q", meta.ID, meta.ConnectorKind)
+		}
+	}
 }
 
 func TestWorkerOnlyCompatibilityFlagAgreesWithBuiltInRuntimeMetadata(t *testing.T) {
 	for _, kind := range managedConnectorKinds {
+		meta, ok := lookupBuiltInManagedWorkerType(kind.name)
+		if !ok {
+			continue
+		}
 		want := WorkerRuntimeModeAtlasEmbedded
 		if kind.workerOnly {
 			want = WorkerRuntimeModeAtlasSupervised
 		}
-		if kind.workerType.RuntimeMode != want {
-			t.Errorf("managed connector kind %q workerOnly=%v but Worker Type runtime mode=%q, want %q", kind.name, kind.workerOnly, kind.workerType.RuntimeMode, want)
+		if meta.RuntimeMode != want {
+			t.Errorf("managed connector kind %q workerOnly=%v but Worker Type runtime mode=%q, want %q", kind.name, kind.workerOnly, meta.RuntimeMode, want)
 		}
 	}
 }
