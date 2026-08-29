@@ -27,8 +27,9 @@ const (
 // built-in capability catalog. ID remains the existing authoring identifier so model
 // bindings do not move; WorkerTypeID supplies ADR-0208's globally namespaced identity.
 // Placement is retained during the compatibility window because it describes this
-// server's current execution placement, while RuntimeMode gives that placement a
-// Worker-domain vocabulary instead of exposing connector-only flags.
+// server's current execution placement. RuntimeMode is intentionally independent from
+// Placement: manually offloading a built-in changes where this server runs it, not the
+// Worker Type contract Atlas ships.
 type WorkerTypeDefinition struct {
 	ID           string            `json:"id"`
 	WorkerTypeID string            `json:"workerTypeId"`
@@ -37,9 +38,11 @@ type WorkerTypeDefinition struct {
 }
 
 // workerTypeDefinitions projects the existing authoritative placement catalog into
-// Worker Type vocabulary. The placement catalog already derives from the immutable
-// built-in job-type tables and the server's configured handler registry, so this adds
-// no second catalog or runtime source of truth.
+// Worker Type vocabulary. During ADR-0208 migration step 1, managedConnectorKind's
+// workerOnly flag remains an internal compatibility signal for the canonical runtime
+// mode; it is never exposed by the Worker API. The placement catalog continues to be
+// the authority for this server's current execution location, so no second runtime
+// routing source is introduced.
 func (s *Server) workerTypeDefinitions() []WorkerTypeDefinition {
 	placements := s.connectorPlacements()
 	out := make([]WorkerTypeDefinition, 0, len(placements))
@@ -47,20 +50,18 @@ func (s *Server) workerTypeDefinitions() []WorkerTypeDefinition {
 		out = append(out, WorkerTypeDefinition{
 			ID:           placement.ID,
 			WorkerTypeID: "atlas." + placement.ID,
-			RuntimeMode:  workerRuntimeModeForPlacement(placement.Placement),
+			RuntimeMode:  workerRuntimeModeForBuiltIn(placement.ID),
 			Placement:    placement.Placement,
 		})
 	}
 	return out
 }
 
-func workerRuntimeModeForPlacement(placement string) WorkerRuntimeMode {
-	switch placement {
-	case placementWorker, placementWorkerOnly:
+func workerRuntimeModeForBuiltIn(id string) WorkerRuntimeMode {
+	if kind, ok := lookupManagedConnectorKind(id); ok && kind.workerOnly {
 		return WorkerRuntimeModeAtlasSupervised
-	default:
-		return WorkerRuntimeModeAtlasEmbedded
 	}
+	return WorkerRuntimeModeAtlasEmbedded
 }
 
 // handleWorkerTypes lists the canonical Worker Type projection while the deprecated
