@@ -1,4 +1,4 @@
-# ADR-DRAFT: Worker Type package contract, trust, and distribution
+# ADR-0208: Worker Type package contract, trust, and distribution
 
 - **Status:** Proposed
 - **Date:** 2026-08-28

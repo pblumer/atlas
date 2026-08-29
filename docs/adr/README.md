@@ -244,6 +244,7 @@ comment safe to write.
 | [0205](0205-connector-ownership-and-event-delivery.md) | Who owns a connector, and who may use the events it brings in | Accepted |
 | [0206](0206-ad-as-a-console-connector.md) | Active Directory is a connector you configure, not one you write into a model | Proposed |
 | [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Proposed |
+| [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Proposed |
 
 ## Status values
 
