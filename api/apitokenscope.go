@@ -17,7 +17,7 @@ import (
 //
 // A scope is not a permission system. It answers "what does this kind of machine
 // need", not "what may this identity do" — that second question is answered by the
-// role each route names (routeroles.go, ADR-draft-roles-per-endpoint-group), and a
+// role each route names (routeroles.go, ADR-0209), and a
 // request has to pass both: the scope says which routes this credential may reach
 // at all, the roles say which kinds of operation its holder may perform. Adding a
 // scope should mean a new kind of machine turned up, not that somebody wanted a

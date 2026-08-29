@@ -191,7 +191,7 @@ func TestMCPToolActsAsTheCallingPrincipal(t *testing.T) {
 	// atlas_migration_plan maps to an admin-gated endpoint, and the role is enforced
 	// at the boundary before the handler looks at the keys — so bogus keys still tell
 	// the two principals apart. That the refusal reaches a *tool call* at all is the
-	// property ADR-0196 promised and ADR-draft-roles-per-endpoint-group relies on: a
+	// property ADR-0196 promised and ADR-0209 relies on: a
 	// tool runs as its caller, so it inherits the caller's roles with no MCP-specific
 	// rule anywhere.
 	const planCall = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"atlas_migration_plan",` +

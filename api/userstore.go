@@ -19,7 +19,7 @@ const (
 // bool, so richer RBAC can grow here without reshaping the record (ADR-0044).
 //
 // Four of them, and each route says which one it needs
-// (ADR-draft-roles-per-endpoint-group). They are a list, not a lattice: an account
+// (ADR-0209). They are a list, not a lattice: an account
 // carries several, and the question asked at the boundary is only "does this
 // principal hold the role this route names". So a modeller who is also to start
 // test instances holds `modeler` *and* `operator` — deliberately, because the
@@ -56,7 +56,7 @@ const (
 // server's own internal credential. Existing installations are running work, and an
 // upgrade that stops that work is one nobody applies, which protects nobody. The
 // narrowing is then an operator's deliberate act on a screen
-// (ADR-draft-roles-per-endpoint-group).
+// (ADR-0209).
 func legacyRoles() []string { return []string{RoleModeler, RoleOperator, RoleUser} }
 
 // User is a person (or, later, an external identity) known to this Atlas
@@ -89,7 +89,7 @@ type User struct {
 	UpdatedAt    int64    `json:"updatedAt"`
 
 	// RolesUpgradedAt is when this record's Roles were last written under the role
-	// model (ADR-draft-roles-per-endpoint-group). Zero means the record predates it,
+	// model (ADR-0209). Zero means the record predates it,
 	// and its roles are therefore not a statement about anything except admin —
 	// nothing else was enforced when they were written.
 	//

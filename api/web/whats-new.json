@@ -15,8 +15,8 @@
         "de": "Bisher war «angemeldet» die ganze Antwort: Jedes Konto konnte ein Modell deployen, fremde Instanzen abbrechen oder ein Skript ausführen. Deployen ist Codeausführung — für alles ausser einem Workshop war das die falsche Vorgabe. Jetzt nennt jeder Endpunkt die Rolle, die er verlangt — admin, modeler, operator oder user —, und der Server prüft sie, bevor die Anfrage irgendetwas erreicht: aus dem Browser, mit einem API-Token oder über MCP von einem KI-Assistenten. Ein Konto trägt mehrere Rollen; sie sind eine Liste, keine Rangfolge. Die Aktualisierung nimmt nichts weg: Jedes bestehende Konto behält modeler, operator und user — also alles ausser der Administration —, und was Sie danach enger stellen, bleibt eng. Neue Konten bekommen user. Vergeben werden die Rollen unter «Organization»; dort steht bei jeder, was sie erlaubt."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0209",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0209-roles-per-endpoint-group.md"
       },
       "tags": [
         "Security",

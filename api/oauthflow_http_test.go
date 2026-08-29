@@ -552,7 +552,7 @@ func TestDeletingAClientRevokesItsGrants(t *testing.T) {
 //
 // "Ordinary" is the three non-admin roles, which is what every account on an
 // installation that upgrades into the role model keeps
-// (ADR-draft-roles-per-endpoint-group) and what these tests mean by a person who
+// (ADR-0209) and what these tests mean by a person who
 // models and operates. The role rule itself is exercised in routeroles_http_test.go;
 // here it would only be scenery in front of the question each test is actually
 // asking.

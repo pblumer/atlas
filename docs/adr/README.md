@@ -245,6 +245,7 @@ comment safe to write.
 | [0206](0206-ad-as-a-console-connector.md) | Active Directory is a connector you configure, not one you write into a model | Proposed |
 | [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Proposed |
 | [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Proposed |
+| [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted |
 
 ## Status values
 

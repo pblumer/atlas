@@ -15,7 +15,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// What a signed-in identity may do (ADR-draft-roles-per-endpoint-group, measure
+// What a signed-in identity may do (ADR-0209, measure
 // M9). Each test here is a line from the concept's acceptance list.
 //
 // The one worth reading twice is the upgrade: an installation that is running work

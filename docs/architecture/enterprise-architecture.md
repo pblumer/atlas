@@ -146,7 +146,7 @@ resolving into a blue application element:
 Four of these are now enforced by the product rather than only described here: an
 account carries `modeler`, `operator`, `user` or `admin`, every endpoint names the
 role it requires, and the boundary checks it for every credential
-([ADR-draft-roles-per-endpoint-group](../adr/draft-roles-per-endpoint-group.md)).
+([ADR-0209](../adr/0209-roles-per-endpoint-group.md)).
 Enterprise Architect and Integration Developer stay business roles with no
 technical counterpart: the first governs, and the second's work — connectors and
 job workers — is authoring, so it is carried by `modeler`.

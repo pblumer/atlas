@@ -10,7 +10,7 @@ import (
 
 // This file answers the question the layer below it does not: not *whether* a
 // caller is somebody (access.go, ADR-0199), but *what that somebody may do*
-// (ADR-draft-roles-per-endpoint-group).
+// (ADR-0209).
 //
 // Until this, Atlas enforced exactly one role, from inside 52 handlers: 51 routes
 // demanded admin and one demanded it conditionally, while the other 146 were

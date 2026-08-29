@@ -58,7 +58,7 @@ type apiToken struct {
 	Scope string `json:"scope,omitempty"`
 
 	// Roles is what this token may *do*, snapshotted from the account that minted it
-	// (ADR-draft-roles-per-endpoint-group). Never admin: a machine that administers
+	// (ADR-0209). Never admin: a machine that administers
 	// accounts is not a case Atlas has. Both halves are then enforced, and a request
 	// has to pass both — the scope says which routes, the roles say which kinds of
 	// operation.

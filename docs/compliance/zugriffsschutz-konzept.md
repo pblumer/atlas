@@ -430,7 +430,7 @@ CI-Job und jeder stdio-MCP-Adapter stünde am Tag der Einführung still. Der Ent
 muss also entscheiden, welche Rollen ein Token trägt.
 
 **Vorschlag** (Entwurf:
-[`ADR-draft-roles-per-endpoint-group`](../adr/draft-roles-per-endpoint-group.md)):
+[`ADR-0209`](../adr/0209-roles-per-endpoint-group.md)):
 
 1. **Die Rolle steht in der Routentabelle**, neben Zusammenfassung und Tag — in
    derselben einzigen Quelle, die schon die OpenAPI-Beschreibung speist (ADR-0043).
@@ -1025,7 +1025,7 @@ Neu und noch offen:
   Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
   sich für die neuen öffentlichen Routen auf die Zugriffsklassen aus ADR-0199 sowie
   für deren Drosselung und Protokollierung auf ADR-0197.
-- 🔲 [`draft-roles-per-endpoint-group.md`](../adr/draft-roles-per-endpoint-group.md)
+- 🔲 [`0209-roles-per-endpoint-group.md`](../adr/0209-roles-per-endpoint-group.md)
   — M9. Füllt das Rollenfeld aus ADR-0044 endlich mit Bedeutung und annotiert die
   Routentabelle aus ADR-0043. Er hebt ADR-0071 nicht auf, sondern steht quer dazu:
   eine Rolle sagt, *welche Art* von Operation, ein Geltungsbereich, *welches

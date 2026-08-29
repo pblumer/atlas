@@ -38,7 +38,7 @@ type apiOp struct {
 	tag     string
 
 	// role is what a signed-in identity must hold to reach this route, one of
-	// routeRoles (ADR-draft-roles-per-endpoint-group). It sits here, beside the
+	// routeRoles (ADR-0209). It sits here, beside the
 	// summary, because this table is the single source of truth for the surface and a
 	// second list of who-may-what is a second list to keep in step. Empty reaches
 	// nobody, and TestEveryRouteDeclaresARole makes empty a failing build.
@@ -877,7 +877,7 @@ func operationDoc(r apiRoute) map[string]any {
 	// Who may call it, in the document that describes it. A client author reading
 	// the explorer would otherwise learn the answer from a 403 in production, and
 	// the answer already lives one field away in the same table
-	// (ADR-draft-roles-per-endpoint-group).
+	// (ADR-0209).
 	if r.op.role != roleAny {
 		op["description"] = "Requires the `" + r.op.role + "` role when authentication is on."
 	}

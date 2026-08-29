@@ -101,7 +101,7 @@ async function loadAuth() {
 
 // mayUse reports whether the signed-in person holds a role, which is what the
 // server asks of every route they are about to reach
-// (ADR-draft-roles-per-endpoint-group). It drives the navigation only: the API is
+// (ADR-0209). It drives the navigation only: the API is
 // the authority, and this keeps the Console from offering a screen whose every
 // call would come back 403.
 //

@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// The upgrade half of the role model (ADR-draft-roles-per-endpoint-group).
+// The upgrade half of the role model (ADR-0209).
 //
 // Before it, an account's roles said one thing: admin, or not. Every other route
 // was reachable by anyone signed in — deploying a model included. So a record

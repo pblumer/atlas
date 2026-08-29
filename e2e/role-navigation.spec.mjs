@@ -1,5 +1,5 @@
 // The Console offers only what the signed-in person's roles reach
-// (ADR-draft-roles-per-endpoint-group, measure M9).
+// (ADR-0209, measure M9).
 //
 // The server refuses regardless — this is a courtesy, not a boundary. But without
 // it a task worker's Console is a menu of screens whose every call comes back 403,

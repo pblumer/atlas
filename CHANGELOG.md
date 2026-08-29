@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   names the role it requires, and one check at the boundary enforces it for every
   credential there is — a browser session, an API token, a deploy token, an OAuth
   grant and, because a tool call runs as its caller, every MCP tool
-  ([ADR-draft-roles-per-endpoint-group](docs/adr/draft-roles-per-endpoint-group.md)).
+  ([ADR-0209](docs/adr/0209-roles-per-endpoint-group.md)).
 
   Four roles, and an account carries several: **admin** (accounts, credentials,
   secrets, settings, backup and restore), **modeler** (author drafts, forms and

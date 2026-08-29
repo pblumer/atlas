@@ -1,4 +1,4 @@
-# ADR-DRAFT: Roles per endpoint group
+# ADR-0209: Roles per endpoint group
 
 - **Status:** Accepted
 - **Date:** 2026-08-28
