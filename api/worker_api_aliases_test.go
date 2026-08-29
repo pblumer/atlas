@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // TestConfiguredWorkerAliasMirrorsConnectors pins ADR-0203's public migration:
@@ -53,9 +55,10 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 	}
 }
 
-// TestWorkerTypesAliasMirrorsConnectorKinds proves the Worker Catalog API is a
-// terminology alias over the same server capability data, not a second catalog.
-func TestWorkerTypesAliasMirrorsConnectorKinds(t *testing.T) {
+// TestWorkerTypesExposeCanonicalRuntimeModes pins ADR-0208's migration boundary:
+// /worker-types is a Worker Type catalog projection over the existing built-in
+// capability registry, while /connector-kinds remains the legacy compatibility API.
+func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 	ts := newTestServer(t)
 
 	newCode, newBody := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
@@ -63,9 +66,79 @@ func TestWorkerTypesAliasMirrorsConnectorKinds(t *testing.T) {
 	if newCode != http.StatusOK || oldCode != http.StatusOK {
 		t.Fatalf("worker types status=%d body=%s; connector kinds status=%d body=%s", newCode, newBody, oldCode, oldBody)
 	}
-	if string(newBody) != string(oldBody) {
-		t.Fatalf("worker types and connector kinds diverged:\nworker-types: %s\nconnector-kinds: %s", newBody, oldBody)
+	if string(newBody) == string(oldBody) {
+		t.Fatalf("worker types still mirror legacy connector kinds: %s", newBody)
 	}
+
+	var catalog struct {
+		Kinds []map[string]any `json:"kinds"`
+	}
+	if err := json.Unmarshal(newBody, &catalog); err != nil {
+		t.Fatalf("decode worker types: %v (%s)", err, newBody)
+	}
+	if len(catalog.Kinds) == 0 {
+		t.Fatal("worker type catalog is empty")
+	}
+
+	seenEmbedded := false
+	seenSupervised := false
+	for _, workerType := range catalog.Kinds {
+		if _, legacy := workerType["workerOnly"]; legacy {
+			t.Fatalf("worker type leaks legacy workerOnly compatibility flag: %v", workerType)
+		}
+		workerTypeID, ok := workerType["workerTypeId"].(string)
+		if !ok || !strings.HasPrefix(workerTypeID, "atlas.") {
+			t.Fatalf("worker type has no stable Atlas-namespaced identity: %v", workerType)
+		}
+		switch workerType["runtimeMode"] {
+		case "atlas-embedded":
+			seenEmbedded = true
+		case "atlas-supervised":
+			seenSupervised = true
+		case "external":
+			// External packages are a valid canonical mode even though this first
+			// built-in projection does not require one to exist yet.
+		default:
+			t.Fatalf("worker type has missing or invalid runtimeMode: %v", workerType)
+		}
+	}
+	if !seenEmbedded {
+		t.Fatal("worker type catalog has no atlas-embedded built-in")
+	}
+	if !seenSupervised {
+		t.Fatal("worker type catalog has no atlas-supervised built-in")
+	}
+}
+
+func TestWorkerTypeRuntimeModeDoesNotFollowManualPlacement(t *testing.T) {
+	ts := newTestServerWith(t, api.WithOffloadedConnectorKinds([]string{"jira"}))
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("worker types status=%d body=%s", code, body)
+	}
+	var catalog struct {
+		Kinds []struct {
+			ID          string `json:"id"`
+			RuntimeMode string `json:"runtimeMode"`
+			Placement   string `json:"placement"`
+		} `json:"kinds"`
+	}
+	if err := json.Unmarshal(body, &catalog); err != nil {
+		t.Fatalf("decode worker types: %v (%s)", err, body)
+	}
+	for _, workerType := range catalog.Kinds {
+		if workerType.ID != "jira" {
+			continue
+		}
+		if workerType.Placement != "worker" {
+			t.Fatalf("jira placement=%q, want worker after explicit offload", workerType.Placement)
+		}
+		if workerType.RuntimeMode != "atlas-embedded" {
+			t.Fatalf("jira runtimeMode=%q, want atlas-embedded: placement must not rewrite the Worker Type contract", workerType.RuntimeMode)
+		}
+		return
+	}
+	t.Fatal("worker type catalog has no jira entry")
 }
 
 // TestOpenAPIAdvertisesWorkerAliasesAndDeprecatesConnectorCore checks that new
