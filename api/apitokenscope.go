@@ -15,11 +15,13 @@ import (
 // routes the real request. Hand-written path comparison is exactly where an
 // allowlist springs a leak.
 //
-// Two scopes, not a permission system. A scope here answers "what does this kind
-// of machine need", not "what may this identity do" — the second question is
-// roles per endpoint group, which is a larger piece of work with its own record
-// still to write. Adding a third scope should mean a third kind of machine turned
-// up, not that somebody wanted a finer slice of the same one.
+// A scope is not a permission system. It answers "what does this kind of machine
+// need", not "what may this identity do" — that second question is answered by the
+// role each route names (routeroles.go, ADR-draft-roles-per-endpoint-group), and a
+// request has to pass both: the scope says which routes this credential may reach
+// at all, the roles say which kinds of operation its holder may perform. Adding a
+// scope should mean a new kind of machine turned up, not that somebody wanted a
+// finer slice of the same one.
 
 const (
 	// apiScopeFull reaches everything a signed-in non-admin user reaches. It is the
@@ -136,8 +138,8 @@ var apiScopeMux = func() map[string]*http.ServeMux {
 //
 // An unconfined scope reaches everything the principal's roles allow — which for a
 // token is never admin, so "everything" already stops short of user administration
-// and of anything else requireAdmin guards. A confined scope reaches only its
-// allowlist, and an unmatched request yields an empty pattern, so anything not
+// and of every other route that names the admin role. A confined scope reaches only
+// its allowlist, and an unmatched request yields an empty pattern, so anything not
 // listed is refused.
 //
 // An unknown scope reaches nothing. That is the fail-closed direction and it

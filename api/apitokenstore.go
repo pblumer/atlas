@@ -57,6 +57,17 @@ type apiToken struct {
 	// credential that can do nothing.
 	Scope string `json:"scope,omitempty"`
 
+	// Roles is what this token may *do*, snapshotted from the account that minted it
+	// (ADR-draft-roles-per-endpoint-group). Never admin: a machine that administers
+	// accounts is not a case Atlas has. Both halves are then enforced, and a request
+	// has to pass both — the scope says which routes, the roles say which kinds of
+	// operation.
+	//
+	// Empty means the legacy set, by the same reading as Scope above: a token minted
+	// before roles existed keeps the reach it was issued with instead of becoming
+	// inert on upgrade.
+	Roles []string `json:"roles,omitempty"`
+
 	// ExpiresAt is when the token stops being accepted, as a Unix time. Zero means
 	// never — allowed, because a worker running for a year is a real case, but the
 	// mint API asks for a lifetime so that "never" is a choice somebody made rather
@@ -73,6 +84,15 @@ func (t apiToken) scope() string {
 		return apiScopeFull
 	}
 	return t.Scope
+}
+
+// roles returns the token's effective roles, resolving the empty default to the
+// legacy set — what this credential could reach before roles existed.
+func (t apiToken) roles() []string {
+	if len(t.Roles) == 0 {
+		return legacyRoles()
+	}
+	return t.Roles
 }
 
 // expired reports whether the token's lifetime has run out at the given Unix time.

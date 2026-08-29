@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // TestCallOverrideHandlerErrors covers the write/read handlers' failure branches
@@ -85,23 +84,21 @@ func TestCallOverrideHandlerErrors(t *testing.T) {
 }
 
 // TestCallOverrideHandlersRequireAdmin checks that setting and clearing an override
-// are admin-gated (ADR-0105): with auth enabled and no admin principal, both write
-// handlers answer 403 and touch nothing else.
+// are admin-gated (ADR-0105) — an override decides which process a call activity
+// reaches on this server, which is an operator's decision about the installation
+// and not about one model.
+//
+// Asserted at the boundary, where the role is now decided (routeroles.go): the
+// request is refused before either handler is entered.
 func TestCallOverrideHandlersRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true, sessions: newSessionStore(time.Hour)}
-	for _, tc := range []struct {
-		name    string
-		method  string
-		handler http.HandlerFunc
-	}{
-		{"set", http.MethodPut, s.handleSetCallOverride},
-		{"delete", http.MethodDelete, s.handleDeleteCallOverride},
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, tc := range []struct{ name, method string }{
+		{"set", http.MethodPut},
+		{"delete", http.MethodDelete},
 	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.method, "/api/v1/call-activities/overrides/x", nil)
-		tc.handler(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s without admin: status = %d, want 403", tc.name, rec.Code)
+		got := boundaryStatus(t, ordinary, tc.method, "/api/v1/call-activities/overrides/x")
+		if got != http.StatusForbidden {
+			t.Errorf("%s without admin: status = %d, want 403", tc.name, got)
 		}
 	}
 }

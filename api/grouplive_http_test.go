@@ -13,7 +13,7 @@ func TestGroupMembershipLive(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
 	admin := newClient(t)
 	login(t, admin, ts, "admin", "password1")
-	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
 	aliceID := idOf(t, ab)
 	_, gb := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"Eng"}`)
 	gid := decodeGroup(t, gb).ID

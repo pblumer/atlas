@@ -196,7 +196,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M6 ✅ | `/metrics` hinter die Schranke, Geltungsbereich `metrics` | S | R-08, O-07 | G1 |
 | M7 ✅ | Anmelde-Härtung: Drosselung je Adresse *und* je Konto | S | O-04, R-12 | — |
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
-| M9 | Rollen je Endpunktgruppe *(Stufe 2)* | M–L | O-02, R-04, R-09 | G4 |
+| M9 ✅ | Rollen je Endpunktgruppe | L | O-02, R-04, R-09 | G2, G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 | M11 ✅ | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
 
@@ -400,13 +400,140 @@ kein bcrypt-Präfix — im Log landet.
 Diese Massnahme ist nicht nur O-03 — sie ist **der Nachweis, dass M1 bis M7
 wirken**. Ohne sie bleibt die Antwort an eine Prüfstelle eine Behauptung.
 
-### M9 — Rollen je Endpunktgruppe *(Stufe 2, hier nur eingeordnet)*
+### M9 — Rollen je Endpunktgruppe ✅
 
-Vier Rollen statt einer: `admin`, `modeler` (Design-Time und Deploy), `operator`
-(Laufzeitsteuerung), `user` (Aufgaben). Der wichtigste einzelne Schnitt ist
-`POST /api/v1/deployments` — weil Deployen Codeausführung bedeutet (R-09), ist
-«jeder Angemeldete darf deployen» auf einer Produktion die falsche Vorgabe. Details
-in O-02; wegen G4 gilt jede Regel automatisch auch für MCP.
+**Problem, gemessen.** M5 und M1 beantworten, *ob* jemand angemeldet ist. Was diese
+Person dann darf, beantwortet Atlas mit genau einer Rolle: `admin`.
+
+| | |
+|---|---|
+| Routen unter `/api/v1` | 199 |
+| auf `admin` geprüft | 53 |
+| **für jedes angemeldete Konto erreichbar** | **146** |
+
+Unter diesen 146: `POST /api/v1/deployments`, `POST /api/v1/scripts/run`,
+`DELETE /api/v1/instances/{key}`, `POST /api/v1/instances/terminate`,
+`POST /api/v1/processes/{key}/cancel-instances` und die Variablen jeder Instanz.
+Deployen ist Codeausführung (R-09) — «jedes angemeldete Konto darf deployen» ist
+für einen Produktivbetrieb die falsche Vorgabe.
+
+Die Freigabe-Arbeit (M11, ADR-0071/0205) deckt das **nicht** ab: Sie beantwortet,
+*welches Objekt* jemand anfassen darf, nicht, *welche Art von Operation* jemand
+überhaupt ausführen darf. Deshalb kann ein Konto ohne ein einziges eigenes Projekt
+weiterhin ein Modell deployen und fremde Instanzen abbrechen.
+
+**Ein zweiter Befund, der den Umfang bestimmt:** Ein **API-Token trägt gar keine
+Rolle** (`api/auth.go`). Heute liest sich das als «kein Admin, sonst alles» — und
+genau deshalb funktionieren Tokens. Unter einer Regel, die jede Route nach einer
+Rolle fragt, erreicht ein rollenloser Prinzipal **nichts**: Jeder Worker, jeder
+CI-Job und jeder stdio-MCP-Adapter stünde am Tag der Einführung still. Der Entwurf
+muss also entscheiden, welche Rollen ein Token trägt.
+
+**Vorschlag** (Entwurf:
+[`ADR-draft-roles-per-endpoint-group`](../adr/draft-roles-per-endpoint-group.md)):
+
+1. **Die Rolle steht in der Routentabelle**, neben Zusammenfassung und Tag — in
+   derselben einzigen Quelle, die schon die OpenAPI-Beschreibung speist (ADR-0043).
+   Die Schranke liest sie; kein Handler fragt noch einmal. Eine Route ohne Rolle
+   fällt durch einen Test, der die Tabelle abläuft. Das ist dieselbe Eigenschaft
+   wie bei M1: Die Reichweite ist durch **Lesen einer Liste** beweisbar, nicht
+   durch Audit von 199 Handlern. Nach Tags zu gruppieren wäre billiger und geht
+   nicht — `System` enthält `GET /api/v1/info` neben `POST /api/v1/restore/full`.
+2. **Vier Rollen**: `admin`, `modeler` (Autorenschaft *und* Deploy), `operator`
+   (Laufzeitsteuerung), `user` (Aufgaben und Lesen). Eine Liste, kein Verband: Ein
+   Konto trägt mehrere. Deploy sitzt in `modeler`, weil der Schnitt, der zuerst
+   zählt, «nicht jede Person darf deployen» ist; ein eigenes `deployer` später
+   kostet eine Konstante, weil die Rolle je Route steht.
+3. **Beim Aktualisieren behalten bestehende Konten, was sie heute können**
+   (`modeler` + `operator` + `user`); neue Konten bekommen `user`. Ein API-Token
+   trägt die Rollen des Kontos, das es ausgestellt hat, geschnitten mit seinem
+   Geltungsbereich — ein Credential ist nie mächtiger als seine Ausstellerin.
+
+**Warum hier anders entschieden wird als bei M11.** Dort wurden Altkonnektoren
+administrativ, weil der Ist-Zustand ein **Loch** war und eine Massnahme, die jede
+bestehende Installation ausnimmt, nichts schliesst. Hier ist der Ist-Zustand ein
+**dokumentiertes, akzeptiertes Restrisiko** (R-04, gelb) in Installationen, auf
+denen heute gearbeitet wird. Aus jedem Konto beim Update eine reine
+Aufgabenbearbeiterin zu machen, hielte diese Arbeit an — und ein Update, das die
+Arbeit anhält, wird nicht eingespielt und schützt damit niemanden.
+
+**Ehrlich dazugesagt.** Nach dem Update ist zunächst **nichts sicherer**: Jedes
+bestehende Konto trägt drei Rollen, bis eine Betreiberin sie bewusst enger stellt.
+Was die Massnahme liefert, ist die Möglichkeit, es enger zu stellen — und die
+Gewissheit, dass keine Route stillschweigend offen bleibt. Ausserdem sind 199
+Entscheidungen einmal von Hand zu treffen; der Inventar-Test macht die Menge
+prüfbar, nicht jede einzelne Entscheidung richtig.
+
+Wegen G4 gilt jede Regel automatisch auch für MCP: Ein Werkzeugaufruf handelt seit
+M2 unter der Identität des Aufrufers. Das wird per Test belegt, nicht angenommen.
+
+**Stand: umgesetzt** (`api/routeroles.go`, `api/rolesupgrade.go`). Jede der 199
+Routen nennt ihre Rolle in `api/openapi.go`, jede daneben gemountete Route an ihrer
+eigenen Montagestelle; `withAuth` liest sie an genau einer Stelle, nach dem
+Geltungsbereich und vor dem Handler. Zwei Inventar-Tests halten das Ergebnis fest:
+einer, dass **jede** gemountete Route eine bekannte Rolle nennt, und einer, dass die
+51 rein administrativen Routen genau die ausgeschriebene Liste sind — eine Route
+enger oder weiter zu stellen ist damit eine Änderung, die jemand liest.
+
+**Die 51 `requireAdmin`-Aufrufe in den Handlern sind mit derselben Änderung
+verschwunden.** Die Schranke weist ab, bevor ein Handler betreten wird; diese
+Prüfungen konnten also gar nicht mehr auslösen. Eine Prüfung, die nicht auslösen
+kann, ist keine Prüfung, sondern Dekoration, die wie eine aussieht. `requireAdmin`
+bleibt für die eine Frage, die eine Rolle je Route nicht ausdrücken kann: Ein
+Repository-Paket zu installieren verlangt `admin` nur, wenn das Paket Code
+mitbringt.
+
+Beim Bauen kam viererlei dazu, das im Entwurf nicht stand:
+
+- **Der interne Token ist ein Credential wie die anderen.** Er identifiziert die
+  Kinder dieses Servers (`superviseenv.go`) und trug bisher gar keine Rolle. Unter
+  der neuen Regel hätte er nichts mehr erreicht — der beaufsichtigte Worker wäre am
+  Tag der Aktualisierung stehengeblieben. Er trägt jetzt denselben Altbestand wie
+  ein bestehendes Konto: alles ausser `admin`.
+- **Ein Deploy-Token ist eine Veröffentlichende**, trägt also `modeler`. Seine
+  Allowlist aus ADR-0129 — zwei Routen — bleibt die engere der beiden Antworten.
+- **Ein API-Token ist nie `admin`.** Der Entwurf sagt «die Rollen des ausstellenden
+  Kontos», und ausstellen darf nur eine Administratorin — wörtlich genommen hätte
+  also jede Maschine die ganze Instanz bekommen. Ein Token trägt deshalb die
+  Nicht-Admin-Rollen seiner Ausstellerin, und bei einer Administratorin den ganzen
+  Nicht-Admin-Satz: genau das, was ein API-Token am Tag davor erreichte.
+- **Die Aktualisierung braucht eine Markierung.** Ohne sie wäre aus der einmaligen
+  Migration eine stehende Regel geworden: Ein Konto, das eine Betreiberin bewusst
+  enger stellt, wäre beim nächsten Start wieder breit. Jeder Datensatz trägt jetzt
+  `rolesUpgradedAt`; die Migration läuft genau einmal je Konto und schreibt zugleich
+  die Rollen-Momentaufnahme in bestehenden OAuth-Freigaben nach — sonst könnte der
+  Connector einer Person weniger als die Person.
+
+**Eine Route bleibt bewusst offen für jedes angemeldete Konto:** das Lesen der
+Variablen *einer* Instanz. Ein Aufgabenformular wird aus den Variablen der Instanz
+vorbefüllt, zu der die Aufgabe gehört — die Rolle `operator`, die der Rest dieser
+Gruppe trägt, hätte einer Aufgabenbearbeiterin ein leeres Formular hingelegt. Was
+dort hingehört, ist die andere Achse («darf ich *diese* Instanz sehen»), und die
+steht in O-02 als offener Punkt; eine Rolle je Endpunktgruppe kann sie nicht
+ausdrücken.
+
+**In der Console** vergibt der Konto-Dialog die vier Rollen namentlich, jede mit
+dem, was sie erlaubt; die Navigation zeigt nur, was die angemeldete Person mit ihren
+Rollen erreicht. Dasselbe im Aufnahmeprozess (ADR-0122): Das Freigabeformular bot
+bisher «user» oder «admin» und bietet jetzt alle vier — die Rolle wird dort vergeben,
+wo die Administratorin ohnehin schon entscheidet. Beides ist Bequemlichkeit, keine Schranke — der Server weist
+ohnehin ab —, aber ohne beides wäre die Massnahme eine reine API-Fähigkeit, und M10
+hat gezeigt, dass das keine Fähigkeit ist.
+
+**Abnahme** — der Nachweis ist Code:
+
+1. ✅ Jede Route der Tabelle nennt eine Rolle; eine ohne fällt durch den
+   Inventar-Test (`TestEveryRouteDeclaresAKnownRole`, `TestEveryMountedPatternDeclaresARole`).
+2. ✅ Ein Konto mit nur `user` erreicht `POST /api/v1/deployments` nicht, ein Konto
+   mit `modeler` schon (`TestOnlyAModelerMayDeploy`).
+3. ✅ Ein API-Token erreicht nicht mehr als das Konto, das es ausgestellt hat, und
+   ist nie `admin` (`TestAnAPITokenIsNeverAnAdministrator`, `TestTokenRolesNeverIncludeAdmin`).
+4. ✅ Ein MCP-Werkzeugaufruf unterliegt derselben Regel wie derselbe Aufruf über
+   HTTP (`TestMCPToolActsAsTheCallingPrincipal`).
+5. ✅ Mit `--auth=false` ist alles davon wirkungslos (`TestAuthOffEnforcesNoRole`).
+6. ✅ Nach einer Aktualisierung kann jedes bestehende Konto genau das, was es vorher
+   konnte — und was danach enger gestellt wird, bleibt enger
+   (`TestAnAccountFromBeforeRolesKeepsWhatItCouldDo`, `TestNarrowingAnAccountSurvivesARestart`).
 
 ### M10 — OAuth, damit ein gehosteter MCP-Client anschliessen kann ✅
 
@@ -759,13 +886,18 @@ ist erledigt, O-03 und O-04 sind weitgehend erledigt.
 
 ### Stufe 2 — vor breiterem Einsatz
 
-M9 (Rollen, O-02) → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
+~~M9 (Rollen, O-02)~~ ✅ → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
 dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten
 (O-06).
 
+**M9 ist umgesetzt.** Damit gibt es die vier Namen, auf die eine Föderation ihre
+Claims abbilden kann — und sie sind ab jetzt eine öffentliche Zusage, kein
+Implementierungsdetail: `admin`, `modeler`, `operator`, `user`. Die Föderation
+wartet damit auf nichts mehr.
+
 **M10 stand quer dazu** und ist umgesetzt — beide Hälften und die dynamische
 Client-Registrierung, in der Reihenfolge des Entscheids. Offen bleibt daraus nur
-noch die Föderation, und die wartet auf M9.
+noch die Föderation.
 
 **M11 steht ebenfalls quer dazu** und wartet auf nichts. Es ordnet einem Objekt
 einen Eigentümer zu, wo M9 einer Rolle eine Endpunktgruppe zuordnet; beide zahlen
@@ -865,6 +997,8 @@ reproduzierbar (O-15).
 | [ADR-0041](../adr/0041-connector-management-and-secret-store.md) | Ein Konnektor ist Betriebskonfiguration ohne Eigentümer | Bekommt Eigentümer und Freigabeliste (M11). Was ADR-0041 über den Geheimnisverweis sagt (nie der Wert, nur die Referenz), bleibt unverändert. |
 | [ADR-0071](../adr/0071-sharing-scopes.md) | Freigabe gilt für **Entwurfszeit-Inhalte**; Laufzeit ausdrücklich draussen | M11 trägt dieselben drei Felder über diese Linie — auf den Konnektor und, per Anspruch auf den Nachrichtennamen, auf die Zustellung. Die Linie selbst fällt nicht: die Isolation *in* der Engine bleibt draussen. |
 | [ADR-0075](../adr/0075-clio-inbound-event-bridge.md) | Ein Abonnement veröffentlicht unter einem frei gewählten Nachrichtennamen | Der Name wird beansprucht und an zwei Türen geprüft (M11). **Neuer Entscheid nötig.** |
+| [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | Die Routentabelle ist die einzige Quelle für die bediente Fläche und ihre Spezifikation | Sie trägt zusätzlich die geforderte Rolle je Route (M9). Was ADR-0043 über Nichtabdriften sagt, gilt damit auch für die Berechtigung. |
+| [ADR-0194](../adr/0194-api-tokens.md) | Ein API-Token trägt einen Geltungsbereich und keine Rolle | Es trägt die Rollen seiner Ausstellerin, geschnitten mit dem Geltungsbereich (M9) — sonst erreichte es nach M9 nichts mehr. |
 
 Als ADR-Entwürfe ohne Nummer (Nummernvergabe beim Merge, ADR-0170):
 
@@ -891,6 +1025,11 @@ Neu und noch offen:
   Credential *nicht* weg — ein OAuth-Token ist bewusst kein API-Token — und stützt
   sich für die neuen öffentlichen Routen auf die Zugriffsklassen aus ADR-0199 sowie
   für deren Drosselung und Protokollierung auf ADR-0197.
+- 🔲 [`draft-roles-per-endpoint-group.md`](../adr/draft-roles-per-endpoint-group.md)
+  — M9. Füllt das Rollenfeld aus ADR-0044 endlich mit Bedeutung und annotiert die
+  Routentabelle aus ADR-0043. Er hebt ADR-0071 nicht auf, sondern steht quer dazu:
+  eine Rolle sagt, *welche Art* von Operation, ein Geltungsbereich, *welches
+  Objekt*. Beide müssen passieren.
 - 🔲 [`0205-connector-ownership-and-event-delivery.md`](../adr/0205-connector-ownership-and-event-delivery.md)
   — M11. Trägt die Freigabe-Sprache aus ADR-0071 und die Gruppen aus ADR-0180 auf
   den Konnektor und auf die Zustellung seiner Ereignisse. Er nimmt ADR-0071 seine

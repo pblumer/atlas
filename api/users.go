@@ -206,9 +206,6 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 // handleListUsers returns every account (public projection), oldest first.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	list := []publicUser{}
 	var loadErr error
 	s.do(func() {
@@ -259,9 +256,6 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 // required and unique (case-insensitive); email, if given, is unique too; the
 // password must meet the minimum length. Roles default to ["user"].
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var payload struct {
 		Username    string   `json:"username"`
 		Email       string   `json:"email"`
@@ -294,15 +288,16 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().Unix()
 	rec := User{
-		ID:           id,
-		Username:     username,
-		Email:        email,
-		DisplayName:  strings.TrimSpace(payload.DisplayName),
-		Roles:        normalizeRoles(payload.Roles),
-		Source:       SourceLocal,
-		PasswordHash: hash,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              id,
+		Username:        username,
+		Email:           email,
+		DisplayName:     strings.TrimSpace(payload.DisplayName),
+		Roles:           normalizeRoles(payload.Roles),
+		Source:          SourceLocal,
+		PasswordHash:    hash,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		RolesUpgradedAt: now,
 	}
 	// The uniqueness check and the write happen in one run-loop turn, so no
 	// concurrent create can slip a duplicate username/email between them.
@@ -337,17 +332,15 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, conflict)
 		return
 	}
-	audit(r, logging.AuthUserCreated, "user created",
+	audit(r, logging.AuthUserCreated, "user created", append([]slog.Attr{
 		slog.String("username", rec.Username), slog.String("user_id", rec.ID),
-		slog.Any("roles", rec.Roles))
+		slog.Any("roles", rec.Roles),
+	}, unenforcedAttr(rec.Roles)...)...)
 	httpapi.JSON(w, http.StatusCreated, rec.toPublic())
 }
 
 // handleGetUser returns one account by id, or 404.
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var (
 		u       User
@@ -371,9 +364,6 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 // would remove the last enabled admin are refused (409) so no instance locks
 // itself out; disabling a user also ends their live sessions.
 func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var payload struct {
 		Email       *string   `json:"email"`
@@ -420,6 +410,10 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if payload.Roles != nil {
 			u.Roles = normalizeRoles(*payload.Roles)
+			// This list is now a statement under the role model, so mark it as one. Without
+			// this, narrowing an account that has not yet been through upgradeLegacyRoles
+			// would last exactly until the next restart, which would widen it straight back.
+			u.RolesUpgradedAt = time.Now().Unix()
 		}
 		if payload.Disabled != nil {
 			u.Disabled = *payload.Disabled
@@ -470,18 +464,16 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 		}
 		// Roles and the disabled flag are the two fields that change what an account
 		// can do, so they are the two the line carries; the rest is a display change.
-		audit(r, logging.AuthUserUpdated, "user updated",
+		audit(r, logging.AuthUserUpdated, "user updated", append([]slog.Attr{
 			slog.String("username", updated.Username), slog.String("user_id", updated.ID),
-			slog.Any("roles", updated.Roles), slog.Bool("disabled", updated.Disabled))
+			slog.Any("roles", updated.Roles), slog.Bool("disabled", updated.Disabled),
+		}, unenforcedAttr(updated.Roles)...)...)
 		httpapi.JSON(w, http.StatusOK, updated.toPublic())
 	}
 }
 
 // handleSetUserPassword replaces a user's password. Body: {"password":"..."}.
 func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var payload struct {
 		Password string `json:"password"`
@@ -533,9 +525,6 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 // (409) so an instance can't lock itself out; a successful delete also ends the
 // user's live sessions.
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var (
 		found   bool

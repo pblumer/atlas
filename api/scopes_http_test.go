@@ -43,9 +43,9 @@ func TestProjectSharingLifecycle(t *testing.T) {
 	if login(t, admin, ts, "admin", "password1") != http.StatusOK {
 		t.Fatal("admin login failed")
 	}
-	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
 	aliceID := idOf(t, ab)
-	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1"}`)
+	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1","roles":["modeler","operator","user"]}`)
 	bobID := idOf(t, bb)
 
 	alice := newClient(t)
@@ -191,8 +191,8 @@ func TestProjectTransferDropsNewOwnerMembership(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
 	admin := newClient(t)
 	login(t, admin, ts, "admin", "password1")
-	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
-	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1"}`)
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
+	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1","roles":["modeler","operator","user"]}`)
 	bobID := idOf(t, bb)
 
 	alice := newClient(t)

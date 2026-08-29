@@ -62,9 +62,6 @@ const maxRestoreEntries = 100_000
 // half-written — and touches neither the engine nor the run loop. Admin-gated
 // when auth is on: a backup is a full dump of every model on the instance.
 func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", backupFilename()))
 	if err := streamBackup(w, os.DirFS(s.dataDir)); err != nil {
@@ -112,9 +109,6 @@ func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 // take effect on the next restart. Admin-gated when auth is on: a restore
 // overwrites design-time state.
 func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	// Bound the compressed upload; the LimitReader below bounds the decompressed
 	// stream so a bomb cannot fill the disk.
 	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)

@@ -69,9 +69,6 @@ type promoteResp struct {
 // this server may ship work and which credential it presents, which is operator
 // configuration, not application content.
 func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -142,9 +139,6 @@ func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
 // handleDeleteTarget removes a peer. Idempotent; the applications that were
 // promoted to it are untouched, both here and over there.
 func (s *Server) handleDeleteTarget(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var delErr error
 	s.do(func() { delErr = s.targets.Delete(r.PathValue("id")) })
 	if delErr != nil {

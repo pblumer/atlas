@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/pblumer/atlas/api/httpapi"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -21,22 +19,13 @@ func TestMigrationEndpointsAreAdminOnly(t *testing.T) {
 		"/api/v1/instances/1/migrate/plan",
 		"/api/v1/processes/1/migrate-instances",
 	}
-	handler := map[string]http.HandlerFunc{
-		"/api/v1/instances/1/migrate":           srv.handleMigrateInstance,
-		"/api/v1/instances/1/migrate/plan":      srv.handleMigrationPlan,
-		"/api/v1/processes/1/migrate-instances": srv.handleMigrateInstancesOfProcess,
-	}
-	// Called directly with a signed-in *non-admin*, so the handler's own gate is what
-	// refuses — not the middleware in front of it, which would refuse an anonymous
-	// caller before the handler ever ran.
+	// A signed-in non-admin is refused at the boundary, which is where the role is
+	// decided (routeroles.go). Migrating a population of live instances onto another
+	// definition is the heaviest runtime act there is, and it stays an
+	// administrator's even though an operator may cancel and repair.
 	for _, path := range paths {
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"targetProcessDefKey":2,"reason":"x"}`))
-		req.Header.Set("Content-Type", "application/json")
-		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{Username: "op", Roles: []string{"user"}}))
-		rec := httptest.NewRecorder()
-		handler[path](rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s as a non-admin = %d, want 403", path, rec.Code)
+		if got := boundaryStatus(t, []string{RoleModeler, RoleOperator, RoleUser}, http.MethodPost, path); got != http.StatusForbidden {
+			t.Errorf("%s as a non-admin = %d, want 403", path, got)
 		}
 	}
 

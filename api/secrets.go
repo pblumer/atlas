@@ -14,9 +14,6 @@ import (
 // handleListSecrets lists secret names and metadata in the vault — never values
 // (ADR-0069). Admin-guarded like the other operator surfaces.
 func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	if s.vault == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
@@ -40,9 +37,6 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 // arrives in the request body, is sealed immediately, and is never persisted in the
 // clear, logged, or echoed back — the response carries only value-free metadata.
 func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	if s.vault == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
@@ -98,9 +92,6 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 // registries, so a connector that referenced it resolves to no token again (and
 // parks) at once, without waiting for a re-save.
 func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	if s.vault == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return

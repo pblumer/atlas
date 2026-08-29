@@ -50,9 +50,6 @@ func (s *Server) loadAPITokens() error {
 // omitted lifetime means the token does not expire, which is allowed and is said
 // out loud in the response rather than hidden in a default.
 func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -113,9 +110,11 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	if lifetime > 0 {
 		rec.ExpiresAt = now.Add(lifetime).Unix()
 	}
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+	p := httpapi.PrincipalFrom(r.Context())
+	if p != nil {
 		rec.CreatedBy = p.UserID
 	}
+	rec.Roles = tokenRoles(p)
 
 	var saveErr error
 	s.do(func() {
@@ -130,16 +129,14 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	audit(r, logging.AuthTokenMinted, "api token minted",
 		slog.String("token_id", rec.ID), slog.String("token_name", rec.Name),
-		slog.String("scope", rec.scope()), slog.Int64("expires_at", rec.ExpiresAt))
+		slog.String("scope", rec.scope()), slog.String("roles", strings.Join(rec.roles(), " ")),
+		slog.Int64("expires_at", rec.ExpiresAt))
 	httpapi.JSON(w, http.StatusOK, newAPITokenResp{apiTokenView: rec.view(), Token: secret})
 }
 
 // handleListAPITokens lists the tokens by identity, reach, lifetime and
 // provenance. The secret is absent because the server does not have it.
 func (s *Server) handleListAPITokens(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	out := []apiTokenView{}
 	var loadErr error
 	s.do(func() {
@@ -163,9 +160,6 @@ func (s *Server) handleListAPITokens(w http.ResponseWriter, r *http.Request) {
 // failure mid-way leaves the credential *revoked in memory* rather than silently
 // still valid — the safe direction for a credential.
 func (s *Server) handleRevokeAPIToken(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var delErr error
 	s.do(func() {

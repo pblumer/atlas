@@ -143,15 +143,16 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		return "", false, err
 	}
 	rec := User{
-		ID:           id,
-		Username:     username,
-		Email:        email,
-		DisplayName:  displayName,
-		Roles:        normalizeRoles(roles),
-		Source:       SourceLocal,
-		PasswordHash: hash,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              id,
+		Username:        username,
+		Email:           email,
+		DisplayName:     displayName,
+		Roles:           normalizeRoles(roles),
+		Source:          SourceLocal,
+		PasswordHash:    hash,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		RolesUpgradedAt: now,
 	}
 	if err := s.users.Save(rec); err != nil {
 		return "", false, err

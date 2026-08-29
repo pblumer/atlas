@@ -71,20 +71,16 @@ func TestHandleBackupFullLogsStreamFailure(t *testing.T) {
 	s.handleBackupFull(&failRW{}, httptest.NewRequest(http.MethodGet, "/api/v1/backup/full", nil))
 }
 
+// A whole-instance snapshot carries the WAL, the accounts and the vault key.
+// Refused at the boundary, where the role is decided now (routeroles.go).
 func TestFullSnapshotEndpointsRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
-	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
-	}{
-		{"backup/full", s.handleBackupFull, http.MethodGet},
-		{"restore/full", s.handleRestoreFull, http.MethodPost},
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, tc := range []struct{ path, method string }{
+		{"/api/v1/backup/full", http.MethodGet},
+		{"/api/v1/restore/full", http.MethodPost},
 	} {
-		rec := httptest.NewRecorder()
-		tc.fn(rec, httptest.NewRequest(tc.meth, "/", nil))
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s without an admin principal: status=%d, want 403", tc.name, rec.Code)
+		if got := boundaryStatus(t, ordinary, tc.method, tc.path); got != http.StatusForbidden {
+			t.Errorf("%s without an admin principal: status=%d, want 403", tc.path, got)
 		}
 	}
 }

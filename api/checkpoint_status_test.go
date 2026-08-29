@@ -184,20 +184,13 @@ func TestCheckpointNowRefusedWhenCheckpointingIsOff(t *testing.T) {
 
 // TestCheckpointEndpointsRequireAdmin: taking a checkpoint is an operator action and the
 // status names on-disk paths, so both sit behind the admin gate like backup/restore.
+// Asserted at the boundary, where the role is decided now (routeroles.go): the
+// routes name the admin role and withAuth refuses before either handler runs.
 func TestCheckpointEndpointsRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
-	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
-	}{
-		{"GET /api/v1/checkpoints", s.handleCheckpointStatus, http.MethodGet},
-		{"POST /api/v1/checkpoints", s.handleCheckpointNow, http.MethodPost},
-	} {
-		rec := httptest.NewRecorder()
-		tc.fn(rec, httptest.NewRequest(tc.meth, "/", nil))
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s without an admin principal: status=%d, want 403", tc.name, rec.Code)
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		if got := boundaryStatus(t, ordinary, method, "/api/v1/checkpoints"); got != http.StatusForbidden {
+			t.Errorf("%s /api/v1/checkpoints without an admin principal: status=%d, want 403", method, got)
 		}
 	}
 }

@@ -36,9 +36,9 @@ func TestGrantAuditLog(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "password1")
 	admin := newClient(t)
 	login(t, admin, ts, "admin", "password1")
-	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	_, ab := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
 	aliceID := idOf(t, ab)
-	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1"}`)
+	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1","roles":["modeler","operator","user"]}`)
 	bobID := idOf(t, bb)
 	_, gb := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"Eng"}`)
 	gid := decodeGroup(t, gb).ID
@@ -57,7 +57,7 @@ func TestGrantAuditLog(t *testing.T) {
 		t.Fatalf("editor reads audit = %d, want 403", code)
 	}
 	// A stranger with no access is refused with 404 (existence hidden).
-	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"carol","password":"password1"}`)
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"carol","password":"password1","roles":["modeler","operator","user"]}`)
 	carol := newClient(t)
 	login(t, carol, ts, "carol", "password1")
 	if code, _ := cReq(t, carol, ts, "GET", "/api/v1/projects/"+pid+"/audit", ""); code != http.StatusNotFound {

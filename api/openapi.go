@@ -29,12 +29,21 @@ type apiRoute struct {
 	op      apiOp            // human/tool-facing description
 }
 
-// apiOp describes a route for the OpenAPI document. summary and tag are required
-// (the drift test enforces non-empty). req/resp bodies are filled in where they
-// add value and default to a permissive object otherwise (ADR-0043).
+// apiOp describes a route for the OpenAPI document, and names the role it needs.
+// summary, tag and role are required (the drift and inventory tests enforce
+// non-empty). req/resp bodies are filled in where they add value and default to a
+// permissive object otherwise (ADR-0043).
 type apiOp struct {
-	summary    string
-	tag        string
+	summary string
+	tag     string
+
+	// role is what a signed-in identity must hold to reach this route, one of
+	// routeRoles (ADR-draft-roles-per-endpoint-group). It sits here, beside the
+	// summary, because this table is the single source of truth for the surface and a
+	// second list of who-may-what is a second list to keep in step. Empty reaches
+	// nobody, and TestEveryRouteDeclaresARole makes empty a failing build.
+	role string
+
 	status     int       // primary success status; 0 means 200 OK
 	deprecated bool      // renders openapi `deprecated: true` (e.g. an alias kept for compat)
 	req        *bodySpec // request body, or nil when the route takes none
@@ -88,62 +97,62 @@ func eventStreamBody(desc string) *bodySpec {
 func (s *Server) apiRoutes() []apiRoute {
 	return []apiRoute{
 		{"GET", "/api/v1/info", s.handleInfo, apiOp{
-			summary: "Product and version metadata", tag: "System",
+			summary: "Product and version metadata", tag: "System", role: roleAny,
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
 			}))}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
-			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System",
+			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
 				"activeProcessInstances": tInteger(), "activeElementInstances": tInteger(),
 				"unresolvedIncidents": tInteger(),
 			}))}},
 		{"GET", "/api/v1/logs", s.handleLogs, apiOp{
-			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",
+			summary: "Recent server log lines (admin-only when auth is on)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
 				"lines": tArray(),
 			}))}},
 		{"GET", "/api/v1/backup", s.handleBackup, apiOp{
-			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System",
+			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
 		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
-			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System",
+			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
 			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup"},
 			resp: jsonBody("Restore summary", schemaObj(map[string]any{
 				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
 			}))}},
 		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
-			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System",
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
 		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
-			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System",
+			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
 			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup/full"},
 			resp: jsonBody("Restore staging summary", schemaObj(map[string]any{
 				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
 			}))}},
 
 		{"GET", "/api/v1/checkpoints", s.handleCheckpointStatus, apiOp{
-			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System",
+			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Checkpoint status", schemaObj(map[string]any{
 				"enabled": tBool(), "intervalSeconds": tInteger(), "keep": tInteger(),
 				"compaction": tBool(), "root": tString(), "checkpoints": tArray(),
 				"lastPass": tObject(), "walSegments": tInteger(), "walBytes": tInteger(),
 			}))}},
 		{"POST", "/api/v1/checkpoints", s.handleCheckpointNow, apiOp{
-			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System",
+			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("What the pass did", schemaObj(map[string]any{
 				"at": tInteger(), "position": tInteger(), "checkpointError": tString(),
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
-			summary: "Validate a FEEL expression compiles", tag: "FEEL",
+			summary: "Validate a FEEL expression compiles", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),
 			resp: jsonBody("Validation result", schemaObj(map[string]any{
 				"ok": tBool(), "error": tString(),
 			}))}},
 		{"POST", "/api/v1/feel/evaluate", s.handleEvaluateFeel, apiOp{
-			summary: "Evaluate a FEEL expression against variables", tag: "FEEL",
+			summary: "Evaluate a FEEL expression against variables", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("Expression and variables", schemaObj(map[string]any{
 				"expression": tString(), "variables": tObject(),
 			}, "expression")),
@@ -151,7 +160,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
 			}))}},
 		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
-			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts",
+			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts", role: RoleAdmin,
 			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{
 				"language": tString(), "source": tString(), "variables": tObject(),
 			}, "language", "source")),
@@ -160,69 +169,74 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
-			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured connector)", tag: "Deployments",
+			summary: "Deploy a BPMN model; the response carries warnings for references that will not resolve at runtime (an unconfigured connector)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
 		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
-			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026)", tag: "Deployments",
+			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026)", tag: "Deployments", role: RoleModeler,
 			req: xmlBody("BPMN 2.0 XML"),
 			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
 				"version": tString(), "problems": tArray(),
 			}))}},
 		{"POST", "/api/v1/layout", s.handleLayout, apiOp{
-			summary: "Regenerate a BPMN model's diagram layout — discards any existing diagram interchange and returns the model with a freshly generated left-to-right layout, backing the Modeler's Auto-layout button. A pure transform: nothing is compiled, deployed, or stored.", tag: "Deployments",
+			summary: "Regenerate a BPMN model's diagram layout — discards any existing diagram interchange and returns the model with a freshly generated left-to-right layout, backing the Modeler's Auto-layout button. A pure transform: nothing is compiled, deployed, or stored.", tag: "Deployments", role: RoleModeler,
 			req:  xmlBody("BPMN 2.0 XML"),
 			resp: xmlBody("BPMN 2.0 XML with regenerated diagram interchange")}},
 
 		{"GET", "/api/v1/processes", s.handleListProcesses, apiOp{
-			summary: "List deployed processes", tag: "Processes", resp: jsonBody("Processes", tArray())}},
+			summary: "List deployed processes", tag: "Processes", role: roleAny, resp: jsonBody("Processes", tArray())}},
 		{"GET", "/api/v1/processes/{key}/xml", s.handleProcessXML, apiOp{
-			summary: "Fetch a deployed process's BPMN XML", tag: "Processes",
+			summary: "Fetch a deployed process's BPMN XML", tag: "Processes", role: roleAny,
 			resp: xmlBody("BPMN 2.0 XML")}},
 		{"DELETE", "/api/v1/processes/{key}", s.handleDeleteProcess, apiOp{
-			summary: "Delete a deployment (must have no running instances)", tag: "Processes",
+			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
-			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
-			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes",
+			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
 			resp: jsonBody("The key and its new active state", tObject())}},
 		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
-			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
+			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", role: roleAny, resp: jsonBody("Call activities", tArray())}},
 		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{
-			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes",
+			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes", role: RoleAdmin,
 			req: jsonBody("Override", tObject()), resp: jsonBody("Stored override", tObject())}},
 		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
-			summary: "Clear a called process id's per-server target override", tag: "Processes", status: http.StatusNoContent}},
+			summary: "Clear a called process id's per-server target override", tag: "Processes", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
-			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
+			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
 
 		{"POST", "/api/v1/processes/{key}/instances", s.handleCreateInstance, apiOp{
-			summary: "Start a process instance", tag: "Instances",
+			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances-from-csv", s.handleCreateInstanceFromCSV, apiOp{
-			summary: "Start a process instance from an uploaded CSV — multipart file + JSON column layout; seeds rows/rowCount/fileName as start variables (ADR-0084)", tag: "Instances",
+			summary: "Start a process instance from an uploaded CSV — multipart file + JSON column layout; seeds rows/rowCount/fileName as start variables (ADR-0084)", tag: "Instances", role: RoleOperator,
 			req: &bodySpec{mediaType: "multipart/form-data", desc: "CSV file and a JSON column layout", schema: schemaObj(map[string]any{
 				"file":   map[string]any{"type": "string", "format": "binary"},
 				"config": tString(),
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
-			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", resp: jsonBody("Instance summary", tArray())}},
+			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
-			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances",
+			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Matching instances", tArray())}},
+		// Every signed-in identity, not the operator role the rest of this group carries:
+		// a task form is prefilled from the variables of the instance the task belongs to,
+		// so a role narrower than "signed in" would hand a task worker an empty form. What
+		// this route needs is the *other* axis — may you see this instance — and that is
+		// open work (O-02), not something a role per endpoint group can express.
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
-			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
+			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances", role: roleAny,
 			resp: jsonBody("Instance variables", tObject())}},
 		{"POST", "/api/v1/instances/{key}/variables", s.handleSetInstanceVariables, apiOp{
-			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances",
+			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Variables to set, and an optional target scope", schemaObj(map[string]any{
 				"variables": tObject(), "scopeKey": tInteger(),
 			}, "variables")),
@@ -230,185 +244,185 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instanceKey": tInteger(), "variablesSet": tInteger(),
 			}))}},
 		{"GET", "/api/v1/instances/{key}/variable-audit", s.handleInstanceVariableAudit, apiOp{
-			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances",
+			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
-			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
+			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
-			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances",
+			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
-			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
+			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
-			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances",
+			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
-			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions",
+			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},
 		{"GET", "/api/v1/decisions/{id}/evaluations", s.handleDecisionEvaluations, apiOp{
-			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions",
+			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
-			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances",
+			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version and optional element-id overrides", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "mapping": tArray(),
 			}, "targetProcessDefKey")),
 			resp: jsonBody("Migration plan", tObject())}},
 		{"POST", "/api/v1/instances/{key}/migrate", s.handleMigrateInstance, apiOp{
-			summary: "Rebind a running instance to another version of its process, preserving its variables, jobs and history; refused with 409 and the same plan when the mapping does not hold. A reason is required and recorded as an operator action (admin-only when auth is on, ADR-0162)", tag: "Instances",
+			summary: "Rebind a running instance to another version of its process, preserving its variables, jobs and history; refused with 409 and the same plan when the mapping does not hold. A reason is required and recorded as an operator action (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Migration result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
-			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances",
+			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Bulk migration result", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
-			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
+			summary: "Cancel a running instance", tag: "Instances", role: RoleOperator, resp: jsonBody("Cancellation result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
-			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances",
+			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Bulk cancellation result", tObject())}},
 		{"POST", "/api/v1/instances/terminate", s.handleTerminateInstances, apiOp{
-			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances",
+			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Selection", schemaObj(map[string]any{"keys": tArray(), "processDefKey": tInteger(), "q": tString(), "limit": tInteger()})),
 			resp: jsonBody("Termination result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
-			summary: "Publish a message for correlation", tag: "Messages",
+			summary: "Publish a message for correlation", tag: "Messages", role: RoleOperator,
 			req: jsonBody("Message", schemaObj(map[string]any{
 				"name": tString(), "correlationKey": tString(), "variables": tObject(),
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
 		{"POST", "/api/v1/workers/{id}/restart", s.handleRestartWorker, apiOp{
-			summary: "Restart a worker process this server supervises (ADR-0157); 409 when it supervises none", tag: "Incidents",
+			summary: "Restart a worker process this server supervises (ADR-0157); 409 when it supervises none", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("The worker that is restarting", tObject())}},
 		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
-			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents",
+			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("Workers and job-type queues", tObject())}},
 		{"GET", "/api/v1/workers/{id}/history", s.handleWorkerHistory, apiOp{
-			summary: "One worker's job history from the configured clio connector, newest first (admin-only; empty when no history connector is configured)", tag: "Incidents",
+			summary: "One worker's job history from the configured clio connector, newest first (admin-only; empty when no history connector is configured)", tag: "Incidents", role: RoleAdmin,
 			resp: jsonBody("Worker job history", tObject())}},
 		{"GET", "/api/v1/workers/{id}/jobs", s.handleWorkerJobs, apiOp{
-			summary: "One worker's recent jobs: what it was handed, what it returned, and what failed (admin-only; a bounded in-memory tail, emptied by a restart)", tag: "Incidents",
+			summary: "One worker's recent jobs: what it was handed, what it returned, and what failed (admin-only; a bounded in-memory tail, emptied by a restart)", tag: "Incidents", role: RoleAdmin,
 			resp: jsonBody("Worker jobs", tObject())}},
 		{"POST", "/api/v1/jobs/activate", s.handleActivateJobsByType, apiOp{
-			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull, optionally long-polling (ADR-0007)", tag: "Incidents",
+			summary: "Lease the next jobs of a named job type to an external worker — the type-keyed pull, optionally long-polling (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Job type, worker id, lease, batch size, and how long to wait for work before answering empty", schemaObj(map[string]any{
 				"type": tString(), "worker": tString(), "leaseMs": tInteger(), "maxJobs": tInteger(), "waitMs": tInteger(),
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
-			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents",
+			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
 				"worker": tString(), "leaseMs": tInteger(),
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents",
+			summary: "Complete a job — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Either the holding worker id with the lease token its activation returned (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
 				"worker": tString(), "leaseToken": tInteger(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
-			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
+			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents", role: RoleOperator,
 			req: jsonBody("Retries left and a failure message; a worker also presents its id and the lease token its activation returned", schemaObj(map[string]any{
 				"retries": tInteger(), "message": tString(), "worker": tString(), "leaseToken": tInteger(),
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
-			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
+			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents", role: RoleOperator,
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients)", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients)", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tArray())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
-			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", resp: jsonBody("Task", tObject())}},
+			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", role: RoleUser, resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
-			summary: "Complete a user task", tag: "Tasks",
+			summary: "Complete a user task", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
-			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks",
+			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
 			resp: jsonBody("Task and assignee", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/unclaim", s.handleUnclaimTask, apiOp{
-			summary: "Release a user task's claim", tag: "Tasks", resp: jsonBody("Task key", tObject())}},
+			summary: "Release a user task's claim", tag: "Tasks", role: RoleUser, resp: jsonBody("Task key", tObject())}},
 
 		{"POST", "/api/v1/drafts", s.handleSaveDraft, apiOp{
-			summary: "Save a diagram draft", tag: "Drafts", req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
+			summary: "Save a diagram draft", tag: "Drafts", role: RoleModeler, req: jsonBody("Draft", tObject()), resp: jsonBody("Saved draft", tObject())}},
 		{"GET", "/api/v1/drafts", s.handleListDrafts, apiOp{
-			summary: "List diagram drafts", tag: "Drafts", resp: jsonBody("Drafts", tArray())}},
+			summary: "List diagram drafts", tag: "Drafts", role: RoleModeler, resp: jsonBody("Drafts", tArray())}},
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
-			summary: "Fetch a draft's BPMN XML", tag: "Drafts", resp: xmlBody("BPMN 2.0 XML")}},
+			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
-			summary: "Move a draft to a project", tag: "Drafts", req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
+			summary: "Move a draft to a project", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
-			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
+			summary: "Delete a draft", tag: "Drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
-			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts",
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts", role: RoleModeler,
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
 		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
-			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions",
+			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			resp: eventStreamBody("SSE stream of session frames")}},
 		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
-			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions",
+			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
 			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
 		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
-			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions",
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
 		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
-			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions",
+			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
-			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions",
+			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Presence update", schemaObj(map[string]any{
 				"participantId": tString(), "selection": tString(),
 			}, "participantId")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
-			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions",
+			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Lock action", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "action": tString(),
 			}, "participantId", "elementId", "action")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
-			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions",
+			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Element change", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "xml": tString(),
 			}, "participantId", "elementId")),
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
-			summary: "Save a form definition", tag: "Forms", req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
+			summary: "Save a form definition", tag: "Forms", role: RoleModeler, req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
 		{"GET", "/api/v1/forms", s.handleListForms, apiOp{
-			summary: "List form definitions", tag: "Forms", resp: jsonBody("Forms", tArray())}},
+			summary: "List form definitions", tag: "Forms", role: roleAny, resp: jsonBody("Forms", tArray())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{
-			summary: "Fetch a form definition", tag: "Forms", resp: jsonBody("Form", tObject())}},
+			summary: "Fetch a form definition", tag: "Forms", role: roleAny, resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
-			summary: "Delete a form definition", tag: "Forms", resp: jsonBody("Deleted id", tObject())}},
+			summary: "Delete a form definition", tag: "Forms", role: RoleModeler, resp: jsonBody("Deleted id", tObject())}},
 		{"POST", "/api/v1/public-links", s.handleCreatePublicLink, apiOp{
-			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms",
+			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms", role: RoleModeler,
 			req:  jsonBody("Target", schemaObj(map[string]any{"processId": tString()}, "processId")),
 			resp: jsonBody("Public link", tObject())}},
 		{"GET", "/api/v1/public-links", s.handleListPublicLinks, apiOp{
-			summary: "List public start links", tag: "Forms", resp: jsonBody("Public links", tArray())}},
+			summary: "List public start links", tag: "Forms", role: RoleModeler, resp: jsonBody("Public links", tArray())}},
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
-			summary: "Revoke a public start link", tag: "Forms", resp: jsonBody("Revoked token", tObject())}},
+			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
 
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
@@ -417,35 +431,35 @@ func (s *Server) apiRoutes() []apiRoute {
 		// bpmn-js already holds the authoritative picture; the server validates,
 		// numbers, stores, and serves it.
 		{"POST", "/api/v1/processes/{processId}/documentation", s.processDocs.HandleCreate, apiOp{
-			summary: "Publish the next documentation version of a process: the produced PDF plus the element prose it describes (ADR-0143)", tag: "Documentation",
+			summary: "Publish the next documentation version of a process: the produced PDF plus the element prose it describes (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			req: jsonBody("Documentation upload", schemaObj(map[string]any{
 				"title": tString(), "note": tString(), "processName": tString(),
 				"xml": tString(), "elements": tArray(), "pdfBase64": tString(),
 			}, "pdfBase64")),
 			resp: jsonBody("The minted documentation version", tObject())}},
 		{"GET", "/api/v1/processes/{processId}/documentation", s.processDocs.HandleList, apiOp{
-			summary: "A process's documentation history, newest version first (ADR-0143)", tag: "Documentation",
+			summary: "A process's documentation history, newest version first (ADR-0143)", tag: "Documentation", role: roleAny,
 			resp: jsonBody("Documentation versions", tArray())}},
 		{"POST", "/api/v1/processes/{processId}/documentation/prune", s.processDocs.HandlePrune, apiOp{
-			summary: "Prune a process's documentation history to the newest `keep` versions, deleting older ones and their PDFs (ADR-0143 retention)", tag: "Documentation",
+			summary: "Prune a process's documentation history to the newest `keep` versions, deleting older ones and their PDFs (ADR-0143 retention)", tag: "Documentation", role: RoleModeler,
 			req: jsonBody("Retention limit", schemaObj(map[string]any{
 				"keep": tInteger(),
 			}, "keep")),
 			resp: jsonBody("The versions that were pruned", tObject())}},
 		{"GET", "/api/v1/documentation/{id}", s.processDocs.HandleGet, apiOp{
-			summary: "Fetch one documentation version in full: metadata, per-element prose, and the BPMN source it was produced from (ADR-0143)", tag: "Documentation",
+			summary: "Fetch one documentation version in full: metadata, per-element prose, and the BPMN source it was produced from (ADR-0143)", tag: "Documentation", role: roleAny,
 			resp: jsonBody("Documentation version", tObject())}},
 		{"GET", "/api/v1/documentation/{id}/pdf", s.processDocs.HandleGetPDF, apiOp{
-			summary: "Download a documentation version's PDF (ADR-0143)", tag: "Documentation",
+			summary: "Download a documentation version's PDF (ADR-0143)", tag: "Documentation", role: roleAny,
 			resp: &bodySpec{mediaType: "application/pdf", schema: tString(), desc: "The published PDF document"}}},
 		{"POST", "/api/v1/documentation/{id}/share", s.processDocs.HandleShare, apiOp{
-			summary: "Share one documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates (ADR-0143)", tag: "Documentation",
+			summary: "Share one documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			resp: jsonBody("The version with its share link", tObject())}},
 		{"DELETE", "/api/v1/documentation/{id}/share", s.processDocs.HandleUnshare, apiOp{
-			summary: "Revoke a documentation version's public link (ADR-0143)", tag: "Documentation",
+			summary: "Revoke a documentation version's public link (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			resp: jsonBody("The version, now private", tObject())}},
 		{"DELETE", "/api/v1/documentation/{id}", s.processDocs.HandleDelete, apiOp{
-			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation",
+			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
@@ -456,348 +470,348 @@ func (s *Server) apiRoutes() []apiRoute {
 		// on-disk store stays `projects/` and the artifact tag stays `projectId`
 		// (zero migration) — the rename is at the API/UI boundary only.
 		{"POST", "/api/v1/applications", s.handleCreateProject, apiOp{
-			summary: "Create a process application (ADR-0128)", tag: "Applications", req: jsonBody("Application", tObject()), resp: jsonBody("Created application", tObject())}},
+			summary: "Create a process application (ADR-0128)", tag: "Applications", role: RoleModeler, req: jsonBody("Application", tObject()), resp: jsonBody("Created application", tObject())}},
 		{"GET", "/api/v1/applications", s.handleListProjects, apiOp{
-			summary: "List process applications", tag: "Applications", resp: jsonBody("Applications", tArray())}},
+			summary: "List process applications", tag: "Applications", role: roleAny, resp: jsonBody("Applications", tArray())}},
 		{"PATCH", "/api/v1/applications/{id}", s.handleUpdateProject, apiOp{
-			summary: "Update an application: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Applications",
+			summary: "Update an application: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application", tag: "Applications", status: http.StatusNoContent}},
+			summary: "Delete a process application", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
 		{"PUT", "/api/v1/applications/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
-			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications",
+			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}/members/{userId}", s.handleRemoveProjectMember, apiOp{
-			summary: "Revoke a user's membership on an application (ADR-0071)", tag: "Applications", resp: jsonBody("Updated application", tObject())}},
+			summary: "Revoke a user's membership on an application (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Updated application", tObject())}},
 		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
-			summary: "Validate an application's artifacts", tag: "Applications", resp: jsonBody("Validation result", tObject())}},
+			summary: "Validate an application's artifacts", tag: "Applications", role: RoleModeler, resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
-			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0128)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
+			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0128)", tag: "Applications", role: RoleModeler, resp: jsonBody("Deploy result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/publish", s.handlePublishApplication, apiOp{
-			summary: "Publish an application: deploy its artifacts as one bundle and record the next application release (ADR-0128)", tag: "Applications",
+			summary: "Publish an application: deploy its artifacts as one bundle and record the next application release (ADR-0128)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Publish options", schemaObj(map[string]any{"note": tString()})),
 			resp: jsonBody("Publish result with the minted release", tObject())}},
 		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
-			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", resp: jsonBody("Releases", tArray())}},
+			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Releases", tArray())}},
 		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
-			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", resp: jsonBody("Grant audit events", tArray())}},
+			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Grant audit events", tArray())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
-			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
+			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
-			summary: "Receive a published application bundle from a peer Atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications",
+			summary: "Receive a published application bundle from a peer Atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
 			req: jsonBody("Bundle", schemaObj(map[string]any{
 				"application": tString(), "release": tObject(), "artifacts": tArray(),
 			}, "application", "release", "artifacts")),
 			resp: jsonBody("Import result", tObject())}},
 
 		{"POST", "/api/v1/applications/{id}/releases/{version}/promote", s.handlePromoteRelease, apiOp{
-			summary: "Promote an existing release to one or more deployment targets: ship the frozen artifacts to peer Atlas servers, reported per target (ADR-0129)", tag: "Applications",
+			summary: "Promote an existing release to one or more deployment targets: ship the frozen artifacts to peer Atlas servers, reported per target (ADR-0129)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Targets", schemaObj(map[string]any{"targetIds": tArray()}, "targetIds")),
 			resp: jsonBody("Per-target promotion results", tObject())}},
 
 		{"GET", "/api/v1/applications/{id}/source", s.handleExportApplicationSource, apiOp{
-			summary: "Download an application's source — its drafts, forms, and decision references — as the curated source layout (a manifest plus native .bpmn and .form.json files) in a gzip tar (ADR-0134)", tag: "Applications",
+			summary: "Download an application's source — its drafts, forms, and decision references — as the curated source layout (a manifest plus native .bpmn and .form.json files) in a gzip tar (ADR-0134)", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar of the application's source tree"}}},
 		{"POST", "/api/v1/applications/source", s.handleImportApplicationSource, apiOp{
-			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed (ADR-0134).", tag: "Applications",
+			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed (ADR-0134).", tag: "Applications", role: RoleModeler,
 			req:  &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar of a source tree, as produced by GET /api/v1/applications/{id}/source"},
 			resp: jsonBody("Import result", tObject())}},
 
 		{"GET", "/api/v1/applications/{id}/targets", s.handleApplicationTargets, apiOp{
-			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications",
+			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Per-target status", tArray())}},
 
 		{"POST", "/api/v1/targets", s.handleCreateTarget, apiOp{
-			summary: "Register a deployment target: a peer Atlas this server can promote releases to; the credential is stored by reference, never by value (admin-only, ADR-0129)", tag: "Deployment targets",
+			summary: "Register a deployment target: a peer Atlas this server can promote releases to; the credential is stored by reference, never by value (admin-only, ADR-0129)", tag: "Deployment targets", role: RoleAdmin,
 			req: jsonBody("Target", schemaObj(map[string]any{
 				"name": tString(), "baseUrl": tString(), "kind": tString(), "credentialRef": tString(),
 			}, "name", "baseUrl")),
 			resp: jsonBody("Created target", tObject())}},
 		{"GET", "/api/v1/targets", s.handleListTargets, apiOp{
-			summary: "List deployment targets and the application bindings learned from them (ADR-0129)", tag: "Deployment targets",
+			summary: "List deployment targets and the application bindings learned from them (ADR-0129)", tag: "Deployment targets", role: RoleModeler,
 			resp: jsonBody("Targets", tArray())}},
 		{"DELETE", "/api/v1/targets/{id}", s.handleDeleteTarget, apiOp{
-			summary: "Remove a deployment target (admin-only, ADR-0129)", tag: "Deployment targets", status: http.StatusNoContent}},
+			summary: "Remove a deployment target (admin-only, ADR-0129)", tag: "Deployment targets", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/deploy-tokens", s.handleCreateDeployToken, apiOp{
-			summary: "Mint a deploy token for a peer Atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens",
+			summary: "Mint a deploy token for a peer Atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens", role: RoleAdmin,
 			req:  jsonBody("Token name", schemaObj(map[string]any{"name": tString()}, "name")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/deploy-tokens", s.handleListDeployTokens, apiOp{
-			summary: "List deploy tokens by identity and provenance; secrets are not stored and never returned (admin-only, ADR-0129)", tag: "Deploy tokens",
+			summary: "List deploy tokens by identity and provenance; secrets are not stored and never returned (admin-only, ADR-0129)", tag: "Deploy tokens", role: RoleAdmin,
 			resp: jsonBody("Deploy tokens", tArray())}},
 		{"DELETE", "/api/v1/deploy-tokens/{id}", s.handleRevokeDeployToken, apiOp{
-			summary: "Revoke a deploy token, effective immediately (admin-only, ADR-0129)", tag: "Deploy tokens",
+			summary: "Revoke a deploy token, effective immediately (admin-only, ADR-0129)", tag: "Deploy tokens", role: RoleAdmin,
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
-			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens",
+			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
 			req: jsonBody("Token name, scope (full|worker) and lifetime in days (0 = never expires)", schemaObj(map[string]any{
 				"name": tString(), "scope": tString(), "expiresInDays": tInteger(),
 			}, "name", "scope")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/api-tokens", s.handleListAPITokens, apiOp{
-			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-0194)", tag: "API tokens",
+			summary: "List API tokens by identity, scope, lifetime and provenance; secrets are not stored and never returned (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
 			resp: jsonBody("API tokens", tArray())}},
 		{"DELETE", "/api/v1/api-tokens/{id}", s.handleRevokeAPIToken, apiOp{
-			summary: "Revoke an API token, effective immediately (admin-only, ADR-0194)", tag: "API tokens",
+			summary: "Revoke an API token, effective immediately (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
 			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/oauth-clients", s.handleRegisterOAuthClient, apiOp{
-			summary: "Register an OAuth client — a hosted application allowed to ask a person for access. The secret is returned once and never again (admin-only, ADR-0200)", tag: "OAuth",
+			summary: "Register an OAuth client — a hosted application allowed to ask a person for access. The secret is returned once and never again (admin-only, ADR-0200)", tag: "OAuth", role: RoleAdmin,
 			req: jsonBody("Client name and the exact redirect URIs it may be sent back to", schemaObj(map[string]any{
 				"name": tString(), "redirectUris": tArray(),
 			}, "name", "redirectUris")),
 			resp: jsonBody("Registered client, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/oauth-clients", s.handleListOAuthClients, apiOp{
-			summary: "List registered OAuth clients; secrets are not stored and never returned (admin-only, ADR-0200)", tag: "OAuth",
+			summary: "List registered OAuth clients; secrets are not stored and never returned (admin-only, ADR-0200)", tag: "OAuth", role: RoleAdmin,
 			resp: jsonBody("OAuth clients", tArray())}},
 		{"DELETE", "/api/v1/oauth-clients/{id}", s.handleDeleteOAuthClient, apiOp{
-			summary: "Remove an OAuth client and revoke every grant approved for it (admin-only, ADR-0200)", tag: "OAuth",
+			summary: "Remove an OAuth client and revoke every grant approved for it (admin-only, ADR-0200)", tag: "OAuth", role: RoleAdmin,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth-grants", s.handleListOAuthGrants, apiOp{
-			summary: "List standing OAuth approvals — your own, or everyone's for an administrator (ADR-0200)", tag: "OAuth",
+			summary: "List standing OAuth approvals — your own, or everyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
 			resp: jsonBody("OAuth grants", tArray())}},
 		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
-			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth",
+			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
-			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth",
+			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth", role: roleAny,
 			resp: jsonBody("Consent context", tObject())}},
 		{"POST", "/api/v1/oauth/authorize", s.handleApprove, apiOp{
-			summary: "Record a person's decision on an authorization request and return where their browser should go next (ADR-0200)", tag: "OAuth",
+			summary: "Record a person's decision on an authorization request and return where their browser should go next (ADR-0200)", tag: "OAuth", role: roleAny,
 			req:  jsonBody("The authorization request, repeated, plus the decision", tObject()),
 			resp: jsonBody("Where to send the browser", tObject())}},
 
 		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
-			summary: "Create a project (deprecated: use POST /api/v1/applications)", tag: "Projects", deprecated: true, req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
+			summary: "Create a project (deprecated: use POST /api/v1/applications)", tag: "Projects", role: RoleModeler, deprecated: true, req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
 		{"GET", "/api/v1/projects", s.handleListProjects, apiOp{
-			summary: "List projects (deprecated: use GET /api/v1/applications)", tag: "Projects", deprecated: true, resp: jsonBody("Projects", tArray())}},
+			summary: "List projects (deprecated: use GET /api/v1/applications)", tag: "Projects", role: roleAny, deprecated: true, resp: jsonBody("Projects", tArray())}},
 		{"PATCH", "/api/v1/projects/{id}", s.handleUpdateProject, apiOp{
-			summary: "Update a project (deprecated: use PATCH /api/v1/applications/{id})", tag: "Projects", deprecated: true,
+			summary: "Update a project (deprecated: use PATCH /api/v1/applications/{id})", tag: "Projects", role: RoleModeler, deprecated: true,
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a project (deprecated: use DELETE /api/v1/applications/{id})", tag: "Projects", deprecated: true, status: http.StatusNoContent}},
+			summary: "Delete a project (deprecated: use DELETE /api/v1/applications/{id})", tag: "Projects", role: RoleModeler, deprecated: true, status: http.StatusNoContent}},
 		{"PUT", "/api/v1/projects/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
-			summary: "Share a project with a user (deprecated: use PUT /api/v1/applications/{id}/members/{userId})", tag: "Projects", deprecated: true,
+			summary: "Share a project with a user (deprecated: use PUT /api/v1/applications/{id}/members/{userId})", tag: "Projects", role: RoleModeler, deprecated: true,
 			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
 			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}/members/{userId}", s.handleRemoveProjectMember, apiOp{
-			summary: "Revoke a user's membership on a project (deprecated: use DELETE /api/v1/applications/{id}/members/{userId})", tag: "Projects", deprecated: true, resp: jsonBody("Updated project", tObject())}},
+			summary: "Revoke a user's membership on a project (deprecated: use DELETE /api/v1/applications/{id}/members/{userId})", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Updated project", tObject())}},
 		{"POST", "/api/v1/projects/{id}/validate", s.handleValidateProject, apiOp{
-			summary: "Validate a project's artifacts (deprecated: use POST /api/v1/applications/{id}/validate)", tag: "Projects", deprecated: true, resp: jsonBody("Validation result", tObject())}},
+			summary: "Validate a project's artifacts (deprecated: use POST /api/v1/applications/{id}/validate)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/projects/{id}/deploy", s.handleDeployProject, apiOp{
-			summary: "Deploy a project's artifacts (deprecated: use POST /api/v1/applications/{id}/deploy)", tag: "Projects", deprecated: true, resp: jsonBody("Deploy result", tObject())}},
+			summary: "Deploy a project's artifacts (deprecated: use POST /api/v1/applications/{id}/deploy)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Deploy result", tObject())}},
 		{"GET", "/api/v1/projects/{id}/audit", s.handleListProjectAudit, apiOp{
-			summary: "A project's access-control history (deprecated: use GET /api/v1/applications/{id}/audit)", tag: "Projects", deprecated: true, resp: jsonBody("Grant audit events", tArray())}},
+			summary: "A project's access-control history (deprecated: use GET /api/v1/applications/{id}/audit)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Grant audit events", tArray())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
-			summary: "Create a DMN reference artifact", tag: "DMN References", req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
+			summary: "Create a DMN reference artifact", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs", s.handleListDmnRefs, apiOp{
-			summary: "List DMN reference artifacts", tag: "DMN References", resp: jsonBody("References", tArray())}},
+			summary: "List DMN reference artifacts", tag: "DMN References", role: RoleModeler, resp: jsonBody("References", tArray())}},
 		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{
-			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
+			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", role: RoleModeler, req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
 		{"DELETE", "/api/v1/dmnrefs/{id}", s.handleDeleteDmnRef, apiOp{
-			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
+			summary: "Delete a DMN reference", tag: "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
-			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
+			summary: "Validate a DMN reference compiles", tag: "DMN References", role: RoleModeler, resp: jsonBody("Validation result", tObject())}},
 		{"GET", "/api/v1/decisions", s.handleListDecisions, apiOp{
-			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", resp: jsonBody("Decisions", tArray())}},
+			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
-			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", resp: jsonBody("Model graph", tObject())}},
+			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
-			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", resp: jsonBody("DMN XML", tObject())}},
+			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
-			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
 		// ADR-0203: configured Workers are the design-time configuration resource;
 		// /api/v1/workers remains the existing runtime/Operations view above.
 		{"GET", "/api/v1/configured-workers", s.handleListConnectors, apiOp{
-			summary: "List configured Workers", tag: "Workers", resp: jsonBody("Configured Workers", tArray())}},
+			summary: "List configured Workers", tag: "Workers", role: roleAny, resp: jsonBody("Configured Workers", tArray())}},
 		{"POST", "/api/v1/configured-workers", s.handleCreateConnector, apiOp{
-			summary: "Create a configured Worker", tag: "Workers", req: jsonBody("Configured Worker", tObject()), resp: jsonBody("Created configured Worker", tObject())}},
+			summary: "Create a configured Worker", tag: "Workers", role: RoleModeler, req: jsonBody("Configured Worker", tObject()), resp: jsonBody("Created configured Worker", tObject())}},
 		{"PATCH", "/api/v1/configured-workers/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a configured Worker (endpoint, provider, sender, credential reference, enabled)", tag: "Workers", req: jsonBody("Configured Worker update", tObject()), resp: jsonBody("Updated configured Worker", tObject())}},
+			summary: "Update a configured Worker (endpoint, provider, sender, credential reference, enabled)", tag: "Workers", role: RoleModeler, req: jsonBody("Configured Worker update", tObject()), resp: jsonBody("Updated configured Worker", tObject())}},
 		{"DELETE", "/api/v1/configured-workers/{id}", s.handleDeleteConnector, apiOp{
-			summary: "Delete a configured Worker; refused while deployed models still reference it unless ?force=true", tag: "Workers", status: http.StatusNoContent}},
+			summary: "Delete a configured Worker; refused while deployed models still reference it unless ?force=true", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/worker-types", s.handleConnectorKinds, apiOp{
-			summary: "List available Worker Types and where this server runs them", tag: "Workers",
+			summary: "List available Worker Types and where this server runs them", tag: "Workers", role: roleAny,
 			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		// Legacy connector names remain compatibility aliases during the ADR-0203
 		// migration. They bind to the same handlers and stores, so no second source
 		// of truth is introduced.
 		{"GET", "/api/v1/connectors", s.handleListConnectors, apiOp{
-			summary: "List managed connector instances (deprecated: use GET /api/v1/configured-workers)", tag: "Connectors", deprecated: true, resp: jsonBody("Connectors", tArray())}},
+			summary: "List managed connector instances (deprecated: use GET /api/v1/configured-workers)", tag: "Connectors", role: roleAny, deprecated: true, resp: jsonBody("Connectors", tArray())}},
 		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
-			summary: "Create a managed connector instance (deprecated: use POST /api/v1/configured-workers)", tag: "Connectors", deprecated: true, req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
+			summary: "Create a managed connector instance (deprecated: use POST /api/v1/configured-workers)", tag: "Connectors", role: RoleModeler, deprecated: true, req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
 		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
-			summary: "Update a managed connector instance (deprecated: use PATCH /api/v1/configured-workers/{id})", tag: "Connectors", deprecated: true, req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Update a managed connector instance (deprecated: use PATCH /api/v1/configured-workers/{id})", tag: "Connectors", role: RoleModeler, deprecated: true, req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
-			summary: "Delete a managed connector instance (deprecated: use DELETE /api/v1/configured-workers/{id})", tag: "Connectors", deprecated: true, status: http.StatusNoContent}},
+			summary: "Delete a managed connector instance (deprecated: use DELETE /api/v1/configured-workers/{id})", tag: "Connectors", role: RoleModeler, deprecated: true, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connector-kinds", s.handleConnectorKinds, apiOp{
-			summary: "List connector kinds (deprecated: use GET /api/v1/worker-types)", tag: "Connectors", deprecated: true,
+			summary: "List connector kinds (deprecated: use GET /api/v1/worker-types)", tag: "Connectors", role: roleAny, deprecated: true,
 			resp: jsonBody("Connector kind placements", schemaObj(map[string]any{"kinds": tArray()}))}},
 
 		{"POST", "/api/v1/connectors/test", s.handleTestConnector, apiOp{
-			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors",
+			summary: "Check a mail connector — connect and authenticate, or send a test message to ?to — without saving it", tag: "Connectors", role: RoleModeler,
 			req: jsonBody("Connector check", tObject()), resp: jsonBody("Check result", tObject())}},
 
 		{"GET", "/api/v1/mail/outbox", s.handleMailOutbox, apiOp{
-			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Connectors", resp: jsonBody("Outbox", tObject())}},
+			summary: "List the messages the preview mail provider delivered, newest first (?limit=)", tag: "Connectors", role: RoleOperator, resp: jsonBody("Outbox", tObject())}},
 		{"POST", "/api/v1/mail/outbox", s.handleDeliverMailOutbox, apiOp{
-			summary: "Deliver a framed message into the preview outbox (used by a mail worker running a preview connector)", tag: "Connectors",
+			summary: "Deliver a framed message into the preview outbox (used by a mail worker running a preview connector)", tag: "Connectors", role: RoleOperator,
 			req: jsonBody("Outbox message", tObject()), status: http.StatusNoContent}},
 		{"DELETE", "/api/v1/mail/outbox", s.handleClearMailOutbox, apiOp{
-			summary: "Empty the preview mail outbox", tag: "Connectors", status: http.StatusNoContent}},
+			summary: "Empty the preview mail outbox", tag: "Connectors", role: RoleOperator, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
-			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", resp: jsonBody("Subscriptions", tArray())}},
+			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
-			summary: "Create an inbound event subscription for a clio connector", tag: "Connectors", req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+			summary: "Create an inbound event subscription for a clio connector", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
 		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
-			summary: "Update an inbound event subscription", tag: "Connectors", req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
+			summary: "Update an inbound event subscription", tag: "Connectors", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
-			summary: "Delete an inbound event subscription", tag: "Connectors", status: http.StatusNoContent}},
+			summary: "Delete an inbound event subscription", tag: "Connectors", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
-			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Share a connector with a user or a group, or change their role (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}/members/{principalId}", s.handleRemoveConnectorMember, apiOp{
-			summary: "Withdraw a user's or a group's access to a connector (ADR-0205); owner only", tag: "Connectors", resp: jsonBody("Updated connector", tObject())}},
+			summary: "Withdraw a user's or a group's access to a connector (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, resp: jsonBody("Updated connector", tObject())}},
 		{"PUT", "/api/v1/connectors/{id}/visibility", s.handleSetConnectorVisibility, apiOp{
-			summary: "Seal a connector again, or open it to its member list (ADR-0205); owner only", tag: "Connectors", req: jsonBody("Visibility", tObject()), resp: jsonBody("Updated connector", tObject())}},
+			summary: "Seal a connector again, or open it to its member list (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, req: jsonBody("Visibility", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"PUT", "/api/v1/connectors/{id}/owner/{userId}", s.handleTransferConnector, apiOp{
-			summary: "Hand a connector to another account (ADR-0205); owner only", tag: "Connectors", resp: jsonBody("Updated connector", tObject())}},
+			summary: "Hand a connector to another account (ADR-0205); owner only", tag: "Connectors", role: RoleModeler, resp: jsonBody("Updated connector", tObject())}},
 		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
-			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
+			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", role: RoleAdmin, req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
 
 		{"GET", "/api/v1/repository/packages", s.handleListRepository, apiOp{
-			summary: "Browse the repository catalog (filter by ?kind and ?q)", tag: "Repository", resp: jsonBody("Catalog packages", tArray())}},
+			summary: "Browse the repository catalog (filter by ?kind and ?q)", tag: "Repository", role: RoleModeler, resp: jsonBody("Catalog packages", tArray())}},
 		{"GET", "/api/v1/repository/packages/{id}", s.handleGetRepositoryPackage, apiOp{
-			summary: "Get one repository package with its element-template payload", tag: "Repository", resp: jsonBody("Package", tObject())}},
+			summary: "Get one repository package with its element-template payload", tag: "Repository", role: RoleModeler, resp: jsonBody("Package", tObject())}},
 		{"POST", "/api/v1/repository/packages/{id}/install", s.handleInstallRepositoryPackage, apiOp{
-			summary: "Install a package's template (script tasks are admin-gated and imported for review)", tag: "Repository", resp: jsonBody("Installed template", tObject())}},
+			summary: "Install a package's template (script tasks are admin-gated and imported for review)", tag: "Repository", role: RoleModeler, resp: jsonBody("Installed template", tObject())}},
 		{"GET", "/api/v1/repository/installed", s.handleListInstalled, apiOp{
-			summary: "List templates installed from the repository", tag: "Repository", resp: jsonBody("Installed templates", tArray())}},
+			summary: "List templates installed from the repository", tag: "Repository", role: RoleModeler, resp: jsonBody("Installed templates", tArray())}},
 		{"DELETE", "/api/v1/repository/installed/{id}", s.handleUninstall, apiOp{
-			summary: "Uninstall a repository template", tag: "Repository", status: http.StatusNoContent}},
+			summary: "Uninstall a repository template", tag: "Repository", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
-			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
+			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", role: RoleAdmin, resp: jsonBody("Secrets", tArray())}},
 		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
-			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
+			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", role: RoleAdmin, req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
 		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
-			summary: "Delete a secret from the encrypted vault", tag: "Secrets", status: http.StatusNoContent}},
+			summary: "Delete a secret from the encrypted vault", tag: "Secrets", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/theme", s.handleGetTheme, apiOp{
-			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System",
+			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System", role: roleAny,
 			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
 		{"PUT", "/api/v1/settings/theme", s.handleSetTheme, apiOp{
-			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0113)", tag: "System",
+			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0113)", tag: "System", role: RoleAdmin,
 			req:  jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}, "accent")),
 			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
 		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
-			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
+			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/logo", s.handleGetLogo, apiOp{
-			summary: "Get the org-wide brand logo image; 404 when none is set (public; shown before login) (ADR-0148)", tag: "System",
+			summary: "Get the org-wide brand logo image; 404 when none is set (public; shown before login) (ADR-0148)", tag: "System", role: roleAny,
 			resp: &bodySpec{mediaType: "image/png", desc: "Brand logo image (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"PUT", "/api/v1/settings/logo", s.handleSetLogo, apiOp{
-			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent,
+			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG logo bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
-			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", status: http.StatusNoContent}},
+			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
-			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings",
+			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings", role: roleAny,
 			resp: jsonBody("ADMock", tObject())}},
 		{"PUT", "/api/v1/settings/ad-mock", s.handleSetADMock, apiOp{
-			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings",
+			summary: "Turn the Active Directory mockup on or off. Admin-gated; the supervised AD worker is restarted holding the new setting, so no server restart is needed", tag: "Settings", role: RoleAdmin,
 			req:  jsonBody("ADMockRequest", tObject()),
 			resp: jsonBody("ADMock", tObject())}},
 		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
-			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System",
+			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System", role: roleAny,
 			resp: jsonBody("Registration config", schemaObj(map[string]any{
 				"enabled": tBool(), "processId": tString(), "url": tString(),
 			}))}},
 		{"PUT", "/api/v1/settings/registration", s.handleSetRegistration, apiOp{
-			summary: "Configure the self-service registration process and mint its public link; empty processId disables it (admin-only when auth is on) (ADR-0126)", tag: "System",
+			summary: "Configure the self-service registration process and mint its public link; empty processId disables it (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin,
 			req: jsonBody("Registration process", schemaObj(map[string]any{"processId": tString()})),
 			resp: jsonBody("Registration config", schemaObj(map[string]any{
 				"enabled": tBool(), "processId": tString(), "url": tString(),
 			}))}},
 		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
-			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", status: http.StatusNoContent}},
+			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
-			summary: "Log in with a username and password", tag: "Auth",
+			summary: "Log in with a username and password", tag: "Auth", role: roleAny,
 			req: jsonBody("Credentials", schemaObj(map[string]any{
 				"username": tString(), "password": tString(),
 			}, "username", "password")),
 			resp: jsonBody("Authenticated user", tObject())}},
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
-			summary: "Log out the current session", tag: "Auth", resp: jsonBody("Logout result", tObject())}},
+			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
 		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
-			summary: "Report auth status and the current user", tag: "Auth",
+			summary: "Report auth status and the current user", tag: "Auth", role: roleAny,
 			resp: jsonBody("Auth status", schemaObj(map[string]any{
 				"authEnabled": tBool(), "user": tObject(),
 			}))}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
-			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},
+			summary: "List user accounts", tag: "Users", role: RoleAdmin, resp: jsonBody("Users", tArray())}},
 		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
-			summary: "List users a task can be assigned to", tag: "Users", resp: jsonBody("Assignable users", tArray())}},
+			summary: "List users a task can be assigned to", tag: "Users", role: roleAny, resp: jsonBody("Assignable users", tArray())}},
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{
-			summary: "List principals (users; groups later) for member and assignee pickers — id-referenced, any authenticated caller (ADR-0073)", tag: "Users", resp: jsonBody("Principals", tArray())}},
+			summary: "List principals (users; groups later) for member and assignee pickers — id-referenced, any authenticated caller (ADR-0073)", tag: "Users", role: roleAny, resp: jsonBody("Principals", tArray())}},
 		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
-			summary: "Create a user account", tag: "Users", status: http.StatusCreated,
+			summary: "Create a user account", tag: "Users", role: RoleAdmin, status: http.StatusCreated,
 			req: jsonBody("New user", schemaObj(map[string]any{
 				"username": tString(), "email": tString(), "displayName": tString(),
 				"password": tString(), "roles": map[string]any{"type": "array", "items": tString()},
 			}, "username", "password")),
 			resp: jsonBody("Created user", tObject())}},
 		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
-			summary: "Fetch a user account", tag: "Users", resp: jsonBody("User", tObject())}},
+			summary: "Fetch a user account", tag: "Users", role: RoleAdmin, resp: jsonBody("User", tObject())}},
 		{"PATCH", "/api/v1/users/{id}", s.handlePatchUser, apiOp{
-			summary: "Update a user account", tag: "Users",
+			summary: "Update a user account", tag: "Users", role: RoleAdmin,
 			req: jsonBody("User changes", schemaObj(map[string]any{
 				"email": tString(), "displayName": tString(),
 				"roles": map[string]any{"type": "array", "items": tString()}, "disabled": tBool(),
 			})),
 			resp: jsonBody("Updated user", tObject())}},
 		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
-			summary: "Set a user's password", tag: "Users",
+			summary: "Set a user's password", tag: "Users", role: RoleAdmin,
 			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
 			resp: jsonBody("User id", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
-			summary: "Delete a user account", tag: "Users", status: http.StatusNoContent}},
+			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/groups", s.handleListGroups, apiOp{
-			summary: "List user groups (admin)", tag: "Groups", resp: jsonBody("Groups", tArray())}},
+			summary: "List user groups (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Groups", tArray())}},
 		{"POST", "/api/v1/groups", s.handleCreateGroup, apiOp{
-			summary: "Create a user group (admin)", tag: "Groups", status: http.StatusCreated,
+			summary: "Create a user group (admin)", tag: "Groups", role: RoleAdmin, status: http.StatusCreated,
 			req:  jsonBody("New group", schemaObj(map[string]any{"name": tString()}, "name")),
 			resp: jsonBody("Created group", tObject())}},
 		{"PATCH", "/api/v1/groups/{id}", s.handleRenameGroup, apiOp{
-			summary: "Rename a user group (admin)", tag: "Groups",
+			summary: "Rename a user group (admin)", tag: "Groups", role: RoleAdmin,
 			req:  jsonBody("Group changes", schemaObj(map[string]any{"name": tString()}, "name")),
 			resp: jsonBody("Updated group", tObject())}},
 		{"DELETE", "/api/v1/groups/{id}", s.handleDeleteGroup, apiOp{
-			summary: "Delete a user group (admin)", tag: "Groups", status: http.StatusNoContent}},
+			summary: "Delete a user group (admin)", tag: "Groups", role: RoleAdmin, status: http.StatusNoContent}},
 		{"PUT", "/api/v1/groups/{id}/members/{userId}", s.handleAddGroupMember, apiOp{
-			summary: "Add a user to a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
+			summary: "Add a user to a group (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Updated group", tObject())}},
 		{"DELETE", "/api/v1/groups/{id}/members/{userId}", s.handleRemoveGroupMember, apiOp{
-			summary: "Remove a user from a group (admin)", tag: "Groups", resp: jsonBody("Updated group", tObject())}},
+			summary: "Remove a user from a group (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Updated group", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
-			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", resp: jsonBody("Grant audit events", tArray())}},
+			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},
 	}
 }
 
@@ -859,6 +873,13 @@ func operationDoc(r apiRoute) map[string]any {
 	}
 	if r.op.deprecated {
 		op["deprecated"] = true
+	}
+	// Who may call it, in the document that describes it. A client author reading
+	// the explorer would otherwise learn the answer from a 403 in production, and
+	// the answer already lives one field away in the same table
+	// (ADR-draft-roles-per-endpoint-group).
+	if r.op.role != roleAny {
+		op["description"] = "Requires the `" + r.op.role + "` role when authentication is on."
 	}
 	if params := pathParams(r.pattern); len(params) > 0 {
 		op["parameters"] = params

@@ -778,9 +778,6 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 // Admin-gated, and the mint (a network call) runs off the run loop (I3); only the
 // connector read and the vault write ride s.do.
 func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	if s.vault == nil {
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return

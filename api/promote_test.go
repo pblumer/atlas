@@ -338,8 +338,10 @@ func TestTargetManagementIsAdminOnly(t *testing.T) {
 	if code := login(t, admin, ts, "admin", "password1"); code != http.StatusOK {
 		t.Fatalf("admin login = %d", code)
 	}
+	// A modeller, not an administrator: promoting a release is an authoring act, and
+	// this test is about the two management calls that are not.
 	if code, body := cReq(t, admin, ts, http.MethodPost, "/api/v1/users",
-		`{"username":"eve","password":"password2","roles":[]}`); code != http.StatusCreated {
+		`{"username":"eve","password":"password2","roles":["modeler"]}`); code != http.StatusCreated {
 		t.Fatalf("create user = %d body=%s", code, body)
 	}
 	eve := newClient(t)

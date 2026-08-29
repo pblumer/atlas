@@ -232,6 +232,46 @@ printf '%s' 'a-strong-password' | sudo -u atlas atlas reset-password \
   --data-dir /var/lib/atlas --password-stdin admin
 ```
 
+### Roles: who may do what
+
+Being signed in is one question; what that account may do is another. Every
+endpoint names the role it needs, and the server checks it before the request
+reaches anything — for a browser session, an API token, a deploy token, an OAuth
+grant and every MCP tool call alike.
+
+| Role | May |
+|---|---|
+| `admin` | everything, including accounts, credentials, secrets, settings, backup and restore |
+| `modeler` | author drafts, forms and decisions — and **deploy** them |
+| `operator` | start, cancel, terminate and repair instances; read runtime data |
+| `user` | work on tasks and read what they are given |
+
+An account carries **several** roles, not one: they are a list, not a ladder, so a
+modeller who also starts test instances holds `modeler` *and* `operator`. An
+administrator reaches everything.
+
+A few runtime operations stay with `admin` because they were admin-only before and
+this release takes nothing away from anybody: rewriting a running instance's
+variables, migrating instances onto another version, and reading a worker's job
+history.
+
+Grant them in the Console under **Organization → Users**, where each role is listed
+with what it lets the person do. The navigation then offers only the apps and
+screens that person can actually use.
+
+Two things to know when you upgrade an installation that predates this:
+
+- **Every existing account keeps what it could do** — `modeler`, `operator` and
+  `user`, so everything except administration. Nothing stops working, and nothing is
+  narrower than it was until you narrow it. The startup log says how many accounts
+  were carried over (`event=auth.roles_upgraded`).
+- **What you narrow, stays narrow.** The carry-over runs once per account, so an
+  account you set back to `user` is still `user` after the next restart.
+
+New accounts get `user`. An API token carries the roles of the account that minted
+it and is **never** an administrator, whoever mints it. With `--auth=false` there is
+no account and none of this is enforced.
+
 ### 7. Back up the vault key
 
 With the vault enabled (the default), the first start generates a master key at

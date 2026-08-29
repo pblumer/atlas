@@ -65,7 +65,11 @@ Der Antragsteller wählt seine **Rolle bewusst nicht selbst** — das Start-Form
 kennt kein Rollen-Feld. So ist derselbe Prozess auch als **öffentliches
 Registrierungs-Formular** tragfähig: die Login-Seite zeigt einen
 „Registrieren"-Link auf die öffentliche Start-URL dieses Prozesses (ADR-0029 /
-ADR-0126). Der Admin vergibt die Rolle erst bei der Freigabe.
+ADR-0126). Der Admin vergibt die Rolle erst bei der Freigabe — zur Auswahl stehen
+die vier Rollen, die Atlas durchsetzt: `user` (Aufgaben), `modeler` (modellieren
+und deployen), `operator` (Instanzen betreiben) und `admin`. Das Feld trägt eine
+kommagetrennte Liste, weil ein Konto mehrere Rollen hält; `modeler,user` ist
+deshalb ein einziger Wert und keine Ausnahme.
 
 ### 2. Zugriffs-Review — `proc_benutzer_review`
 ```

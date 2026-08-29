@@ -131,14 +131,17 @@ func TestPrincipalForAndWithAuthMiddleware(t *testing.T) {
 	h := s.withAuth(policy, next)
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/users", nil))
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/auth/me", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no-cookie protected request: got %d, want 401", rec.Code)
 	}
 
-	// With a valid cookie the principal is resolved and passed through.
+	// With a valid cookie the principal is resolved and passed through. The route is
+	// one every signed-in identity reaches, because what is under test here is the
+	// principal arriving at the handler, not which role it holds — that is
+	// routeroles_test.go's question.
 	rec = httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/v1/users", nil)
+	req := httptest.NewRequest("GET", "/api/v1/auth/me", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: tok})
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

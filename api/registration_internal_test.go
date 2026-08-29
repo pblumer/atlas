@@ -88,21 +88,15 @@ func TestRegistrationReadIsPublic(t *testing.T) {
 
 // TestRegistrationWritesRequireAdmin: with auth enabled, PUT and DELETE demand the
 // admin role. The gate runs before any store access, so a bare Server suffices.
+// The read is public — the login screen shows the "Registrieren" link before
+// anybody is anybody — and the writes are an administrator's. Asserted at the
+// boundary, where the role is decided now (routeroles.go).
 func TestRegistrationWritesRequireAdmin(t *testing.T) {
-	s := &Server{authEnabled: true}
-	for _, tc := range []struct {
-		name string
-		fn   func(http.ResponseWriter, *http.Request)
-		meth string
-	}{
-		{"set", s.handleSetRegistration, http.MethodPut},
-		{"delete", s.handleDeleteRegistration, http.MethodDelete},
-	} {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.meth, "/api/v1/settings/registration", nil)
-		tc.fn(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s registration without an admin principal: status=%d, want 403", tc.name, rec.Code)
+	ordinary := []string{RoleModeler, RoleOperator, RoleUser}
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		got := boundaryStatus(t, ordinary, method, "/api/v1/settings/registration")
+		if got != http.StatusForbidden {
+			t.Errorf("%s registration without an admin principal: status=%d, want 403", method, got)
 		}
 	}
 }

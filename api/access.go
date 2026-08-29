@@ -115,15 +115,22 @@ type accessPolicy struct {
 	// exactly where an allowlist springs a leak.
 	served *http.ServeMux
 	class  map[string]accessClass
+
+	// role is the second half of the same declaration: which role the route needs
+	// once a principal is known (routeroles.go). It is resolved the same way and for
+	// the same reason — one mux decides precedence — and an undeclared pattern gets
+	// the empty string, which is a role nobody holds.
+	role map[string]string
 }
 
 func newAccessPolicy(served *http.ServeMux) *accessPolicy {
-	return &accessPolicy{served: served, class: map[string]accessClass{}}
+	return &accessPolicy{served: served, class: map[string]accessClass{}, role: map[string]string{}}
 }
 
-// declare records the class of a mounted pattern.
-func (p *accessPolicy) declare(pattern string, class accessClass) {
+// declare records the class and the required role of a mounted pattern.
+func (p *accessPolicy) declare(pattern string, class accessClass, role string) {
 	p.class[pattern] = class
+	p.role[pattern] = role
 }
 
 // classify returns the class of the route that will serve r.
@@ -135,6 +142,26 @@ func (p *accessPolicy) declare(pattern string, class accessClass) {
 func (p *accessPolicy) classify(r *http.Request) accessClass {
 	_, pattern := p.served.Handler(r)
 	return p.class[pattern]
+}
+
+// requiredRole returns the role the route that will serve r names.
+//
+// An unmatched or undeclared pattern yields the empty string, which mayReach
+// refuses: not knowing means nobody, the same direction classify falls in.
+func (p *accessPolicy) requiredRole(r *http.Request) string {
+	_, pattern := p.served.Handler(r)
+	return p.role[pattern]
+}
+
+// declaredRoles returns the role of every mounted pattern. It exists for the
+// inventory test, which reads it rather than the route table so that routes
+// mounted outside the table — /mcp, /metrics, the share links — are covered too.
+func (p *accessPolicy) declaredRoles() map[string]string {
+	out := make(map[string]string, len(p.role))
+	for pattern, role := range p.role {
+		out[pattern] = role
+	}
+	return out
 }
 
 // declaredPatterns returns every pattern that was mounted, sorted. A scope's

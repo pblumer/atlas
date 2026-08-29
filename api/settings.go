@@ -80,9 +80,6 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, _ *http.Request) {
 // handleSetTheme stores the org-wide brand accent. Admin-gated: it changes what
 // every user of the instance sees.
 func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -113,9 +110,6 @@ func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
 // handleDeleteTheme clears the org-wide theme, restoring the built-in default.
 // Admin-gated.
 func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var clearErr error
 	s.do(func() { clearErr = s.settings.clearTheme() })
 	if clearErr != nil {
@@ -195,9 +189,6 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 // the raw request body; its format comes from the Content-Type header and is
 // re-validated against the bytes before anything is persisted.
 func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	ct := normalizeLogoType(r.Header.Get("Content-Type"))
 	if _, ok := logoExtByType[ct]; !ok {
 		httpapi.Error(w, http.StatusUnsupportedMediaType, "logo must be uploaded as image/png or image/svg+xml")
@@ -234,9 +225,6 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 // handleDeleteLogo clears the org-wide logo, restoring the built-in letter mark.
 // Admin-gated.
 func (s *Server) handleDeleteLogo(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var clearErr error
 	s.do(func() { clearErr = s.settings.clearLogo() })
 	if clearErr != nil {
@@ -352,9 +340,6 @@ func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
 // registration off. 400 if the named process is not a publishable public form, so
 // an operator gets immediate feedback rather than a silently dead link.
 func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
@@ -403,9 +388,6 @@ func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
 // removing the file, so the "off" choice sticks instead of reverting to the
 // built-in default on the next read.
 func (s *Server) handleDeleteRegistration(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var saveErr error
 	s.do(func() { saveErr = s.settings.saveRegistration(registrationSetting{ProcessID: ""}) })
 	if saveErr != nil {
@@ -483,9 +465,6 @@ func adSeedFormat(seed string) string {
 // rather than being left holding the old one — which is the whole point of putting
 // the switch here instead of on the command line.
 func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	// Its own limit, and a MaxBytesReader rather than a LimitReader. The theme's 4 KB
 	// is the size of a colour; this body carries a directory. Truncating one silently
 	// at 4 KB — which is what a LimitReader does — would have surfaced as "invalid JSON

@@ -45,9 +45,6 @@ func toGroupView(g group) groupView {
 
 // handleListGroups lists every group (admin-only). Oldest first.
 func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	list := []groupView{}
 	var loadErr error
 	s.do(func() {
@@ -70,9 +67,6 @@ func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 // name must be non-empty and unique (case-insensitive). Members are added
 // afterward via the member endpoints.
 func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	var payload struct {
 		Name string `json:"name"`
 	}
@@ -120,9 +114,6 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 // handleRenameGroup renames a group (admin-only). Body: {"name":"..."}. The new
 // name must be non-empty and unique (ignoring the group's own current name).
 func (s *Server) handleRenameGroup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var payload struct {
 		Name string `json:"name"`
@@ -185,9 +176,6 @@ func (s *Server) handleRenameGroup(w http.ResponseWriter, r *http.Request) {
 // every live session, so its grants stop applying for everyone at once without a
 // re-login (ADR-0185).
 func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	var delErr error
 	s.do(func() { delErr = s.groups.Delete(id) })
@@ -207,9 +195,6 @@ func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 // re-login, and a user not signed in snapshots it at their next login
 // (ADR-0185).
 func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	userID := r.PathValue("userId")
 	var (
@@ -268,9 +253,6 @@ func (s *Server) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 // live sessions, so access is gone on their next request without a re-login
 // (ADR-0185).
 func (s *Server) handleRemoveGroupMember(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	id := r.PathValue("id")
 	userID := r.PathValue("userId")
 	var (

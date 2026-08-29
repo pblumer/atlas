@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "not-every-account-may-deploy-any-more",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Accounts now have roles, and not every account may deploy",
+        "de": "Konten haben jetzt Rollen — und nicht jedes Konto darf deployen"
+      },
+      "summary": {
+        "en": "Until now, being signed in was the whole answer: any account could deploy a model, cancel somebody's instances or run a script. Deploying is code execution, so that was the wrong default for anything but a workshop. Every endpoint now names the role it needs — admin, modeler, operator or user — and the server checks it before the request reaches anything, whether it arrives from a browser, an API token or an AI assistant over MCP. An account carries several roles; they are a list, not a ladder. Your upgrade takes nothing away: every existing account keeps modeler, operator and user, so everything except administration, and what you narrow afterwards stays narrow. New accounts get user. Grant the roles under Organization, where each one says what it lets the person do.",
+        "de": "Bisher war «angemeldet» die ganze Antwort: Jedes Konto konnte ein Modell deployen, fremde Instanzen abbrechen oder ein Skript ausführen. Deployen ist Codeausführung — für alles ausser einem Workshop war das die falsche Vorgabe. Jetzt nennt jeder Endpunkt die Rolle, die er verlangt — admin, modeler, operator oder user —, und der Server prüft sie, bevor die Anfrage irgendetwas erreicht: aus dem Browser, mit einem API-Token oder über MCP von einem KI-Assistenten. Ein Konto trägt mehrere Rollen; sie sind eine Liste, keine Rangfolge. Die Aktualisierung nimmt nichts weg: Jedes bestehende Konto behält modeler, operator und user — also alles ausser der Administration —, und was Sie danach enger stellen, bleibt eng. Neue Konten bekommen user. Vergeben werden die Rollen unter «Organization»; dort steht bei jeder, was sie erlaubt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organization öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "an-inbound-connector-s-events-reach-only-the-processes-you-a",
       "version": "Unreleased",
       "date": null,
@@ -268,28 +297,6 @@
       },
       "tags": [
         "Security"
-      ]
-    },
-    {
-      "id": "mcp-is-behind-the-login-and-acts-as-its-caller",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "The MCP connection needs a login — and acts as its caller",
-        "de": "Der MCP-Zugang verlangt eine Anmeldung — und handelt als sein Aufrufer"
-      },
-      "summary": {
-        "en": "Atlas offers its features to AI assistants over MCP, and that connection sat outside the login: it was mounted beside the API server, so the check never saw it, while the adapter attached the server's own internal credential to everything it did. `--auth` therefore did not close it — it supplied it. Anything that could reach the port drove all 71 tools as the server itself, deploying among them, and deploying runs script tasks. It is now mounted by the API server and gated like every other route. It also carries no identity of its own any more: it forwards whatever the request arrived with, so a tool call is exactly as privileged as the person or token that made it, is attributed to them, and inherits every rule the API has — an administrator reaches an admin-only tool, a signed-in ordinary user does not, and a deploy token is refused outright. Breaking on a server with a login: an MCP client must now send the session cookie or a bearer token.",
-        "de": "Atlas bietet seine Funktionen KI-Assistenten über MCP an — und dieser Zugang lag ausserhalb der Anmeldung: Er hing neben dem API-Server, sodass die Prüfung ihn nie zu sehen bekam, während der Adapter allem, was er tat, die interne Kennung des Servers mitgab. `--auth` schloss ihn also nicht, sondern versorgte ihn. Wer den Port erreichte, bediente alle 71 Werkzeuge als der Server selbst, das Deployen eingeschlossen — und Deployen führt Skript-Aufgaben aus. Der Zugang wird jetzt vom API-Server selbst bereitgestellt und wie jede andere Route geschützt. Und er bringt keine eigene Identität mehr mit: Er reicht weiter, womit die Anfrage angekommen ist. Ein Werkzeugaufruf hat damit genau die Rechte dessen, der ihn ausgelöst hat, wird ihm zugeschrieben und erbt jede Regel der API — ein Administrator erreicht ein Administrator-Werkzeug, ein angemeldeter gewöhnlicher Benutzer nicht, und ein Deploy-Token wird rundheraus abgewiesen. Auf einem Server mit Anmeldung brechend: Ein MCP-Client muss jetzt das Sitzungs-Cookie oder ein Bearer-Token mitschicken."
-      },
-      "link": {
-        "label": "ADR-0049",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0049-internal-service-auth-for-mcp.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
       ]
     }
   ]

@@ -40,9 +40,6 @@ type runScriptResp struct {
 // surface, ADR-0047). A run error (non-zero exit, timeout, bad output) is reported
 // faithfully as ok:false with the message, not an HTTP error.
 func (s *Server) handleRunScript(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxScriptBytes))
 	dec.UseNumber() // keep numbers exact for the interpreter
 	var req runScriptReq

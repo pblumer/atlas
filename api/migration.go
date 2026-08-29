@@ -221,9 +221,6 @@ func readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequ
 // two graphs an operator cannot diff by eye, and "which of my elements would be
 // stranded" is the question they actually have (ADR-0162).
 func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
@@ -254,9 +251,6 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 // problem — so a rejection is as informative as a dry run, and an operator never has to
 // ask twice to find out why.
 func (s *Server) handleMigrateInstance(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
@@ -340,9 +334,6 @@ type migrateBatchResp struct {
 // that were fine (ADR-0162) — the batch is an API convenience, never one durable
 // transaction. The caller repeats while `remaining` is true, as the bulk cancel does.
 func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
 	fromKey, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
