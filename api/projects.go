@@ -13,8 +13,9 @@ import (
 )
 
 // projectView is the JSON shape of a project for the Modeler. Artifacts is the
-// number of artifacts (BPMN drafts + DMN references) currently tagged with this
-// project. OwnerID, Visibility, and Members are the ADR-0071 sharing scope;
+// number of design-time artifacts currently tagged with this project, including
+// Panorama architecture models. OwnerID, Visibility, and Members are the
+// ADR-0071 sharing scope;
 // MyRole is the caller's own effective role, so the UI can gate its sharing
 // controls (hide "Share" from a viewer, "Delete" from a non-owner, …) without
 // re-deriving the rule client-side.
@@ -153,6 +154,14 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 			if rec.ProjectID != "" {
 				counts[rec.ProjectID]++
 			}
+		}
+		panoramaCounts, err := s.panorama.CountsByApplicationOnLoop()
+		if err != nil {
+			loadErr = err
+			return
+		}
+		for applicationID, count := range panoramaCounts {
+			counts[applicationID] += count
 		}
 		for _, p := range projs {
 			if scopeRank(p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)) == 0 {
@@ -323,11 +332,12 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
-		notFound  bool
-		forbidden int
-		fmsg      string
-		getErr    error
-		delErr    error
+		notFound        bool
+		panoramaBlocked bool
+		forbidden       int
+		fmsg            string
+		getErr          error
+		delErr          error
 	)
 	s.do(func() {
 		rec, ok, e := s.projects.Get(id)
@@ -345,6 +355,19 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if code, msg := protectedGuard(rec); code != 0 {
 			forbidden, fmsg = code, msg
+			return
+		}
+		// Panorama models have strict application ownership (ADR-0189), unlike the
+		// older artifacts that can degrade to Not assigned. Refuse to orphan them;
+		// the user can export/delete them first, and a later move operation can make
+		// this guard a choice of destination instead.
+		panoramaCount, err := s.panorama.CountForApplicationOnLoop(id)
+		if err != nil {
+			delErr = err
+			return
+		}
+		if panoramaCount > 0 {
+			panoramaBlocked = true
 			return
 		}
 		// Drop the application's release history *before* the application itself
@@ -378,6 +401,8 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read project: "+getErr.Error())
 	case forbidden != 0:
 		httpapi.Error(w, forbidden, fmsg)
+	case panoramaBlocked:
+		httpapi.Error(w, http.StatusConflict, "application contains Panorama models; delete them before deleting the application")
 	case delErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
 	case notFound:
@@ -387,9 +412,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// countArtifactsInProject counts the artifacts (BPMN drafts + DMN references)
-// tagged with a project id. It must be called on the run-loop goroutine (inside
-// do).
+// countArtifactsInProject counts the design-time artifacts tagged with a project
+// id, including Panorama models. It must be called on the run-loop goroutine
+// (inside do).
 func (s *Server) countArtifactsInProject(id string) (int, error) {
 	drafts, err := s.drafts.LoadAll()
 	if err != nil {
@@ -410,5 +435,10 @@ func (s *Server) countArtifactsInProject(id string) (int, error) {
 			n++
 		}
 	}
+	panoramaCount, err := s.panorama.CountForApplicationOnLoop(id)
+	if err != nil {
+		return 0, err
+	}
+	n += panoramaCount
 	return n, nil
 }

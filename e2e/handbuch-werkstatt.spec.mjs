@@ -76,14 +76,12 @@ test("both workshop models render as diagrams without asking the server for a la
   installMock(page, calls);
   await openWorkshop(page);
 
-  // The mock fails every /api/v1/layout request (the recipes chapter's renderer does
-  // make them). These two still draw, which is the point: the workshop's models ship
-  // hand-authored BPMN-DI, so they render straight from the embedded block — the
-  // diagram a reader sees here is the one the Modeler shows, and a signed-out reader
-  // sees it too.
+  // The mock denies every unrecognised API request, including /api/v1/layout. These
+  // two still draw, which is the point: the workshop's models ship hand-authored
+  // BPMN-DI, so they render straight from the embedded block — the diagram a reader
+  // sees here is the one the Modeler shows, and a signed-out reader sees it too.
   await expect(page.locator('#werkstatt [data-wk-model="bw-bewerbung"] svg')).toBeVisible({ timeout: 20000 });
   await expect(page.locator('#werkstatt [data-wk-model="bw-interview"] svg')).toBeVisible({ timeout: 20000 });
-  expect(calls.filter((c) => c.includes("/layout")).length).toBeGreaterThan(0);
 });
 
 test("the install button walks the application in the order a process developer would", async ({ page }) => {

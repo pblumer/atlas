@@ -29,9 +29,8 @@ test("a task worker is offered Tasks and the Console, not the Modeler", async ({
   stubAPI(page, { username: "tina", roles: ["user"] });
   await boot(page);
 
-  // Panorama is a "soon" placeholder with nothing behind it, so it is offered to
-  // everyone; its label carries the badge's text.
-  await expect(drawer(page)).toHaveText(["Console", "Tasks", "Panoramasoon"]);
+  // Panorama is an authoring workspace, so it follows the Modeler's product role.
+  await expect(drawer(page)).toHaveText(["Console", "Tasks"]);
   // And inside the Console, the administrator's screens are not offered either.
   const names = await topnav(page).allTextContents();
   expect(names).toContain("Dashboard");
@@ -43,15 +42,14 @@ test("a modeller who also operates is offered both", async ({ page }) => {
   stubAPI(page, { username: "mona", roles: ["modeler", "operator", "user"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Operations", "Panoramasoon"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Operations", "Panorama"]);
 });
 
 test("an administrator is offered everything, Organization included", async ({ page }) => {
   stubAPI(page, { username: "root", roles: ["admin"] });
   await boot(page);
 
-  // Panorama is in the list as "soon", so an administrator sees all five entries.
-  await expect(drawer(page)).toHaveCount(5);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Operations", "Panorama"]);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 

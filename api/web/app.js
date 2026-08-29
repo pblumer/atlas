@@ -440,7 +440,7 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama", on: false, role: "any" },
+  { id: "panorama", name: "Panorama", route: "#/panorama", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -470,7 +470,8 @@ const TOPNAV = {
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
-  ], panorama: [],
+  ],
+  panorama: [{ name: "Models", route: "#/panorama", role: "modeler" }],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -2660,7 +2661,7 @@ async function renameProject(id, current, reload) {
 }
 
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete application "${name}"? Its artifacts are kept and become Not assigned.`)) return;
+  if (!window.confirm(`Delete application "${name}"? BPMN, DMN, and form artifacts are kept and become Not assigned. Panorama models must be deleted first.`)) return;
   try {
     await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
     toast(`Deleted application "${name}"`, "ok");
@@ -6233,6 +6234,163 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
+// Panorama P1 is deliberately a model library, not a pretend ArchiMate editor:
+// it imports, validates, preserves and exports the canonical Open Exchange XML.
+// The diagram-js canvas arrives in P2 once its renderer and semantic rules can
+// show the document without discarding unsupported standard content (ADR-0189).
+async function viewPanoramaModels() {
+  view.innerHTML = `<p class="muted">Loading architecture models…</p>`;
+
+  let models, applications;
+  try {
+    [models, applications] = await Promise.all([
+      api("GET", "/api/v1/panorama/models"),
+      api("GET", "/api/v1/applications"),
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Panorama</h1><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const byApplication = new Map(applications.map((app) => [app.id, app]));
+  const writable = applications.filter((app) => !app.protected && roleRank(app.myRole) >= 2);
+  const canEdit = (model) => {
+    const app = byApplication.get(model.applicationId);
+    return !!app && !app.protected && roleRank(app.myRole) >= 2;
+  };
+
+  const row = (model) => {
+    const app = byApplication.get(model.applicationId);
+    const editable = canEdit(model);
+    const actions = [
+      { label: "Export XML", icon: "↓", href: `/api/v1/panorama/models/${encodeURIComponent(model.id)}/xml` },
+    ];
+    if (editable) actions.push(
+      { label: "Rename", icon: "✎", act: "rename-panorama", data: { id: model.id } },
+      { sep: true },
+      { label: "Delete", icon: "🗑", act: "delete-panorama", data: { id: model.id }, danger: true },
+    );
+    return `<tr data-name="${esc(`${model.name} ${app ? app.name : ""}`.toLowerCase())}">
+      <td><div class="artifact-name"><span class="chip">ARCHI</span>
+        <a href="/api/v1/panorama/models/${encodeURIComponent(model.id)}/xml"><b>${esc(model.name)}</b></a></div>
+        <div class="muted" style="font-size:12px; padding-left:54px">${esc(model.id)}</div></td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td><span class="chip">ArchiMate 3.2</span></td>
+      <td class="muted">r${model.revision}</td>
+      <td class="muted" data-sort="${model.updatedAt || 0}">${esc(fmtTime(model.updatedAt))}</td>
+      <td class="row-actions">${dropdown("⋯", "icon-btn", actions)}</td>
+    </tr>`;
+  };
+
+  view.innerHTML = `<div id="panorama-root">
+    <div class="between">
+      <div>
+        <h1>Architecture models</h1>
+        <p class="muted" style="margin:0">ArchiMate 3.2 models stored as interoperable Open Exchange XML.</p>
+      </div>
+      ${writable.length ? dropdown("Create new", "btn", [
+        { label: "Blank ArchiMate model", icon: "◇", act: "new-panorama" },
+        { label: "Import Open Exchange XML…", icon: "📥", act: "import-panorama" },
+      ]) : ""}
+    </div>
+    ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
+      <h2>Create an application first</h2>
+      <p>Every architecture model belongs to a Process Application and inherits its sharing permissions.</p>
+      <a class="btn ghost" href="#/modeler">Open Modeler</a>
+    </div>`}
+    <div class="card" style="padding:0; margin-top:16px">
+      <table data-dt-key="panorama-models">
+        <thead><tr><th>Model</th><th>Application</th><th>Notation</th><th>Revision</th><th>Last changed</th><th></th></tr></thead>
+        <tbody>${models.map(row).join("") || `<tr><td colspan="6" class="empty">${writable.length
+          ? "No architecture models yet — create a blank model or import Open Exchange XML."
+          : "No architecture models are visible to you."}</td></tr>`}</tbody>
+      </table>
+    </div>
+  </div>`;
+
+  const panoramaRoot = document.getElementById("panorama-root");
+
+  const chooseApplication = () => {
+    if (!writable.length) return null;
+    if (writable.length === 1) return writable[0];
+    const choices = writable.map((app, i) => `${i + 1}) ${app.name}`).join("\n");
+    const answer = window.prompt(`Store the architecture model in which application?\n\n${choices}\n\nEnter a number:`, "1");
+    if (answer == null) return null;
+    const selected = writable[Number(answer) - 1];
+    if (!selected) toast("No such application", "err");
+    return selected || null;
+  };
+
+  const saveImported = async (xml, suggestedName) => {
+    const validation = await api("POST", "/api/v1/panorama/validate", xml, true);
+    if (!validation.valid) {
+      const first = validation.problems && validation.problems[0];
+      throw new Error(first ? first.message : "The document is not valid ArchiMate Open Exchange XML");
+    }
+    const app = chooseApplication();
+    if (!app) return;
+    const name = window.prompt("Model name:", validation.name || suggestedName || "Architecture model");
+    if (name == null || !name.trim()) return;
+    await api("POST", "/api/v1/panorama/models", {
+      applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+    });
+    toast(`${name.trim()} imported`, "ok");
+    return route();
+  };
+
+  onMenuAction(panoramaRoot, async (act, button) => {
+    try {
+      if (act === "import-panorama") {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".xml,.archimate,application/xml,text/xml";
+        input.addEventListener("change", async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          try { await saveImported(await file.text(), file.name.replace(/\.(archimate\.)?xml$/i, "")); }
+          catch (e) { toast(e.message, "err"); }
+        });
+        input.click();
+      }
+      if (act === "new-panorama") {
+        const app = chooseApplication();
+        if (!app) return;
+        const name = window.prompt("Model name:", "Application landscape");
+        if (name == null || !name.trim()) return;
+        const identifier = `model-${globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : Date.now()}`;
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+          `<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="${identifier}">\n` +
+          `  <name xml:lang="en">${esc(name.trim())}</name>\n</model>\n`;
+        await api("POST", "/api/v1/panorama/models", {
+          applicationId: app.id, name: name.trim(), notation: "archimate-3.2", xml,
+        });
+        toast(`${name.trim()} created`, "ok");
+        return route();
+      }
+      if (act === "rename-panorama") {
+        const model = models.find((item) => item.id === button.dataset.id);
+        if (!model) return;
+        const name = window.prompt("Model name:", model.name);
+        if (name == null || !name.trim() || name.trim() === model.name) return;
+        await api("PUT", `/api/v1/panorama/models/${encodeURIComponent(model.id)}`, {
+          expectedRevision: model.revision, name: name.trim(),
+        });
+        toast("Architecture model renamed", "ok");
+        return route();
+      }
+      if (act === "delete-panorama") {
+        const model = models.find((item) => item.id === button.dataset.id);
+        if (!model || !window.confirm(`Delete architecture model “${model.name}”?`)) return;
+        await api("DELETE", `/api/v1/panorama/models/${encodeURIComponent(model.id)}`);
+        toast("Architecture model deleted", "ok");
+        return route();
+      }
+    } catch (e) {
+      toast(e.message, "err");
+    }
+  });
+}
+
 // resolveProject looks up a project's display name so the editor can render a
 // breadcrumb link back to it. Returns {id, name} or null when the id is empty
 // or unknown (a new/ungrouped artifact, or a best-effort lookup that failed —
@@ -6610,6 +6768,7 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/panorama$/, "Models · Panorama"],
   ];
   for (const [re, label] of rules) if (re.test(path)) return label;
   return "";
@@ -6689,6 +6848,7 @@ async function route() {
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
+    if (path === "#/panorama") return await viewPanoramaModels();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
@@ -6706,7 +6866,7 @@ async function route() {
     // token walks the diagram in activation order (ADR-0046).
     const im = path.match(/^#\/operations\/i\/(\d+)$/);
     if (im) return await viewInstanceReplay(Number(im[1]));
-    if (appId !== "console" && appId !== "modeler" && appId !== "tasks") return viewComingSoon(appId);
+    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "panorama") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
   } catch (e) {

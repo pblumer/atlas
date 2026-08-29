@@ -34,6 +34,7 @@ var backupDirs = []string{
 	"drafts",
 	"forms",
 	"projects",
+	"panorama-models",
 	"releases",
 	"dmnrefs",
 	"dmn-models",
