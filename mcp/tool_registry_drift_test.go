@@ -154,6 +154,18 @@ var mcpOmittedRoutes = map[string]string{
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
 
+	// Panorama P1 (ADR-0189) establishes the application-owned HTTP contract and
+	// browser model library first. Its MCP authoring contract is a separate slice:
+	// exposing raw XML mutations without first deciding tool-sized validation and
+	// revision-conflict responses would freeze an awkward agent API prematurely.
+	"POST /api/v1/panorama/validate":       "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models":          "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"POST /api/v1/panorama/models":         "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models/{id}":     "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"PUT /api/v1/panorama/models/{id}":     "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"DELETE /api/v1/panorama/models/{id}":  "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models/{id}/xml": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+
 	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
 	// directly (or relies on server-side ensureDiagramLayout on read), so it does
