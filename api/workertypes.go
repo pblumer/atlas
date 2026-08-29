@@ -23,45 +23,47 @@ const (
 	WorkerRuntimeModeExternal WorkerRuntimeMode = "external"
 )
 
-// WorkerTypeDefinition is the first canonical Worker-oriented view over Atlas's
-// built-in capability catalog. ID remains the existing authoring identifier so model
-// bindings do not move; WorkerTypeID supplies ADR-0208's globally namespaced identity.
-// Placement is retained during the compatibility window because it describes this
-// server's current execution placement. RuntimeMode is intentionally independent from
-// Placement: manually offloading a built-in changes where this server runs it, not the
-// Worker Type contract Atlas ships.
+// WorkerTypeDefinition is the canonical Worker-oriented view over Atlas's capability
+// catalog. ID remains the existing authoring identifier so model bindings do not move;
+// WorkerTypeID is ADR-0208's globally namespaced identity. Built-in managed Worker
+// Types additionally expose their package metadata. Placement remains install-specific
+// and is deliberately independent from RuntimeMode.
 type WorkerTypeDefinition struct {
 	ID           string            `json:"id"`
 	WorkerTypeID string            `json:"workerTypeId"`
+	Version      string            `json:"version,omitempty"`
+	Title        string            `json:"title,omitempty"`
+	Vendor       string            `json:"vendor,omitempty"`
+	Origin       WorkerTypeOrigin  `json:"origin,omitempty"`
 	RuntimeMode  WorkerRuntimeMode `json:"runtimeMode"`
 	Placement    string            `json:"placement"`
 }
 
-// workerTypeDefinitions projects the existing authoritative placement catalog into
-// Worker Type vocabulary. During ADR-0208 migration step 1, managedConnectorKind's
-// workerOnly flag remains an internal compatibility signal for the canonical runtime
-// mode; it is never exposed by the Worker API. The placement catalog continues to be
-// the authority for this server's current execution location, so no second runtime
-// routing source is introduced.
+// workerTypeDefinitions projects the existing placement catalog into Worker Type
+// vocabulary. Managed built-ins read their identity and package metadata from the
+// ADR-0208 built-in metadata registry. Non-managed entries keep the step-1 fallback
+// until their own Worker-Type/non-Worker semantics are migrated in a later slice.
 func (s *Server) workerTypeDefinitions() []WorkerTypeDefinition {
 	placements := s.connectorPlacements()
 	out := make([]WorkerTypeDefinition, 0, len(placements))
 	for _, placement := range placements {
-		out = append(out, WorkerTypeDefinition{
+		definition := WorkerTypeDefinition{
 			ID:           placement.ID,
 			WorkerTypeID: "atlas." + placement.ID,
-			RuntimeMode:  workerRuntimeModeForBuiltIn(placement.ID),
+			RuntimeMode:  WorkerRuntimeModeAtlasEmbedded,
 			Placement:    placement.Placement,
-		})
+		}
+		if meta, ok := lookupBuiltInManagedWorkerType(placement.ID); ok {
+			definition.WorkerTypeID = meta.ID
+			definition.Version = meta.Version
+			definition.Title = meta.Title
+			definition.Vendor = meta.Vendor
+			definition.Origin = meta.Origin
+			definition.RuntimeMode = meta.RuntimeMode
+		}
+		out = append(out, definition)
 	}
 	return out
-}
-
-func workerRuntimeModeForBuiltIn(id string) WorkerRuntimeMode {
-	if kind, ok := lookupManagedConnectorKind(id); ok && kind.workerOnly {
-		return WorkerRuntimeModeAtlasSupervised
-	}
-	return WorkerRuntimeModeAtlasEmbedded
 }
 
 // handleWorkerTypes lists the canonical Worker Type projection while the deprecated
