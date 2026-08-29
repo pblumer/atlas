@@ -53,9 +53,10 @@ func TestConfiguredWorkerAliasMirrorsConnectors(t *testing.T) {
 	}
 }
 
-// TestWorkerTypesAliasMirrorsConnectorKinds proves the Worker Catalog API is a
-// terminology alias over the same server capability data, not a second catalog.
-func TestWorkerTypesAliasMirrorsConnectorKinds(t *testing.T) {
+// TestWorkerTypesExposeCanonicalRuntimeModes pins ADR-0208's migration boundary:
+// /worker-types is a Worker Type catalog projection over the existing built-in
+// capability registry, while /connector-kinds remains the legacy compatibility API.
+func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 	ts := newTestServer(t)
 
 	newCode, newBody := doReq(t, ts, http.MethodGet, "/api/v1/worker-types", "", "")
@@ -63,8 +64,41 @@ func TestWorkerTypesAliasMirrorsConnectorKinds(t *testing.T) {
 	if newCode != http.StatusOK || oldCode != http.StatusOK {
 		t.Fatalf("worker types status=%d body=%s; connector kinds status=%d body=%s", newCode, newBody, oldCode, oldBody)
 	}
-	if string(newBody) != string(oldBody) {
-		t.Fatalf("worker types and connector kinds diverged:\nworker-types: %s\nconnector-kinds: %s", newBody, oldBody)
+	if string(newBody) == string(oldBody) {
+		t.Fatalf("worker types still mirror legacy connector kinds: %s", newBody)
+	}
+
+	var workerTypes []map[string]any
+	if err := json.Unmarshal(newBody, &workerTypes); err != nil {
+		t.Fatalf("decode worker types: %v (%s)", err, newBody)
+	}
+	if len(workerTypes) == 0 {
+		t.Fatal("worker type catalog is empty")
+	}
+
+	seenEmbedded := false
+	seenSupervised := false
+	for _, workerType := range workerTypes {
+		if _, legacy := workerType["workerOnly"]; legacy {
+			t.Fatalf("worker type leaks legacy workerOnly compatibility flag: %v", workerType)
+		}
+		switch workerType["runtimeMode"] {
+		case "atlas-embedded":
+			seenEmbedded = true
+		case "atlas-supervised":
+			seenSupervised = true
+		case "external":
+			// External packages are a valid canonical mode even though this first
+			// built-in projection does not require one to exist yet.
+		default:
+			t.Fatalf("worker type has missing or invalid runtimeMode: %v", workerType)
+		}
+	}
+	if !seenEmbedded {
+		t.Fatal("worker type catalog has no atlas-embedded built-in")
+	}
+	if !seenSupervised {
+		t.Fatal("worker type catalog has no atlas-supervised built-in")
 	}
 }
 
