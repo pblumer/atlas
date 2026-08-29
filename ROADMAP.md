@@ -894,17 +894,19 @@ standards-based architecture workspace that relates declared ArchiMate 3.2 model
 to current Atlas resources without mixing runtime observations into the model. See
 [ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
 
-- 🔲 **P1 — Architecture model:** add application-owned Panorama artifacts in a
+- ✅ **P1 — Architecture model:** add application-owned Panorama artifacts in a
   design-time sidecar store; import, validate, preserve, and export Open Group
   ArchiMate Model Exchange XML; keep reusable elements/relationships separate from
   their views; use optimistic revisions, bounded XML parsing, backup/restore, and
   interoperability fixtures.
-- 🔲 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
+- 🚧 **P2 — ArchiMate editor:** ship a separate, reproducibly vendored
   `diagram-js` bundle with an Atlas-owned ArchiMate palette, semantic connection
   rules, property panel, multi-view canvas, undo/redo, save/reload, and browser E2E
   coverage. Start with Capability, Business Process, the core Application layer,
   and the Technology elements needed to model artifacts, nodes, services, and
-  networks; state the supported subset explicitly.
+  networks; state the supported subset explicitly. The read-only, multi-view
+  `diagram-js` canvas, ArchiMate renderer, selection properties, and zoom/pan
+  controls are complete; authoring, semantic rules, undo/redo, and save remain.
 - 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   connectors/job types, releases, local runtimes, and deployment targets. Preserve

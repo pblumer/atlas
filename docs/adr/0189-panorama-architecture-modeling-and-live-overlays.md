@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

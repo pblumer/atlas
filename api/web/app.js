@@ -6234,10 +6234,9 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
-// Panorama P1 is deliberately a model library, not a pretend ArchiMate editor:
-// it imports, validates, preserves and exports the canonical Open Exchange XML.
-// The diagram-js canvas arrives in P2 once its renderer and semantic rules can
-// show the document without discarding unsupported standard content (ADR-0189).
+// Panorama keeps the Open Exchange XML canonical. The library owns documents;
+// its diagram-js viewer is a read-only projection and therefore cannot discard
+// unsupported standard content when a model is opened (ADR-0189).
 async function viewPanoramaModels() {
   view.innerHTML = `<p class="muted">Loading architecture models…</p>`;
 
@@ -6272,7 +6271,7 @@ async function viewPanoramaModels() {
     );
     return `<tr data-name="${esc(`${model.name} ${app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">ARCHI</span>
-        <a href="/api/v1/panorama/models/${encodeURIComponent(model.id)}/xml"><b>${esc(model.name)}</b></a></div>
+        <a href="#/panorama/models/${encodeURIComponent(model.id)}"><b>${esc(model.name)}</b></a></div>
         <div class="muted" style="font-size:12px; padding-left:54px">${esc(model.id)}</div></td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
       <td><span class="chip">ArchiMate 3.2</span></td>
@@ -6389,6 +6388,13 @@ async function viewPanoramaModels() {
       toast(e.message, "err");
     }
   });
+}
+
+async function viewPanoramaModel(id) {
+  const gen = navGen;
+  const mod = await import("./panorama-viewer.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaViewer(view, { api, toast, id });
 }
 
 // resolveProject looks up a project's display name so the editor can render a
@@ -6768,6 +6774,7 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
   ];
   for (const [re, label] of rules) if (re.test(path)) return label;
@@ -6849,6 +6856,8 @@ async function route() {
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama") return await viewPanoramaModels();
+    const pm = path.match(/^#\/panorama\/models\/(.+)$/);
+    if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
