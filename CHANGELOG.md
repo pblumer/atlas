@@ -452,6 +452,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
+  library now opens its Open Exchange Diagram views on a read-only `diagram-js`
+  canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
+  the same canvas/properties/problems frame as the BPMN and DMN editors
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)).
+  Selecting an element or relationship shows its standard type and identifier;
+  switching views projects the same reusable model elements into their stored
+  positions. The XML remains canonical and byte-preserved: viewing issues no
+  writes, while export remains available beside the canvas.
+
 - **A Jira connector.** Atlassian Jira is a first-class connector kind
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one issue-tracker operation
