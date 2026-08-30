@@ -114,6 +114,10 @@ var (
 	AuthPasswordSet  = newEvent("auth.password_set")
 	AuthTokenMinted  = newEvent("auth.token_minted")
 	AuthTokenRevoked = newEvent("auth.token_revoked")
+	// AuthOIDCConfigured is said once at startup where an operator named an identity
+	// provider. It is the line that tells whoever reads the log after a failed login
+	// which issuer this server was asking, which is the first thing to check.
+	AuthOIDCConfigured = newEvent("auth.oidc_configured")
 	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
 	// group shipped, naming how many accounts kept what they could already do. It is
 	// the line an operator needs to see: nothing is narrower than it was yesterday

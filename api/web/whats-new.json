@@ -2,6 +2,35 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "sign-in-with-your-identity-provider",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Sign in with your identity provider",
+        "de": "Anmelden mit Ihrem Identitätsanbieter"
+      },
+      "summary": {
+        "en": "Atlas can now hand the sign-in to an OpenID Connect provider — Entra ID, Keycloak, Google, any compliant one. People press a button on the login screen, authenticate where they already do, and come back signed in; multi-factor and password rules become the provider's job, and an account that is closed there stops working here. A first sign-in creates an account linked to the provider's subject with the user role and nothing else, so a new person can see their own tasks and nothing more until an administrator says otherwise. Nothing changes unless you configure a provider: with no issuer set, Atlas makes no outbound connection and the local password stays the only way in. It stays available in any case, on purpose — a provider that is unreachable must not lock an administrator out of their own instance.",
+        "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organization öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "not-every-account-may-deploy-any-more",
       "version": "Unreleased",
       "date": null,
@@ -276,27 +305,6 @@
       "tags": [
         "Security",
         "Operations"
-      ]
-    },
-    {
-      "id": "the-api-description-and-the-explorer-are-behind-the-login",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "The API description and its explorer are behind the login",
-        "de": "Die API-Beschreibung und ihr Explorer liegen hinter der Anmeldung"
-      },
-      "summary": {
-        "en": "The machine-readable API description and the built-in explorer were readable by anyone who found the port. Nothing on the login screen reads either of them, and the explorer's \"Try it out\" drives the very API a session is required for — so this is the argument `--docs` already makes, one step further. Whether they are served at all is still `--docs`; who reads them is now the login. They moved together on purpose: an explorer that renders and then cannot fetch its own document is worse than one that says plainly it needs a login.",
-        "de": "Die maschinenlesbare API-Beschreibung und der eingebaute Explorer waren für jeden lesbar, der den Port fand. Der Anmeldebildschirm liest weder das eine noch das andere, und das „Try it out\" des Explorers bedient genau die API, für die eine Sitzung verlangt wird — das ist also dasselbe Argument, das `--docs` ohnehin schon macht, einen Schritt weiter gedacht. Ob beides überhaupt ausgeliefert wird, entscheidet weiterhin `--docs`; wer es liest, entscheidet jetzt die Anmeldung. Beide sind bewusst gemeinsam umgezogen: Ein Explorer, der sich aufbaut und dann sein eigenes Dokument nicht laden kann, ist schlimmer als einer, der klar sagt, dass er eine Anmeldung braucht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security"
       ]
     }
   ]

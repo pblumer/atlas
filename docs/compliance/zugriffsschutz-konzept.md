@@ -199,6 +199,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M9 ✅ | Rollen je Endpunktgruppe | L | O-02, R-04, R-09 | G2, G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 | M11 ✅ | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
+| M12 ◐ | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -844,6 +845,130 @@ befragt.
     abgewiesen, ist auch der erste nicht registriert.
     `TestDeployingAProjectStopsBeforeItStarts`.
 
+### M12 — Föderierte Authentisierung ◐
+
+**Problem, gemessen.** Atlas kennt genau **einen** Weg, wie aus einem Menschen ein
+Prinzipal wird: Benutzername und lokales Passwort.
+
+| | |
+|---|---|
+| Wege, eine **Person** zu authentisieren | 1 (lokales Passwort) |
+| Stellen, an denen eine Session entsteht | 1 (`handleLogin`, `api/users.go`) |
+| Produktive Lesestellen von `User.Source` | 1 (die Console-Liste) |
+| Produktive Lesestellen von `User.ExternalID` | **0** |
+| Abhängigkeiten für OIDC, JWT oder JWKS | 0 |
+
+[ADR-0044](../adr/0044-user-management-and-authentication-boundary.md) hat die
+Haken bewusst gesetzt und schreibt sie auch hin: «morgen kann der Prinzipal aus
+einem OIDC/JWT-Bearer kommen, indem nur die Middleware getauscht wird». Benutzt hat
+sie bis heute nichts. Das ist zugleich die gute Nachricht — die Naht ist **eine**
+Funktion — und das ganze Risiko: Alles, was eine fremde Identität echt macht, gibt
+es noch nicht.
+
+Was das kostet, steht schon in den Akten. **R-03** (gelb): lokale Passwörter statt
+eIAM, kein MFA, keine zentrale Passwortrichtlinie und — der Punkt, nach dem eine
+Prüfstelle zuerst fragt — **kein automatischer Entzug beim Austritt**. Ein Konto
+hier überlebt die Anstellung seiner Inhaberin, bis eine Administratorin es von Hand
+entfernt.
+
+**Vorschlag** (Entwurf:
+[`ADR-draft-federated-authentication`](../adr/draft-federated-authentication.md)):
+
+1. **Atlas wird OIDC-Relying-Party.** Authorization Code mit PKCE, Discovery,
+   Prüfung des ID-Tokens gegen die JWKS des Anbieters. Drei Endpunkte und dieselbe
+   Naht: Am Ende steht die Session, die auch ein lokales Login erzeugt, mit
+   derselben Momentaufnahme aus Rollen und Gruppen. Damit gilt jede Regel seit M5
+   unverändert weiter, statt für eine zweite Art Aufrufer neu bewiesen zu werden.
+2. **Das Konto entsteht beim ersten Login** — `Source` wird `oidc`, `ExternalID`
+   das `sub` des Anbieters. Die Identität ist das Subjekt, nicht die E-Mail-Adresse:
+   Eine Adresse kann neu vergeben werden, ein `sub` nicht.
+3. **Ein Claim vergibt zunächst keine Rolle.** Ein föderiertes Konto bekommt `user`,
+   genau wie ein lokal angelegtes (M9), und Rollen vergibt eine Administratorin in
+   Atlas. Die Abbildung von Claims auf Rollen und Gruppen ist der **zweite**
+   Schritt, ausdrücklich konfiguriert, mit «leere Abbildung heisst: kein Claim
+   vergibt etwas».
+4. **Das lokale Login bleibt**, mindestens als Notfallzugang. Eine Installation,
+   deren Anbieter nicht erreichbar ist, muss administrierbar bleiben; die
+   Aussperr-Sperre aus ADR-0044 gilt unverändert.
+
+**Warum nicht der billigere Weg.** Der naheliegende Kurzschluss ist ein
+vertrauenswürdiger Header von einem authentisierenden Reverse Proxy. Das ist keine
+Authentisierung, sondern der Entschluss, einem Header zu glauben — und in einem
+Einzelbinary, das jemand direkt auf seinem Port erreicht, ist dieser Glaube genau
+eine fehlgeleitete Anfrage von einem offenen Login entfernt. Er bleibt im Entscheid
+als **Betriebsmuster** mit ausgeschriebenen Leitplanken stehen, weil es
+Installationen mit einem solchen Proxy gibt und O-01 ausdrücklich Dokumentation
+dafür verlangt. Die Antwort des Produkts ist er nicht.
+
+SAML ist zurückgestellt, nicht verworfen: Spricht das Ziel eIAM SAML, ist das eine
+zweite Fassade auf dieselbe Naht. Ein LDAP-Bind wäre am billigsten und schickt das
+Passwort weiterhin durch Atlas — also genau die Eigenschaft, die Föderation
+beseitigen soll.
+
+**Ehrlich dazugesagt.** Atlas übernimmt damit die Prüfung fremder Tokens, also
+sicherheitskritischen Code, den es bisher nicht hatte. Er ist begrenzt und prüfbar,
+aber ihn falsch zu machen ist schlechter, als ihn nicht zu haben. Und ein Ausfall
+des Anbieters wird zu einem Ausfall von Atlas für föderierte Konten; der lokale
+Notfallzugang ist die Antwort, und er ist nur dann eine, wenn jemand dieses Passwort
+aufbewahrt.
+
+**Reihenfolge.** Schritt 1 ist der Anmeldeweg mit `user` als einziger Rolle.
+Schritt 2 ist die Abbildung von Claims auf Rollen und Gruppen — bewusst danach,
+denn ab diesem Tag verwaltet, wer die Gruppen des Anbieters pflegt, die Rollen von
+Atlas. Das ist der Sinn der Föderation und zugleich ihre schärfste Kante, also soll
+es eine Betreiberin einschalten, nachdem das Login selbst bewiesen ist. Die
+Autorisierungsserver-Hälfte aus M10 bleibt vorerst stehen: Sie abzulösen setzt
+voraus, dass der fremde Anbieter Tokens mit Atlas als Zielgruppe ausstellt, und das
+ist eine Aussage über dessen Konfiguration, die ein selbstgehosteter PoC nicht
+treffen kann.
+
+**Stand: Schritt 1 ist umgesetzt** (`api/oidc.go`, `api/oidctoken.go`,
+`api/oidclogin.go`). Zwei Endpunkte, eine Naht: `/auth/oidc/start` schickt die
+Person zum Anbieter, `/auth/oidc/callback` prüft, was zurückkommt, und endet dort,
+wo auch ein lokales Login endet. Konfiguriert wird über `--oidc-issuer`,
+`--oidc-client-id` und `--oidc-client-secret` beziehungsweise die entsprechenden
+`ATLAS_OIDC_*`-Variablen. Die Anmeldemaske bietet die Schaltfläche nur, wenn ein
+Anbieter konfiguriert ist, und behält das Passwortformular in jedem Fall.
+
+Drei Dinge kamen beim Bauen dazu:
+
+- **Der erneute Abruf der Schlüssel darf nicht gedrosselt werden.** Der erste
+  Entwurf erlaubte einen Abruf pro Minute, damit eine unbekannte Schlüssel-ID kein
+  Hebel wird. Ein Test, der den Schlüssel des Anbieters rotieren lässt, hat gezeigt,
+  was das kostet: eine Minute lang jede Anmeldung abgewiesen, mit «Signatur
+  ungültig» und ohne erkennbare Ursache auf beiden Seiten. Den Hebel gibt es nicht —
+  bis zur Prüfung kommt nur, wer einen von diesem Server ausgestellten `state`, das
+  passende Cookie und einen vom **Anbieter** akzeptierten Code hat.
+- **Eine Namenskollision ist weder eine Abweisung noch eine Übernahme.** Trägt ein
+  lokales Konto den Namen schon, bekommt das föderierte die nächste freie Variante.
+  Die beiden zusammenzuführen bleibt eine bewusste administrative Handlung.
+- **Eine gescheiterte Anmeldung sagt nichts.** Sie landet auf der Anmeldemaske,
+  ohne Grund; welcher Prüfschritt fehlschlug, steht im Audit-Log.
+
+**Abnahme** — der Nachweis ist Code:
+
+1. ✅ Ohne konfigurierten Anbieter verhält sich der Server exakt wie heute; die
+   Route existiert nicht und die Anmeldemaske zeigt keinen zusätzlichen Weg
+   (`TestWithoutAProviderNothingChanges`, `e2e/login-sso.spec.mjs`).
+2. ✅ Ein ID-Token mit falschem Aussteller, falscher Zielgruppe, abgelaufener
+   Gültigkeit, fehlendem `nonce`, unbekanntem Schlüssel oder «alg: none» führt zu
+   **keiner** Session (`TestAnIDTokenIsRefused`, `TestAFederatedLoginIsRefused`).
+3. ✅ Der erste Login einer unbekannten Person erzeugt ein Konto mit `Source=oidc`,
+   gesetztem `ExternalID` und genau der Rolle `user`
+   (`TestAFederatedLoginCreatesAnAccountAndASession`).
+4. ✅ Ein zweiter Login derselben Person erzeugt **kein** zweites Konto, auch dann
+   nicht, wenn sich Name oder E-Mail-Adresse geändert haben
+   (`TestASecondFederatedLoginReusesTheAccount`).
+5. ✅ Ein deaktiviertes Konto bekommt auch über den Anbieter keine Session
+   (`TestADisabledAccountCannotFederate`).
+6. ✅ Das lokale Login funktioniert unverändert weiter; das Passwortformular bleibt
+   auch bei konfiguriertem Anbieter stehen.
+
+**Offen bleibt Schritt 2**: die Abbildung von Claims auf Rollen und Gruppen, und
+damit der Teil, der R-03 wirklich grün macht — solange Rollen hier vergeben werden,
+entzieht ein Austritt beim Anbieter zwar den Zugang, aber die Rollenpflege bleibt
+manuell. Dazu die vom Anbieter ausgelöste Abmeldung.
+
 ---
 
 ## 4 Stufenplan
@@ -886,14 +1011,14 @@ ist erledigt, O-03 und O-04 sind weitgehend erledigt.
 
 ### Stufe 2 — vor breiterem Einsatz
 
-~~M9 (Rollen, O-02)~~ ✅ → Föderation OIDC/eIAM (O-01, setzt auf den Rollen auf) →
-dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten
-(O-06).
+~~M9 (Rollen, O-02)~~ ✅ → **M12** (Föderation OIDC/eIAM, O-01, setzt auf den Rollen
+auf) → dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender
+Daten (O-06).
 
 **M9 ist umgesetzt.** Damit gibt es die vier Namen, auf die eine Föderation ihre
 Claims abbilden kann — und sie sind ab jetzt eine öffentliche Zusage, kein
 Implementierungsdetail: `admin`, `modeler`, `operator`, `user`. Die Föderation
-wartet damit auf nichts mehr.
+wartet damit auf nichts mehr; sie ist als **M12** ausgearbeitet.
 
 **M10 stand quer dazu** und ist umgesetzt — beide Hälften und die dynamische
 Client-Registrierung, in der Reihenfolge des Entscheids. Offen bleibt daraus nur

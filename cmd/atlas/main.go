@@ -181,6 +181,11 @@ func runServe(args []string) error {
 	// use. Only the RFC 9728 discovery documents and the WWW-Authenticate challenge
 	// read it today (ADR-0200); unset means derive from the request.
 	externalURL := fs.String("external-url", os.Getenv("ATLAS_EXTERNAL_URL"), "public origin this server is reachable under, e.g. https://atlas.example.com, for the absolute URLs in the OAuth protected-resource metadata and the WWW-Authenticate challenge (ADR-0200); empty derives them from the request (or ATLAS_EXTERNAL_URL)")
+	oidcIssuer := fs.String("oidc-issuer", os.Getenv("ATLAS_OIDC_ISSUER"), "OpenID Connect issuer URL people may sign in with, e.g. https://login.example.com/realms/atlas; empty means the local password is the only way in (or ATLAS_OIDC_ISSUER)")
+	oidcClientID := fs.String("oidc-client-id", os.Getenv("ATLAS_OIDC_CLIENT_ID"), "client id this server was registered under at the OIDC issuer (or ATLAS_OIDC_CLIENT_ID)")
+	oidcClientSecret := fs.String("oidc-client-secret", os.Getenv("ATLAS_OIDC_CLIENT_SECRET"), "client secret for the OIDC token exchange; empty is allowed for a public client, since PKCE covers the flow either way (or ATLAS_OIDC_CLIENT_SECRET)")
+	oidcScopes := fs.String("oidc-scopes", os.Getenv("ATLAS_OIDC_SCOPES"), "space-separated OIDC scopes to request; empty asks for \"openid profile email\" (or ATLAS_OIDC_SCOPES)")
+	oidcName := fs.String("oidc-name", os.Getenv("ATLAS_OIDC_NAME"), "what the sign-in button on the login screen says; empty uses the issuer's host (or ATLAS_OIDC_NAME)")
 	// RFC 7591 self-registration, off by default. It is the one unauthenticated
 	// endpoint that writes durable state, so an operator turns it on deliberately or
 	// not at all; a client that would use it discovers its absence from the metadata
@@ -253,7 +258,13 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration, oidc: api.OIDCConfig{
+		Issuer:       *oidcIssuer,
+		ClientID:     *oidcClientID,
+		ClientSecret: *oidcClientSecret,
+		Scopes:       *oidcScopes,
+		Name:         *oidcName,
+	}}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -298,6 +309,12 @@ func envIntOr(key string, def int) int {
 type oauthConfig struct {
 	externalURL         string
 	dynamicRegistration bool
+
+	// oidc is the identity provider people may sign in with, when an operator named
+	// one (ADR-draft-federated-authentication). It rides along here because it shares
+	// the one thing that has to be right for both — the origin this server is
+	// reachable under, which is what a redirect URI is built from.
+	oidc api.OIDCConfig
 }
 
 // retentionConfig is the history-retention configuration the CLI assembles: the
@@ -428,6 +445,16 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 	}
 	if oauth.externalURL != "" {
 		apiOpts = append(apiOpts, api.WithExternalURL(oauth.externalURL))
+	}
+	if oauth.oidc.Issuer != "" {
+		apiOpts = append(apiOpts, api.WithOIDC(oauth.oidc))
+		// Said at startup because it is the one configuration that makes this server
+		// depend on somebody else being up, and because an operator reading the log
+		// after a failed login needs to know which issuer was asked.
+		logging.Info(logging.AuthOIDCConfigured,
+			"an identity provider is configured: people may sign in with it, and a first login "+
+				"creates an account with the user role and nothing else",
+			slog.String("issuer", oauth.oidc.Issuer), slog.String("client_id", oauth.oidc.ClientID))
 	}
 	if oauth.dynamicRegistration {
 		apiOpts = append(apiOpts, api.WithDynamicClientRegistration())

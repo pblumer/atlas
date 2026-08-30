@@ -534,6 +534,19 @@ type Server struct {
 	// empty means derive them from the request (ADR-0200).
 	externalURL string
 
+	// oidc is the identity provider people may sign in with, when an operator
+	// configured one (WithOIDC, ADR-draft-federated-authentication). Nil is the
+	// default and means the local password is the only way in: the routes are not
+	// mounted, and nothing is ever fetched from anybody. Set once before Handler is
+	// mounted; read-only thereafter, and the provider guards its own caches.
+	oidc *oidcProvider
+
+	// oidcStates holds the federated logins in flight — the state, nonce and PKCE
+	// verifier a callback needs to finish one. Handler-goroutine state like the
+	// sessions and the authorization codes, so it guards itself and is never
+	// persisted (oidclogin.go).
+	oidcStates *oidcStateStore
+
 	// publicCORSOrigins is the allow-list of web origins permitted to call the
 	// unauthenticated /public/forms endpoints cross-origin, so a start form can be
 	// embedded in an external site (ADR-0186). Empty is the closed default — no
@@ -1042,6 +1055,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		users:             users,
 		groups:            groups,
 		sessions:          newSessionStore(defaultSessionTTL),
+		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
 		collabKeepalive:   collab.KeepaliveInterval,
 		dmnResolver:       resolver,
@@ -2220,6 +2234,20 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		// only when that transport is, so the document never describes something this
 		// binary does not answer on.
 		mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+"/mcp", s.handleProtectedResourceMetadata)
+	}
+	if s.oidc != nil {
+		// The federated login, when an operator configured a provider
+		// (ADR-draft-federated-authentication). Both halves are public because both are
+		// a browser that is not signed in yet — that is the entire point of them — and
+		// mounted only when there is somewhere to send it, so a server without a
+		// provider answers 404 rather than redirecting nowhere.
+		//
+		// The callback is safe without a principal for the reasons oidclogin.go gives:
+		// it is refused unless the state matches this browser, the state was one this
+		// server minted and has not spent, and the token the code buys survives every
+		// check in oidctoken.go.
+		mountFunc(accessPublic, roleAny, "GET "+oidcStartPath, s.handleOIDCStart)
+		mountFunc(accessPublic, roleAny, "GET "+oidcCallbackPath, s.handleOIDCCallback)
 	}
 
 	// Every /api/v1 route is registered from the single-source-of-truth route

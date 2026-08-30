@@ -272,6 +272,53 @@ New accounts get `user`. An API token carries the roles of the account that mint
 it and is **never** an administrator, whoever mints it. With `--auth=false` there is
 no account and none of this is enforced.
 
+### Single sign-on with an identity provider
+
+Optional, and off unless you configure it. With no provider set, Atlas
+authenticates people exactly as it did before — a local password, no outbound
+connection, no dependency on anybody else being up.
+
+Point it at an OpenID Connect provider (Entra ID, Keycloak, Google, Auth0, any
+compliant one) with three settings:
+
+```bash
+sudo tee -a /etc/atlas/atlas.env >/dev/null <<'EOF'
+ATLAS_OIDC_ISSUER=https://login.example.com/realms/atlas
+ATLAS_OIDC_CLIENT_ID=atlas
+ATLAS_OIDC_CLIENT_SECRET=the-secret-the-provider-issued
+ATLAS_EXTERNAL_URL=https://atlas.example.com
+EOF
+sudo systemctl restart atlas
+```
+
+`ATLAS_EXTERNAL_URL` matters here: the redirect URI is built from it, so it has to
+be the origin people actually reach. Register **`<external-url>/auth/oidc/callback`**
+as the redirect URI at your provider — that exact string, or the provider will
+refuse the login.
+
+Two more settings if you need them: `ATLAS_OIDC_SCOPES` (default
+`openid profile email`) and `ATLAS_OIDC_NAME`, which is what the button on the
+login screen says. The client secret may be omitted for a provider that registered
+Atlas as a public client; the flow uses PKCE either way.
+
+What to expect once it is on:
+
+- The login screen gains a **Sign in with …** button and keeps the password form.
+- A first sign-in **creates an account** — source `oidc`, linked to the provider's
+  subject — with the `user` role and nothing else. Grant more under
+  **Organization → Users**, as for any account.
+- The link is the provider's subject, not the email address. A person whose name
+  or address changes at the provider keeps their account; a matching local account
+  is *not* adopted, so somebody with both has two records until you remove one.
+- Sign-in is refused, with the reason in the server log and not on screen, when the
+  token is for another audience, has expired, carries the wrong nonce, or is signed
+  by a key the provider does not publish.
+
+**Keep one local administrator.** A provider that is unreachable — an expired
+certificate, a moved discovery document, a closed network path — takes federated
+sign-in with it. The local password remains the way back in, and Atlas refuses to
+leave an instance without an enabled administrator.
+
 ### 7. Back up the vault key
 
 With the vault enabled (the default), the first start generates a master key at
