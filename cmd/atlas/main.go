@@ -453,7 +453,8 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 		// after a failed login needs to know which issuer was asked.
 		logging.Info(logging.AuthOIDCConfigured,
 			"an identity provider is configured: people may sign in with it, and a first login "+
-				"creates an account with the user role and nothing else",
+				"creates an account with the user role and nothing else unless a claim mapping "+
+				"is switched on under Organization",
 			slog.String("issuer", oauth.oidc.Issuer), slog.String("client_id", oauth.oidc.ClientID))
 	}
 	if oauth.dynamicRegistration {

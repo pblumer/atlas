@@ -26,11 +26,26 @@ _Changed_ / _Removed_ for each version.
   in — which is what every installation has today.
 
   A first sign-in creates an account linked to the provider's *subject*, not the
-  email address, with the `user` role and nothing else; grant more under
-  Organization as for any account. The local password form stays, deliberately: a
-  provider that is unreachable must not lock an administrator out of their own
-  instance. Mapping the provider's groups onto Atlas roles is the next step and not
-  in this one.
+  email address. The local password form stays, deliberately: a provider that is
+  unreachable must not lock an administrator out of their own instance.
+
+- **Let the provider's groups decide roles.** Under **Organization → Single
+  sign-on** an administrator names one claim in the token and a list of exact
+  values it may carry, and each value names the Atlas roles it grants and the
+  groups it puts a person in. Onboarding and offboarding become a group membership
+  somebody already maintains: the role and the shared projects arrive at the next
+  sign-in and go away at the sign-in after the membership does.
+
+  **It is off until you turn it on**, and worth one decision before you do: while
+  it is on, whoever administers those groups administers this instance's roles, and
+  a role granted by hand is replaced at that person's next sign-in. Group
+  membership follows only for the groups your rules name — a group no rule mentions
+  is left alone, so a membership you added by hand there survives.
+
+  Nothing is granted by absence: somebody the provider says nothing about matches
+  no rule and holds `user`, which everybody who can sign in has either way. A rule
+  that could never work — a role Atlas does not enforce, a group that has been
+  deleted — is refused when you save it rather than ignored on every login.
 
 ### Security
 

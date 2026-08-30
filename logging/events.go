@@ -118,6 +118,11 @@ var (
 	// provider. It is the line that tells whoever reads the log after a failed login
 	// which issuer this server was asking, which is the first thing to check.
 	AuthOIDCConfigured = newEvent("auth.oidc_configured")
+	// AuthOIDCMappingSet records a change to the mapping from a provider's claims
+	// onto Atlas roles and groups. It is the change that explains every role change
+	// after it: from the moment the mapping is on, whoever administers the provider's
+	// groups administers this instance's roles.
+	AuthOIDCMappingSet = newEvent("auth.oidc_mapping_set")
 	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
 	// group shipped, naming how many accounts kept what they could already do. It is
 	// the line an operator needs to see: nothing is narrower than it was yesterday

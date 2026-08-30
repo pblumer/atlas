@@ -87,10 +87,11 @@ type adMockSetting struct {
 // CRUD-by-id surface. Owned by the run-loop goroutine (accessed through s.do), so
 // it needs no locking, and it holds no secret material.
 type settingsStore struct {
-	dir     string
-	file    string // theme.json
-	regFile string // registration.json
-	adFile  string // admock.json
+	dir      string
+	file     string // theme.json
+	regFile  string // registration.json
+	adFile   string // admock.json
+	oidcFile string // oidcmapping.json
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -99,10 +100,11 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		return nil, fmt.Errorf("settingsstore: create dir: %w", err)
 	}
 	return &settingsStore{
-		dir:     dir,
-		file:    filepath.Join(dir, "theme.json"),
-		regFile: filepath.Join(dir, "registration.json"),
-		adFile:  filepath.Join(dir, "admock.json"),
+		dir:      dir,
+		file:     filepath.Join(dir, "theme.json"),
+		regFile:  filepath.Join(dir, "registration.json"),
+		adFile:   filepath.Join(dir, "admock.json"),
+		oidcFile: filepath.Join(dir, "oidcmapping.json"),
 	}, nil
 }
 
@@ -161,6 +163,32 @@ func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
 // previous value. An empty ProcessID is a valid stored value meaning "disabled".
 func (s *settingsStore) saveRegistration(r registrationSetting) error {
 	return sidecar.WriteJSON(s.dir, s.regFile, r)
+}
+
+// ---------- Claim mapping for a federated login (ADR-draft-federated-authentication) ----------
+
+// getOIDCMapping returns the stored claim mapping, or the zero value when nobody
+// has written one. A missing file is not an error: it is the ordinary state of an
+// installation that has not turned the mapping on, and the zero value is exactly
+// what that means — disabled, no claim, no rules.
+func (s *settingsStore) getOIDCMapping() (oidcMapping, error) {
+	data, err := os.ReadFile(s.oidcFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return oidcMapping{}, nil
+		}
+		return oidcMapping{}, fmt.Errorf("settingsstore: read oidc mapping: %w", err)
+	}
+	var m oidcMapping
+	if err := json.Unmarshal(data, &m); err != nil {
+		return oidcMapping{}, fmt.Errorf("settingsstore: decode oidc mapping: %w", err)
+	}
+	return m, nil
+}
+
+// saveOIDCMapping writes the claim mapping durably, overwriting any previous one.
+func (s *settingsStore) saveOIDCMapping(m oidcMapping) error {
+	return sidecar.WriteJSON(s.dir, s.oidcFile, m)
 }
 
 // ---------- Org brand logo (ADR-0148) ----------

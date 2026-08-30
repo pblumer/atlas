@@ -779,6 +779,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
 			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
+			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-draft-federated-authentication)", tag: "Auth", role: RoleAdmin,
+			resp: jsonBody("Claim mapping", tObject())}},
+		{"PUT", "/api/v1/settings/oidc-mapping", s.handleSetOIDCMapping, apiOp{
+			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-draft-federated-authentication)", tag: "Auth", role: RoleAdmin,
+			req:  jsonBody("Claim mapping", tObject()),
+			resp: jsonBody("Claim mapping", tObject())}},
+
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth", role: roleAny,
 			req: jsonBody("Credentials", schemaObj(map[string]any{
