@@ -1,5 +1,5 @@
 // The login screen offers a federated login only when there is one
-// (ADR-draft-federated-authentication, measure M12).
+// (ADR-0210, measure M12).
 //
 // The button is the whole visible surface of the feature, and it is drawn from
 // what the server says rather than from configuration the browser cannot see. An

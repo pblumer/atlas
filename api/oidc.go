@@ -14,7 +14,7 @@ import (
 )
 
 // Atlas as an OpenID Connect relying party
-// (ADR-draft-federated-authentication).
+// (ADR-0210).
 //
 // This file holds what talking to a provider needs — the configuration an
 // operator sets, the discovery document, and the signing keys — and nothing about
@@ -103,7 +103,7 @@ func (c OIDCConfig) scopes() string {
 }
 
 // WithOIDC configures an OpenID Connect provider people may sign in with
-// (ADR-draft-federated-authentication).
+// (ADR-0210).
 //
 // Off unless it is given: without it the routes are not mounted and the login
 // screen offers nothing but the password form, which is the behaviour every

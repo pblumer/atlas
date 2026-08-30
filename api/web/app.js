@@ -182,7 +182,7 @@ function viewLogin() {
       </p>
     </div>`;
   // A federated login, when an operator configured one
-  // (ADR-draft-federated-authentication). The endpoint is public and answers an
+  // (ADR-0210). The endpoint is public and answers an
   // empty list on an instance with no provider, which is the ordinary case — so
   // nothing appears unless there is somewhere to go, and a server that cannot
   // answer leaves the password form exactly as it is.

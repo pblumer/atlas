@@ -15,8 +15,8 @@
         "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0210",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
       },
       "tags": [
         "Security",

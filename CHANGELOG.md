@@ -16,7 +16,7 @@ _Changed_ / _Removed_ for each version.
 
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
-  back with a session ([ADR-draft-federated-authentication](docs/adr/draft-federated-authentication.md)).
+  back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
   Point it at any compliant provider with `ATLAS_OIDC_ISSUER`,
   `ATLAS_OIDC_CLIENT_ID` and `ATLAS_OIDC_CLIENT_SECRET`, and register
   `<external-url>/auth/oidc/callback` as the redirect URI.

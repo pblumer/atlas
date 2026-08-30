@@ -535,7 +535,7 @@ type Server struct {
 	externalURL string
 
 	// oidc is the identity provider people may sign in with, when an operator
-	// configured one (WithOIDC, ADR-draft-federated-authentication). Nil is the
+	// configured one (WithOIDC, ADR-0210). Nil is the
 	// default and means the local password is the only way in: the routes are not
 	// mounted, and nothing is ever fetched from anybody. Set once before Handler is
 	// mounted; read-only thereafter, and the provider guards its own caches.
@@ -2237,7 +2237,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	}
 	if s.oidc != nil {
 		// The federated login, when an operator configured a provider
-		// (ADR-draft-federated-authentication). Both halves are public because both are
+		// (ADR-0210). Both halves are public because both are
 		// a browser that is not signed in yet — that is the entire point of them — and
 		// mounted only when there is somewhere to send it, so a server without a
 		// provider answers 404 rather than redirecting nowhere.

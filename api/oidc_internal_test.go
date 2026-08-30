@@ -13,7 +13,7 @@ import (
 
 // The parts of talking to a provider that are not the login itself: the
 // configuration, the documents, and what happens when the provider is not what it
-// said it was (ADR-draft-federated-authentication).
+// said it was (ADR-0210).
 
 // TestAProviderIsInertUntilItIsConfigured. The promise an installation is owed is
 // that nothing changes until somebody asks for it, and it holds at the level of

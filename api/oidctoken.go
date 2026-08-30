@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Validating what an identity provider says (ADR-draft-federated-authentication).
+// Validating what an identity provider says (ADR-0210).
 //
 // An ID token is a bearer statement about who somebody is. Everything downstream
 // — the account, the session, the roles that decide what it may do — follows from

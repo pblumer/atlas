@@ -872,7 +872,7 @@ hier überlebt die Anstellung seiner Inhaberin, bis eine Administratorin es von 
 entfernt.
 
 **Vorschlag** (Entwurf:
-[`ADR-draft-federated-authentication`](../adr/draft-federated-authentication.md)):
+[`ADR-0210`](../adr/0210-federated-authentication.md)):
 
 1. **Atlas wird OIDC-Relying-Party.** Authorization Code mit PKCE, Discovery,
    Prüfung des ID-Tokens gegen die JWKS des Anbieters. Drei Endpunkte und dieselbe

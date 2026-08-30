@@ -16,7 +16,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// The federated login itself (ADR-draft-federated-authentication).
+// The federated login itself (ADR-0210).
 //
 // Two endpoints and one seam. `/auth/oidc/start` sends the person to their
 // provider; `/auth/oidc/callback` takes what comes back, refuses it unless every
