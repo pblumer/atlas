@@ -82,6 +82,7 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 
 	seenEmbedded := false
 	seenSupervised := false
+	seenJiraMetadata := false
 	for _, workerType := range catalog.Kinds {
 		if _, legacy := workerType["workerOnly"]; legacy {
 			t.Fatalf("worker type leaks legacy workerOnly compatibility flag: %v", workerType)
@@ -101,12 +102,21 @@ func TestWorkerTypesExposeCanonicalRuntimeModes(t *testing.T) {
 		default:
 			t.Fatalf("worker type has missing or invalid runtimeMode: %v", workerType)
 		}
+		if workerType["id"] == "jira" {
+			if workerType["workerTypeId"] != "atlas.jira" || workerType["version"] != "1.0.0" || workerType["title"] != "Atlassian Jira" || workerType["vendor"] != "Atlas" || workerType["origin"] != "built-in" {
+				t.Fatalf("jira Worker Type does not expose its built-in package metadata: %v", workerType)
+			}
+			seenJiraMetadata = true
+		}
 	}
 	if !seenEmbedded {
 		t.Fatal("worker type catalog has no atlas-embedded built-in")
 	}
 	if !seenSupervised {
 		t.Fatal("worker type catalog has no atlas-supervised built-in")
+	}
+	if !seenJiraMetadata {
+		t.Fatal("worker type catalog has no jira built-in metadata")
 	}
 }
 
