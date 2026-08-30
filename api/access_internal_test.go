@@ -31,6 +31,7 @@ var wantPublicRoutes = []string{
 	"GET /api/v1/settings/theme",
 	"GET /api/v1/settings/logo",
 	"GET /api/v1/settings/registration",
+	"GET /api/v1/auth/providers",
 
 	// Share links, where the token in the URL is the whole authorization
 	// (ADR-0029/0143). Rate-limited in their handlers.

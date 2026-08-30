@@ -199,7 +199,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M9 ✅ | Rollen je Endpunktgruppe | L | O-02, R-04, R-09 | G2, G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 | M11 ✅ | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
-| M12 | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
+| M12 ◐ | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -845,7 +845,7 @@ befragt.
     abgewiesen, ist auch der erste nicht registriert.
     `TestDeployingAProjectStopsBeforeItStarts`.
 
-### M12 — Föderierte Authentisierung
+### M12 — Föderierte Authentisierung ◐
 
 **Problem, gemessen.** Atlas kennt genau **einen** Weg, wie aus einem Menschen ein
 Prinzipal wird: Benutzername und lokales Passwort.
@@ -922,19 +922,52 @@ voraus, dass der fremde Anbieter Tokens mit Atlas als Zielgruppe ausstellt, und 
 ist eine Aussage über dessen Konfiguration, die ein selbstgehosteter PoC nicht
 treffen kann.
 
+**Stand: Schritt 1 ist umgesetzt** (`api/oidc.go`, `api/oidctoken.go`,
+`api/oidclogin.go`). Zwei Endpunkte, eine Naht: `/auth/oidc/start` schickt die
+Person zum Anbieter, `/auth/oidc/callback` prüft, was zurückkommt, und endet dort,
+wo auch ein lokales Login endet. Konfiguriert wird über `--oidc-issuer`,
+`--oidc-client-id` und `--oidc-client-secret` beziehungsweise die entsprechenden
+`ATLAS_OIDC_*`-Variablen. Die Anmeldemaske bietet die Schaltfläche nur, wenn ein
+Anbieter konfiguriert ist, und behält das Passwortformular in jedem Fall.
+
+Drei Dinge kamen beim Bauen dazu:
+
+- **Der erneute Abruf der Schlüssel darf nicht gedrosselt werden.** Der erste
+  Entwurf erlaubte einen Abruf pro Minute, damit eine unbekannte Schlüssel-ID kein
+  Hebel wird. Ein Test, der den Schlüssel des Anbieters rotieren lässt, hat gezeigt,
+  was das kostet: eine Minute lang jede Anmeldung abgewiesen, mit «Signatur
+  ungültig» und ohne erkennbare Ursache auf beiden Seiten. Den Hebel gibt es nicht —
+  bis zur Prüfung kommt nur, wer einen von diesem Server ausgestellten `state`, das
+  passende Cookie und einen vom **Anbieter** akzeptierten Code hat.
+- **Eine Namenskollision ist weder eine Abweisung noch eine Übernahme.** Trägt ein
+  lokales Konto den Namen schon, bekommt das föderierte die nächste freie Variante.
+  Die beiden zusammenzuführen bleibt eine bewusste administrative Handlung.
+- **Eine gescheiterte Anmeldung sagt nichts.** Sie landet auf der Anmeldemaske,
+  ohne Grund; welcher Prüfschritt fehlschlug, steht im Audit-Log.
+
 **Abnahme** — der Nachweis ist Code:
 
-1. Ohne konfigurierten Anbieter verhält sich der Server exakt wie heute; die
-   Anmeldemaske zeigt keinen zusätzlichen Weg.
-2. Ein ID-Token mit falschem Aussteller, falscher Zielgruppe, abgelaufener
-   Gültigkeit, fehlendem `nonce` oder ungültiger Signatur führt zu **keiner**
-   Session, und jede Abweisung steht im Audit-Log.
-3. Der erste Login einer unbekannten Person erzeugt ein Konto mit `Source=oidc`,
-   gesetztem `ExternalID` und genau der Rolle `user`.
-4. Ein zweiter Login derselben Person erzeugt **kein** zweites Konto, auch dann
-   nicht, wenn sich Name oder E-Mail-Adresse geändert haben.
-5. Ein deaktiviertes Konto bekommt auch über den Anbieter keine Session.
-6. Das lokale Login funktioniert unverändert weiter.
+1. ✅ Ohne konfigurierten Anbieter verhält sich der Server exakt wie heute; die
+   Route existiert nicht und die Anmeldemaske zeigt keinen zusätzlichen Weg
+   (`TestWithoutAProviderNothingChanges`, `e2e/login-sso.spec.mjs`).
+2. ✅ Ein ID-Token mit falschem Aussteller, falscher Zielgruppe, abgelaufener
+   Gültigkeit, fehlendem `nonce`, unbekanntem Schlüssel oder «alg: none» führt zu
+   **keiner** Session (`TestAnIDTokenIsRefused`, `TestAFederatedLoginIsRefused`).
+3. ✅ Der erste Login einer unbekannten Person erzeugt ein Konto mit `Source=oidc`,
+   gesetztem `ExternalID` und genau der Rolle `user`
+   (`TestAFederatedLoginCreatesAnAccountAndASession`).
+4. ✅ Ein zweiter Login derselben Person erzeugt **kein** zweites Konto, auch dann
+   nicht, wenn sich Name oder E-Mail-Adresse geändert haben
+   (`TestASecondFederatedLoginReusesTheAccount`).
+5. ✅ Ein deaktiviertes Konto bekommt auch über den Anbieter keine Session
+   (`TestADisabledAccountCannotFederate`).
+6. ✅ Das lokale Login funktioniert unverändert weiter; das Passwortformular bleibt
+   auch bei konfiguriertem Anbieter stehen.
+
+**Offen bleibt Schritt 2**: die Abbildung von Claims auf Rollen und Gruppen, und
+damit der Teil, der R-03 wirklich grün macht — solange Rollen hier vergeben werden,
+entzieht ein Austritt beim Anbieter zwar den Zugang, aber die Rollenpflege bleibt
+manuell. Dazu die vom Anbieter ausgelöste Abmeldung.
 
 ---
 

@@ -13,6 +13,12 @@ import (
 // external identities coexist later without a migration (ADR-0044).
 const (
 	SourceLocal = "local"
+
+	// SourceOIDC marks an account an OpenID Connect provider vouches for
+	// (ADR-draft-federated-authentication). Its ExternalID is that provider's
+	// subject, it carries no password hash, and the pair (source, external id) is
+	// what a federated login resolves by.
+	SourceOIDC = "oidc"
 )
 
 // Well-known roles. Roles are a free-form list on the user, not a single "admin"
@@ -184,6 +190,29 @@ func (s *userStore) byUsername(username string) (User, bool, error) {
 // email never matches, so an empty needle cannot resolve to one.
 func (s *userStore) byEmail(email string) (User, bool, error) {
 	return s.findBy(email, func(u User) string { return u.Email })
+}
+
+// byExternalID finds the account an identity provider's subject is linked to.
+//
+// The match is exact and case-sensitive, unlike the lookups above: a subject is an
+// opaque identifier the provider chose, not a name a person types, and folding its
+// case would be inventing an equivalence the provider never claimed. Both halves
+// must match, so a subject from one provider can never resolve to an account
+// created by another.
+func (s *userStore) byExternalID(source, externalID string) (User, bool, error) {
+	if source == "" || externalID == "" {
+		return User{}, false, nil
+	}
+	all, err := s.LoadAll()
+	if err != nil {
+		return User{}, false, err
+	}
+	for _, u := range all {
+		if u.Source == source && u.ExternalID == externalID {
+			return u, true, nil
+		}
+	}
+	return User{}, false, nil
 }
 
 // findBy is the shared scan behind the lookups: normalize the needle, and return

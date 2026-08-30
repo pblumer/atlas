@@ -159,6 +159,8 @@ function viewLogin() {
     <div class="card" style="max-width:380px; margin:8vh auto">
       <h1>Sign in</h1>
       <p class="muted">This Atlas instance requires you to sign in.</p>
+      <p id="sso-error" class="muted err" hidden>Signing in with your identity provider did not work. Try again, or ask an administrator to check the server log.</p>
+      <div id="sso-providers" hidden></div>
       <form id="login-form">
         <label class="field">Username
           <input name="username" autocomplete="username" autofocus required></label>
@@ -179,6 +181,30 @@ function viewLogin() {
         Noch kein Konto? <a id="register-link" href="#">Registrieren</a>
       </p>
     </div>`;
+  // A federated login, when an operator configured one
+  // (ADR-draft-federated-authentication). The endpoint is public and answers an
+  // empty list on an instance with no provider, which is the ordinary case — so
+  // nothing appears unless there is somewhere to go, and a server that cannot
+  // answer leaves the password form exactly as it is.
+  //
+  // The callback sends a failed attempt back here with ?sso=failed and no reason.
+  // The reason is in the server's audit log, where an operator can read it, rather
+  // than in a URL anybody could send somebody.
+  if (new URLSearchParams(location.search).get("sso") === "failed") {
+    document.getElementById("sso-error").hidden = false;
+  }
+  (async () => {
+    try {
+      const providers = await api("GET", "/api/v1/auth/providers");
+      if (!Array.isArray(providers) || providers.length === 0) return;
+      const host = document.getElementById("sso-providers");
+      host.innerHTML = providers.map((p) =>
+        `<a class="btn" style="display:block; text-align:center; margin-bottom:8px" href="${esc(p.start)}"` +
+        ` title="Sign in with ${esc(p.name)}">Sign in with ${esc(p.name)}</a>`).join("") +
+        `<p class="muted" style="text-align:center; margin:0 0 10px">or sign in with a password</p>`;
+      host.hidden = false;
+    } catch { /* no provider, or the server could not say — the password form stands */ }
+  })();
   // Self-service registration (ADR-0126): the login screen asks the server whether
   // registration is enabled and, if so, reveals a link to the public start form of
   // the configured intake process. The endpoint is public (served before login),

@@ -12,6 +12,26 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Sign in with your identity provider.** Atlas can now be an OpenID Connect
+  relying party: people reach the login screen, press **Sign in with …**, and come
+  back with a session ([ADR-draft-federated-authentication](docs/adr/draft-federated-authentication.md)).
+  Point it at any compliant provider with `ATLAS_OIDC_ISSUER`,
+  `ATLAS_OIDC_CLIENT_ID` and `ATLAS_OIDC_CLIENT_SECRET`, and register
+  `<external-url>/auth/oidc/callback` as the redirect URI.
+
+  **Nothing changes unless you configure one.** With no issuer set, no route is
+  mounted, nothing is fetched from anybody, and the local password is the only way
+  in — which is what every installation has today.
+
+  A first sign-in creates an account linked to the provider's *subject*, not the
+  email address, with the `user` role and nothing else; grant more under
+  Organization as for any account. The local password form stays, deliberately: a
+  provider that is unreachable must not lock an administrator out of their own
+  instance. Mapping the provider's groups onto Atlas roles is the next step and not
+  in this one.
+
 ### Security
 
 - **Not every account may deploy any more.** Each of the 199 `/api/v1` routes now

@@ -1,6 +1,6 @@
 # ADR-DRAFT: Federated authentication
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-29
 - **Deciders:** Atlas maintainers
 
@@ -188,6 +188,31 @@ and it is not this record: it requires the provider to issue tokens with Atlas a
 the audience, which is a claim about the provider's configuration that a
 self-hosted PoC cannot make and eIAM will not make casually. Federating the human
 login is worth doing on its own, and the two halves are independent.
+
+### What is built
+
+The relying-party flow, the token validation, the account, and the button. What is
+not: the claim mapping, which is the second step by design, and RP-initiated logout.
+
+Three things came out of building it that the proposal did not have:
+
+- **The key-set refetch must not be rate limited.** The first draft of it allowed
+  one refetch a minute, to keep an unknown key id from being a lever. A test that
+  rotated the provider's key found what that costs: every login refused, for a
+  minute, with "signature invalid" and no cause visible from either end. The lever
+  turns out not to exist — reaching the verification needs a state this server
+  minted, the cookie that matches it, and a code the *provider* accepted — so the
+  limit was removed and the reasoning written where the code is.
+- **A name collision is not a refusal, and not an adoption either.** A provider's
+  `preferred_username` can be a name a local account already holds. Refusing the
+  login would make an unrelated account somebody else's problem; adopting the local
+  record would hand a federated identity a password account it never proved it
+  owned. The federated account gets the next free variant of the name, and joining
+  the two stays an administrator's deliberate act.
+- **A failed federated login says nothing.** It lands back on the login screen with
+  a flag in the URL and no reason. Which check failed is in the audit log, where an
+  operator can read it, for the same reason a wrong password is not told which half
+  was wrong.
 
 ### Consequences
 

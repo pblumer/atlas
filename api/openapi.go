@@ -758,6 +758,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Authenticated user", tObject())}},
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
 			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
+		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
+			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-draft-federated-authentication)", tag: "Auth", role: roleAny,
+			resp: jsonBody("Configured identity providers", tArray())}},
 		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
 			summary: "Report auth status and the current user", tag: "Auth", role: roleAny,
 			resp: jsonBody("Auth status", schemaObj(map[string]any{

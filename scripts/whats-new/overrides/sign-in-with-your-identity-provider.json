@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Security",
+    "Console"
+  ],
+  "title": {
+    "en": "Sign in with your identity provider",
+    "de": "Anmelden mit Ihrem Identitätsanbieter"
+  },
+  "summary": {
+    "en": "Atlas can now hand the sign-in to an OpenID Connect provider — Entra ID, Keycloak, Google, any compliant one. People press a button on the login screen, authenticate where they already do, and come back signed in; multi-factor and password rules become the provider's job, and an account that is closed there stops working here. A first sign-in creates an account linked to the provider's subject with the user role and nothing else, so a new person can see their own tasks and nothing more until an administrator says otherwise. Nothing changes unless you configure a provider: with no issuer set, Atlas makes no outbound connection and the local password stays the only way in. It stays available in any case, on purpose — a provider that is unreachable must not lock an administrator out of their own instance.",
+    "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
+  },
+  "try": {
+    "label": {
+      "en": "Open Organization",
+      "de": "Organization öffnen"
+    },
+    "route": "#/console/org"
+  }
+}
