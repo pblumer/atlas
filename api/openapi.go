@@ -415,6 +415,35 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Fetch a form definition", tag: "Forms", role: roleAny, resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
 			summary: "Delete a form definition", tag: "Forms", role: RoleModeler, resp: jsonBody("Deleted id", tObject())}},
+
+		// Panorama architecture models (ADR-0189) are application-owned Open Group
+		// ArchiMate Model Exchange documents. Metadata and XML travel separately so a
+		// listing never hauls every landscape document through the browser.
+		{"POST", "/api/v1/panorama/validate", s.panorama.HandleValidate, apiOp{
+			summary: "Validate an ArchiMate Open Exchange document without storing it (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			req: xmlBody("ArchiMate Open Exchange XML"), resp: jsonBody("Validation result", tObject())}},
+		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
+			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Panorama models", tArray())}},
+		{"POST", "/api/v1/panorama/models", s.panorama.HandleCreate, apiOp{
+			summary: "Import an ArchiMate Open Exchange document as a Panorama model (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			status: http.StatusCreated,
+			req: jsonBody("Panorama model import", schemaObj(map[string]any{
+				"applicationId": tString(), "name": tString(), "notation": tString(), "xml": tString(),
+			}, "applicationId", "xml")), resp: jsonBody("Created Panorama model metadata", tObject())}},
+		{"GET", "/api/v1/panorama/models/{id}", s.panorama.HandleGet, apiOp{
+			summary: "Fetch Panorama model metadata without its XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Panorama model metadata", tObject())}},
+		{"PUT", "/api/v1/panorama/models/{id}", s.panorama.HandleUpdate, apiOp{
+			summary: "Update a Panorama model using optimistic revision matching (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			req: jsonBody("Panorama model update", schemaObj(map[string]any{
+				"expectedRevision": tInteger(), "name": tString(), "xml": tString(),
+			}, "expectedRevision")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
+		{"DELETE", "/api/v1/panorama/models/{id}", s.panorama.HandleDelete, apiOp{
+			summary: "Delete a Panorama model (ADR-0189)", tag: "Panorama", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/panorama/models/{id}/xml", s.panorama.HandleXML, apiOp{
+			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: xmlBody("ArchiMate Open Exchange XML")}},
 		{"POST", "/api/v1/public-links", s.handleCreatePublicLink, apiOp{
 			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms", role: RoleModeler,
 			req:  jsonBody("Target", schemaObj(map[string]any{"processId": tString()}, "processId")),

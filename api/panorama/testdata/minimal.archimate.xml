@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       identifier="model-panorama-minimal">
+  <name xml:lang="en">Minimal Panorama Model</name>
+  <elements>
+    <element identifier="application-atlas" xsi:type="ApplicationComponent">
+      <name xml:lang="en">Atlas</name>
+    </element>
+    <element identifier="service-workflow" xsi:type="ApplicationService">
+      <name xml:lang="en">Workflow Service</name>
+    </element>
+  </elements>
+  <relationships>
+    <relationship identifier="realization-atlas-workflow"
+                  source="application-atlas"
+                  target="service-workflow"
+                  xsi:type="Realization"/>
+  </relationships>
+  <views>
+    <diagrams>
+      <view identifier="view-application" xsi:type="Diagram">
+        <name xml:lang="en">Application View</name>
+        <node identifier="node-atlas" elementRef="application-atlas"
+              xsi:type="Element" x="40" y="40" w="160" h="60"/>
+        <node identifier="node-service" elementRef="service-workflow"
+              xsi:type="Element" x="300" y="40" w="160" h="60"/>
+        <connection identifier="connection-realization"
+                    relationshipRef="realization-atlas-workflow"
+                    xsi:type="Relationship"
+                    source="node-atlas" target="node-service"/>
+      </view>
+    </diagrams>
+  </views>
+</model>

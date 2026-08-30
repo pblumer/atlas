@@ -46,6 +46,7 @@ import (
 
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
@@ -229,7 +230,10 @@ type Server struct {
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
-	processDocs      *processdoc.Service
+	processDocs *processdoc.Service
+	// panorama is the application-owned ArchiMate model library (ADR-0189),
+	// isolated as a per-area service under ADR-0147.
+	panorama         *panorama.Service
 	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -911,6 +915,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	panoramaStore, err := panorama.NewStore(filepath.Join(dataDir, "panorama-models"))
+	if err != nil {
+		return nil, err
+	}
 	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
 	if err != nil {
 		return nil, err
@@ -1083,6 +1091,27 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return processdoc.Deployment{Key: d.Key, Version: d.Version}, true
 		},
 		token.New,
+	)
+	// Panorama reuses the process-application scope rather than inventing an ACL.
+	// The resolver is called only from the service's run-loop turn, so reading the
+	// project store here keeps both authorization and model persistence under the
+	// same single writer (ADR-0189/0147).
+	s.panorama = panorama.New(
+		s.runLoop,
+		panoramaStore,
+		func(r *http.Request, applicationID string) (panorama.ApplicationAccess, error) {
+			app, ok, err := s.projects.Get(applicationID)
+			if err != nil || !ok {
+				return panorama.ApplicationAccess{Exists: ok}, err
+			}
+			role := app.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)
+			return panorama.ApplicationAccess{
+				Exists: true, CanView: scopeRank(role) >= scopeRank(ScopeRoleViewer),
+				CanEdit: scopeRank(role) >= scopeRank(ScopeRoleEditor), Protected: app.Protected,
+			}, nil
+		},
+		token.New,
+		time.Now,
 	)
 	for _, opt := range opts {
 		opt(s)
