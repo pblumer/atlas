@@ -680,6 +680,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Output variables", tObject()), resp: jsonBody("Completed", tObject())}},
 		{"GET", "/api/v1/playground/sessions/{id}/overlay", s.playground.HandleOverlay, apiOp{
 			summary: "Read a Playground run's per-element visit counts", tag: "Playground", role: RoleModeler, resp: jsonBody("Element visits", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/heatmap", s.playground.HandleHeatMap, apiOp{
+			summary: "Read a Playground run's element and sequence-flow token counts, including the paths it never took",
+			tag:     "Playground", role: RoleModeler, resp: jsonBody("Heat map", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs", s.playground.HandleStartRun, apiOp{
 			summary: "Start a Playground batch over a dataset sent inline", tag: "Playground", role: RoleModeler,
 			req: jsonBody("Cases and arrival profile", tObject()), resp: jsonBody("Run status", tObject())}},

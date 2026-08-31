@@ -122,6 +122,21 @@ type reportResp struct {
 	Elements map[string]elementResp `json:"elements"`
 	Pools    map[string]poolResp    `json:"pools"`
 	Visits   map[string]int64       `json:"visits"`
+	Timeline timelineResp           `json:"timeline"`
+}
+
+// timelineResp is the run laid out over simulated time: equal slices of it, each
+// with what arrived, what finished and what was still running at its end.
+type timelineResp struct {
+	WidthMillis int64        `json:"widthMillis"`
+	Buckets     []bucketResp `json:"buckets"`
+}
+
+type bucketResp struct {
+	At        string `json:"at"`
+	Started   int    `json:"started"`
+	Completed int    `json:"completed"`
+	InFlight  int    `json:"inFlight"`
 }
 
 type elementResp struct {
@@ -486,6 +501,15 @@ func renderReport(rep playground.Report) reportResp {
 	}
 	if out.Visits == nil {
 		out.Visits = map[string]int64{}
+	}
+	out.Timeline = timelineResp{
+		WidthMillis: rep.Timeline.Width.Milliseconds(),
+		Buckets:     make([]bucketResp, 0, len(rep.Timeline.Buckets)),
+	}
+	for _, b := range rep.Timeline.Buckets {
+		out.Timeline.Buckets = append(out.Timeline.Buckets, bucketResp{
+			At: rfc3339(b.At), Started: b.Started, Completed: b.Completed, InFlight: b.InFlight,
+		})
 	}
 	return out
 }

@@ -146,6 +146,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/playground/sessions/{id}/tasks":                    "lists what waits in an author's sandbox",
 	"POST /api/v1/playground/sessions/{id}/tasks/{jobKey}/complete": "answers a task in an author's sandbox",
 	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
 	"POST /api/v1/playground/sessions/{id}/runs":                    "starts a batch in an author's sandbox",
 	"POST /api/v1/playground/sessions/{id}/runs/csv":                "starts a batch from an uploaded dataset in an author's sandbox",
 	"GET /api/v1/playground/sessions/{id}/runs":                     "progress of a batch in an author's sandbox",
