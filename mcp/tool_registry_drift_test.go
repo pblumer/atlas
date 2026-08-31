@@ -107,6 +107,13 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
+	// identity another *server* correlates against, not something an agent authors
+	// or runs. An agent already knows which server it is talking to, because it is
+	// the one it was pointed at, and the write half is an operator naming the
+	// instance for other operators to recognise.
+	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	"PUT /api/v1/node": "an operator naming this instance, not an agent action",
 	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
 	// a memory tail rather than a record. An agent debugging a run asks from the
 	// instance side, where atlas_instance_jobs and the timeline answer the same

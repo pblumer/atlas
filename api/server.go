@@ -1017,6 +1017,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The node identity is minted here rather than on the first read of the
+	// descriptor, for two reasons: a stable id must not be the side effect of
+	// somebody's GET, and a data directory this server cannot write to is an
+	// operator's problem to see at startup rather than weeks later on a request
+	// (ADR-0189 §6).
+	if _, err := ensureNodeIdentity(settings); err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).

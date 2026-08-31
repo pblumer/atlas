@@ -101,6 +101,25 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
 			}))}},
+		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
+		// to /api/v1/info's account of which binary. It is what makes cross-server
+		// correlation possible at all, so it is readable by any signed-in identity and
+		// by the least-privilege status scope a remote correlator is given; writing it
+		// is an operator act and stays with the administrator.
+		{"GET", "/api/v1/node", s.handleNode, apiOp{
+			summary: "This server's stable node descriptor: runtime identity, build, partition and supported features (ADR-0189)",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Node descriptor", schemaObj(map[string]any{
+				"id": tString(), "name": tString(), "environment": tString(),
+				"product": tString(), "version": tString(),
+				"partition": tInteger(), "partitions": tInteger(), "features": tArray(),
+			}, "id"))}},
+		{"PUT", "/api/v1/node", s.handleUpdateNode, apiOp{
+			summary: "Set this node's operator-owned display name, environment and labels (ADR-0189)",
+			tag:     "System", role: RoleAdmin,
+			req: jsonBody("Node identity", schemaObj(map[string]any{
+				"name": tString(), "environment": tString(), "labels": tObject(),
+			})), resp: jsonBody("Node descriptor", tObject())}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{

@@ -1048,22 +1048,91 @@ async function viewConsoleEngine() {
       </div>
     </div>`;
   view.innerHTML += `
+    <div class="card" id="node-card" style="margin-top:14px">
+      <h2>This node</h2>
+      <p class="muted">The identity this server presents to other Atlas servers (ADR-0189). The id is
+      minted once and survives restarts — it is what a landscape view correlates against, and what an
+      architecture model binds to with <code>atlas.runtimeId</code>. The name is for people; the id is
+      for machines, and changing the name never changes the id.</p>
+      <div id="node-info" class="muted">loading…</div>
+    </div>`;
+  view.innerHTML += `
     <div class="card" id="build-card" style="margin-top:14px">
       <h2>Build</h2>
       <p class="muted">Which commit this running server was built from — check it against the merged code to confirm the deployed binary is up to date.</p>
       <div id="build-info" class="muted">loading…</div>
     </div>`;
   try {
-    const [procs, stats, info] = await Promise.all([
+    const [procs, stats, info, node] = await Promise.all([
       api("GET", "/api/v1/processes"),
       api("GET", "/api/v1/stats"),
       api("GET", "/api/v1/info"),
+      api("GET", "/api/v1/node"),
     ]);
     document.getElementById("e-pi").textContent = stats.activeProcessInstances;
     document.getElementById("e-ei").textContent = stats.activeElementInstances;
     document.getElementById("e-dep").textContent = procs.length;
     document.getElementById("build-info").innerHTML = buildInfoHTML(info);
+    mountNodeCard(node);
   } catch (e) { toast(e.message, "err"); }
+}
+
+// nodeInfoHTML renders the node descriptor. The id is shown in full and
+// monospaced: it is a value somebody copies into a model binding, and a truncated
+// identifier is one that gets pasted wrong.
+//
+// The features list is what this node advertises it can be asked for. It is
+// derived server-side from the routes actually mounted, so it is worth showing
+// verbatim rather than summarising: an operator comparing two servers is looking
+// for the difference.
+function nodeInfoHTML(n) {
+  n = n || {};
+  const labels = Object.entries(n.labels || {});
+  const rows = [
+    ["Runtime id", `<span style="font-family:ui-monospace,monospace">${esc(n.id || "—")}</span>`],
+    ["Name", esc(n.name || "—")],
+    ["Environment", esc(n.environment || "—")],
+    ["Partition", `${esc(String(n.partition ?? "—"))} of ${esc(String(n.partitions ?? "—"))}`],
+    ["Labels", labels.length
+      ? labels.map(([k, v]) => `<span class="pill">${esc(k)}=${esc(v)}</span>`).join(" ")
+      : "<span class=\"muted\">none</span>"],
+    ["Features", (n.features || []).length
+      ? (n.features || []).map((f) => `<code>${esc(f)}</code>`).join(" ")
+      : "<span class=\"muted\">none advertised</span>"],
+  ];
+  return `<table class="kv-table">${rows.map(([k, v]) =>
+    `<tr><td style="padding:2px 16px 2px 0; color:var(--muted); vertical-align:top">${k}</td><td>${v}</td></tr>`).join("")}</table>`;
+}
+
+// mountNodeCard renders the descriptor and, for an administrator, the form that
+// names it. Naming is admin-only on the server (ADR-0209), so the form is not
+// offered to anybody else rather than offered and refused.
+function mountNodeCard(node) {
+  const slot = document.getElementById("node-info");
+  if (!slot) return;
+  const editable = mayUse("admin");
+  slot.innerHTML = nodeInfoHTML(node) + (editable ? `
+    <form id="node-form" class="row" style="gap:10px; margin-top:12px; flex-wrap:wrap; align-items:flex-end">
+      <label class="field" style="margin:0"><span>Name</span>
+        <input id="node-name" type="text" maxlength="200" placeholder="e.g. Zurich primary"
+          value="${esc(node.name || "")}" /></label>
+      <label class="field" style="margin:0"><span>Environment</span>
+        <input id="node-env" type="text" maxlength="200" placeholder="e.g. production"
+          value="${esc(node.environment || "")}" /></label>
+      <button class="btn" type="submit">Save</button>
+    </form>` : "");
+  if (!editable) return;
+  document.getElementById("node-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const saved = await api("PUT", "/api/v1/node", {
+        name: document.getElementById("node-name").value,
+        environment: document.getElementById("node-env").value,
+      });
+      mountNodeCard(saved);
+      toast("Node identity saved");
+    } catch (e) { toast(e.message, "err"); }
+  });
 }
 
 // buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
