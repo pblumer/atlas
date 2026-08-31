@@ -1,6 +1,8 @@
 package playground_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -263,5 +265,52 @@ func TestATaskIsCompletableRightAfterTheCaseStarts(t *testing.T) {
 	}
 	if c.State != model.PICompleted {
 		t.Errorf("state = %v, want completed", c.State)
+	}
+}
+
+// A sandbox that cannot make its directory fails at Open, before an engine exists.
+func TestOpenFailsWhenItCannotMakeItsDirectory(t *testing.T) {
+	// A file where the base directory should be: MkdirTemp cannot make a child of it.
+	base := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(base, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := playground.Open(playground.Options{
+		ModelXML: fixture(t, "sequence.bpmn"), BaseDir: base,
+	}); err == nil {
+		t.Error("opening a sandbox under a file should be refused")
+	}
+}
+
+// The zero StartTime is legal — it simply starts at the epoch — because a caller
+// that never shows a time to anybody should not have to invent one.
+func TestZeroStartTimeStartsAtTheEpoch(t *testing.T) {
+	sb, err := playground.Open(playground.Options{
+		ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = sb.Close() })
+	if got := sb.Now().Unix(); got != 0 {
+		t.Errorf("simulated time = %d, want the epoch", got)
+	}
+}
+
+// A job the sandbox is going to answer itself is not offered to the person: the
+// list is "waiting for you", not "waiting".
+func TestAStubbedJobIsNotOfferedToThePerson(t *testing.T) {
+	sb := openSandbox(t, "two-tasks.bpmn", playground.StubSet{
+		Default: &playground.Stub{Min: time.Minute, Max: time.Minute},
+	})
+	if _, err := sb.StartCase(); err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	tasks, err := sb.OpenTasks()
+	if err != nil {
+		t.Fatalf("open tasks: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Errorf("open tasks = %+v, want none: the stub answers that job in a minute", tasks)
 	}
 }

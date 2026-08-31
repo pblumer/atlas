@@ -276,10 +276,10 @@ func (s *Service) HandleClose(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.session(w, r); !ok {
 		return
 	}
-	if err := s.sessions.Close(r.PathValue("id")); err != nil {
-		httpapi.Error(w, http.StatusNotFound, err.Error())
-		return
-	}
+	// A session that went away between the lookup and here — the reaper got it, or
+	// another tab closed it — is gone, which is what the caller asked for. Reporting
+	// that race as a failure would be a worse answer than the truth.
+	_ = s.sessions.Close(r.PathValue("id"))
 	httpapi.JSON(w, http.StatusOK, map[string]bool{"closed": true})
 }
 

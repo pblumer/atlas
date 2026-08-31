@@ -252,3 +252,45 @@ func TestSessionRecordsItsOwner(t *testing.T) {
 		t.Error("with authentication off a session should belong to everyone, as every other route does")
 	}
 }
+
+// The small facts a caller reads off a session without touching its sandbox.
+func TestSessionReportsItsOwnFacts(t *testing.T) {
+	r := newRegistry(t)
+	before := time.Now()
+	s := openSession(t, r, "sequence.bpmn")
+
+	if s.ID() == "" {
+		t.Error("a session with no id cannot be addressed")
+	}
+	if s.CreatedAt().Before(before.Add(-time.Second)) {
+		t.Errorf("createdAt = %s, want around %s", s.CreatedAt(), before)
+	}
+	if !s.LastUsed().Equal(s.CreatedAt()) && s.LastUsed().Before(s.CreatedAt()) {
+		t.Errorf("lastUsed %s is before createdAt %s", s.LastUsed(), s.CreatedAt())
+	}
+	if r.Len() != 1 {
+		t.Errorf("registry holds %d sessions, want 1", r.Len())
+	}
+}
+
+// A caller has to be able to tell "your session is gone" from any other failure,
+// because only one of them is worth retrying with a new session.
+func TestClosedSessionIsRecognisable(t *testing.T) {
+	r := newRegistry(t)
+	s := openSession(t, r, "sequence.bpmn")
+	if err := r.Close(s.ID()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	err := s.With(func(*playground.Sandbox) error { return nil })
+	if !playground.ErrClosedSession(err) {
+		t.Errorf("error %v is not recognisable as a closed session", err)
+	}
+	if playground.ErrClosedSession(nil) {
+		t.Error("a nil error should not read as a closed session")
+	}
+	// Closing twice says the same thing rather than pretending it worked.
+	if err := s.Close(); !playground.ErrClosedSession(err) {
+		t.Errorf("closing twice returned %v", err)
+	}
+}

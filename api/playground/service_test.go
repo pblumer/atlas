@@ -2,8 +2,10 @@ package playground
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -298,6 +300,7 @@ func TestGoneSessionIsNotFound(t *testing.T) {
 		"tasks":    svc.HandleTasks,
 		"overlay":  svc.HandleOverlay,
 		"pause":    svc.HandlePause,
+		"resume":   svc.HandleResume,
 		"close":    svc.HandleClose,
 		"newCase":  svc.HandleStartCase,
 		"messages": svc.HandlePublishMessage,
@@ -413,5 +416,274 @@ func TestASessionBelongsToWhoeverOpenedIt(t *testing.T) {
 	svc.HandleClose(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("another modeler closed the session: %d", w.Code)
+	}
+}
+
+// Every kind of occurrence has to reach the wire under its own name: a run report
+// that calls a failure a completion is worse than no report.
+func TestOccurrenceKindsReachTheWire(t *testing.T) {
+	svc := newService(t)
+	body := `{"source":"xml","xml":` + jsonString(userTaskXML) +
+		`,"stubs":{"human":{"minMillis":1000,"maxMillis":1000,"failPerMillion":1000000,"failMessage":"declined"}}}`
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost, body, nil), &sess)
+	call(t, svc.HandleStartCase, http.MethodPost, "", map[string]string{"id": sess.ID})
+
+	var occ occurrenceResp
+	decodeInto(t, call(t, svc.HandleStep, http.MethodPost, "", map[string]string{"id": sess.ID}), &occ)
+	if occ.Kind != "jobFailed" || occ.Element != "approve" {
+		t.Errorf("occurrence = %+v, want a failure on \"approve\"", occ)
+	}
+
+	// The same stub, throwing a modelled business error instead.
+	body = `{"source":"xml","xml":` + jsonString(userTaskXML) +
+		`,"stubs":{"human":{"minMillis":1000,"maxMillis":1000,"failPerMillion":1000000,"errorCode":"DECLINED"}}}`
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost, body, nil), &sess)
+	call(t, svc.HandleStartCase, http.MethodPost, "", map[string]string{"id": sess.ID})
+	decodeInto(t, call(t, svc.HandleStep, http.MethodPost, "", map[string]string{"id": sess.ID}), &occ)
+	if occ.Kind != "jobError" {
+		t.Errorf("occurrence kind = %q, want jobError", occ.Kind)
+	}
+
+	// A timer is the third kind, and carries no element: several may come due at
+	// the same instant.
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+		`{"source":"xml","xml":`+jsonString(waitXML)+`}`, nil), &sess)
+	call(t, svc.HandleStartCase, http.MethodPost, "", map[string]string{"id": sess.ID})
+	// A fresh value, not the one above: an element-less timer omits the field, so a
+	// reused struct would keep the previous occurrence's element and pass by accident.
+	var timer occurrenceResp
+	decodeInto(t, call(t, svc.HandleStep, http.MethodPost, "", map[string]string{"id": sess.ID}), &timer)
+	if timer.Kind != "timer" || timer.Element != "" {
+		t.Errorf("occurrence = %+v, want an element-less timer", timer)
+	}
+}
+
+// A per-element policy overrides the defaults, and a bad entry anywhere in it is
+// refused with the element named — a policy with twenty elements needs to say
+// which one is wrong.
+func TestPerElementPolicyAndItsRefusals(t *testing.T) {
+	svc := newService(t)
+	good := `{"source":"xml","xml":` + jsonString(userTaskXML) +
+		`,"stubs":{"byElement":{"approve":{"minMillis":1000,"maxMillis":2000,"outputs":{"decision":"auto"}}}}}`
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost, good, nil), &sess)
+
+	var started caseResp
+	decodeInto(t, call(t, svc.HandleStartCase, http.MethodPost, "", map[string]string{"id": sess.ID}), &started)
+	var ran progressResp
+	decodeInto(t, call(t, svc.HandleRun, http.MethodPost, "", map[string]string{"id": sess.ID}), &ran)
+	var done caseResp
+	decodeInto(t, call(t, svc.HandleCase, http.MethodGet, "",
+		map[string]string{"id": sess.ID, "caseKey": started.InstanceKey}), &done)
+	if done.State != "completed" {
+		t.Errorf("state = %q; the element's own entry should have answered the user task", done.State)
+	}
+
+	for _, bad := range []string{
+		`{"source":"xml","xml":"<x/>","stubs":{"byElement":{"approve":{"minMillis":-1}}}}`,
+		`{"source":"xml","xml":"<x/>","stubs":{"human":{"failPerMillion":-3}}}`,
+	} {
+		rec := call(t, svc.HandleOpen, http.MethodPost, bad, nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400 for %s", rec.Code, bad)
+		}
+		if !strings.Contains(rec.Body.String(), "stubs.") {
+			t.Errorf("error %s should name the part of the policy that is wrong", rec.Body)
+		}
+	}
+}
+
+// errReader fails on read, standing in for a request whose body dies mid-flight.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
+
+// Every handler that reads a body has to refuse a broken one rather than acting on
+// half of it or answering 500.
+func TestHandlersRefuseUnreadableAndMalformedBodies(t *testing.T) {
+	svc := newService(t)
+	sess := openSession(t, svc, userTaskXML)
+	id := map[string]string{"id": sess.ID}
+	withJob := map[string]string{"id": sess.ID, "jobKey": "1"}
+
+	decoders := map[string]struct {
+		h    http.HandlerFunc
+		vals map[string]string
+	}{
+		"open":     {svc.HandleOpen, nil},
+		"case":     {svc.HandleStartCase, id},
+		"clock":    {svc.HandleAdvanceClock, id},
+		"message":  {svc.HandlePublishMessage, id},
+		"complete": {svc.HandleCompleteTask, withJob},
+	}
+	for name, d := range decoders {
+		t.Run(name+" malformed", func(t *testing.T) {
+			if rec := call(t, d.h, http.MethodPost, "{oops", d.vals); rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400 (body %s)", rec.Code, rec.Body)
+			}
+		})
+		t.Run(name+" unreadable", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/", errReader{})
+			for k, v := range d.vals {
+				r.SetPathValue(k, v)
+			}
+			rec := httptest.NewRecorder()
+			d.h(rec, r)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400 (body %s)", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+// A variable the server cannot convert is the caller's problem, named as such,
+// wherever variables are accepted.
+func TestUnconvertibleVariablesAreRefused(t *testing.T) {
+	reg := playground.NewRegistry(time.Hour, 4)
+	t.Cleanup(reg.CloseAll)
+	// A converter that refuses one sentinel value, standing in for the server's own,
+	// which refuses anything it cannot express as an engine variable.
+	picky := func(in map[string]any) ([]model.VariableValue, error) {
+		if _, bad := in["nope"]; bad {
+			return nil, errors.New("variable \"nope\": unsupported value type")
+		}
+		return vars(in)
+	}
+	svc := New(reg, func(*http.Request, string, string) ([]byte, int, string) {
+		return nil, http.StatusNotFound, "no"
+	}, picky)
+
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+		`{"source":"xml","xml":`+jsonString(userTaskXML)+`}`, nil), &sess)
+	id := map[string]string{"id": sess.ID}
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"start variables": call(t, svc.HandleStartCase, http.MethodPost, `{"variables":{"nope":1}}`, id),
+		"message payload": call(t, svc.HandlePublishMessage, http.MethodPost, `{"name":"m","variables":{"nope":1}}`, id),
+		"task outputs":    call(t, svc.HandleCompleteTask, http.MethodPost, `{"variables":{"nope":1}}`, map[string]string{"id": sess.ID, "jobKey": "1"}),
+		"stub outputs":    call(t, svc.HandleOpen, http.MethodPost, `{"source":"xml","xml":"<x/>","stubs":{"default":{"outputs":{"nope":1}}}}`, nil),
+	} {
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400 (body %s)", name, rec.Code, rec.Body)
+		}
+	}
+}
+
+// Closing something that is not there is a 404, not a silent success.
+func TestClosingAnUnknownSessionIsNotFound(t *testing.T) {
+	svc := newService(t)
+	if rec := call(t, svc.HandleClose, http.MethodDelete, "", map[string]string{"id": "nope"}); rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+// A session can go away underneath a request: the reaper takes an idle one, or
+// another tab closes it, between the lookup and the work. Every handler has to
+// answer "it is gone" rather than the zero value of a closure that never ran.
+func TestASessionClosedUnderneathARequestIsNotFound(t *testing.T) {
+	reg := playground.NewRegistry(time.Hour, 4)
+	t.Cleanup(reg.CloseAll)
+	svc := New(reg, func(*http.Request, string, string) ([]byte, int, string) {
+		return nil, http.StatusNotFound, "no"
+	}, vars)
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+		`{"source":"xml","xml":`+jsonString(userTaskXML)+`}`, nil), &sess)
+
+	// Closed directly rather than through the registry, so the registry still hands
+	// it out — exactly what the reaper's race looks like from a handler.
+	live, ok := reg.Get(sess.ID)
+	if !ok {
+		t.Fatal("the registry lost the session it just opened")
+	}
+	if err := live.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	id := map[string]string{"id": sess.ID}
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"status":   call(t, svc.HandleStatus, http.MethodGet, "", id),
+		"run":      call(t, svc.HandleRun, http.MethodPost, "", id),
+		"step":     call(t, svc.HandleStep, http.MethodPost, "", id),
+		"case":     call(t, svc.HandleStartCase, http.MethodPost, "", id),
+		"tasks":    call(t, svc.HandleTasks, http.MethodGet, "", id),
+		"overlay":  call(t, svc.HandleOverlay, http.MethodGet, "", id),
+		"clock":    call(t, svc.HandleAdvanceClock, http.MethodPost, `{"millis":1000}`, id),
+		"message":  call(t, svc.HandlePublishMessage, http.MethodPost, `{"name":"m"}`, id),
+		"readCase": call(t, svc.HandleCase, http.MethodGet, "", map[string]string{"id": sess.ID, "caseKey": "1"}),
+		"complete": call(t, svc.HandleCompleteTask, http.MethodPost, "", map[string]string{"id": sess.ID, "jobKey": "1"}),
+	} {
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want 404 (body %s)", name, rec.Code, rec.Body)
+		}
+	}
+}
+
+// A completion is the third occurrence kind, and the one a batch run is made of.
+func TestACompletionReachesTheWireAsOne(t *testing.T) {
+	svc := newService(t)
+	body := `{"source":"xml","xml":` + jsonString(userTaskXML) +
+		`,"stubs":{"human":{"minMillis":1000,"maxMillis":1000}}}`
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost, body, nil), &sess)
+	call(t, svc.HandleStartCase, http.MethodPost, "", map[string]string{"id": sess.ID})
+
+	var occ occurrenceResp
+	decodeInto(t, call(t, svc.HandleStep, http.MethodPost, "", map[string]string{"id": sess.ID}), &occ)
+	if occ.Kind != "jobCompleted" || occ.Element != "approve" {
+		t.Errorf("occurrence = %+v, want a completion on \"approve\"", occ)
+	}
+}
+
+// A case or a task on a session that never existed is a 404 before any work.
+func TestUnknownSessionOnTheKeyedRoutes(t *testing.T) {
+	svc := newService(t)
+	if rec := call(t, svc.HandleCase, http.MethodGet, "",
+		map[string]string{"id": "nope", "caseKey": "1"}); rec.Code != http.StatusNotFound {
+		t.Errorf("case on an unknown session = %d, want 404", rec.Code)
+	}
+	if rec := call(t, svc.HandleCompleteTask, http.MethodPost, "",
+		map[string]string{"id": "nope", "jobKey": "1"}); rec.Code != http.StatusNotFound {
+		t.Errorf("complete on an unknown session = %d, want 404", rec.Code)
+	}
+}
+
+// When the sandbox's own state cannot be read, every handler has to answer 500 —
+// the run's numbers are not trustworthy any more, and a 200 with rows missing is
+// the one answer that must not happen.
+func TestAnUnreadableSandboxIsReportedAsAFault(t *testing.T) {
+	svc := newService(t)
+	sess := openSession(t, svc, userTaskXML)
+	id := map[string]string{"id": sess.ID}
+
+	var started caseResp
+	decodeInto(t, call(t, svc.HandleStartCase, http.MethodPost, "", id), &started)
+
+	live, ok := svc.sessions.Get(sess.ID)
+	if !ok {
+		t.Fatal("the registry lost the session it just opened")
+	}
+	key, err := strconv.ParseUint(started.InstanceKey, 10, 64)
+	if err != nil {
+		t.Fatalf("parse case key: %v", err)
+	}
+	if err := live.With(func(sb *playground.Sandbox) error { return sb.InjectUnreadableCase(key) }); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"status":  call(t, svc.HandleStatus, http.MethodGet, "", id),
+		"tasks":   call(t, svc.HandleTasks, http.MethodGet, "", id),
+		"case":    call(t, svc.HandleStartCase, http.MethodPost, "", id),
+		"step":    call(t, svc.HandleStep, http.MethodPost, "", id),
+		"run":     call(t, svc.HandleRun, http.MethodPost, "", id),
+		"clock":   call(t, svc.HandleAdvanceClock, http.MethodPost, `{"millis":1000}`, id),
+		"message": call(t, svc.HandlePublishMessage, http.MethodPost, `{"name":"m"}`, id),
+	} {
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: status = %d, want 500 (body %s)", name, rec.Code, rec.Body)
+		}
 	}
 }

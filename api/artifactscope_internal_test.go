@@ -121,6 +121,10 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
 		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
 		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
+		// Opening a Playground sandbox on a draft reads that draft, so it goes through
+		// the same authorization — and fails the same way when the project cannot be
+		// read (ADR-draft-modeler-playground).
+		{"playground on a draft (authorizeArtifact)", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"d1"}`},
 	}
 	for _, tc := range cases {
 		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {
@@ -142,6 +146,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"update dmnref get error", "PATCH", "/api/v1/dmnrefs/rdir", `{"name":"x"}`},
 		{"delete form get error", "DELETE", "/api/v1/forms/fdir", ""},
 		{"save form existing-read error", "POST", "/api/v1/forms", `{"id":"fdir","schema":{}}`},
+		{"playground draft read error", "POST", "/api/v1/playground/sessions", `{"source":"draft","ref":"ddir"}`},
 	}
 	for _, tc := range storeErr {
 		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {

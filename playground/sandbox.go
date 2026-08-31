@@ -691,6 +691,18 @@ func (s *Sandbox) Case(piKey uint64) (CaseResult, error) {
 	return res, nil
 }
 
+// InjectUnreadableCase writes an undecodable record under a case's key, so a
+// caller in another package can exercise what every read path does when the
+// sandbox's own state cannot be decoded — report it, rather than returning a
+// report with rows silently missing.
+//
+// It is a test/tooling affordance only, mirroring the store's own
+// InjectCorruptProcessInstance, and nothing in the sandbox's normal operation
+// writes a record this way.
+func (s *Sandbox) InjectUnreadableCase(piKey uint64) error {
+	return s.store.InjectCorruptProcessInstance(piKey)
+}
+
 // ElementVisits reports how many tokens have passed through each element of the
 // root process, keyed by BPMN element id — the heat map's raw material, read from
 // the same maintained counters the runtime overlay uses (ADR-0080).

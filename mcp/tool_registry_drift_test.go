@@ -125,6 +125,28 @@ var mcpOmittedRoutes = map[string]string{
 	// operator watches and occasionally forces before a restart. Same category as
 	// backup/restore — it concerns the data directory, not the processes running in it,
 	// and the control deletes WAL segments when compaction is on.
+	// The Playground (ADR-draft-modeler-playground) is a live sandbox bound to the
+	// person who opened it: a session holds an engine and a temp directory, it is
+	// reclaimed on a TTL of disuse, and it exists to let an *author* watch a model
+	// run. An agent that wants to know how a model behaves has the durable surface
+	// for it — deploy it and drive the instance — and would otherwise be holding
+	// sandboxes nobody is watching. Revisit if the Modeler copilot (ADR-0032) grows
+	// a reason to try a model before proposing it.
+	"POST /api/v1/playground/sessions":                              "opens a live sandbox bound to its author, not an agent action",
+	"GET /api/v1/playground/sessions/{id}":                          "state of an author's sandbox session",
+	"DELETE /api/v1/playground/sessions/{id}":                       "closes an author's sandbox session",
+	"POST /api/v1/playground/sessions/{id}/cases":                   "drives an author's sandbox; an agent uses the durable start path",
+	"GET /api/v1/playground/sessions/{id}/cases/{caseKey}":          "reads a case out of an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/run":                     "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/step":                    "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/pause":                   "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/resume":                  "drives an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/clock":                   "moves an author's sandbox clock",
+	"POST /api/v1/playground/sessions/{id}/messages":                "drives an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/tasks":                    "lists what waits in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/tasks/{jobKey}/complete": "answers a task in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
+
 	// Leasing is the external worker protocol's own surface (ADR-0007), not an agent
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
 	// pointed at, and never needs to hold one against other workers.
