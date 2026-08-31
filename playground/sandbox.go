@@ -59,6 +59,11 @@ type Budget struct {
 	// Horizon caps how far simulated time may travel from where the Run started.
 	// A run stops *before* stepping past it, so the horizon is never overshot.
 	Horizon time.Duration
+	// Stop, when set, is asked before every occurrence whether to give up. It is
+	// how a pause reaches a run that is already in flight: the run holds the
+	// session's goroutine, so the answer cannot come through the loop. Like the
+	// other bounds, stopping this way is not quiescence.
+	Stop func() bool
 }
 
 // DefaultBudget is a bound generous enough for any single case a person is
@@ -553,6 +558,10 @@ func (s *Sandbox) Run(b Budget) (Progress, error) {
 		}
 		if !ok {
 			prog.Quiescent = true
+			prog.SimTime = s.Now()
+			return prog, nil
+		}
+		if b.Stop != nil && b.Stop() {
 			prog.SimTime = s.Now()
 			return prog, nil
 		}
