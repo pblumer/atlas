@@ -401,52 +401,83 @@ func (s *Server) rebuildConnectorRegistries() error {
 	return nil
 }
 
+// connectorListing is one stored connector as one particular caller may see it: the
+// record, what the runtime made of it, and whether this caller may see how it is
+// configured at all. Both the legacy connector listing and the canonical
+// configured-Worker listing (ADR-0208) render from this, so ADR-0205's access
+// boundary is decided in one place and the two representations cannot drift apart
+// on who sees what.
+type connectorListing struct {
+	record  connector
+	role    string
+	problem string
+	usedBy  []connectorUse
+	// catalogOnly marks a caller below viewer: they may know the connector exists and
+	// nothing about how it is configured. It is carried as a fact from the role check
+	// rather than re-derived by a renderer from the shape it was handed.
+	catalogOnly bool
+}
+
+// connectorListings loads every stored connector, oldest first, and resolves per
+// record what this caller may see of it. The store read and the registry reads
+// happen in the same closure: the registries are owned by the run-loop goroutine
+// (rebuild swaps them there), so asking them anywhere else would race a rebuild
+// (invariant I3).
+func (s *Server) connectorListings(r *http.Request) ([]connectorListing, error) {
+	var (
+		listings []connectorListing
+		loadErr  error
+	)
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			loadErr = err
+			return
+		}
+		uses := s.connectorUseIndex()
+		listings = make([]connectorListing, 0, len(recs))
+		for _, c := range recs {
+			listing := connectorListing{record: c, problem: s.connectorProblem(c.Kind, c.Name)}
+			if code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer); code != 0 {
+				listing.catalogOnly = true
+			} else {
+				listing.role = connectorRole(c, httpapi.PrincipalFrom(r.Context()), s.authEnabled)
+				// UsedBy is an operator's view of the blast radius of a delete, so it
+				// travels with the configuration rather than with the catalog entry.
+				listing.usedBy = uses[c.Kind+"/"+c.Name]
+			}
+			listings = append(listings, listing)
+		}
+	})
+	return listings, loadErr
+}
+
 // handleListConnectors lists the managed connector instances, oldest first. The
 // records carry only credential *references*, never secrets, so nothing is
 // redacted.
 func (s *Server) handleListConnectors(w http.ResponseWriter, r *http.Request) {
-	var (
-		recs    []connector
-		loadErr error
-	)
+	listings, err := s.connectorListings(r)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list connectors: "+err.Error())
+		return
+	}
 	// Two shapes, by what this caller may see (ADR-0205). At viewer or above, the
 	// record and what the runtime made of it. Below that, the catalog entry — name,
 	// kind, enabled — because the modeler builds its connector picker from this same
 	// listing, and a modeller who cannot see that a connector exists cannot author
 	// against it. See connectorscope.go for why existence is not configuration.
-	views := []any{}
-	// The store read and the registry reads happen in the same closure: the registries
-	// are owned by the run-loop goroutine (rebuild swaps them there), so asking them
-	// anywhere else would race a rebuild (invariant I3).
-	s.do(func() {
-		recs, loadErr = s.connectors.LoadAll()
-		if loadErr != nil {
-			return
+	views := make([]any, 0, len(listings))
+	for _, listing := range listings {
+		if listing.catalogOnly {
+			views = append(views, catalogEntry(listing.record, listing.problem))
+			continue
 		}
-		uses := s.connectorUseIndex()
-		views = make([]any, 0, len(recs))
-		for _, c := range recs {
-			problem := s.connectorProblem(c.Kind, c.Name)
-			if code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer); code != 0 {
-				views = append(views, catalogEntry(c, problem))
-				continue
-			}
-			views = append(views, connectorView{
-				connector: c,
-				Role:      connectorRole(c, httpapi.PrincipalFrom(r.Context()), s.authEnabled),
-				Problem:   problem,
-				// UsedBy is an operator's view of the blast radius of a delete, so it
-				// travels with the configuration rather than with the catalog entry.
-				UsedBy: uses[c.Kind+"/"+c.Name],
-			})
-		}
-	})
-	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list connectors: "+loadErr.Error())
-		return
-	}
-	if views == nil {
-		views = []any{}
+		views = append(views, connectorView{
+			connector: listing.record,
+			Role:      listing.role,
+			Problem:   listing.problem,
+			UsedBy:    listing.usedBy,
+		})
 	}
 	httpapi.JSON(w, http.StatusOK, views)
 }
@@ -499,6 +530,22 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	rec, code, msg := s.createConnector(r, p)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, rec)
+}
+
+// createConnector validates a decoded create request, seals a pasted connection
+// string, persists the record and rebuilds the registries, returning the stored
+// record. A refusal comes back as an HTTP status and message instead of being
+// written, because the canonical configured-Worker API (ADR-0208) creates through
+// this same function: the per-kind validation, the vault seal, the name check and
+// the ownership default exist exactly once, and a Worker created either way is the
+// same record made the same way.
+func (s *Server) createConnector(r *http.Request, p createConnectorParams) (connector, int, string) {
 	p.Name = strings.TrimSpace(p.Name)
 	p.Kind = strings.TrimSpace(p.Kind)
 	if p.Kind == "" {
@@ -509,21 +556,18 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
-		httpapi.Error(w, http.StatusBadRequest, "connector name is required")
-		return
+		return connector{}, http.StatusBadRequest, "connector name is required"
 	}
 	kind, ok := lookupManagedConnectorKind(p.Kind)
 	if !ok {
-		httpapi.Error(w, http.StatusBadRequest, managedConnectorKindsError())
-		return
+		return connector{}, http.StatusBadRequest, managedConnectorKindsError()
 	}
 	// The id is generated before validation because a SQL connector's credential
 	// reference is derived from it: the operator pastes a connection string, and what
 	// the record stores is a vault key named after the record itself.
 	id, err := newID()
 	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
-		return
+		return connector{}, http.StatusInternalServerError, "generate id: " + err.Error()
 	}
 	// A pasted connection string becomes a vault reference before anything else looks
 	// at the request, so every path below — validation, the record, the response —
@@ -534,12 +578,10 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.ConnectionString = ""
 	if dsn != "" {
 		if !isSQLConnectorKind(p.Kind) {
-			httpapi.Error(w, http.StatusBadRequest, "connectionString applies only to a SQL connector ("+strings.Join(sqlConnectorKinds(), ", ")+")")
-			return
+			return connector{}, http.StatusBadRequest, "connectionString applies only to a SQL connector (" + strings.Join(sqlConnectorKinds(), ", ") + ")"
 		}
 		if s.vault == nil {
-			httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured; a connection string cannot be stored without one")
-			return
+			return connector{}, http.StatusServiceUnavailable, "vault not configured; a connection string cannot be stored without one"
 		}
 		p.CredentialsRef = sqlDSNRef(id)
 		p.Endpoint = redactedSQLTarget(dsn)
@@ -547,8 +589,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	// The kind's validator applies its own rules and normalizes p (defaulting a mail
 	// provider, clearing mail-only fields for kinds that don't use them).
 	if msg := kind.validateCreate(&p); msg != "" {
-		httpapi.Error(w, http.StatusBadRequest, msg)
-		return
+		return connector{}, http.StatusBadRequest, msg
 	}
 	enabled := true
 	if p.Enabled != nil {
@@ -601,40 +642,60 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case dupErr:
-		httpapi.Error(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
-		return
+		return connector{}, http.StatusConflict, "a connector named " + p.Name + " already exists"
 	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
-		return
+		return connector{}, http.StatusInternalServerError, "save connector: " + saveErr.Error()
 	}
-	httpapi.JSON(w, http.StatusOK, rec)
+	return rec, 0, ""
+}
+
+// connectorPatch is every field an operator can change on a stored connector.
+// Provider is here because switching one — an SMTP host that will not authenticate
+// moved to the in-app preview transport, say — is the fix for a whole class of parked
+// mail tasks, and re-creating the connector under the same name to change it would
+// break every model referencing it (ADR-0160).
+//
+// Every field is a pointer because absent and empty are two different acts. A body
+// naming only an endpoint has to leave the provider a mail connector authenticates
+// with exactly as it was: blanking it would move a Gmail connector onto SMTP while
+// its OAuth bundle reference stayed behind, and the operator would be told the change
+// succeeded.
+type connectorPatch struct {
+	Endpoint       *string `json:"endpoint"`
+	CredentialsRef *string `json:"credentialsRef"`
+	Provider       *string `json:"provider"`
+	Sender         *string `json:"sender"`
+	Enabled        *bool   `json:"enabled"`
 }
 
 // handleUpdateConnector applies a partial change to a managed connector (endpoint,
 // credential reference, or enabled state) and rebuilds the registry.
 func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	// Every field an operator can change on a stored connector. Provider is here
-	// because switching one — an SMTP host that will not authenticate moved to the
-	// in-app preview transport, say — is the fix for a whole class of parked mail
-	// tasks, and re-creating the connector under the same name to change it would
-	// break every model referencing it (ADR-0160).
-	var p struct {
-		Endpoint       *string `json:"endpoint"`
-		CredentialsRef *string `json:"credentialsRef"`
-		Provider       *string `json:"provider"`
-		Sender         *string `json:"sender"`
-		Enabled        *bool   `json:"enabled"`
-	}
+	var p connectorPatch
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	rec, code, msg := s.updateConnector(r, r.PathValue("id"), p)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, rec)
+}
+
+// updateConnector applies a decoded patch to the stored record and rebuilds the
+// registries, returning the saved record. A refusal comes back as an HTTP status and
+// message instead of being written, because the canonical configured-Worker API
+// (ADR-0208) patches through this same function: the editor check, the re-validation
+// and the rebuild exist once, and the two representations cannot drift apart on what
+// a patch is allowed to do.
+func (s *Server) updateConnector(r *http.Request, id string, p connectorPatch) (connector, int, string) {
 	var (
 		rec         connector
 		found       bool
@@ -688,19 +749,15 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case saveErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "update connector: "+saveErr.Error())
-		return
+		return connector{}, http.StatusInternalServerError, "update connector: " + saveErr.Error()
 	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no connector with that id")
-		return
+		return connector{}, http.StatusNotFound, "no connector with that id"
 	case refusedCode != 0:
-		httpapi.Error(w, refusedCode, refusedMsg)
-		return
+		return connector{}, refusedCode, refusedMsg
 	case badRequest != "":
-		httpapi.Error(w, http.StatusBadRequest, badRequest)
-		return
+		return connector{}, http.StatusBadRequest, badRequest
 	}
-	httpapi.JSON(w, http.StatusOK, rec)
+	return rec, 0, ""
 }
 
 // handleDeleteConnector removes a managed connector and rebuilds the registry so a
