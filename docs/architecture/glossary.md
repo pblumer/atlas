@@ -10,6 +10,8 @@ Terms used throughout Atlas's documentation and code.
 
 **Command** — An intention to do something, submitted to a partition. May be rejected. Not persisted. Turned into events by the processor.
 
+**Connector** *(legacy)* — The pre-ADR-0203 word for what is now a **Worker Type** or a **Worker**, depending on where it stood — which is why it was replaced. It survives in contracts that cannot change without breaking deployed models: the `connector/` package paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the `ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes (aliased by `/api/v1/configured-workers`).
+
 **CompiledProcess** — The immutable, integer-indexed output of the graph compiler for one process version. Read concurrently without locks.
 
 **Detail table** — A type-specific table (e.g. `serviceTasks`, `timers`) that a `CompiledNode` indexes into, keeping nodes small and cache-friendly.
@@ -30,7 +32,7 @@ Terms used throughout Atlas's documentation and code.
 
 **Intent** — Part of the record discriminator. What is happening or has happened (Activating, Completing, Created, Triggered, ...).
 
-**Job** — A unit of service-task work handed to an external worker. Identified by a job key; completed via a command that flows back through the processor.
+**Job** (work item) — A durable unit of service-task work, created when a token reaches a job-backed task and handed to a worker only after WAL append, fsync and state commit. Identified by a job key; completed via a command that flows back through the processor. The set of activatable jobs for one job type is a *logical work stream*, derived from the job store — Atlas has no second, independently durable queue (ADR-0203).
 
 **Key** — A globally unique 64-bit identifier for a stateful entity, with the partition encoded in the high 16 bits.
 
@@ -67,3 +69,9 @@ Terms used throughout Atlas's documentation and code.
 **Variable override** — An operator setting or overwriting a variable on a running instance from outside the model (ADR-0095), via `POST /api/v1/instances/{key}/variables`. Admin-gated when auth is on; recorded as ordinary variable events plus an audit event, so it replays deterministically and — unlike a model write — does not re-evaluate gateways a token has already passed.
 
 **WAL (write-ahead log)** — The append-only, segmented log of events. The single source of truth; the state store is its materialization.
+
+**Worker** — An operator-managed configuration of one Worker Type: where and under which identity the work is performed (`jira-production`, `mail-service-desk`, `prod-forest`). Holds endpoint and configuration plus a *reference* to a credential, never the credential value — no secret enters a BPMN model, an event or the WAL. This is the name a job-backed task states, and it supersedes the operator-facing "connector instance" of ADR-0041 (ADR-0203).
+
+**Worker Instance** — A live runtime consumer leasing jobs for a Worker: an embedded consumer, a worker process Atlas supervises, or an independently deployed one. Ephemeral runtime topology, not design-time configuration — one Worker may have zero, one or many. Scaling adds Worker Instances rather than cloning Worker configuration, and a model never names one (ADR-0203).
+
+**Worker Type** — An available execution capability that knows how to run one or more job types: `jira`, `mail`, `ad`, `entra`, `postgres`. Defines the supported operations, the configuration and credential schema, optional Modeler templates and the runtime mode. Worker Types form the Worker Catalog; installing one makes a capability available, and creates no connection to any target (ADR-0203). Implemented one package per type under `connector/`.

@@ -203,7 +203,7 @@ type deploymentTarget struct {
   optional `targetId`. When set, the local server calls the **remote's existing**
   `POST /api/v1/deployments` (or its bundle publish) with each member's XML/DMN,
   authenticating with the vault credential. Runs as a post-API side effect (an
-  outbound HTTP call like any connector), off the hot path. Records the release
+  outbound HTTP call like any worker's), off the hot path. Records the release
   with the target on it.
 - **`api/targets_status.go`** — `GET /api/v1/applications/{id}/deployments` extended
   to query each target's `GET /processes` + instances summary and fold live

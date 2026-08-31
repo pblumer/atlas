@@ -106,7 +106,7 @@ The control-flow basics most real models use.
   collection) and an association panel (the FEEL value, the target member/variable),
   with input associations defaulting their target on draw. Next: a lineage view
   folding the `SourcePos` chain, item-definition schema validation, list-index path
-  targets, and connector-backed data stores.
+  targets, and worker-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
@@ -177,15 +177,15 @@ The control-flow basics most real models use.
   job completion — so a downstream gateway routes on the decision. **A second
   evaluation mode landed** ([ADR-0050](docs/adr/0050-temis-decision-connector.md)):
   a business rule task marked `<atlas:temisConnector connector="…">` is a *central*
-  decision, evaluated by a remote temis service through the connector/job path
+  decision, evaluated by a remote temis service through the worker/job path
   (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
   only the evaluation locus differs, and a central decision needs no local model at
-  deploy. The `temis` connector trio (registry/client/worker) and the shared
-  `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
-  the single-binary server run loop**, and **connectors are now operator-managed in
+  deploy. The `temis` trio (registry/client/worker) and the shared
+  `dmn.DecisionHandler` core landed, and **its worker is now wired into
+  the single-binary server run loop**, and **workers are now operator-managed in
   the Console** ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)):
-  durable connector instances (`{name, endpoint, credentialsRef, enabled}`) live in
-  a sidecar store with CRUD on Organization → Connectors, the endpoint token is a
+  durable worker records (`{name, endpoint, credentialsRef, enabled}`) live in
+  a sidecar store with CRUD on Organization → Workers, the endpoint token is a
   reference resolved from `ATLAS_CONNECTOR_<REF>_TOKEN` at runtime (never stored),
   and a change rebuilds the live registry — so a central decision runs against the
   configured temis service without a restart (server end-to-end tested). Environment
@@ -223,15 +223,15 @@ The control-flow basics most real models use.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
-- 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
-  bearing an `<atlas:clioConnector>` extension is a connector task that appends an
+- 🚧 **Worker Types** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
+  bearing an `<atlas:clioConnector>` extension is a worker task that appends an
   event to a **server-registered** clio event store through the job path (like the
   DMN worker) — endpoint and credentials live in the server config, the model
-  refers to a connector by name. The `clio:write-events` slice (registry, client,
+  refers to a worker by name. The `clio:write-events` slice (registry, client,
   worker, recovery) landed; each write is idempotency-keyed by the job key so
   at-least-once delivery is safe against clio's append-only log. Wiring the worker
   into the server run loop, a `clio:query` operation, and a WAL→clio event mirror
-  are follow-ups. **A service-task connector catalog now makes connector kinds a
+  are follow-ups. **A service-task catalog now makes a Worker Type a
   data entry, not a bespoke panel** ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)):
   the modeler carries an array of kind entries `{id, name, description, icon,
   extension, fields[]}` and renders a searchable "Implement" picker over them —
@@ -239,7 +239,7 @@ The control-flow basics most real models use.
   (ADR-0012/0027) — while the compiler keeps discriminating by extension/job type
   and one worker serves each kind; the plain job-worker task, clio, and REST are
   its first three entries, and the next kind is additive at every layer. The same
-  ADR gives the **REST connector a model-authored endpoint**: the model carries the
+  ADR gives the **REST worker a model-authored endpoint**: the model carries the
   method, the full URL, and a result variable the JSON response is written into on
   completion (the ADR-0066 output-mapping path), and **the REST worker is wired into
   the run loop** so a REST task is authored and executed end to end. This revises
@@ -247,14 +247,14 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
-  **A BMC Remedy connector is another catalog kind**
+  **BMC Remedy is another Worker Type in the catalog**
   ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
   `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on
   `HPD:IncidentInterface_Create`) in a Remedy form through the BMC AR System REST API on
   the job path — the form and its field values are model-authored (literal-or-FEEL), the
   created entry's id is written into a result variable, and the AR System base URL plus
   the `{username,password}` credential bundle are server-registered and vault-resolved
-  like mail/clio, never in the model. The `remedy` connector trio (registry/client/worker)
+  like mail/clio, never in the model. The `remedy` trio (registry/client/worker)
   is wired into the single-binary server run loop under the reserved Remedy job type and
   authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
@@ -263,15 +263,15 @@ The control-flow basics most real models use.
   engine resolves the task into plain values and `atlas worker --connector remedy` creates
   the entry, holding the AR System base URL and the service account in its own environment
   (`ATLAS_REMEDY_CONNECTORS` plus per name `_ENDPOINT`, `_USERNAME`, `_PASSWORD`) — handed
-  to a supervised worker out of the connector store and the vault at spawn, exactly as mail
+  to a supervised worker out of the worker store and the vault at spawn, exactly as mail
   is. A Helix instance reachable only from the worker's network is thereby serviceable.
   Atlas supervises that worker **by default** (ADR-0192), so a
   ticket create leaves the loop with nothing to configure; the in-process handler remains
   as the fallback `--in-process-connectors` returns to. For local development without a real
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
-  connector runs against unmodified (package `connector/remedy/mock`).
-  **A Jira connector is another catalog kind**
+  worker runs against unmodified (package `connector/remedy/mock`).
+  **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
   through the REST API on the job path. Seven operations cover the loop a process runs
@@ -282,13 +282,13 @@ The control-flow basics most real models use.
   (`{email, apiToken}` for Jira Cloud, `{token}` for a Data Center personal access token)
   are server-registered and vault-resolved like mail/clio/Remedy, never in the model; the
   same fact decides both the authentication scheme and how an account is addressed when
-  assigning, so a model does not know which product it is talking to. The `jira` connector
-  trio (registry/client/worker) is wired into the single-binary run loop under the
+  assigning, so a model does not know which product it is talking to. The `jira` trio
+  (registry/client/worker) is wired into the single-binary run loop under the
   reserved Jira job type and authored via a first-class **Jira Connector** service-task
   type in the modeler. A transition may be named by the button a person reads in Jira (its
   id is resolved first), a search follows Jira's paging to the model's cap, and an extra
   issue field keeps the JSON shape its FEEL value had. Attachments, an out-of-process
-  worker for the kind, and inbound webhook events are follow-ups.
+  worker for the type, and inbound webhook events are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -440,15 +440,15 @@ Making processes wait, react, and time out.
   wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
   the Modeler's Implement panel via the shared message picker.
 - ✅ **Send tasks** ([ADR-0112](docs/adr/0112-send-tasks.md)): a `<sendTask>` is the **single
-  outbound element**, its kind chosen in the Implement panel. A **job/connector** kind
+  outbound element**, its kind chosen in the Implement panel. A **job/worker** kind
   (`zeebe:taskDefinition` or an `atlas:*Connector`) is a job-creating *activity* identical in
-  execution to a service task — it reuses `serviceTaskBehavior`, so connectors (e-mail, REST, …),
+  execution to a service task — it reuses `serviceTaskBehavior`, so worker tasks (e-mail, REST, …),
   boundary timeouts, I/O/data/multi-instance, retry backoff, and incidents all apply. A **message**
   kind (`messageRef`, or an `operationRef` naming a `<bpmn:operation>` whose `inMessageRef` is
   resolved to that message) is a correlating throw in task form: it compiles to the message throw
   path (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. `operationRef` is a
   deploy-time compatibility path for imported WSDL-style models (its `outMessageRef` response is
-  not supported). Recovery-tested; the Modeler offers the connector/job-worker catalog plus a
+  not supported). Recovery-tested; the Modeler offers the Worker Type catalog plus a
   Message entry on the send task.
 - ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
   target catch event at once — each outgoing flow leads to a message/timer/signal
@@ -639,7 +639,7 @@ What it takes to run this for real.
   them today — which discards work already done and re-runs side effects already
   committed, and which
   [ADR-0160](docs/adr/0160-fix-the-connector-from-the-incident.md) named as the missing
-  piece behind "adjust this service task and try again": the *connector* behind a task
+  piece behind "adjust this service task and try again": the *worker* behind a task
   is operator-managed runtime state and is now editable from the incident, but what the
   model says is not. The record decides the shape — a durable per-instance event
   carrying a **frozen** element mapping (never one recomputed during the fold, which
@@ -867,10 +867,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
-  ADR-0041's deferred **A3** so an operator can set a connector credential from the
+  ADR-0041's deferred **A3** so an operator can set a worker's credential from the
   Console/API on a single node without provisioning env vars or an external secret
   manager. Secrets are sealed with **AES-256-GCM** (standard-library crypto, no
-  CGO) into a sidecar store mirroring the connector store — one record
+  CGO) into a sidecar store mirroring the worker store — one record
   `{name, keyId, nonce, ciphertext, …}` per secret, atomic write + fsync — and
   resolved through the same `credentialsRef` indirection: the vault is consulted
   first, falling through to the ADR-0041 A2 environment lookup on a miss. The
@@ -912,7 +912,7 @@ for the derived whole-instance mesh above them.
   controls are complete; authoring, semantic rules, undo/redo, and save remain.
 - 🔲 **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
   Atlas already holds — process applications, deployed processes, call activities,
-  connectors, job/worker types, releases, deployment targets, DMN decisions — so
+  workers, Worker Types, releases, deployment targets, DMN decisions — so
   Panorama is useful before anyone models anything, and treat the ArchiMate model as
   an annotation over it rather than its source. Compute the graph per requesting
   principal against the existing sharing scopes, and where a scope cuts a path,
@@ -931,7 +931,7 @@ for the derived whole-instance mesh above them.
   critical and always attributing a worst-of parent to the descendant that caused it.
 - 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
-  connectors/job types, releases, local runtimes, and deployment targets. Preserve
+  workers and job types, releases, local runtimes, and deployment targets. Preserve
   the distinction between an ArchiMate Application Component and an Atlas process
   application, including many-to-many mappings.
 - 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and

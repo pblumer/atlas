@@ -135,7 +135,7 @@ Massnahmen aus Kapitel 6.4 im Wesentlichen fünf Restrisiken:
 |-----|------------|-----------------------|
 | R-01 | **Produktreife**: `0.x` Developer Preview, instabile On-Disk-Formate, kein Downgrade, kein LTS, keine Backport-Patches | rot bis zur 1.0 |
 | R-03 | **Föderierte Authentisierung nur zum Teil**: Der Anmeldefluss über OpenID Connect ist mit M12 gebaut, die Abbildung von Claims auf Rollen noch nicht; ohne konfigurierten Anbieter bleibt es beim lokalen Passwort | gelb |
-| R-04 | **Grobgranulare Autorisierung**: seit M9 nennt jede der 199 `/api/v1`-Routen die Rolle, die sie verlangt (`admin`, `modeler`, `operator`, `user`), und die Schranke setzt sie durch — dazu Projekt- und Konnektor-Sichtbarkeit. Bestehende Konten behalten beim Update, was sie vorher konnten, sind also erst enger gestellt, wenn eine Betreiberin sie enger stellt | gelb, grün bei bewusst vergebenen Rollen |
+| R-04 | **Grobgranulare Autorisierung**: seit M9 nennt jede der 199 `/api/v1`-Routen die Rolle, die sie verlangt (`admin`, `modeler`, `operator`, `user`), und die Schranke setzt sie durch — dazu Projekt- und Worker-Sichtbarkeit. Bestehende Konten behalten beim Update, was sie vorher konnten, sind also erst enger gestellt, wenn eine Betreiberin sie enger stellt | gelb, grün bei bewusst vergebenen Rollen |
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets: WAL, State-Store und Design-Time-Ablagen liegen im Klartext im Dateisystem | gelb, grün mit Datenträgerverschlüsselung |
 | R-07 | **Keine Hochverfügbarkeit**: Single-Writer, genau ein Prozess pro Datenverzeichnis, keine Replikation (ADR-0175 ist erst *Proposed*) | gelb, abhängig von der Verfügbarkeitsanforderung |
 
@@ -173,10 +173,10 @@ angebundenen Fachsystemen ab (siehe Kommunikationsmatrix 5.4).
 | Nr. | Art | Gegenstand | Begründung | Referenz |
 |-----|-----|------------|------------|----------|
 | A-01 | CRQ FW-Portöffnung | Reverse Proxy (PEZ/SZ) → Atlas-Server TCP 8080 | Zugriff der Benutzer auf UI und API | ⟨CRQ-Nr.⟩ |
-| A-02 | CRQ FW-Portöffnung | Worker → Atlas-Server TCP 8080 | Job-Leasing der Connector-Arbeit (ADR-0007/0168) | ⟨CRQ-Nr.⟩ |
-| A-03 | CRQ FW-Portöffnung | Worker → Fachsystem (SMTP 25/587, LDAP 389/636, SQL 1433/5432/3306, HTTPS 443) | ausgehende Connector-Aufrufe | ⟨CRQ-Nr., pro Ziel⟩ |
+| A-02 | CRQ FW-Portöffnung | Worker → Atlas-Server TCP 8080 | Job-Leasing der Worker-Arbeit (ADR-0007/0168) | ⟨CRQ-Nr.⟩ |
+| A-03 | CRQ FW-Portöffnung | Worker → Fachsystem (SMTP 25/587, LDAP 389/636, SQL 1433/5432/3306, HTTPS 443) | ausgehende Worker-Aufrufe | ⟨CRQ-Nr., pro Ziel⟩ |
 | A-04 | CRQ FW-Portöffnung | Atlas → OpenSearch (9200/443), OTLP-Collector (4318), Prometheus-Scrape | Export, Tracing, Monitoring | ⟨CRQ-Nr.⟩ |
-| A-05 | Proxy-/SSL-Whitelist | ausgehend zu ⟨Fachsystem-Hosts⟩ | REST-/SOAP-/Graph-Connectoren | ⟨CRQ-Nr.⟩ |
+| A-05 | Proxy-/SSL-Whitelist | ausgehend zu ⟨Fachsystem-Hosts⟩ | REST-, SOAP- und Graph-Worker-Typen | ⟨CRQ-Nr.⟩ |
 | A-06 | Ausnahmebewilligung (P035) | Betrieb eines Produkts der `0.x`-Linie ohne Herstellersupportvertrag | R-01; Open Source, AGPL-3.0-only, Support über ⟨Regelung⟩ | ⟨Referenz⟩ |
 | A-07 | Ausnahmebewilligung (P035) | Öffentlicher Start-Link aus dem Internet (falls genutzt, ADR-0029) | Publikumsintake ohne Konto | ⟨Referenz⟩ |
 | A-08 | keine | Kein ausgehender Zugriff des Servers ins Internet erforderlich | Atlas prüft keine Updates, sendet keine Telemetrie | Code-Prüfung |
@@ -308,12 +308,12 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | Komponente | Funktion | Sicherheitsrelevanz |
 |------------|----------|---------------------|
 | **Engine** (Compiler, Prozessor, WAL, State-Store) | führt Prozessinstanzen aus; ein Schreiber pro Partition; Ereignisse werden angehängt, gruppenweise mit *einem* `fsync` dauerhaft gemacht, erst danach sichtbar | Integrität und Nachvollziehbarkeit der Geschäftsfälle; «durable before visible» ist eine erzwungene Invariante (ADR-0005) |
-| **Design-Time-Ablagen** (Sidecar-Stores) | Entwürfe, Projekte, Formulare, Deployments, Releases, Benutzer, Gruppen, Connectoren, Einstellungen — je eine JSON-Datei, atomar geschrieben | enthalten Konfiguration und Benutzerkonten, nicht Geschäftsdaten |
+| **Design-Time-Ablagen** (Sidecar-Stores) | Entwürfe, Projekte, Formulare, Deployments, Releases, Benutzer, Gruppen, Worker, Einstellungen — je eine JSON-Datei, atomar geschrieben | enthalten Konfiguration und Benutzerkonten, nicht Geschäftsdaten |
 | **HTTP-API** (`/api/v1/…`) | vollständige Steuerfläche, OpenAPI-spezifiziert; Explorer unter `/api/docs` (abschaltbar) | einziger Zugangsweg für UI, Worker und Agenten |
 | **Web-UI** | Modeler, Operations (Live-Tokens, Replay), Tasks-Inbox, Console, Handbuch — im Binary eingebettet | zeigt Prozessvariablen und damit potenziell Personendaten |
-| **Worker-Prozess** (`atlas worker`) | führt Connector-/Service-Task-Arbeit aus, least Jobs über die HTTP-API | hält die Credentials der Fachsysteme; läuft idealerweise in der Zone des Zielsystems (ADR-0164/0168) |
+| **Worker-Prozess** (`atlas worker`) | führt Service-Task-Arbeit aus, least Jobs über die HTTP-API | hält die Credentials der Fachsysteme; läuft idealerweise in der Zone des Zielsystems (ADR-0164/0168) |
 | **MCP-Adapter** (`atlas mcp`) | stellt die API als Model-Context-Protocol-Werkzeuge bereit (für KI-Agenten) | `/mcp` liegt innerhalb der Zugriffsgrenze des Servers und wird von `--auth` erzwungen; ein Werkzeugaufruf handelt mit dem Credential des Aufrufers (ADR-0196). Der stdio-Adapter hält als Prozess *ein* Credential für seine ganze Laufzeit — `--token` bzw. `ATLAS_TOKEN`, üblicherweise ein API-Token mit Geltungsbereich `full` (ADR-0194) |
-| **Vault** | AES-256-GCM-verschlüsselte Ablage der Connector-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
+| **Vault** | AES-256-GCM-verschlüsselte Ablage der Worker-Secrets | Schlüssel `vault.key` (Mode 0600) oder extern via `ATLAS_VAULT_KEY(_FILE)` (ADR-0069/0070) |
 | **Reverse Proxy** ⟨nginx/Apache BIT-Standard⟩ | TLS-Terminierung, Zugriffssteuerung, Access-Log, Rate-Limiting | **zwingend** — Atlas selbst kann kein TLS |
 
 ### 5.2.2 Authentisierung
@@ -366,7 +366,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 | Prinzipal | Herkunft | Rechte |
 |-----------|----------|--------|
 | Benutzer (Rolle `user`) | lokales Konto | alles, was nicht ausdrücklich admin-geschützt ist: Modelle deployen, Instanzen starten/abbrechen, Laufzeitdaten und Prozessvariablen lesen, Tasks bearbeiten |
-| Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Connectoren, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
+| Benutzer (Rolle `admin`) | lokales Konto | zusätzlich Benutzer- und Gruppenverwaltung, Secrets, Worker, Einstellungen, Backup/Restore, Snapshots, Migration, Deploy-Tokens |
 | Projektmitglied | Projekt-Sichtbarkeit `private`/`shared` mit Rollen `viewer`/`editor` (ADR-0071, Gruppen ADR-0180) | Zugriff auf die Design-Time-Artefakte des Projekts |
 | `system:mcp` | interner Bearer-Token, nur prozessintern (ADR-0049); heute das Credential der von Atlas gestarteten Worker | wie ein Benutzer, **nie** admin |
 | API-Token | von einem Administrator ausgestelltes Maschinen-Credential (ADR-0194): benannt, befristet, widerrufbar, nur SHA-256 gespeichert, Geheimnis genau einmal ausgeliefert | genau der Geltungsbereich des Tokens — `worker` (vier Operationen) oder `full` (wie ein Benutzer); **nie** admin |
@@ -377,7 +377,7 @@ festlegen, wer Releases bezieht, prüft und einspielt (Massnahme M-14).
 **Wichtig für die Beurteilung:** ausser `admin` wird **keine Rolle erzwungen**.
 Insbesondere ist `POST /api/v1/deployments` **nicht** admin-geschützt — jeder
 angemeldete Benutzer kann ein Prozessmodell einspielen und damit auch
-Skript-Tasks und Connector-Aufrufe zur Ausführung bringen (R-04, R-09). Trennung
+Skript-Tasks und Worker-Aufrufe zur Ausführung bringen (R-04, R-09). Trennung
 von Entwicklungs-/Test-/Produktionsumgebung und ein enger Benutzerkreis auf der
 Produktion sind deshalb Pflicht (M-05).
 
@@ -495,7 +495,7 @@ flowchart LR
   subgraph SZ["Server-Zone (SZ)"]
     A["atlas serve<br/>Engine · API · UI<br/>HTTP 8080, kein TLS"]
     D[("Datenverzeichnis<br/>wal/ · state/ · checkpoints/<br/>vault/ · vault.key · Sidecar-Stores")]
-    W["atlas worker<br/>Connector-Arbeit<br/>hält die Fachsystem-Credentials"]
+    W["atlas worker<br/>Worker-Instanz · least Jobs<br/>hält die Fachsystem-Credentials"]
   end
   subgraph EXT["Fachsysteme / Dienste"]
     M["Mail-Relay (SMTP)"]
@@ -517,7 +517,7 @@ flowchart LR
   P -->|/metrics| A
 ```
 
-Ohne Worker laufen die verbliebenen In-Process-Connectoren im Server-Prozess;
+Ohne Worker-Instanz laufen die verbliebenen In-Process-Worker-Typen im Server-Prozess;
 das ist der abgekündigte Weg (ADR-0164) und für den Bund nicht empfohlen, weil
 die Credentials dann im Engine-Prozess liegen und ausgehende Verbindungen aus der
 Server-Zone erfolgen.
@@ -534,10 +534,10 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-03 | Atlas-Server ⟨SZ⟩ | lokales Dateisystem | — | WAL, State, Vault, Sidecar-Stores | keine (Datenträgerverschlüsselung ⟨LUKS/BitLocker⟩) | Dateirechte 0750 / 0600, eigener Dienstbenutzer |
 | K-04 | Worker ⟨Zone des Fachsystems⟩ | Atlas-Server ⟨SZ⟩ | HTTP / 8080 | Job-Leasing, Ergebnisrückgabe (ADR-0007) | ⟨über Proxy/TLS führen⟩ | ⟨Bearer/Proxy⟩ |
 | K-05 | Worker | Mail-Relay | SMTP / 25 · 587 (bzw. Graph HTTPS 443) | ausgehende Benachrichtigungen (ADR-0079/0093) | ⟨STARTTLS/TLS⟩ | ⟨Relay-Regel / OAuth2⟩ |
-| K-06 | Worker | LDAP / AD / Entra ID | LDAP 389 · LDAPS 636 · HTTPS 443 | Verzeichnis-Connectoren (ADR-0153/0154/0166/0172) | LDAPS/TLS empfohlen | Dienstkonto aus Vault/Worker |
+| K-06 | Worker | LDAP / AD / Entra ID | LDAP 389 · LDAPS 636 · HTTPS 443 | Verzeichnis-Worker-Typen (ADR-0153/0154/0166/0172) | LDAPS/TLS empfohlen | Dienstkonto aus Vault/Worker |
 | K-07 | Worker | Fachanwendung REST/SOAP | HTTPS / 443 | Service-Tasks (ADR-0067/0165), OAuth2 möglich (ADR-0152) | TLS (Systemtruststore) | Token/Basic/OAuth2 aus Vault |
-| K-08 | Worker | Datenbank | TCP / 1433 · 5432 · 3306 | generischer SQL-Connector (ADR-0173) | ⟨TLS erzwingen⟩ | Dienstkonto aus Vault |
-| K-09 | Worker | SharePoint / Remedy | HTTPS / 443 | Fach-Connectoren (ADR-0141/0106) | TLS | Dienstkonto aus Vault |
+| K-08 | Worker | Datenbank | TCP / 1433 · 5432 · 3306 | generischer SQL-Worker-Typ (ADR-0173) | ⟨TLS erzwingen⟩ | Dienstkonto aus Vault |
+| K-09 | Worker | SharePoint / Remedy | HTTPS / 443 | Fach-Worker-Typen (ADR-0141/0106) | TLS | Dienstkonto aus Vault |
 | K-10 | Atlas-Server | OpenSearch | HTTPS / 9200 · 443 | Ereignis-Export (ADR-0114), optional | TLS ⟨Cluster-Konfiguration⟩ | Basic Auth via Umgebungsvariablen |
 | K-11 | Atlas-Server | OTLP-Collector | HTTP / 4318 | Traces, optional, standardmässig aus | ⟨TLS⟩ | ⟨Collector-Regel⟩ |
 | K-12 | Monitoring | Atlas-Server | HTTP / 8080 `/metrics` | Prometheus-Scrape | keine | **keine** — am Proxy/FW einschränken |
@@ -587,13 +587,13 @@ zu bestätigen.
 | R-01 | **Produktreife.** `0.x` Developer Preview: On-Disk-Format instabil, kein Downgrade, keine LTS-Linie, Sicherheitsfixes nur im nächsten Release, kein kommerzieller Support | alle | M-05, M-11, M-14, befristete Freigabe | **rot** bis 1.0; gelb bei unkritischem Einsatz mit Ausnahmebewilligung |
 | R-02 | **Kein TLS im Produkt.** Server spricht ausschliesslich HTTP; bei fehlendem/fehlkonfiguriertem Proxy Klartext im Netz (Session-Cookie, Prozessvariablen) | Vertraulichkeit, Integrität | M-01, Konfigurationsprüfung in der Abnahme | gelb → **grün** bei korrektem Proxy |
 | R-03 | **Föderierte Authentisierung nur zum Teil.** Mit M12 kann eine Installation die Anmeldung an einen OpenID-Connect-Anbieter übergeben; MFA und Passwortrichtlinie werden damit dessen Sache, und ein dort geschlossenes Konto kommt hier nicht mehr hinein. Ohne konfigurierten Anbieter bleibt es beim lokalen Passwort, und das lokale Login bleibt in jedem Fall als Notfallzugang bestehen. Offen: die Abbildung von Claims auf Rollen und Gruppen, also der automatische *Rollen*-Entzug, sowie SAML für eIAM | Vertraulichkeit | M-01 (AuthN am Proxy), M-06, M-07, ADR-0197, M12 | **gelb**, grün für Installationen mit konfiguriertem Anbieter und vergebenen Rollen |
-| R-04 | **Grobgranulare Autorisierung.** Mit M9 nennt jede der 199 `/api/v1`-Routen die verlangte Rolle — `admin` (51 Routen), `modeler`, `operator`, `user` — und die Schranke setzt sie an einer Stelle durch, für Session, API-Token, Deploy-Token und OAuth-Freigabe gleichermassen; ein Token ist nie `admin`. Konnektoren sind seit M11 erfasst (Eigentümer, Freigabe, Anspruch auf den Nachrichtennamen). Was bleibt: Beim Update behält jedes bestehende Konto `modeler`+`operator`+`user`, also alles ausser Administration, bis eine Betreiberin es enger stellt — die Massnahme liefert die Möglichkeit, nicht den Zustand | Vertraulichkeit, Integrität | M-05, M-07, enger Benutzerkreis, getrennte Installationen, Rollen nach Aufnahme bewusst vergeben | **gelb**, grün bei bewusst vergebenen Rollen |
+| R-04 | **Grobgranulare Autorisierung.** Mit M9 nennt jede der 199 `/api/v1`-Routen die verlangte Rolle — `admin` (51 Routen), `modeler`, `operator`, `user` — und die Schranke setzt sie an einer Stelle durch, für Session, API-Token, Deploy-Token und OAuth-Freigabe gleichermassen; ein Token ist nie `admin`. Worker sind seit M11 erfasst (Eigentümer, Freigabe, Anspruch auf den Nachrichtennamen). Was bleibt: Beim Update behält jedes bestehende Konto `modeler`+`operator`+`user`, also alles ausser Administration, bis eine Betreiberin es enger stellt — die Massnahme liefert die Möglichkeit, nicht den Zustand | Vertraulichkeit, Integrität | M-05, M-07, enger Benutzerkreis, getrennte Installationen, Rollen nach Aufnahme bewusst vergeben | **gelb**, grün bei bewusst vergebenen Rollen |
 | R-05 | **Keine Verschlüsselung ruhender Daten** ausser Vault-Secrets; wer Dateisystemzugriff hat, liest alle Geschäftsdaten | Vertraulichkeit | M-04 (Datenträgerverschlüsselung, Dateirechte, minimaler Admin-Kreis) | gelb → **grün** mit M-04 |
 | R-06 | **Löschung vs. Anfüge-only-Log.** Retention löscht den Zustandsdatensatz, Ereignisse verbleiben im WAL bis zur Kompaktierung; weitere Kopien in OpenSearch, Backups, Snapshots | Datenschutz (Art. 6 DSG) | M-08, Modellierungsrichtlinie «Referenz statt Inhalt» | **gelb**, grün bei konsistent konfigurierten Fristen |
 | R-07 | **Keine Hochverfügbarkeit.** Single-Writer, genau ein Prozess pro Datenverzeichnis; Ausfall = Ausfall bis Restore/Neustart; Replikation erst geplant (ADR-0175, *Proposed*) | Verfügbarkeit | M-11, M-12, M-17, ⟨VM-/Storage-HA⟩ | **gelb**, abhängig von der Verfügbarkeitsanforderung |
 | R-08 | **Unauthentisierte Endpunkte.** Offen bleiben nur noch `/healthz`, `/readyz` und die tokenbasierten öffentlichen Links; dazu, was die Anmeldemaske selbst liest. `/mcp` (ADR-0196), der API-Explorer (ADR-0195) und `/metrics` (ADR-0198) sind geschlossen. Welche Route offen ist, ist deklariert und per Test gegen eine ausgeschriebene Liste gehalten (ADR-0199) | Vertraulichkeit, Integrität | M-13 | **grün** — keine Route hängt mehr an einer Proxy-Regel |
 | R-09 | **Skript-Tasks führen Code aus.** PowerShell/Python/JavaScript laufen im Kontext des Dienstbenutzers; wer deployen darf, führt Code aus. Seit M9 ist «wer deployen darf» eine vergebene Rolle (`modeler`) und nicht mehr jedes angemeldete Konto | Integrität, Vertraulichkeit | M-09 (nicht benötigte Sprachen abschalten), M-05, M9 (Rolle `modeler` nur an Autorinnen), systemd-Härtung | **gelb** |
-| R-10 | **Ausgehende Connector-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
+| R-10 | **Ausgehende Worker-Aufrufe.** Ein Prozessmodell adressiert Zielsysteme; falsch modelliert oder missbraucht = Datenabfluss | Vertraulichkeit | M-10 (Registrierung durch Betrieb, Worker in der Zielzone, FW-Whitelist), M-05 | **gelb** |
 | R-11 | **Lieferkette.** Releases nur mit `SHA256SUMS`, ohne Signatur und ohne SBOM; CI ohne automatisierte Schwachstellenprüfung (kein `govulncheck`/SAST) | Integrität | M-14, Build aus Quellen, Abhängigkeits-Scan im Bund | **gelb** |
 | R-12 | **Sessions nur im Speicher**, 12 h Gültigkeit, Abmeldung aller Benutzer bei Neustart; keine serverseitige Sitzungsübersicht. Anmeldeversuche sind seit ADR-0197 je Adresse und je Konto begrenzt | Verfügbarkeit (Komfort), Vertraulichkeit | M-01, M-12 | **grün** |
 | R-13 | Sicherheits-Audit-Log für An-/Abmeldungen, Fehlversuche, Drosselung, Autorisierungsverweigerungen und den Konto-/Credential-Lebenszyklus ist vorhanden (`auth.*`, ADR-0197). **Kein HTTP-Access-Log im Produkt**, und die Aufbewahrung ist die des Anwendungslogs | Nachvollziehbarkeit | M-06 (Access-Log am Proxy, Weiterleitung an ⟨SIEM⟩) | **grün**, sofern das Anwendungslog nach ⟨SIEM⟩ geliefert wird |
@@ -623,7 +623,7 @@ zu bestätigen.
     wo immer möglich, `full` nur wo die Aufrufe nicht im Voraus benannt werden
     können. Ausstellung und Widerruf stehen im Audit-Log (`auth.token_minted`,
     `auth.token_revoked`); Bestand mit `GET /api/v1/api-tokens` rezertifizieren.
-  - Worker- und Connector-Dienstkonten in den Fachsystemen: Least Privilege,
+  - Worker-Dienstkonten in den Fachsystemen: Least Privilege,
     Rotation ⟨Frist⟩; die Werte liegen im Vault bzw. beim Worker, nie im Modell.
 - **`--user-provisioning` (Standard: an):** freigegebene Prozesse des geschützten
   System-Projekts dürfen Atlas-Logins anlegen, Passwörter setzen und Konten
@@ -654,11 +654,11 @@ BIT-Dienstleistung «Analyse/Monitoring» prüfen.⟩
 |-----|---------|--------------------------|--------|
 | 01 | Unverhältnismässige Erweiterung der Zugriffsrechte | Konto erhält `admin` oder wird auffällig vielen Gruppen/Projekten zugeordnet | Benutzer-/Gruppen-Ablage, ⟨Rezertifizierung⟩ |
 | 02 | Massen-Export | Aufruf des Backup-Endpunkts, viele Instanz-Snapshots oder auffällig viele Laufzeitabfragen in kurzer Zeit | Proxy-Access-Log |
-| 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Connector-Ziel | Deployment-Historie, Proxy-Log |
+| 03 | Unautorisiertes Deployment | Prozessmodell ausserhalb des Change-Verfahrens eingespielt, insbesondere mit Skript-Task oder neuem Worker-Ziel | Deployment-Historie, Proxy-Log |
 | 04 | Wiederholte Fehlanmeldungen / Passwort-Raten | Häufung von `auth.login_failed`, und `auth.login_throttled` überhaupt — letzteres heisst, dass ein Budget aufgebraucht wurde | Anwendungslog (`--log-format=json`), Alarm auf beide Ereignisse |
 | 04b | Rechteanmassung | `auth.denied`: ein angemeldeter Benutzer greift auf eine admin-geschützte Operation zu | Anwendungslog, mit `actor` und `path` |
 | 05 | Zugriff auf `/mcp` von aussen | gehäufte `401` auf `/mcp` (Versuche ohne Credential) oder MCP-Nutzung durch ein Konto, für das sie nicht vorgesehen ist | Proxy-Log / Firewall; die Werkzeugaufrufe selbst sind seit ADR-0196 dem handelnden Benutzer zugeordnet |
-| 06 | Auffällige Connector-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Connector; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
+| 06 | Auffällige Worker-Aktivität | Häufung von Incidents oder Job-Fehlern auf einem Worker; ungewöhnliche Zielhosts | Incident-Liste (ADR-0061), Firewall-Logs |
 | 07 | Externe Änderung von Prozessvariablen | Variablen einer laufenden Instanz von aussen gesetzt — mit handelndem Benutzer attribuiert | Variablen-Audit (ADR-0098) |
 | 08 | Vault-Schlüssel-Abweichung | Secrets lassen sich nicht mehr öffnen (`keyId`-Mismatch) → Schlüsseltausch oder Manipulation | Startup-/Fehlerlog |
 | 09 | Verlust der Durability | `checkpoint.failed`, `wal_compaction.failed`, `readyz` meldet blockierten Partition-Writer | Log, Monitoring |
@@ -684,7 +684,7 @@ mit dem ISBO BIT.
 | M-07 | Benutzer-/Berechtigungslebenszyklus: Eintritt, Mutation, Austritt (`Disabled`), jährliche Rezertifizierung | ⟨AV⟩ | Rezertifizierungsprotokoll (Kap. 8.3) |
 | M-08 | Aufbewahrung/Löschung konfigurieren: `--retention-max-age` bzw. `atlas:historyTtl`, Checkpointing **und** `--compact-wal`, OpenSearch-Retention, Backup-Fristen, ⟨Proxy-Logfristen⟩ | ⟨AV + Betrieb⟩ | Konfiguration, Löschnachweis |
 | M-09 | Nicht benötigte Skriptsprachen abschalten (`--powershell=false --python=false --javascript=false`); `--script-timeout` prüfen | ⟨Betrieb LE⟩ | Startparameter |
-| M-10 | Connectoren und Secrets ausschliesslich durch den Betrieb registrieren; Worker in der Zone des Zielsystems betreiben; Firewall-Whitelist je Ziel | ⟨Betrieb LE⟩ | Kommunikationsmatrix 5.4, CRQs |
+| M-10 | Worker und Secrets ausschliesslich durch den Betrieb registrieren; Worker in der Zone des Zielsystems betreiben; Firewall-Whitelist je Ziel | ⟨Betrieb LE⟩ | Kommunikationsmatrix 5.4, CRQs |
 | M-11 | Datensicherung gemäss 5.2.5; **halbjährlicher Restore-Test** inkl. Vault-Schlüssel | ⟨Betrieb LE⟩ | Restore-Protokoll |
 | M-12 | Monitoring von `/readyz`, Prometheus-Metriken, Plattenplatz des Datenverzeichnisses; Startup-Probe mit ausreichendem Zeitbudget (Replay!) | ⟨Betrieb LE⟩ | Monitoring |
 | M-13 | Öffentliche Start-Links und Selbstregistrierung bewusst konfigurieren bzw. deaktivieren; `--docs=false` und `--user-provisioning=false`, wo nicht benötigt | ⟨AV⟩ | Konfigurationsprüfung |
@@ -692,7 +692,7 @@ mit dem ISBO BIT.
 | M-15 | Webscan und Penetrationstest vor Produktivsetzung; Befunde nach Kapitel 8.3 nachführen | ⟨Projekt⟩ | Prüfprotokoll |
 | M-16 | Archivierung: Anbieten der geschäftsrelevanten Daten ans BAR organisieren, Exportweg testen | ⟨AV⟩ | Archivierungskonzept |
 | M-17 | Notfallkonzept P042-Hi03 erstellen, Verweis auf BCM Stufe Amt | ⟨Projekt⟩ | Notfallkonzept |
-| M-18 | Keine externen KI-Agenten-Endpunkte registrieren; falls doch, nur bundesinterne mit eigener Beurteilung | ⟨AV⟩ | Connector-Liste |
+| M-18 | Keine externen KI-Agenten-Endpunkte registrieren; falls doch, nur bundesinterne mit eigener Beurteilung | ⟨AV⟩ | Worker-Liste |
 | M-19 | Klassifizierungsgrenze «intern» einhalten; keine Mischung von Schutzbedarfsklassen in einer Installation | ⟨AV + ISBO⟩ | Betriebsanweisung |
 
 ---
@@ -716,7 +716,7 @@ auf Stufe Amt zu verweisen: ⟨Verweis⟩
 **Wiederherstellungsablauf (Empfehlung):** Dienst stoppen → Datenverzeichnis aus
 der Sicherung zurückspielen → `vault.key` bereitstellen → Dienst starten →
 `/readyz` abwarten → Stichproben: laufende Instanzen, Aufgabenliste, ein
-Connector-Testaufruf. ⟨Als Ablauf im Notfallkonzept dokumentieren und im
+Worker-Testaufruf. ⟨Als Ablauf im Notfallkonzept dokumentieren und im
 Restore-Test (M-11) bestätigen.⟩
 
 ---
@@ -769,7 +769,7 @@ anzuhören.
 
 **Technische Ergänzung:** Zugriff auf Fach- und Randdaten dieser Installation
 haben faktisch (a) angemeldete Benutzer über UI/API im Rahmen von Kapitel 5.2.3,
-(b) Administratoren für Benutzer-, Connector- und Backup-Funktionen, (c) **jede
+(b) Administratoren für Benutzer-, Worker- und Backup-Funktionen, (c) **jede
 Person mit Dateisystemzugriff auf das Datenverzeichnis**, da die Daten ausser den
 Vault-Secrets unverschlüsselt abgelegt sind (R-05). Der Kreis unter (c) ist zu
 benennen und zu begrenzen: ⟨…⟩
@@ -780,7 +780,7 @@ benennen und zu begrenzen: ⟨…⟩
 
 | Prüfung | Rhythmus | Verantwortlich |
 |---------|----------|----------------|
-| Rezertifizierung Benutzer und Berechtigungen (inkl. Deploy-Tokens, Connector-Konten) | jährlich | ⟨AV⟩ |
+| Rezertifizierung Benutzer und Berechtigungen (inkl. Deploy-Tokens, Worker-Konten) | jährlich | ⟨AV⟩ |
 | Restore-Test inkl. Vault-Schlüssel | halbjährlich | ⟨Betrieb⟩ |
 | Webscan | bei jedem Major-/Minor-Upgrade | ⟨Betrieb⟩ |
 | Penetrationstest | vor Produktivsetzung, danach alle ⟨3⟩ Jahre | ⟨Projekt/Betrieb⟩ |

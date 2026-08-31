@@ -39,7 +39,7 @@ Verhältnis zu den bestehenden Unterlagen:
 | **M3** — API-Tokens als erste Klasse | ✅ umgesetzt — [`ADR-0194`](../adr/0194-api-tokens.md), `api/apitokenstore.go` |
 | **M6** — `/metrics` hinter die Schranke | ✅ umgesetzt — [`ADR-0198`](../adr/0198-metrics-behind-the-boundary.md) |
 | **M10** — OAuth für gehostete MCP-Clients | ✅ umgesetzt — [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md): Ressourcenserver (`api/oauthmeta.go`), Autorisierungsserver (`api/oauthserver.go`) und dynamische Client-Registrierung (`api/oauthregister.go`, standardmässig aus) |
-| **M11** — Berechtigungen auf Konnektor-Ebene | ✅ umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md): Eigentümer und Freigabe am Konnektor (`api/connectorscope.go`) und der Anspruch auf den Nachrichtennamen an beiden Türen (`api/messageclaim.go`) |
+| **M11** — Berechtigungen auf Worker-Ebene | ✅ umgesetzt — [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md): Eigentümer und Freigabe am Worker (`api/connectorscope.go`) und der Anspruch auf den Nachrichtennamen an beiden Türen (`api/messageclaim.go`) |
 
 **Die acht Massnahmen der Stufe 1 sind umgesetzt. R-08 ist grün.**
 
@@ -136,20 +136,20 @@ sein statt durch Audit jedes Handlers. Dieses Prinzip fehlt eine Ebene höher �
 die Frage, welche Route überhaupt ohne Prinzipal erreichbar ist. Massnahme M1
 trägt es genau dorthin.
 
-### 1.5 Neubefund: Ein Konnektor gehört niemandem
+### 1.5 Neubefund: Ein Worker gehört niemandem
 
 Dieser Punkt kam nach der ersten Fassung dazu, aus einer Frage aus dem Betrieb:
-«Wenn ich einen Inbound-E-Mail-Konnektor habe, darf ausser mir niemand diese
+«Wenn ich einen Inbound-E-Mail-Worker habe, darf ausser mir niemand diese
 Ereignisse nutzen.» Nachgemessen an einem Server mit `--auth`, mit einem
 gewöhnlichen Konto, das nur die Rolle `user` trägt:
 
 | Es kann | Weil |
 |---|---|
-| einen Konnektor anlegen | `handleCreateConnector` hat keine Rollenprüfung |
-| **alle** Konnektoren auflisten, mit Endpunkt und Absenderpostfach | `handleListConnectors` ebenso wenig |
-| **fremde** Konnektoren ändern und löschen | dito; `DELETE …?force=true` antwortete `204` |
+| einen Worker anlegen | `handleCreateConnector` hat keine Rollenprüfung |
+| **alle** Worker auflisten, mit Endpunkt und Absenderpostfach | `handleListConnectors` ebenso wenig |
+| **fremde** Worker ändern und löschen | dito; `DELETE …?force=true` antwortete `204` |
 | **alle** Inbound-Abonnements lesen — also jeden Nachrichtennamen | `handleListInboundSubscriptions` ebenso wenig |
-| ein Abonnement auf einem **fremden** Konnektor anlegen, unter einem selbst gewählten Nachrichtennamen | `handleCreateInboundSubscription` ebenso wenig |
+| ein Abonnement auf einem **fremden** Worker anlegen, unter einem selbst gewählten Nachrichtennamen | `handleCreateInboundSubscription` ebenso wenig |
 
 `requireAdmin` steht auf genau einem dieser Endpunkte:
 `POST /api/v1/connectors/{id}/provision-clio-key`. Der Rest lautet «irgendein
@@ -163,7 +163,7 @@ Autorisierung**, und er ist aus der Liste oben für jeden lesbar.
 
 Das ist keine Lücke in R-08 — jede dieser Routen verlangt einen Prinzipal, die
 Haustür ist zu. Es ist eine Lücke *dahinter*, also in O-02 (feingranulare
-Autorisierung), und sie fällt erst auf, seit ein Konnektor nicht mehr nur
+Autorisierung), und sie fällt erst auf, seit ein Worker nicht mehr nur
 hinausgreift, sondern hereinlässt (ADR-0075). Massnahme **M11** beantwortet sie und
 ist umgesetzt; dieser Abschnitt beschreibt den Zustand davor.
 
@@ -198,7 +198,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M8 ✅ | Sicherheits-Audit-Log | S | O-03, R-13 | — |
 | M9 ✅ | Rollen je Endpunktgruppe | L | O-02, R-04, R-09 | G2, G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
-| M11 ✅ | Berechtigungen auf Konnektor-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
+| M11 ✅ | Berechtigungen auf Worker-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
 | M12 ◐ | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
@@ -450,7 +450,7 @@ muss also entscheiden, welche Rollen ein Token trägt.
    trägt die Rollen des Kontos, das es ausgestellt hat, geschnitten mit seinem
    Geltungsbereich — ein Credential ist nie mächtiger als seine Ausstellerin.
 
-**Warum hier anders entschieden wird als bei M11.** Dort wurden Altkonnektoren
+**Warum hier anders entschieden wird als bei M11.** Dort wurden Alt-Worker
 administrativ, weil der Ist-Zustand ein **Loch** war und eine Massnahme, die jede
 bestehende Installation ausnimmt, nichts schliesst. Hier ist der Ist-Zustand ein
 **dokumentiertes, akzeptiertes Restrisiko** (R-04, gelb) in Installationen, auf
@@ -699,19 +699,19 @@ voraussetzen, dass Atlas der Aussteller bleibt.
 
 Entscheid: [`ADR-0200`](../adr/0200-mcp-oauth-resource-server.md).
 
-### M11 — Berechtigungen auf Konnektor-Ebene
+### M11 — Berechtigungen auf Worker-Ebene
 
-**Problem.** Ein Konnektor gehört niemandem (1.5). Der Datensatz kennt Name, Art,
+**Problem.** Ein Worker gehört niemandem (1.5). Der Datensatz kennt Name, Art,
 Endpunkt und Zugangsdaten-Verweis — aber kein Feld, das sagt, wessen er ist. Das
-war eine zutreffende Beschreibung, solange ein Konnektor Infrastruktur war: eine
+war eine zutreffende Beschreibung, solange ein Worker Infrastruktur war: eine
 Jira-Instanz, ein SMTP-Relay, einmal für die Installation eingerichtet.
 
-Seit ADR-0075 ist ein Konnektor auch ein Weg **herein**: Ein Inbound-Abonnement
+Seit ADR-0075 ist ein Worker auch ein Weg **herein**: Ein Inbound-Abonnement
 beobachtet ein externes Subjekt und veröffentlicht, was ankommt, als
 Atlas-Nachricht — die Prozesse startet.
 
 Der auslösende Fall existiert noch nicht: Inbound ist heute nur clio, der
-Mail-Konnektor ist ausgehend (ADR-0079/0093), ein *eingehender* ist weder gebaut
+Mail-Worker ist ausgehend (ADR-0079/0093), ein *eingehender* ist weder gebaut
 noch geplant. Er ist das, wonach gefragt wurde — und ein Postfach ist persönlich,
 wie eine Jira-Instanz es nie war. Genau deshalb wird jetzt entschieden: Solange das
 Postfach hypothetisch ist, kostet die Antwort nichts; sobald Menschen eines haben,
@@ -719,20 +719,20 @@ kostet jede Antwort eine Migration.
 
 **Zwei Fragen, nicht eine.** Die Konfiguration zu schützen beantwortet die
 gestellte Frage nicht. Selbst wenn niemand mehr ein Abonnement auf meinem
-Konnektor anlegen kann, kann weiterhin jede Person einen Prozess deployen, dessen
+Worker anlegen kann, kann weiterhin jede Person einen Prozess deployen, dessen
 Nachrichten-Startereignis `mail-eingegangen` heisst — und meine Ereignisse starten
 ihn, weil der Name der ganze Schlüssel ist.
 
 **Vorschlag** (Entwurf:
 [`ADR-0205`](../adr/0205-connector-ownership-and-event-delivery.md)):
 
-1. **Der Konnektor bekommt die drei Felder, die ein Projekt schon hat** —
+1. **Der Worker bekommt die drei Felder, die ein Projekt schon hat** —
    `ownerId`, `visibility`, `members[{ref, role}]` aus ADR-0071. Wörtlich
    dieselben, damit Gruppen (ADR-0180) ohne weiteres Zutun funktionieren: «teile
    es mit meiner Frau» und «teile es mit dem Team» sind derselbe Handgriff.
    Durchgesetzt wird es dort, wo ADR-0071 seine eigenen Regeln durchsetzt — in den
    HTTP-Handlern am aufgelösten Prinzipal, nicht in der Engine. Ein Abonnement
-   erbt den Geltungsbereich seines Konnektors, wie ein Artefakt den seines
+   erbt den Geltungsbereich seines Workers, wie ein Artefakt den seines
    Projekts erbt.
 2. **Ein Abonnement beansprucht seinen Nachrichtennamen.** Solange der Anspruch
    steht, ist dieser Name nur an Definitionen im Geltungsbereich des Anspruchs
@@ -754,36 +754,36 @@ Sie ist im Entwurf als Nachfolger benannt, nicht als Absicht verschwiegen.
 **Der Preis, ebenfalls benannt.** Nachrichtennamen werden zu einem Namensraum mit
 Ansprüchen: Ein Deploy kann künftig aus einem Grund abgewiesen werden, der in
 einer Konfiguration liegt, die die deployende Person nicht sehen darf. Und
-Konnektoren aus der Zeit vor M11 tragen keinen Eigentümer; sie werden unter
+Worker aus der Zeit vor M11 tragen keinen Eigentümer; sie werden unter
 `--auth` **administrativ**, bis eine Administratorin ihnen einen zuweist. Das
 weicht von ADR-0071 ab, das altlastige Artefakte offen liess — dort wurde eine
 Fähigkeit ergänzt, hier wird eine Lücke geschlossen, und eine Sicherheitsmassnahme,
 die jede bestehende Installation ausnimmt, schliesst nichts.
 
-**Reihenfolge.** Wann immer ein Inbound-E-Mail-Konnektor gebaut wird, gehört M11
+**Reihenfolge.** Wann immer ein Inbound-E-Mail-Worker gebaut wird, gehört M11
 davor, damit ein persönliches Postfach nie — auch nicht vorübergehend —
 installationsweit ist. Zu M9 steht es quer: M9 ordnet Rollen Endpunktgruppen zu,
 M11 ordnet einem Objekt einen Eigentümer zu. Beide zahlen auf O-02 ein, keines wartet auf das andere.
 
-**Stand: Schritt 1 ist umgesetzt** (`api/connectorscope.go`). Der Konnektor trägt
-Eigentümer, Sichtbarkeit und Mitgliederliste; die Handler für Konnektor *und*
+**Stand: Schritt 1 ist umgesetzt** (`api/connectorscope.go`). Der Worker trägt
+Eigentümer, Sichtbarkeit und Mitgliederliste; die Handler für Worker *und*
 Abonnements prüfen die Rolle; Freigeben, Zurückziehen, Versiegeln und Übergeben
-gibt es als Endpunkte **und** in der Console neben jedem Konnektor. Zwei Dinge kamen
+gibt es als Endpunkte **und** in der Console neben jedem Worker. Zwei Dinge kamen
 beim Bauen dazu, die im Entwurf nicht standen und dort jetzt nachgetragen sind:
 
-- **Existenz ist nicht Konfiguration.** Der Modeler füllt seine Konnektor-Auswahl
+- **Existenz ist nicht Konfiguration.** Der Modeler füllt seine Worker-Auswahl
   aus derselben Liste. Hätte man die Liste schlicht eingeschränkt, stünde jede
   Person ohne Eigentum vor einem leeren Auswahlfeld — eine Freigaberegel, die
   Menschen an der Arbeit hindert, ist keine Freigaberegel. Die Liste hat deshalb
   zwei Formen: ab *viewer* der Datensatz, darunter ein Katalogeintrag aus Name, Art
   und Zustand. Geschützt sind Endpunkt, Absender, Zugangsdaten-Verweis,
   Mitgliederliste und die Inbound-Abonnements.
-- **Die Konnektor-Prüfung darf kein fremdes Geheimnis borgen.**
+- **Die Worker-Prüfung darf kein fremdes Geheimnis borgen.**
   `POST /api/v1/connectors/test` löst den Zugangsdaten-Verweis auf, den der Body
   nennt, und verschickt damit echte Mail. Das war bis jetzt für **jedes** Konto ein
   «Mail versenden als irgendwer, mit irgendwessen Zugangsdaten». Den Datensatz zu
   sperren und das stehen zu lassen wäre Theater gewesen. Die Regel: Ein Verweis darf
-  nur nennen, wer einen Konnektor bearbeiten darf, der ihn schon benutzt.
+  nur nennen, wer einen Worker bearbeiten darf, der ihn schon benutzt.
 
 **Schritt 2 ist ebenfalls umgesetzt** (`api/messageclaim.go`): Ein Abonnement
 beansprucht seinen Nachrichtennamen, geprüft an beiden Türen — beim Deployen gegen
@@ -794,7 +794,7 @@ um den Anlege-Endpunkt herum. Beide Abweisungen nennen die Nachricht und sonst
 nichts.
 
 **Beim Bauen kam heraus, dass die beiden Türen verschiedene Fragen stellen** — der
-Entwurf hatte das nicht gesehen. Ein Konnektor hat einen Geltungsbereich, ein
+Entwurf hatte das nicht gesehen. Ein Worker hat einen Geltungsbereich, ein
 *Deployment* hatte gar keine Identität: ADR-0071 hat die Laufzeit ausdrücklich
 draussengelassen, und nirgends stand, wer eine Definition deployt hat. Die zweite
 Tür brauchte genau diese eine Tatsache, und sie gibt es jetzt (`deployedBy`). Sie
@@ -813,7 +813,7 @@ befragt.
 
 **Abnahme** — dieselbe Regel wie in Kapitel 6, der Nachweis ist Code:
 
-1. ✅ Ein gewöhnliches Konto sieht einen fremden privaten Konnektor nicht, ändert
+1. ✅ Ein gewöhnliches Konto sieht einen fremden privaten Worker nicht, ändert
    ihn nicht und löscht ihn nicht; es legt darauf kein Abonnement an und liest seine
    Abonnements nicht. Genau die fünf Zeilen aus 1.5, jede als Test:
    `TestAConnectorBelongsToWhoeverMadeIt`.
@@ -821,14 +821,14 @@ befragt.
    Mitgliedschaft — dieselbe Eigenschaft, die ADR-0180 für Projekte hat.
    `TestSharingAConnectorWithAGroup`, dazu `TestSharingAConnectorFollowsTheRoles`
    für viewer/editor/owner.
-3. ✅ Der Modeler kann weiterhin gegen jeden Konnektor autorisieren, auch gegen
+3. ✅ Der Modeler kann weiterhin gegen jeden Worker autorisieren, auch gegen
    einen fremden: `TestEveryoneCanStillAuthorAgainstAConnector`.
-4. ✅ Die **Laufzeit** fragt den Geltungsbereich nicht: ein privater Konnektor steht
+4. ✅ Die **Laufzeit** fragt den Geltungsbereich nicht: ein privater Worker steht
    in der Registry, sonst würde jedes Modell parken, das ihn nennt.
    `TestTheRuntimeResolvesAConnectorNobodyIsSignedInFor`.
-5. ✅ Ein Konnektor ohne Eigentümer (aus der Zeit davor) ist administrativ, sein
+5. ✅ Ein Worker ohne Eigentümer (aus der Zeit davor) ist administrativ, sein
    Katalogeintrag bleibt sichtbar: `TestAConnectorFromBeforeOwnershipIsAdminOnly`.
-6. ✅ Kein fremdes Geheimnis über die Konnektor-Prüfung:
+6. ✅ Kein fremdes Geheimnis über die Worker-Prüfung:
    `TestBorrowingAnotherConnectorsCredentialIsRefused`.
 7. ✅ Mit `--auth=false` ist alles davon wirkungslos: der Server ist per Deklaration
    offen, und M11 fügt dort keine einzige Verweigerung hinzu.
@@ -1027,7 +1027,7 @@ noch die Föderation.
 **M11 steht ebenfalls quer dazu** und wartet auf nichts. Es ordnet einem Objekt
 einen Eigentümer zu, wo M9 einer Rolle eine Endpunktgruppe zuordnet; beide zahlen
 auf O-02 ein, keines setzt auf dem anderen auf. Seine eigene Reihenfolge ist die
-einzige, die zählt: vor einem Inbound-E-Mail-Konnektor, falls und sobald einer
+einzige, die zählt: vor einem Inbound-E-Mail-Worker, falls und sobald einer
 gebaut wird.
 Wer zuerst föderiert (O-01), löscht die Autorisierungsserver-Hälfte wieder: Dann
 zeigen die Ressourcenserver-Metadaten auf den fremden Anbieter, und alles andere
@@ -1119,8 +1119,8 @@ reproduzierbar (O-15).
 | [ADR-0129](../adr/0129-remote-deployment-targets.md) | Deploy-Tokens als Sonderfall | Speicher und Muster werden zu API-Tokens verallgemeinert (M3); Deploy-Tokens werden ein Geltungsbereich davon. |
 | [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | `openapi.json` vor dem Login lesbar | Hinter die Schranke, sobald Auth aktiv ist (M5). |
 | [ADR-0142](../adr/0142-prometheus-metrics.md) | `/metrics` ungated wie `/healthz` | Hinter der Schranke, mit Geltungsbereich `metrics` (M6). Was ADR-0142 über *Inhalt* und Kosten der Exposition sagt, bleibt unverändert. |
-| [ADR-0041](../adr/0041-connector-management-and-secret-store.md) | Ein Konnektor ist Betriebskonfiguration ohne Eigentümer | Bekommt Eigentümer und Freigabeliste (M11). Was ADR-0041 über den Geheimnisverweis sagt (nie der Wert, nur die Referenz), bleibt unverändert. |
-| [ADR-0071](../adr/0071-sharing-scopes.md) | Freigabe gilt für **Entwurfszeit-Inhalte**; Laufzeit ausdrücklich draussen | M11 trägt dieselben drei Felder über diese Linie — auf den Konnektor und, per Anspruch auf den Nachrichtennamen, auf die Zustellung. Die Linie selbst fällt nicht: die Isolation *in* der Engine bleibt draussen. |
+| [ADR-0041](../adr/0041-connector-management-and-secret-store.md) | Ein Worker ist Betriebskonfiguration ohne Eigentümer | Bekommt Eigentümer und Freigabeliste (M11). Was ADR-0041 über den Geheimnisverweis sagt (nie der Wert, nur die Referenz), bleibt unverändert. |
+| [ADR-0071](../adr/0071-sharing-scopes.md) | Freigabe gilt für **Entwurfszeit-Inhalte**; Laufzeit ausdrücklich draussen | M11 trägt dieselben drei Felder über diese Linie — auf den Worker und, per Anspruch auf den Nachrichtennamen, auf die Zustellung. Die Linie selbst fällt nicht: die Isolation *in* der Engine bleibt draussen. |
 | [ADR-0075](../adr/0075-clio-inbound-event-bridge.md) | Ein Abonnement veröffentlicht unter einem frei gewählten Nachrichtennamen | Der Name wird beansprucht und an zwei Türen geprüft (M11). **Neuer Entscheid nötig.** |
 | [ADR-0043](../adr/0043-openapi-spec-and-embedded-api-explorer.md) | Die Routentabelle ist die einzige Quelle für die bediente Fläche und ihre Spezifikation | Sie trägt zusätzlich die geforderte Rolle je Route (M9). Was ADR-0043 über Nichtabdriften sagt, gilt damit auch für die Berechtigung. |
 | [ADR-0194](../adr/0194-api-tokens.md) | Ein API-Token trägt einen Geltungsbereich und keine Rolle | Es trägt die Rollen seiner Ausstellerin, geschnitten mit dem Geltungsbereich (M9) — sonst erreichte es nach M9 nichts mehr. |
@@ -1157,7 +1157,7 @@ Neu und noch offen:
   Objekt*. Beide müssen passieren.
 - 🔲 [`0205-connector-ownership-and-event-delivery.md`](../adr/0205-connector-ownership-and-event-delivery.md)
   — M11. Trägt die Freigabe-Sprache aus ADR-0071 und die Gruppen aus ADR-0180 auf
-  den Konnektor und auf die Zustellung seiner Ereignisse. Er nimmt ADR-0071 seine
+  den Worker und auf die Zustellung seiner Ereignisse. Er nimmt ADR-0071 seine
   Linie nicht weg: die Isolation *in* der Engine bleibt ausdrücklich ein eigener,
   späterer Entscheid.
 

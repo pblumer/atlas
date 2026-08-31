@@ -42,7 +42,7 @@ A useful rule of thumb is:
 | Long-running business processes | Possible, using execution and wait mechanisms | Core architectural use case |
 | Human workflow | Forms and integration-oriented interaction | BPMN user tasks and task state |
 | Decision modelling | Conditions, expressions, code, or external services | FEEL and DMN through the Atlas ecosystem |
-| Ready-made integrations | Large catalogue | Limited; workers and connectors are the intended boundary |
+| Ready-made integrations | Large catalogue | Limited; the Worker Type catalogue is the intended boundary |
 | Runtime state model | Workflow executions backed by a database | Event log plus materialized state |
 | Recovery principle | Product-level execution recovery and retry | Deterministic event replay through the same state-apply path |
 | License | Sustainable Use License plus commercial offerings | Apache License 2.0 at the current pre-release stage |
@@ -200,7 +200,7 @@ See the official [integrations catalogue](https://n8n.io/integrations/).
 
 Atlas deliberately keeps external I/O outside the single-writer processor.
 Service tasks create durable jobs; workers perform side effects and submit job
-completion or failure commands. Atlas can also expose APIs and connector
+completion or failure commands. Atlas can also expose APIs and worker
 boundaries, but it does not currently offer a catalogue comparable to n8n.
 
 | Use case | Better fit |
@@ -213,7 +213,7 @@ boundaries, but it does not currently offer a catalogue comparable to n8n.
 | Central integration hub | n8n |
 | Central BPMN orchestrator | Atlas |
 
-Atlas should not make a broad n8n-style connector catalogue a near-term goal.
+Atlas should not make a broad n8n-style Worker Type catalogue a near-term goal.
 That would expand the product surface substantially and compete with the more
 important work on BPMN correctness, recovery, and operational safety.
 
@@ -308,7 +308,7 @@ guarantees.
 | Distributed worker operation | Established queue mode | Partition and worker architecture under development |
 | Upgrade and migration history | Mature | APIs and formats are still unstable |
 | Enterprise identity and governance | Available depending on edition | Incomplete |
-| Credential management | Product capability | Connector/secret boundary under development |
+| Credential management | Product capability | Worker/secret boundary under development |
 | Multi-tenant production hardening | Product and edition dependent | Must be completed and proven |
 | Commercial support | Available | Community/project based |
 
@@ -348,7 +348,7 @@ suggest execution support that the engine does not provide.
 | Area | n8n | Atlas |
 |---|---|---|
 | Main implementation language | TypeScript / Node.js | Go |
-| Extension mechanism | Built-in, community, and custom nodes | Workers, connectors, APIs, engine behaviours |
+| Extension mechanism | Built-in, community, and custom nodes | Worker Types, workers, APIs, engine behaviours |
 | Code inside workflows | JavaScript and Python options | Script tasks and external workers |
 | Source model | n8n workflow JSON | BPMN XML and DMN artefacts |
 | Embedding | Primarily operated as a platform | Engine core remains embeddable as a Go library |
@@ -442,9 +442,9 @@ The priorities remain:
 3. jobs, timers, messages, incidents, and human tasks;
 4. FEEL and DMN consistency;
 5. operational and security maturity;
-6. clear worker and connector contracts;
+6. clear Worker Type and worker contracts;
 7. process operations and the live BPMN overlay;
-8. selected high-value connectors only after the engine foundation is mature.
+8. selected high-value Worker Types only after the engine foundation is mature.
 
 This positioning makes n8n a possible integration layer below Atlas rather than
 a product Atlas must imitate.
