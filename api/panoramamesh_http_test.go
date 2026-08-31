@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -127,7 +128,7 @@ func TestPanoramaMeshDerivesDeployedProcessesAndTheirCalls(t *testing.T) {
 		t.Errorf("caller node = %+v, want a derived process node for %q", n, "caller")
 	}
 	for _, pid := range []string{"child", "missing"} {
-		if !meshHasEdge(g, callerID, "unresolved:"+pid, "calls") {
+		if !meshHasEdge(g, callerID, "unresolved:process:"+pid, "calls") {
 			t.Errorf("edge to unresolved %q missing from %+v", pid, g.Edges)
 		}
 	}
@@ -150,11 +151,11 @@ func TestPanoramaMeshDerivesDeployedProcessesAndTheirCalls(t *testing.T) {
 	if !meshHasEdge(g, callerID, childID, "calls") {
 		t.Errorf("resolved call edge missing from %+v", g.Edges)
 	}
-	if meshHasEdge(g, callerID, "unresolved:child", "calls") {
+	if meshHasEdge(g, callerID, "unresolved:process:child", "calls") {
 		t.Errorf("stale unresolved edge to child survived the deploy: %+v", g.Edges)
 	}
 	// "missing" is still nowhere, and must stay visible as such.
-	if !meshHasEdge(g, callerID, "unresolved:missing", "calls") {
+	if !meshHasEdge(g, callerID, "unresolved:process:missing", "calls") {
 		t.Errorf("edge to still-undeployed %q missing from %+v", "missing", g.Edges)
 	}
 }
@@ -163,4 +164,86 @@ func TestPanoramaMeshDerivesDeployedProcessesAndTheirCalls(t *testing.T) {
 // the same way the payload does.
 func meshProcessID(key uint64) string {
 	return "process:" + strconv.FormatUint(key, 10)
+}
+
+// connectorMeshBPMN names a mail connector, the way every model refers to a
+// server-registered one (ADR-0036/0041) — by name, with no endpoint and no secret.
+const connectorMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+  <process id="notifier" name="Notifier" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="notify">
+      <extensionElements><atlas:mailConnector connector="ops-mail" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="notify"/>
+    <sequenceFlow id="f2" sourceRef="notify" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestPanoramaMeshShowsAnUnconfiguredConnector is the finding a model cannot make
+// about itself. It names a connector by name and carries nothing that says whether
+// that name exists here, so a process can deploy clean and then park its first token
+// (ADR-0158). The landscape is on the outside, next to the connector store, and says
+// so before anything runs.
+func TestPanoramaMeshShowsAnUnconfiguredConnector(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", connectorMeshBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+
+	g := getMesh(t, ts)
+	if n := meshNodeByID(t, g, "unresolved:connector:ops-mail"); n.Name != "ops-mail" {
+		t.Errorf("unresolved connector node = %+v", n)
+	}
+	if !meshHasEdge(g, meshProcessID(dep.Key), "unresolved:connector:ops-mail", "uses") {
+		t.Errorf("uses edge to the unconfigured connector missing from %+v", g.Edges)
+	}
+}
+
+// TestPanoramaMeshNeverCarriesAConnectorEndpoint is the disclosure bound, asserted
+// against a real configured connector on a real server rather than against the
+// derivation alone: the endpoint reaches the store, and must not reach the wire.
+func TestPanoramaMeshNeverCarriesAConnectorEndpoint(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/connectors",
+		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create connector status = %d, body = %s", code, body)
+	}
+	if code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", connectorMeshBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+
+	code, raw := doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("mesh status = %d, body = %s", code, raw)
+	}
+	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", "587"} {
+		if strings.Contains(string(raw), leak) {
+			t.Errorf("mesh payload leaks %q: %s", leak, raw)
+		}
+	}
+	// The dependency is still drawn — the endpoint is what stays out, not the edge.
+	var g meshGraph
+	if err := json.Unmarshal(raw, &g); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var found bool
+	for _, n := range g.Nodes {
+		if n.Kind == "connector" && n.Name == "ops-mail" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("configured connector missing from %+v", g.Nodes)
+	}
 }
