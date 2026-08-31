@@ -247,6 +247,7 @@ comment safe to write.
 | [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Proposed |
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted |
+| [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted |
 
 ## Status values
 

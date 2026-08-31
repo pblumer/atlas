@@ -1,4 +1,4 @@
-# ADR-DRAFT: Panorama's derived landscape mesh and notation projections
+# ADR-0211: Panorama's derived landscape mesh and notation projections
 
 - **Status:** Accepted
 - **Date:** 2026-08-31

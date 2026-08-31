@@ -894,7 +894,7 @@ standards-based architecture workspace that relates declared ArchiMate 3.2 model
 to current Atlas resources without mixing runtime observations into the model. See
 [ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)
 for the drawn model, its bindings, and the observation projection, and
-[ADR-draft-panorama-derived-landscape-mesh](docs/adr/draft-panorama-derived-landscape-mesh.md)
+[ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)
 for the derived whole-instance mesh above them.
 
 - ✅ **P1 — Architecture model:** add application-owned Panorama artifacts in a
