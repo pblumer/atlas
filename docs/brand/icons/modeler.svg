@@ -1,8 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
-  <!-- A canvas holding a modelled flow: two nodes and the sequence flow between them. -->
-  <rect x="26" y="46" width="204" height="164" rx="20" stroke="#2563EB" stroke-width="18"/>
-  <path d="M26 92H230" stroke="#2563EB" stroke-width="14"/>
-  <path d="M92 152H164" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="82" cy="152" r="16" fill="#2563EB"/>
-  <circle cx="174" cy="152" r="16" fill="#2563EB"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
+  <!-- A canvas holding a modelled flow: two nodes and the flow between them. -->
+  <path fill="#6E7781" fill-rule="evenodd" d="M46 44H210A22 22 0 0 1 232 66V190A22 22 0 0 1 210 212H46A22 22 0 0 1 24 190V66A22 22 0 0 1 46 44ZM46 96V190H210V96Z"/><rect fill="#6E7781" x="84" y="142" width="88" height="22" rx="11"/><circle fill="#6E7781" cx="84" cy="153" r="19"/><circle fill="#6E7781" cx="172" cy="153" r="19"/>
 </svg>
