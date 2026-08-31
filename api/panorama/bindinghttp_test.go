@@ -3,6 +3,8 @@ package panorama
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -257,5 +259,139 @@ func TestCatalogForKeyCoversTheWholeContract(t *testing.T) {
 	var empty Catalog
 	if empty.forKey("atlas.nonsense") != nil {
 		t.Error("forKey answered for a key outside the contract")
+	}
+}
+
+// The editor must let a user pick from resources they may see rather than type an
+// opaque id (ADR-0189 §4). Candidates is that list: already filtered, and never
+// carrying anything but an id and a name.
+func TestHandleBindingCandidatesListsOnlyVisibleResources(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	fx.catalog = Catalog{Applications: map[string]ResourceRef{
+		"proj-a": {ID: "proj-a", Name: "Billing", CanView: true},
+		"proj-b": {ID: "proj-b", Name: "HR Confidential", CanView: false},
+	}}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/panorama/models/"+testModelID+"/bindings/candidates?key="+KeyApplicationID, nil)
+	req.SetPathValue("id", testModelID)
+	rec := invoke(t, fx.service.HandleBindingCandidates, req, http.StatusOK)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Billing") {
+		t.Errorf("candidates = %s, want the visible application", body)
+	}
+	if strings.Contains(body, "HR Confidential") || strings.Contains(body, "proj-b") {
+		t.Errorf("candidates leak a resource the caller may not see: %s", body)
+	}
+}
+
+// A key whose catalog nothing supplies answers with an empty list and says the kind
+// is unsupported, rather than an empty list that reads as "there are none".
+func TestHandleBindingCandidatesSaysWhenAKindIsUnsupported(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/panorama/models/"+testModelID+"/bindings/candidates?key="+KeyRuntimeID, nil)
+	req.SetPathValue("id", testModelID)
+	rec := invoke(t, fx.service.HandleBindingCandidates, req, http.StatusOK)
+
+	if !strings.Contains(rec.Body.String(), `"supported":false`) {
+		t.Errorf("body = %s, want the kind reported unsupported", rec.Body)
+	}
+}
+
+func TestHandleBindingCandidatesRefusesAnUnknownKey(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/panorama/models/"+testModelID+"/bindings/candidates?key=atlas.credentialRef", nil)
+	req.SetPathValue("id", testModelID)
+	invoke(t, fx.service.HandleBindingCandidates, req, http.StatusBadRequest)
+}
+
+// The candidates route carries the same two guards as the resolution route, for the
+// same reason: an empty picker reads as "you may bind nothing", which is a claim,
+// and it would be false when the server simply could not answer.
+func TestHandleBindingCandidatesFailsHonestly(t *testing.T) {
+	candidates := func(fx *serviceFixture, status int) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet,
+			"/api/v1/panorama/models/"+testModelID+"/bindings/candidates?key="+KeyApplicationID, nil)
+		req.SetPathValue("id", testModelID)
+		invoke(t, fx.service.HandleBindingCandidates, req, status)
+	}
+
+	t.Run("catalog failure", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedBound(t, fx, "app-1")
+		fx.catalogErr = errStub
+		candidates(fx, http.StatusInternalServerError)
+	})
+	t.Run("closing loop", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedBound(t, fx, "app-1")
+		fx.service.loop = stoppedLoop()
+		candidates(fx, http.StatusServiceUnavailable)
+	})
+	t.Run("model the caller cannot see", func(t *testing.T) {
+		fx := newServiceFixture(t)
+		seedBound(t, fx, "hidden")
+		// The model read is the authorization check, so this cannot become a way to
+		// enumerate resources through a model id.
+		candidates(fx, http.StatusNotFound)
+	})
+}
+
+// A store the handler cannot read is a server fault on every binding route. A 500
+// here is the honest answer; a 200 with no bindings would say the model declares
+// none, which is a claim about a document nobody managed to read.
+func TestBindingRoutesReportACorruptStore(t *testing.T) {
+	for name, handler := range map[string]func(*serviceFixture) http.HandlerFunc{
+		"bindings":   func(fx *serviceFixture) http.HandlerFunc { return fx.service.HandleBindings },
+		"candidates": func(fx *serviceFixture) http.HandlerFunc { return fx.service.HandleBindingCandidates },
+		"set":        func(fx *serviceFixture) http.HandlerFunc { return fx.service.HandleSetBinding },
+	} {
+		t.Run(name, func(t *testing.T) {
+			fx := newServiceFixture(t)
+			seedBound(t, fx, "app-1")
+			if err := os.WriteFile(filepath.Join(fx.store.Dir(), testModelID+".json"), []byte("{"), 0o644); err != nil {
+				t.Fatalf("write corrupt model: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPut,
+				"/api/v1/panorama/models/"+testModelID+"/bindings?key="+KeyApplicationID,
+				jsonBody(t, map[string]any{
+					"expectedRevision": 1, "elementId": "bp-1", "key": KeyProcessID, "values": []string{"x"},
+				}))
+			req.Header.Set("Content-Type", "application/json")
+			req.SetPathValue("id", testModelID)
+			invoke(t, handler(fx), req, http.StatusInternalServerError)
+		})
+	}
+}
+
+// Two resources may share a name, so the picker's order falls back to the id.
+// Without the tie-break the list would reorder between requests, and a picker whose
+// entries move is one a user mis-clicks.
+func TestBindingCandidatesOrderIsStableForEqualNames(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	fx.catalog = Catalog{Applications: map[string]ResourceRef{
+		"proj-b": {ID: "proj-b", Name: "Billing", CanView: true},
+		"proj-a": {ID: "proj-a", Name: "Billing", CanView: true},
+	}}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/panorama/models/"+testModelID+"/bindings/candidates?key="+KeyApplicationID, nil)
+	req.SetPathValue("id", testModelID)
+	rec := invoke(t, fx.service.HandleBindingCandidates, req, http.StatusOK)
+
+	var out BindingCandidates
+	decodeResponse(t, rec, &out)
+	if len(out.Candidates) != 2 || out.Candidates[0].ID != "proj-a" {
+		t.Errorf("candidates = %#v, want the id to break the tie", out.Candidates)
 	}
 }

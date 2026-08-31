@@ -174,8 +174,9 @@ var mcpOmittedRoutes = map[string]string{
 	// Bindings ride with the Panorama authoring surface: an agent that could set
 	// one could rewrite an architecture model, which is the authoring contract
 	// deferred above rather than a read-only query.
-	"GET /api/v1/panorama/models/{id}/bindings": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
-	"PUT /api/v1/panorama/models/{id}/bindings": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"PUT /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models/{id}/bindings/candidates": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 
 	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI

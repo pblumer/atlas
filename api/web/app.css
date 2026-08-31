@@ -3250,3 +3250,21 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   .mesh-body { flex-direction: column; }
   .mesh-side { width: 100%; }
 }
+
+/* Atlas bindings in the Panorama properties panel (ADR-0189 §4). A binding shows
+   the server-resolved name; the id stays visible because it is what the document
+   actually stores and what another tool will read. */
+.panorama-binding { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.panorama-binding:last-child { border-bottom: 0; }
+.panorama-binding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panorama-binding-head span { font-size: 13px; color: var(--muted); }
+.panorama-binding p { margin: 4px 0 0; font-size: 13px; }
+.panorama-bound-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.panorama-bound { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.panorama-bound code { font-size: 12px; }
+/* An unresolved binding is shown rather than hidden: removing it would make a
+   broken binding look like an absent one, and the model would then look correct. */
+.panorama-bound.unresolved { color: var(--warn); }
+.panorama-unresolved { font-size: 12px; }
+.panorama-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.panorama-pick label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; font-size: 13px; }

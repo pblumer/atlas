@@ -3,6 +3,7 @@ package panorama
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -144,4 +145,73 @@ func (s *Service) HandleSetBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, summarize(model))
+}
+
+// BindingCandidate is one resource a caller may bind to: an id to store and a name
+// to show. Nothing else — a candidate list is a picker, not a resource export.
+type BindingCandidate struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// BindingCandidates answers "what may I bind this key to".
+type BindingCandidates struct {
+	Key string `json:"key"`
+	// Supported is false when this server cannot resolve the kind at all. Without
+	// it an empty list would read as "there are none", which is a different and
+	// wrong answer.
+	Supported  bool               `json:"supported"`
+	Candidates []BindingCandidate `json:"candidates"`
+}
+
+// HandleBindingCandidates lists the resources this caller may bind one key to.
+//
+// ADR-0189 §4 asks the editor to let an authorized user select only resources they
+// may see; this is that list. It is derived from the same catalog resolution uses,
+// so a picker cannot offer something resolution would then call forbidden.
+func (s *Service) HandleBindingCandidates(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("key")
+	if _, known := allowedOn[key]; !known {
+		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
+			"unknown Atlas binding key %q; contract version %d defines %s",
+			key, BindingContractVersion, strings.Join(BindingKeys(), ", ")))
+		return
+	}
+	// Reading the model first is the authorization check: a caller who may not see
+	// the model gets the same 404 here as on every other route, so this cannot
+	// become a way to enumerate resources through a model id.
+	if _, refusal, err := s.readModel(r, r.PathValue("id")); writeReadOutcome(w, refusal, err) {
+		return
+	}
+
+	var catalog Catalog
+	var ran bool
+	var opErr error
+	s.loop.Do(func() {
+		ran = true
+		catalog, opErr = s.catalog(r)
+	})
+	if !ran {
+		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
+		return
+	}
+	if opErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "resolve binding candidates: "+opErr.Error())
+		return
+	}
+
+	lookup := catalog.forKey(key)
+	out := BindingCandidates{Key: key, Supported: lookup != nil, Candidates: []BindingCandidate{}}
+	for _, ref := range lookup {
+		if ref.CanView {
+			out.Candidates = append(out.Candidates, BindingCandidate{ID: ref.ID, Name: ref.Name})
+		}
+	}
+	sort.Slice(out.Candidates, func(i, j int) bool {
+		if out.Candidates[i].Name != out.Candidates[j].Name {
+			return out.Candidates[i].Name < out.Candidates[j].Name
+		}
+		return out.Candidates[i].ID < out.Candidates[j].ID
+	})
+	httpapi.JSON(w, http.StatusOK, out)
 }

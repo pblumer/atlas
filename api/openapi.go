@@ -453,6 +453,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},
+		{"GET", "/api/v1/panorama/models/{id}/bindings/candidates", s.panorama.HandleBindingCandidates, apiOp{
+			summary: "List the Atlas resources the caller may bind one key to (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Binding candidates", tObject())}},
 		{"PUT", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleSetBinding, apiOp{
 			summary: "Set one Atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			req: jsonBody("Binding assignment", schemaObj(map[string]any{
