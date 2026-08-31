@@ -297,7 +297,10 @@ func (s *Sandbox) ProcessID() string { return s.root.ProcessId() }
 // cheaper identity, and that is a problem for the batch stage, not this one.
 func (s *Sandbox) StartCase(vars ...model.VariableValue) (uint64, error) {
 	s.proc.CreateInstance(s.root.Key, vars...)
-	if err := s.proc.RunUntilIdle(); err != nil {
+	// Settle rather than merely drain: a new case can park on a job immediately,
+	// and until the schedule has been reconciled that job is neither answered by
+	// the policy nor completable by hand.
+	if err := s.settle(); err != nil {
 		return 0, fmt.Errorf("playground: start case: %w", err)
 	}
 	key, err := s.newestCase()

@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,9 +74,11 @@ import (
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/playground"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
@@ -231,6 +234,11 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// playground serves the Modeler's Playground area, and playgroundSessions
+	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
+	// so neither field is guarded by this server's run loop (ADR-draft-modeler-playground).
+	playground         *playgroundapi.Service
+	playgroundSessions *playground.Registry
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
 	panorama         *panorama.Service
@@ -1092,6 +1100,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// The Playground's sandboxes are engines of their own, so the registry is not
+	// behind this server's run loop — but *finding* the model a session runs is
+	// design-time state and authorization, and both stay here (ADR-draft-modeler-playground).
+	s.playgroundSessions = playground.NewRegistry(playgroundSessionTTL, playgroundMaxSessions)
+	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
+
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the
@@ -1404,6 +1418,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
 	go s.collabReaper(collab.ReapInterval)
+	// A Playground sandbox is a live engine and a directory on disk, and a closed
+	// browser tab never says goodbye. The reaper is what keeps an abandoned session
+	// from holding either for ever. Like the collaboration reaper it runs off the
+	// run loop: sessions own their own writers.
+	s.wg.Add(1)
+	go s.playgroundReaper(playgroundReapInterval)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -2122,6 +2142,85 @@ func (s *Server) collabReaper(every time.Duration) {
 					slog.Int("participants", n), slog.Duration("ttl", collab.ParticipantTTL))
 			}
 		}
+	}
+}
+
+// Playground session bounds. A session holds a compiled model, two open stores
+// and a goroutine, so both numbers are resource limits rather than tuning knobs:
+// long enough that a person can think between two steps, few enough that a
+// server cannot be talked into holding a fleet of engines.
+const (
+	playgroundSessionTTL   = 30 * time.Minute
+	playgroundMaxSessions  = 8
+	playgroundReapInterval = time.Minute
+)
+
+// playgroundReaper closes Playground sessions nobody has touched for the TTL.
+func (s *Server) playgroundReaper(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			s.playgroundSessions.CloseAll()
+			return
+		case <-t.C:
+			if n := s.playgroundSessions.Reap(time.Now()); n > 0 {
+				logging.Info(logging.PlaygroundSessionsReaped,
+					"closed Playground sessions nobody came back to",
+					slog.Int("sessions", n), slog.Duration("ttl", playgroundSessionTTL))
+			}
+		}
+	}
+}
+
+// playgroundModel resolves the model a Playground session is asked to run, and
+// decides whether this request may read it. It is the one place the Playground
+// touches design-time state, so both the lookup and the authorization live here
+// rather than in the service (ADR-draft-modeler-playground).
+//
+// A draft is read under the same per-artifact rule its own XML route uses
+// (ADR-0071): running somebody's draft in a sandbox is reading it.
+func (s *Server) playgroundModel(r *http.Request, kind, ref string) ([]byte, int, string) {
+	switch kind {
+	case "draft":
+		var (
+			rec     draft
+			ok      bool
+			readErr error
+		)
+		s.do(func() { rec, ok, readErr = s.drafts.Get(ref) })
+		switch {
+		case readErr != nil:
+			return nil, http.StatusInternalServerError, "read draft: " + readErr.Error()
+		case !ok:
+			return nil, http.StatusNotFound, "no draft with that process id"
+		}
+		if code, msg := s.authorizeArtifact(r, rec.ProjectID, rec.OwnerID, ScopeRoleViewer); code != 0 {
+			return nil, code, msg
+		}
+		return []byte(rec.XML), 0, ""
+	case "process":
+		key, err := strconv.ParseUint(ref, 10, 64)
+		if err != nil {
+			return nil, http.StatusBadRequest, "invalid definition key"
+		}
+		var raw []byte
+		s.do(func() {
+			if d, ok := s.deployments[key]; ok {
+				raw = d.xml
+			}
+		})
+		if raw == nil {
+			return nil, http.StatusNotFound, "no deployment with that key"
+		}
+		// A deployed definition's XML is readable by any principal, exactly as
+		// GET /api/v1/processes/{key}/xml serves it; running it in a sandbox reads
+		// no more than that. The draft case above is the one with an owner to check.
+		return raw, 0, ""
+	default:
+		return nil, http.StatusBadRequest, "unknown model source"
 	}
 }
 

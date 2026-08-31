@@ -640,6 +640,41 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/projects/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "A project's access-control history (deprecated: use GET /api/v1/applications/{id}/audit)", tag: "Projects", role: RoleModeler, deprecated: true, resp: jsonBody("Grant audit events", tArray())}},
 
+		{"POST", "/api/v1/playground/sessions", s.playground.HandleOpen, apiOp{
+			summary: "Open a Playground session on a draft, a deployed definition, or an inline model", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Session to open", tObject()), resp: jsonBody("Session", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}", s.playground.HandleStatus, apiOp{
+			summary: "Read a Playground session's state", tag: "Playground", role: RoleModeler, resp: jsonBody("Session", tObject())}},
+		{"DELETE", "/api/v1/playground/sessions/{id}", s.playground.HandleClose, apiOp{
+			summary: "Close a Playground session and discard its sandbox", tag: "Playground", role: RoleModeler, resp: jsonBody("Closed", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/cases", s.playground.HandleStartCase, apiOp{
+			summary: "Start one case in a Playground session", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Start variables", tObject()), resp: jsonBody("Case", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/cases/{caseKey}", s.playground.HandleCase, apiOp{
+			summary: "Read what became of one Playground case", tag: "Playground", role: RoleModeler, resp: jsonBody("Case", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/run", s.playground.HandleRun, apiOp{
+			summary: "Run a Playground session until it comes to rest, its budget stops it, or it is paused", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Progress", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/step", s.playground.HandleStep, apiOp{
+			summary: "Carry out exactly one occurrence in a Playground session", tag: "Playground", role: RoleModeler, resp: jsonBody("Occurrence", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/pause", s.playground.HandlePause, apiOp{
+			summary: "Hold a Playground run at its next occurrence", tag: "Playground", role: RoleModeler, resp: jsonBody("Paused", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/resume", s.playground.HandleResume, apiOp{
+			summary: "Let a paused Playground session run again", tag: "Playground", role: RoleModeler, resp: jsonBody("Paused", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/clock", s.playground.HandleAdvanceClock, apiOp{
+			summary: "Jump a Playground session's simulated clock and fire what came due", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Advance", tObject()), resp: jsonBody("Simulated time", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/messages", s.playground.HandlePublishMessage, apiOp{
+			summary: "Publish a message into a Playground session", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Message", tObject()), resp: jsonBody("Published", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/tasks", s.playground.HandleTasks, apiOp{
+			summary: "List the Playground jobs waiting for a person", tag: "Playground", role: RoleModeler, resp: jsonBody("Tasks", tArray())}},
+		{"POST", "/api/v1/playground/sessions/{id}/tasks/{jobKey}/complete", s.playground.HandleCompleteTask, apiOp{
+			summary: "Complete a parked Playground task by hand", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Output variables", tObject()), resp: jsonBody("Completed", tObject())}},
+		{"GET", "/api/v1/playground/sessions/{id}/overlay", s.playground.HandleOverlay, apiOp{
+			summary: "Read a Playground run's per-element visit counts", tag: "Playground", role: RoleModeler, resp: jsonBody("Element visits", tObject())}},
+
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
 			summary: "Create a DMN reference artifact", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs", s.handleListDmnRefs, apiOp{

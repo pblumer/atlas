@@ -20,7 +20,7 @@ func newRegistry(t *testing.T) *playground.Registry {
 
 func openSession(t *testing.T, r *playground.Registry, fixtureName string) *playground.Session {
 	t.Helper()
-	s, err := r.Open(playground.Options{
+	s, err := r.Open("", playground.Options{
 		ModelXML: fixture(t, fixtureName), BaseDir: t.TempDir(),
 		StartTime: simStart, Stubs: playground.DefaultStubs(),
 	})
@@ -149,7 +149,7 @@ func TestPauseStopsARunAndResumeLetsItFinish(t *testing.T) {
 func TestRegistryReapsIdleSessions(t *testing.T) {
 	r := playground.NewRegistry(time.Minute, 4)
 	t.Cleanup(r.CloseAll)
-	s, err := r.Open(playground.Options{
+	s, err := r.Open("", playground.Options{
 		ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir(), StartTime: simStart,
 	})
 	if err != nil {
@@ -198,13 +198,13 @@ func TestRegistryRefusesBeyondItsCap(t *testing.T) {
 	r := playground.NewRegistry(time.Hour, 2)
 	t.Cleanup(r.CloseAll)
 	for i := 0; i < 2; i++ {
-		if _, err := r.Open(playground.Options{
+		if _, err := r.Open("", playground.Options{
 			ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir(),
 		}); err != nil {
 			t.Fatalf("open %d: %v", i, err)
 		}
 	}
-	_, err := r.Open(playground.Options{ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir()})
+	_, err := r.Open("", playground.Options{ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir()})
 	if err == nil {
 		t.Fatal("the registry opened a third session over a cap of two")
 	}
@@ -216,10 +216,39 @@ func TestRegistryRefusesBeyondItsCap(t *testing.T) {
 // A model the compiler refuses never becomes a session.
 func TestRegistryDoesNotKeepAFailedOpen(t *testing.T) {
 	r := newRegistry(t)
-	if _, err := r.Open(playground.Options{ModelXML: []byte("nonsense"), BaseDir: t.TempDir()}); err == nil {
+	if _, err := r.Open("", playground.Options{ModelXML: []byte("nonsense"), BaseDir: t.TempDir()}); err == nil {
 		t.Fatal("a model that does not compile should not open a session")
 	}
 	if n := r.Len(); n != 0 {
 		t.Errorf("registry holds %d sessions after a failed open, want 0", n)
+	}
+}
+
+// A session belongs to whoever opened it. The registry does not enforce that —
+// it does not know what a principal is — it only records it, so the HTTP layer
+// can.
+func TestSessionRecordsItsOwner(t *testing.T) {
+	r := newRegistry(t)
+	s, err := r.Open("vreni", playground.Options{
+		ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if !s.OwnedBy("vreni") {
+		t.Error("the session does not recognise its owner")
+	}
+	if s.OwnedBy("someone-else") {
+		t.Error("the session recognises somebody else as its owner")
+	}
+
+	unowned, err := r.Open("", playground.Options{
+		ModelXML: fixture(t, "sequence.bpmn"), BaseDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if !unowned.OwnedBy("anybody") {
+		t.Error("with authentication off a session should belong to everyone, as every other route does")
 	}
 }

@@ -265,4 +265,5 @@ var (
 	ScriptWorkerMissing      = newEvent("script_worker.binary_missing")
 	CallOverrideSkipped      = newEvent("call_override.skipped")
 	CollabParticipantsReaped = newEvent("collab.participants_reaped")
+	PlaygroundSessionsReaped = newEvent("playground.sessions_reaped")
 )

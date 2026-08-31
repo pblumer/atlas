@@ -236,3 +236,32 @@ func TestUnknownCaseIsAnError(t *testing.T) {
 		t.Error("reading an unknown case should be refused")
 	}
 }
+
+// A case that parks on a human task the moment it is created must be completable
+// straight away: the author sees the task in the list and clicks it, without a
+// run in between.
+func TestATaskIsCompletableRightAfterTheCaseStarts(t *testing.T) {
+	sb := openSandbox(t, "user-task.bpmn", playground.DefaultStubs())
+	key, err := sb.StartCase()
+	if err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+
+	tasks, err := sb.OpenTasks()
+	if err != nil {
+		t.Fatalf("open tasks: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %+v, want one", tasks)
+	}
+	if err := sb.CompleteTask(tasks[0].JobKey); err != nil {
+		t.Fatalf("complete a task the list just offered: %v", err)
+	}
+	c, err := sb.Case(key)
+	if err != nil {
+		t.Fatalf("case: %v", err)
+	}
+	if c.State != model.PICompleted {
+		t.Errorf("state = %v, want completed", c.State)
+	}
+}

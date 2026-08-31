@@ -983,12 +983,15 @@ the hand-written Details panel one vertical slice at a time:
 ([ADR-draft-modeler-playground](docs/adr/draft-modeler-playground.md)), building on
 the Play-mode sandbox above and extending it from "step one instance" to "run a
 dataset of up to 50 000 cases":
-- 🔲 **Sandbox session**: a sandbox over a draft *or* a deployed version — own
-  partition, own single-writer goroutine, non-durable log, virtual clock — driven as
-  a session (free-run, pause, step, resume, TTL) rather than inside one request.
-- 🔲 **Interactive play**: stop mid-run, inspect a case's variables, complete a
-  parked user task through its real form, publish a message, jump the clock. Same
-  session as the batch run, scheduler held instead of free-running.
+- ✅ **Sandbox session**: a sandbox over a draft *or* a deployed version — own
+  partition (from a reserved range), own single-writer goroutine, non-durable log,
+  virtual clock — driven as a session (free-run, pause, step, resume, TTL, owned by
+  the principal that opened it) rather than inside one request.
+  [`playground/`](playground/), [`api/playground/`](api/playground/).
+- 🚧 **Interactive play**: the API is there — start a case, step one occurrence,
+  pause and resume, list the jobs waiting for a person, complete one by hand,
+  publish a message, jump the clock, read the per-element visit counts. The Modeler
+  tab that drives it is not.
 - 🔲 **Data in**: a case list from a CSV upload (reusing the ADR-0084/0139 row
   parsing), from a form-based list editor over the start variables, or from a
   generator that draws values per field.

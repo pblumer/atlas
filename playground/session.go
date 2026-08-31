@@ -26,6 +26,12 @@ import (
 type Session struct {
 	id string
 	sb *Sandbox
+	// owner is the principal that opened the session, as the caller names them
+	// ("" when authentication is off). A session is not a shared resource: it can
+	// hold the variables of a draft only its owner may read, so whoever looks it
+	// up has to be the same person. The registry does not enforce this — it has no
+	// idea what a principal is — the HTTP layer does, with [Session.OwnedBy].
+	owner string
 
 	loop *runloop.Loop
 	quit chan struct{}
@@ -54,14 +60,14 @@ func NewID() (string, error) {
 }
 
 // newSession opens a sandbox and starts the goroutine that owns it.
-func newSession(id string, opts Options) (*Session, error) {
+func newSession(id, owner string, opts Options) (*Session, error) {
 	sb, err := Open(opts)
 	if err != nil {
 		return nil, err
 	}
 	quit := make(chan struct{})
 	s := &Session{
-		id: id, sb: sb,
+		id: id, owner: owner, sb: sb,
 		loop: runloop.New(quit), quit: quit, done: make(chan struct{}),
 		createdAt: time.Now(),
 	}
@@ -75,6 +81,11 @@ func newSession(id string, opts Options) (*Session, error) {
 
 // ID is the session's identifier.
 func (s *Session) ID() string { return s.id }
+
+// OwnedBy reports whether principal is the one that opened this session. An
+// unowned session (authentication off) belongs to everyone, which is the same
+// reach every other route has in that mode.
+func (s *Session) OwnedBy(principal string) bool { return s.owner == "" || s.owner == principal }
 
 // CreatedAt is when the session was opened.
 func (s *Session) CreatedAt() time.Time { return s.createdAt }
@@ -159,9 +170,10 @@ func NewRegistry(ttl time.Duration, max int) *Registry {
 	return &Registry{sessions: map[string]*Session{}, ttl: ttl, max: max}
 }
 
-// Open starts a session on a fresh sandbox. It fails if the model does not
-// compile — in which case nothing is registered — or if the registry is full.
-func (r *Registry) Open(opts Options) (*Session, error) {
+// Open starts a session on a fresh sandbox, owned by the named principal (empty
+// when authentication is off). It fails if the model does not compile — in which
+// case nothing is registered — or if the registry is full.
+func (r *Registry) Open(owner string, opts Options) (*Session, error) {
 	id, err := NewID()
 	if err != nil {
 		return nil, err
@@ -178,7 +190,7 @@ func (r *Registry) Open(opts Options) (*Session, error) {
 	r.sessions[id] = nil
 	r.mu.Unlock()
 
-	s, err := newSession(id, opts)
+	s, err := newSession(id, owner, opts)
 	if err != nil {
 		r.mu.Lock()
 		delete(r.sessions, id)

@@ -126,11 +126,22 @@ day" becomes a question the report answers rather than a number the author had t
 guess and configure. This needs no engine change: it is the sandbox's own job runner
 deciding *when* to complete a job it already holds, in virtual time.
 
-**Isolation by absence.** The sandbox registers job handlers only for the job types
-its own compiled process names, and it registers **no connector factories, no vault,
+**Isolation by absence.** The sandbox registers **no connector factories, no vault,
 no mail transport, no HTTP client at all**. A REST task in the sandbox cannot reach
 the network because there is nothing in the sandbox that can. Side-effect freedom is
-a structural property here, not a configuration flag.
+a structural property here, not a configuration flag. Its partitions come from a
+reserved range at the top of the partition space (`0xF000` and above) while the
+durable engine runs far below it, so a sandbox key is recognisable on sight and can
+never be mistaken for a real one.
+
+Two smaller commitments fall out of this and are worth stating, because both were
+found the hard way. Reproducibility is seeded on a key's **counter**, not the whole
+key: the high bits carry the partition, which a sandbox is handed as it opens, so
+seeding on the key would make the same dataset and seed produce different runs in
+two sandboxes. And a session is **owned by the principal that opened it**: it can
+hold the variables of a draft only that person may read, so another caller's request
+for it is answered as "not found" rather than "forbidden" — an existing id must not
+become an oracle.
 
 **A run is a session, not a request.** 50 000 cases will not finish inside an HTTP
 call, and stepping through one case by hand is a conversation rather than a call. So
@@ -211,7 +222,12 @@ executor of the real semantics.
   must say so rather than presenting a modelled duration as a measurement. Timing
   fidelity is *modelled*, not measured: the playground answers "given these service
   times, where does it pile up", never "how fast is our REST endpoint".
-- **Follow-ups / risks to watch:** the fsync in the batch cycle is the one thing
+- **Follow-ups / risks to watch:** a case's key is found by scanning for the
+  newest instance, because the engine hands none back: creation is a queued command
+  and the key is minted when it is processed. That is cheap while a person steps
+  through a handful of cases and hopeless for tens of thousands, so the batch stage
+  needs a cheaper identity — most likely a reserved start variable, or an engine
+  hook that reports the key it minted. The fsync in the batch cycle is the one thing
   standing between the durable path and the in-memory numbers above, so the sandbox
   needs a log that does not fsync (a WAL option, or a temp dir on tmpfs) — a
   deliberate, contained deviation, since nothing outside the sandbox observes it.
