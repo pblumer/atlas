@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_message_catch" targetNamespace="http://atlas/playground">
+  <message id="Msg_paid" name="payment-received">
+    <extensionElements>
+      <zeebe:subscription correlationKey="= &quot;K&quot;"/>
+    </extensionElements>
+  </message>
+  <process id="message-catch" name="Message catch" isExecutable="true">
+    <documentation>Playground fixture: the case waits for something the outside world sends. In a sandbox the author is the outside world — they publish the message themselves.</documentation>
+    <startEvent id="start" name="Start"/>
+    <intermediateCatchEvent id="await_payment" name="Await payment">
+      <messageEventDefinition messageRef="Msg_paid"/>
+    </intermediateCatchEvent>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="await_payment"/>
+    <sequenceFlow id="f2" sourceRef="await_payment" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="message-catch">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_await" bpmnElement="await_payment"><dc:Bounds x="290" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="420" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="290" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="326" y="200"/><di:waypoint x="420" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

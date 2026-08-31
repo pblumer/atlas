@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_two_pools" targetNamespace="http://atlas/playground">
+  <process id="first" name="First" isExecutable="true">
+    <documentation>Playground fixture: one of two executable processes, so the sandbox has to be told which one a run is about.</documentation>
+    <startEvent id="s1" name="Start"/>
+    <endEvent id="e1" name="Done"/>
+    <sequenceFlow id="ff1" sourceRef="s1" targetRef="e1"/>
+  </process>
+  <process id="second" name="Second" isExecutable="true">
+    <documentation>The other one. Naming it as the root is what picks it.</documentation>
+    <startEvent id="s2" name="Start"/>
+    <endEvent id="e2" name="Done"/>
+    <sequenceFlow id="ff2" sourceRef="s2" targetRef="e2"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="first">
+      <bpmndi:BPMNShape id="di_s1" bpmnElement="s1"><dc:Bounds x="160" y="82" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_e1" bpmnElement="e1"><dc:Bounds x="300" y="82" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_ff1" bpmnElement="ff1"><di:waypoint x="196" y="100"/><di:waypoint x="300" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="di_s2" bpmnElement="s2"><dc:Bounds x="160" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_e2" bpmnElement="e2"><dc:Bounds x="300" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_ff2" bpmnElement="ff2"><di:waypoint x="196" y="240"/><di:waypoint x="300" y="240"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
