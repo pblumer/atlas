@@ -1,6 +1,6 @@
 # ADR-DRAFT: Panorama's derived landscape mesh and notation projections
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
