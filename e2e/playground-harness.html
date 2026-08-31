@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Playground tab e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js and api/web/playground.js against a mock
+         Playground API, so the tab's browser half can be verified without a server.
+
+         The mock stands in for one sandbox session running a two-task process: a user
+         task that waits for the person at the keyboard, and a job the stub answers. It
+         records every call, so a test can prove the panel talks to the endpoints it
+         claims to — and that leaving the editor releases the sandbox rather than
+         leaving it to its TTL. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor, cleanup } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_pg" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="credit" name="Kreditantrag" isExecutable="true">
+    <bpmn:startEvent id="start" name="Antrag eingegangen"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="review" name="Antrag prüfen"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:serviceTask id="score" name="Bonität prüfen">
+      <bpmn:extensionElements><zeebe:taskDefinition type="scoring" /></bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="done" name="Entschieden"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="score"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="done"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="credit">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="score_di" bpmnElement="score"><dc:Bounds x="400" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="550" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="500" y="200"/><di:waypoint x="550" y="200"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The mock sandbox. It knows three states — before the case, the case parked on
+      // the user task, and the case finished — which is all the tab's wiring needs to
+      // be exercised end to end.
+      const SESSION = "sess-1";
+      let phase = "idle";
+      window.__calls = [];
+
+      const tasks = () => (phase === "parked"
+        ? [{ jobKey: "77", instanceKey: "5", element: "review", human: true }]
+        : []);
+      const visits = () => ({
+        idle: {},
+        parked: { start: 1, review: 1 },
+        done: { start: 1, review: 1, score: 1, done: 1 },
+      }[phase]);
+      const theCase = () => (phase === "done"
+        ? { instanceKey: "5", state: "completed", path: ["start", "review", "score", "done"],
+            variables: { amount: "12400", decision: "approved" }, incidents: 0 }
+        : { instanceKey: "5", state: "active", path: ["start", "review"],
+            variables: { amount: "12400" }, incidents: 0 });
+
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "GET" && /\/forms$/.test(url)) return [];
+        if (method === "POST" && /\/playground\/sessions$/.test(url)) {
+          phase = "idle";
+          return { id: SESSION, processId: "credit", seed: 4711,
+                   simTime: "2026-03-05T08:00:00Z", createdAt: "2026-03-05T08:00:00Z",
+                   lastUsed: "2026-03-05T08:00:00Z", paused: false, openTasks: 0 };
+        }
+        if (method === "POST" && /\/cases$/.test(url)) { phase = "parked"; return theCase(); }
+        if (method === "GET" && /\/tasks$/.test(url)) return tasks();
+        if (method === "GET" && /\/overlay$/.test(url)) return visits();
+        if (method === "GET" && /\/cases\/\d+$/.test(url)) return theCase();
+        if (method === "POST" && /\/tasks\/\d+\/complete$/.test(url)) { phase = "done"; return { completed: true }; }
+        if (method === "POST" && /\/run$/.test(url)) {
+          return { occurrences: 1, quiescent: true, simTime: "2026-03-05T08:01:00Z", paused: false };
+        }
+        if (method === "POST" && /\/step$/.test(url)) {
+          return { happened: true, kind: "jobCompleted", element: "score",
+                   at: "2026-03-05T08:01:00Z", simTime: "2026-03-05T08:01:00Z" };
+        }
+        if (method === "GET" && /\/playground\/sessions\/[\w-]+$/.test(url)) {
+          return { id: SESSION, processId: "credit", seed: 4711,
+                   simTime: phase === "done" ? "2026-03-05T08:01:00Z" : "2026-03-05T08:00:00Z",
+                   createdAt: "2026-03-05T08:00:00Z", lastUsed: "2026-03-05T08:00:00Z",
+                   paused: false, openTasks: tasks().length };
+        }
+        if (method === "DELETE" && /\/playground\/sessions\//.test(url)) return { closed: true };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__leave = () => cleanup();
+      window.__ready = true;
+    </script>
+  </body>
+</html>

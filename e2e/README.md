@@ -31,6 +31,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`playground.spec.mjs`** ([ADR-draft-modeler-playground](../docs/adr/draft-modeler-playground.md)):
+  the **Playground tab** — a mode rather than a level of detail, so it takes the control
+  strip and a side panel and gives the properties panel's width back to the diagram;
+  starting a sandbox sends the diagram *on screen* rather than a stored copy; a job waiting
+  for a person becomes a Complete button, and completing it repaints the run onto the canvas
+  with the runtime view's own markers; malformed start variables are reported instead of
+  posted; editing the diagram says the run no longer matches it; and leaving the editor
+  releases the server-side sandbox rather than leaving it to its TTL. Drives the real
+  `mountEditor` and `playground.js` against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway
   forks both branches and the join merges to one completion; the **inclusive** gateway
