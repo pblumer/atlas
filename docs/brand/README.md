@@ -51,39 +51,43 @@ Eight icons, one per Highlights bullet. They exist because the alternative was
 emoji, and a row of emoji down the left of a feature list reads as generated
 filler no matter what the words say.
 
-They are **drawn from a shared vocabulary** so the set looks like one family:
-an enclosing tile, flow lines, and nodes as filled dots. Same constants
-throughout —
-
-> They predate the current mark and still carry the old hexagon-and-flow
-> vocabulary in blue. They read as a coherent set on their own, so they were
-> left alone when the mark changed; redrawing them against the peak is open
-> work, and an all-or-nothing job when it happens.
+They are **drawn from the mark's own vocabulary** so the set and the logo look
+like one family: solid shapes with their detail cut out of them, the peak as the
+enclosing form, and nodes as filled dots. Same constants throughout —
 
 | | |
 |---|---|
-| Colour | `#2563EB` only. No second colour, no gradient, no fill behind the strokes. |
+| Colour | `#6E7781` only. No second colour, no gradient. |
 | Canvas | `viewBox="0 0 256 256"`, matching the mark, so weights carry over unscaled. |
-| Stroke | 18 for an enclosing shape, 12–14 for interior detail, `round` caps and joins. |
-| Nodes | Filled circles, r 15–34 by prominence. |
+| Form | Filled shapes, never strokes. Interior detail is a hole in the fill (`fill-rule="evenodd"`), exactly as the mark cuts its notch and cross. |
+| Weight | No feature under ~22 units — that is 1.5px at the size these ship. |
+| Nodes | Filled circles, r 19–28 by prominence. |
+
+**Why grey, when the mark is black and white.** These are `<img>` tags in a
+GitHub README, so they get no theme information and cannot use `currentColor`:
+one fixed colour has to survive both the light and the dark page. The mark's own
+black does not — it disappears on the dark theme — and the old blue is now a
+colour the brand uses nowhere else. `#6E7781` is the achromatic middle that
+holds on both grounds. If these ever move somewhere that *can* see the theme,
+switch them to `currentColor` and drop the constant.
 
 | File | What it draws |
 |------|---------------|
-| `one-binary.svg` | Everything Atlas is, inside one tile |
+| `one-binary.svg` | Everything Atlas is, inside the mark's own peak |
 | `durable.svg` | A record landing on the append-only log |
 | `compiled.svg` | Many strands resolving into one path |
 | `modeler.svg` | A canvas holding a modelled flow |
 | `tokens.svg` | One live token on the flow, singled out |
 | `human.svg` | A person — work handed to someone, not to a worker |
 | `decisions.svg` | A rule table with the row that hit marked |
-| `agents.svg` | The tile driven from outside, through two connectors |
+| `agents.svg` | The peak driven from outside, through two connectors |
 
 **Drawing another one.** Keep to the constants above and to the vocabulary —
 if a motif needs a shape the mark does not use, it probably belongs to a
 different set. Then check it at **18px**, not at 256: that is the size it ships
-at, and it is where fine detail dies. Two of these had to be redrawn heavier
-after failing that test; the 256px view flatters everything and will not tell
-you.
+at, and it is where fine detail dies. Check it on **both** grounds while you are
+there, white and `#0d1117`. The 256px view on white flatters everything and will
+not tell you either.
 
 In the README they are decorative — the bold lead carries the meaning — so each
 SVG is `aria-hidden="true"` and each `<img>` takes an empty `alt`. They are
