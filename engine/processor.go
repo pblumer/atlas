@@ -153,6 +153,12 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 // Deploy registers an immutable compiled definition so instances can run it, and
 // indexes any message start events so a correlating message instantiates it
 // (ADR-0035).
+// Partition reports which partition this processor drives. It is read-only and
+// fixed for the processor's life, so it is safe to call from any goroutine — the
+// API's node descriptor (ADR-0189 §6) reads it while serving a request, off the
+// run loop.
+func (p *Processor) Partition() uint16 { return p.partition }
+
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.processes[cp.Key] = cp
 	// Newest definition per process id wins; deployments reload oldest-first on

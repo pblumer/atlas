@@ -943,23 +943,36 @@ for the derived whole-instance mesh above them.
   application, including many-to-many mappings. The `atlas.*` key contract,
   extraction, validation, a writer that edits the document in place rather than
   reserialising it, per-principal resolution, the three HTTP routes and the binding
-  panel in the model viewer are complete. Two kinds resolve as **unsupported**
-  rather than missing until their catalogs exist: a job type is authored in a model
-  rather than registered as a resource, and a stable runtime id is the node
-  descriptor P4 delivers.
-- 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
+  panel in the model viewer are complete, and a runtime id now resolves against
+  this server's own node descriptor (P4a). One kind still resolves as
+  **unsupported** rather than missing, because there is nothing to look it up in:
+  a job type is authored in a model rather than registered as a resource.
+- 🚧 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
   a separate observation projection for readiness, health, version, deployments,
   instances, jobs, and incidents. Resolve remote target status server-side with
   bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
   stale/unbound states; show status as borders and badges without overwriting
-  ArchiMate layer colors.
+  ArchiMate layer colors. Ships in stages:
+  **a)** the node descriptor — a runtime id minted once and persisted, an
+  operator-owned name, environment and labels, build and partition facts, and a
+  feature list derived from the routes actually mounted, behind a least-privilege
+  `status` token scope. Complete; it also makes `atlas.runtimeId` resolve instead
+  of reporting unsupported (P3);
+  **b)** the local observation projection, keyed by ArchiMate element id, with
+  source, status, `observedAt` and staleness per observation — which is what first
+  makes **stale** producible on the landscape mesh (P2.5c);
+  **c)** remote node descriptors and status through deployment-target bindings,
+  resolved server-side off the run loop with bounded concurrency, deadlines,
+  response-size limits and per-target error isolation — which is what first makes
+  **unreachable** producible; and
+  **d)** observations on the ArchiMate canvas as borders and badges with a text
+  legend, layer colors intact.
 - 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
   into P2.5, which derives the edges they need. P4 also unblocks the two observation
-  states P2.5c declares unavailable (unreachable, stale) and the two binding kinds
-  P3 resolves as unsupported. Panorama remains a correlation
-  surface, not a time-series or log database.
+  states P2.5c declares unavailable (unreachable, stale). Panorama remains a
+  correlation surface, not a time-series or log database.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

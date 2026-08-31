@@ -33,7 +33,13 @@ func TestCollectBindingCatalogReportsStoreFailures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newTargetStore: %v", err)
 		}
-		s.releases, s.connectors, s.targets = releases, connectors, targets
+		// The catalog resolves atlas.runtimeId against this node's own descriptor
+		// (ADR-0189 §6), so the settings store is one of the stores it needs.
+		settings, err := newSettingsStore(filepath.Join(dir, "settings"))
+		if err != nil {
+			t.Fatalf("newSettingsStore: %v", err)
+		}
+		s.releases, s.connectors, s.targets, s.settings = releases, connectors, targets, settings
 		s.versions = map[string]int32{}
 		return s
 	}
@@ -91,8 +97,16 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTargetStore: %v", err)
 	}
-	s.releases, s.connectors, s.targets = releases, connectors, targets
+	settings, err := newSettingsStore(filepath.Join(dir, "settings"))
+	if err != nil {
+		t.Fatalf("newSettingsStore: %v", err)
+	}
+	s.releases, s.connectors, s.targets, s.settings = releases, connectors, targets, settings
 	s.versions = map[string]int32{}
+	identity, err := ensureNodeIdentity(settings)
+	if err != nil {
+		t.Fatalf("ensureNodeIdentity: %v", err)
+	}
 
 	catalog, err := s.collectBindingCatalog(httptest.NewRequest(http.MethodGet, "/", nil))
 	if err != nil {
@@ -101,8 +115,12 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 	if catalog.JobTypes != nil {
 		t.Error("JobTypes is present; a job type is authored in a model, not registered")
 	}
-	if catalog.Runtimes != nil {
-		t.Error("Runtimes is present; the node descriptor arrives with P4")
+	// Runtimes became answerable with the node descriptor (ADR-0189 §6): this server
+	// knows one runtime for certain — itself. The map being present is what turns a
+	// binding to some other node from "unsupported" into "missing", which is the
+	// true answer here and a different one.
+	if len(catalog.Runtimes) != 1 || catalog.Runtimes[identity.ID].ID != identity.ID {
+		t.Errorf("Runtimes = %#v, want exactly this node (%s)", catalog.Runtimes, identity.ID)
 	}
 	for name, supplied := range map[string]bool{
 		"Applications": catalog.Applications != nil,
@@ -110,6 +128,7 @@ func TestCollectBindingCatalogOmitsKindsWithNoSource(t *testing.T) {
 		"Connectors":   catalog.Connectors != nil,
 		"Targets":      catalog.Targets != nil,
 		"Releases":     catalog.Releases != nil,
+		"Runtimes":     catalog.Runtimes != nil,
 	} {
 		if !supplied {
 			t.Errorf("%s is absent; the server can supply it, so an empty map is the honest answer", name)

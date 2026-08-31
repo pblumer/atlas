@@ -29,10 +29,26 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 		Connectors:   map[string]panorama.ResourceRef{},
 		Targets:      map[string]panorama.ResourceRef{},
 		Releases:     map[string]panorama.ResourceRef{},
-		// JobTypes and Runtimes are deliberately absent. A job type is authored in a
-		// model rather than registered as a resource, and a stable runtime id is the
-		// node descriptor ADR-0189 §6 defines and P4 delivers. Supplying an empty map
-		// for either would turn "not built yet" into "no such resource".
+		Runtimes:     map[string]panorama.ResourceRef{},
+		// JobTypes is deliberately absent: a job type is authored in a model rather
+		// than registered as a resource, so nothing here can be looked up. Supplying
+		// an empty map would turn "not built yet" into "no such resource".
+	}
+
+	// Runtimes are the Atlas nodes a model may bind to. This server knows exactly
+	// one of them with certainty — itself (ADR-0189 §6) — so the map is present and
+	// holds one entry. That is the honest shape: a binding to this node resolves, a
+	// binding to any other id is *missing* here rather than unsupported, which is
+	// the true answer until remote descriptors are collected through deployment
+	// targets. Every caller may see it: the descriptor is what this server tells any
+	// signed-in identity about itself, and a name it already serves on a route of
+	// its own is not a secret here.
+	node, err := s.nodeIdentity()
+	if err != nil {
+		return panorama.Catalog{}, err
+	}
+	catalog.Runtimes[node.ID] = panorama.ResourceRef{
+		ID: node.ID, Name: nodeDisplayName(node), CanView: true,
 	}
 
 	for _, p := range projs {
@@ -100,4 +116,19 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 // belongs to and the version it shipped.
 func releaseDisplayName(application string, version int32) string {
 	return application + " v" + strconv.FormatInt(int64(version), 10)
+}
+
+// nodeDisplayName names a runtime the way an architect binding to it would
+// recognise it: the operator's own name for the node, qualified by its
+// environment. It falls back to the product name rather than to the id, because an
+// id repeated as its own label tells a reader nothing they did not already have.
+func nodeDisplayName(n nodeIdentity) string {
+	name := n.Name
+	if name == "" {
+		name = "Atlas"
+	}
+	if n.Environment != "" {
+		return name + " (" + n.Environment + ")"
+	}
+	return name
 }
