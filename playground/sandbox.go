@@ -96,6 +96,8 @@ const (
 	OccJobError
 	// OccTimer: simulated time reached a due timer and it fired.
 	OccTimer
+	// OccCaseStarted: a planned case reached its arrival time and was created.
+	OccCaseStarted
 )
 
 // Occurrence is one scheduled thing the scheduler carried out.
@@ -230,6 +232,17 @@ type Sandbox struct {
 	// exists only in the policy.
 	pools        map[string]*poolState
 	elementStats map[string]*ElementStat
+
+	// plan is the batch still being released, nil for a sandbox somebody is
+	// stepping through by hand. caseKeys is the arrival-ordered key list the report
+	// and the results pages read, rebuilt when new cases appear.
+	plan          *plan
+	caseKeys      []uint64
+	caseKeysStale bool
+	// startedAt is where simulated time began, so a report can say what the run
+	// spanned, and maxInFlight the most cases ever active at once.
+	startedAt   int64
+	maxInFlight int
 }
 
 // Open compiles the model and brings up a sandbox for it. The caller must Close
@@ -256,7 +269,12 @@ func Open(opts Options) (*Sandbox, error) {
 	if err != nil {
 		return nil, fmt.Errorf("playground: sandbox dir: %w", err)
 	}
-	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	// The sandbox's log is written but never forced to the platter: nothing outside
+	// the sandbox observes it and it is deleted when the run ends, so the fsync
+	// that "durable before visible" (invariant I2) exists for would buy nothing and
+	// costs most of the run. This is the deviation the record calls out, and it is
+	// confined to exactly here.
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal"), NoFsync: true})
 	if err != nil {
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("playground: open log: %w", err)
@@ -273,7 +291,7 @@ func Open(opts Options) (*Sandbox, error) {
 		clock.nanos = 0
 	}
 	s := &Sandbox{
-		dir: dir, partition: partition, seed: opts.Seed,
+		dir: dir, partition: partition, seed: opts.Seed, startedAt: clock.nanos,
 		log: log, store: store, clock: clock,
 		root:         root,
 		byKey:        make(map[uint64]*compiler.CompiledProcess, len(deployables)),
@@ -372,6 +390,7 @@ func (s *Sandbox) StartCase(vars ...model.VariableValue) (uint64, error) {
 		return 0, err
 	}
 	s.handedOut = key
+	s.caseKeysStale = true
 	return key, nil
 }
 
@@ -401,12 +420,44 @@ func (s *Sandbox) newestCase() (uint64, error) {
 }
 
 // settle runs the engine until it is idle and then brings the schedule back in
-// step with reality.
+// step with reality. A plan whose next arrival has come is released here, so the
+// rest of the scheduler never has to know whether a case came from a person
+// pressing "+ Case" or from a dataset.
 func (s *Sandbox) settle() error {
-	if err := s.proc.RunUntilIdle(); err != nil {
-		return fmt.Errorf("playground: run: %w", err)
+	for {
+		if err := s.proc.RunUntilIdle(); err != nil {
+			return fmt.Errorf("playground: run: %w", err)
+		}
+		released, err := s.releaseArrivals()
+		if err != nil {
+			return err
+		}
+		if !released {
+			break
+		}
+	}
+	if err := s.trackInFlight(); err != nil {
+		return err
 	}
 	return s.reconcileJobs()
+}
+
+// trackInFlight keeps the high-water mark of cases running at the same time — the
+// work in progress a report shows against the arrival rate.
+//
+// It reads the maintained per-definition counter (ADR-0080), which is O(1). The
+// scanning count next to it walks every instance in the store, and this runs
+// after every settle: on a batch of fifty thousand that difference was two fifths
+// of the whole run.
+func (s *Sandbox) trackInFlight() error {
+	n, err := s.store.DefInstanceCount(s.root.Key)
+	if err != nil {
+		return fmt.Errorf("playground: count active cases: %w", err)
+	}
+	if n > s.maxInFlight {
+		s.maxInFlight = n
+	}
+	return nil
 }
 
 // reconcileJobs matches the committed answers against the jobs that actually
@@ -580,6 +631,13 @@ func (s *Sandbox) nextDue() (int64, bool, error) {
 			due, found = p.dueAt, true
 		}
 	}
+	// A planned case that has not arrived yet is an instant the run must travel to,
+	// exactly like a due answer or a timer.
+	if at, ok, err := s.nextArrival(); err != nil {
+		return 0, false, err
+	} else if ok && (!found || at < due) {
+		due, found = at, true
+	}
 	// Work waiting on a closed pool has no due date either, but the pool's next
 	// opening is an instant the run must travel to — otherwise a queue in front of
 	// a closed pool reads as quiescence and the run reports itself finished.
@@ -652,8 +710,18 @@ func (s *Sandbox) stepSettled() (Occurrence, bool, error) {
 		return Occurrence{}, false, err
 	}
 	s.clock.advanceTo(due)
-	// The clock may have reached a pool's opening, in which case the work waiting
-	// in front of it starts now and is what this step carries out.
+	// The clock may have reached a planned arrival or a pool's opening. Both are
+	// things this step carries out; releasing a case is reported as its own
+	// occurrence so a stepping author sees the case appear rather than watching
+	// the clock jump for no visible reason.
+	if released, err := s.releaseArrivals(); err != nil {
+		return Occurrence{}, false, err
+	} else if released {
+		if err := s.settle(); err != nil {
+			return Occurrence{}, false, err
+		}
+		return Occurrence{Kind: OccCaseStarted, At: s.Now()}, true, nil
+	}
 	if err := s.serveQueues(s.clock.Now()); err != nil {
 		return Occurrence{}, false, err
 	}
@@ -762,10 +830,13 @@ func (s *Sandbox) answer(p pending) {
 func (s *Sandbox) Run(b Budget) (Progress, error) {
 	startedAt := s.clock.Now()
 	prog := Progress{SimTime: s.Now()}
+	// Settle once here rather than at the top of every turn: stepSettled ends with
+	// a settle of its own, so a per-turn one would rescan the open jobs with
+	// nothing having happened in between — half the scanning in a long batch.
+	if err := s.settle(); err != nil {
+		return prog, err
+	}
 	for {
-		if err := s.settle(); err != nil {
-			return prog, err
-		}
 		due, ok, err := s.nextDue()
 		if err != nil {
 			return prog, err

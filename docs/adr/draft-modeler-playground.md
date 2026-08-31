@@ -179,16 +179,28 @@ here, because each of them changes what has to be built.
   capacity, every reported waiting time is just a sum of durations the author typed
   in, and the bottleneck ranking says nothing they did not already know. Pools are
   what make the temporal analysis worth reading.
-- **The ceiling is 50 000 cases per run.** This is affordable because the sandbox is
-  non-durable: the published baseline measures ~840 instances/sec when every batch
-  fsyncs to disk but ~6 900–16 500/sec for the same workloads with the log on tmpfs
-  (`benchmarks/results/baseline-5b1b9f2.md`), so 50 000 cases land in seconds to tens
-  of seconds rather than minutes. It is *not* affordable naively: at that size the
-  report must be aggregated as the run proceeds (counters per element and flow,
-  bucketed histograms for the percentiles, time series in fixed buckets), the case
-  list must live in a server-side result store read page by page, and the CSV must
-  be streamed rather than assembled. Anything that holds one object per case in
-  memory — in the server or in the browser — is ruled out by this number.
+- **The ceiling is 50 000 cases per run.** It is affordable, but not for the reason
+  first written here. The estimate was taken from the engine's own baseline
+  (~840 instances/sec with an fsync per batch against ~6 900–16 500/sec with the log
+  in memory, `benchmarks/results/baseline-5b1b9f2.md`) and predicted "seconds to tens
+  of seconds". The sandbox is slower than the raw engine, because per case it also
+  draws an answer, queues it against a pool, moves a virtual clock and measures what
+  happened: **`go test ./playground -bench=Batch -benchtime=50000x` measures ~2.0 ms
+  per case — 50 000 cases in about a minute and a half** on the four-core VM the rest
+  of these numbers come from. Ten thousand take seventeen seconds and a thousand
+  take under one, which is the size an author actually iterates on.
+  Three things bought a 3.5× improvement over the first working version and are load-
+  bearing rather than tuning: the sandbox's log does not fsync (it is discarded, so
+  the "durable before visible" cost buys nothing — `wal.Options.NoFsync`, used
+  nowhere else), the work-in-progress count reads the maintained per-definition
+  counter instead of scanning every instance (ADR-0080), and a run settles once per
+  occurrence rather than twice. What remains is the scan of the activatable jobs on
+  every settle, which is the next thing to attack and is why the number is minutes
+  rather than seconds.
+  Size, as opposed to speed, is what the design has to respect: the report is folded
+  in one pass and holds no object per case, the case list is read page by page out of
+  the sandbox's own store, and the CSV is streamed. Anything that holds one object
+  per case in memory — in the server or in the browser — is ruled out by this number.
 
 Option 1 is rejected for the reason ADR-0030 gave: a browser walker that also
 produced *numbers* would be a second engine whose statistics look authoritative and
@@ -222,12 +234,15 @@ executor of the real semantics.
   must say so rather than presenting a modelled duration as a measurement. Timing
   fidelity is *modelled*, not measured: the playground answers "given these service
   times, where does it pile up", never "how fast is our REST endpoint".
-- **Follow-ups / risks to watch:** a case's key is found by scanning for the
-  newest instance, because the engine hands none back: creation is a queued command
-  and the key is minted when it is processed. That is cheap while a person steps
-  through a handful of cases and hopeless for tens of thousands, so the batch stage
-  needs a cheaper identity — most likely a reserved start variable, or an engine
-  hook that reports the key it minted. The fsync in the batch cycle is the one thing
+- **Follow-ups / risks to watch:** the batch identifies its cases by key order
+  rather than by looking each one up as it is created — keys are minted from a
+  monotonic counter, so ascending key order is arrival order, which costs one sorted
+  key list for the whole run instead of a scan per case. The interactive path still
+  scans for the newest instance, which is fine for the handful a person starts by
+  hand. The activatable-job scan on every settle is the remaining cost at scale; the
+  robust fix is a watermark over new job keys checked against the maintained
+  open-job counter, so a job that appears out of order is still found rather than
+  silently never answered. The fsync in the batch cycle is the one thing
   standing between the durable path and the in-memory numbers above, so the sandbox
   needs a log that does not fsync (a WAL option, or a temp dir on tmpfs) — a
   deliberate, contained deviation, since nothing outside the sandbox observes it.

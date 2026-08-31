@@ -51,12 +51,22 @@ type Options struct {
 	// segment. Zero means the default (64 MiB). A single batch is never split
 	// across segments, so a segment may exceed this by up to one batch.
 	MaxSegmentSize int64
+	// NoFsync writes each batch but does not force it to the platter, so a crash
+	// can lose the tail of the log.
+	//
+	// It exists for a log nobody will ever recover: the Playground's sandbox is
+	// discarded when the run ends, and its whole point is to be cheap. Turning it
+	// on for anything a process instance depends on breaks "durable before
+	// visible" (invariant I2), which is the one thing this log is for — so it is
+	// named after what it gives up rather than after the speed it buys.
+	NoFsync bool
 }
 
 // Log is a segmented append-only write-ahead log.
 type Log struct {
 	dir            string
 	maxSegmentSize int64
+	noFsync        bool
 
 	active     *os.File
 	activeSize int64
@@ -80,7 +90,7 @@ func Open(opts Options) (*Log, error) {
 		return nil, err
 	}
 
-	l := &Log{dir: opts.Dir, maxSegmentSize: max}
+	l := &Log{dir: opts.Dir, maxSegmentSize: max, noFsync: opts.NoFsync}
 	segs, err := l.segmentFiles()
 	if err != nil {
 		return nil, err
@@ -158,8 +168,12 @@ func (l *Log) Sync() error {
 	if err != nil {
 		return err
 	}
-	if err := l.active.Sync(); err != nil {
-		return err
+	// A log opened with NoFsync is written but not forced: see Options.NoFsync for
+	// the one caller that may ask for it and what it gives up.
+	if !l.noFsync {
+		if err := l.active.Sync(); err != nil {
+			return err
+		}
 	}
 	l.pending = l.pending[:0]
 	return nil

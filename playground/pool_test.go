@@ -92,7 +92,7 @@ func TestAPoolOnlyWorksWhileItsCalendarIsOpen(t *testing.T) {
 		Human: &playground.Stub{Min: 2 * time.Hour, Max: 2 * time.Hour},
 		Pools: map[string]playground.Pool{"clerks": {
 			Capacity: 1,
-			Open:     []playground.Window{{From: 8 * time.Hour, To: 17 * time.Hour}},
+			Calendar: playground.Calendar{Open: []playground.Window{{From: 8 * time.Hour, To: 17 * time.Hour}}},
 		}},
 		PoolOf: map[string]string{"approve": "clerks"},
 	})
