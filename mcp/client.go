@@ -33,11 +33,26 @@ type Client struct {
 type caller struct {
 	authorization string // the Authorization header, as received
 	cookie        string // the Cookie header, as received
+	via           string // the TransportHeader marker, as received
 }
 
 // empty reports whether the caller presented no credential at all — the ordinary
 // case on a server running without --auth.
-func (c caller) empty() bool { return c.authorization == "" && c.cookie == "" }
+func (c caller) empty() bool { return c.authorization == "" && c.cookie == "" && c.via == "" }
+
+// TransportHeader marks an API request as one a tool call made, rather than one a
+// client made directly against /api/v1 with the same credential.
+//
+// Atlas stamps it on every request entering /mcp and this adapter forwards it, the
+// same way it forwards the caller's own credential and for the same reason: what
+// arrives at the API has to be recognisable as what it is. A token a person
+// approved for the transport alone is otherwise confined away from the very API
+// calls its tools are made of.
+//
+// It is not a credential this adapter holds — it holds none (ADR-0196). It arrives
+// on the request, is carried verbatim like the other two, and means nothing except
+// to the server that wrote it.
+const TransportHeader = "X-Atlas-Via-MCP"
 
 // forCaller returns a Client that authenticates as the given caller instead of
 // with the token this one was built with. It shallow-copies, so the derived
@@ -161,6 +176,9 @@ func (c *Client) doResponse(method, path, contentType string, body []byte) (clie
 	}
 	if c.caller.cookie != "" {
 		req.Header.Set("Cookie", c.caller.cookie)
+	}
+	if c.caller.via != "" {
+		req.Header.Set(TransportHeader, c.caller.via)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
