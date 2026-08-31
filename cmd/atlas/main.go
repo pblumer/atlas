@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -171,6 +172,16 @@ func printVersion(w io.Writer) {
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", ":8080", "HTTP listen address")
+	// TLS, where an operator supplies a certificate (ADR-0191). Both files or
+	// neither: naming one without the other stops the server rather than falling
+	// back to plaintext on the port somebody believed they had just secured. Unset
+	// is today's behaviour exactly — plaintext, behind a reverse proxy. Turning this
+	// on removes the cryptographic reason to run that proxy and not the
+	// authorization one: /metrics, /healthz and /readyz stay unauthenticated by
+	// design (ADR-0142), because a kubelet has no credential to offer.
+	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
+	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another Atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph connectors, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
@@ -258,13 +269,18 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration, oidc: api.OIDCConfig{
+	// Shut down cleanly on SIGINT/SIGTERM. The signal handling belongs out here with
+	// the rest of the process's lifecycle, so serve is driven by a context and can
+	// be started and stopped by a test.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return serve(ctx, *addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration, oidc: api.OIDCConfig{
 		Issuer:       *oidcIssuer,
 		ClientID:     *oidcClientID,
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -317,6 +333,20 @@ type oauthConfig struct {
 	oidc api.OIDCConfig
 }
 
+// tlsConfig is the transport half of the serve flags (ADR-0191), kept together for
+// the reason oauthConfig is: what this server serves TLS with and what it verifies
+// another Atlas against are one subject, not three more positional arguments.
+type tlsConfig struct {
+	// certFile and keyFile are the pair --addr is served with. Both empty is
+	// plaintext, which is what every deployment behind a proxy keeps.
+	certFile, keyFile string
+
+	// caFile is an operator's CA bundle, trusted *in addition to* the host's roots
+	// by the clients that call another Atlas. It is deliberately not global: a
+	// connector reaching a third party has its own endpoint and its own trust.
+	caFile string
+}
+
 // retentionConfig is the history-retention configuration the CLI assembles: the
 // server-wide max age (ADR-0115), plus the sweep's cadence and per-tick batch, which
 // together bound how fast a backlog of finished instances drains. Grouped because they
@@ -327,7 +357,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -351,6 +381,43 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 				slog.String("error", err.Error()))
 		}
 	}()
+
+	// TLS, where the operator supplied a certificate (ADR-0191). Before the data
+	// directory, so a wrong path or a mismatched pair stops the server without
+	// having touched anything durable.
+	tlsOn, err := tlsConfigured(tlsCfg.certFile, tlsCfg.keyFile)
+	if err != nil {
+		return err
+	}
+	var (
+		serverTLS  *tls.Config
+		loopbackLn net.Listener
+	)
+	if tlsOn {
+		if serverTLS, err = newServerTLSConfig(tlsCfg.certFile, tlsCfg.keyFile); err != nil {
+			return err
+		}
+		// The plaintext listener this process's own children use, bound here because
+		// its port has to be known before the handler that hands it to them is built.
+		// Nothing accepts on it until serveUntil below; a child that gets there first
+		// waits in the backlog rather than being refused.
+		if loopbackLn, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+			return fmt.Errorf("bind the loopback listener: %w", err)
+		}
+		defer loopbackLn.Close()
+	}
+	// What the MCP adapter's loopback client and every supervised worker call back
+	// on. Without TLS it is this server's own address, exactly as before.
+	internal := internalURL(addr, loopbackLn)
+
+	// The other half of TLS: what this server trusts when it calls another Atlas.
+	// A peer on-prem usually presents a certificate an internal CA issued, and
+	// without its bundle the https:// a deployment target demands (ADR-0129) fails
+	// at verification instead of connecting.
+	targetRoots, err := trustPool(tlsCfg.caFile)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
@@ -442,6 +509,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 		logging.Warn(logging.WALCompactionInert,
 			"--compact-wal has no effect without checkpointing; set --checkpoint-interval to a "+
 				"positive duration to enable it (ADR-0131)")
+	}
+	if targetRoots != nil {
+		apiOpts = append(apiOpts, api.WithTargetTLSRoots(targetRoots))
 	}
 	if oauth.externalURL != "" {
 		apiOpts = append(apiOpts, api.WithExternalURL(oauth.externalURL))
@@ -571,7 +641,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
 	}
 	if len(specs) > 0 {
-		apiOpts = append(apiOpts, api.WithSupervisedWorkers(selfURL(addr), specs, handles))
+		apiOpts = append(apiOpts, api.WithSupervisedWorkers(internal, specs, handles))
 	}
 	// A worker's job history, when an operator named a clio connector for it. Atlas
 	// keeps none of its own: the console's tail is memory, and everything beyond it
@@ -596,7 +666,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 	// This used to be a second mux out here, with the server's internal service
 	// token attached to every loopback call (ADR-0049). withAuth never saw those
 	// requests, so anything that could reach the port drove the whole API.
-	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(loopbackURL(addr)))))
+	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(internal))))
 
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
@@ -604,42 +674,39 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 	}
 	defer srv.Close()
 
-	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler()}
-
-	// Shut down cleanly on SIGINT/SIGTERM.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	errCh := make(chan error, 1)
-	go func() {
-		base := loopbackURL(addr)
-		logging.Info(logging.ServerListening, "listening; recovery is complete and this instance is ready",
-			slog.String("addr", addr), slog.String("ui", base+"/"), slog.String("mcp", base+"/mcp"))
-		if docs {
-			logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
-				slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
+	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler(), TLSConfig: serverTLS}
+	listeners := []httpListener{{srv: httpSrv, serve: func() error {
+		if !tlsOn {
+			return httpSrv.ListenAndServe()
 		}
-		if metricsOn {
-			logging.Info(logging.ServerMetrics,
-				"Prometheus metrics enabled (unauthenticated; proxy it if exposed beyond the host)",
-				slog.String("metrics", base+"/metrics"))
-		}
-		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-			return
-		}
-		errCh <- nil
-	}()
-
-	select {
-	case err := <-errCh:
-		return err
-	case <-ctx.Done():
-		logging.Info(logging.ServerShuttingDown, "shutting down")
-		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		return httpSrv.Shutdown(shutCtx)
+		// The pair is served by TLSConfig's GetCertificate, which re-reads it when it
+		// changes; the filename arguments here would read it once and never again,
+		// so they are deliberately empty (ADR-0191).
+		return httpSrv.ListenAndServeTLS("", "")
+	}}}
+	if loopbackLn != nil {
+		loopbackSrv := &http.Server{Handler: srv.Handler()}
+		listeners = append(listeners, httpListener{srv: loopbackSrv, serve: func() error {
+			return loopbackSrv.Serve(loopbackLn)
+		}})
 	}
+
+	// The origin a person can use, which with a TLS listener is no longer the one
+	// this process's children were handed.
+	base := reachableOrigin(oauth.externalURL, addr, tlsOn)
+	logging.Info(logging.ServerListening, "listening; recovery is complete and this instance is ready",
+		slog.String("addr", addr), slog.String("ui", base+"/"), slog.String("mcp", base+"/mcp"),
+		slog.Bool("tls", tlsOn))
+	if docs {
+		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
+			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
+	}
+	if metricsOn {
+		logging.Info(logging.ServerMetrics,
+			"Prometheus metrics enabled (unauthenticated; proxy it if exposed beyond the host)",
+			slog.String("metrics", base+"/metrics"))
+	}
+	return serveUntil(ctx, shutdownTimeout, listeners...)
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls
@@ -802,18 +869,6 @@ func (f superviseFlag) build() ([]api.SuperviseSpec, [][]string) {
 // selfURL is the address a supervised worker is told to work for. It is this
 // server's own listen address, with a bare port meaning loopback — a child talks to
 // its parent, not out across the network.
-func selfURL(addr string) string {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "http://127.0.0.1:8080"
-	}
-	switch host {
-	case "", "0.0.0.0", "::", "[::]":
-		host = "127.0.0.1"
-	}
-	return "http://" + net.JoinHostPort(host, port)
-}
-
 // handleFlag collects repeated --handle type=command pairs: what this worker
 // serves, and what to run for each. A repeated flag is the shape that keeps the
 // pairing unambiguous — two parallel lists would let a typo silently line the wrong
@@ -869,6 +924,7 @@ func runWorker(args []string) error {
 	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to work for")
 	id := fs.String("id", defaultWorkerID(), "worker id, shown in the Workers view; give each deployment its own")
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"), "bearer token, when the server requires authentication (or ATLAS_TOKEN)")
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
 	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
 	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
 	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs one poll may lease; keep it to what this worker can actually run at once")
@@ -908,11 +964,29 @@ func runWorker(args []string) error {
 	for jobType, argv := range handles {
 		execs[jobType] = worker.CmdExec{Name: argv[0], Args: argv[1:]}
 	}
-	w := worker.New(worker.Options{
+	// A worker on the server's own host reaches it over loopback and needs none of
+	// this; one on another host is the case --tls-ca exists for, and its bearer
+	// token is what would otherwise cross a network in the clear.
+	serverRoots, err := trustPool(*tlsCA)
+	if err != nil {
+		return err
+	}
+	opts := worker.Options{
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
 		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
-	})
+	}
+	if serverRoots != nil {
+		// Only where a CA was named: otherwise worker.New builds the client, and a
+		// worker that does not need this keeps exactly the one it always had. One
+		// request may block for a whole poll and is followed by the work itself, so
+		// the ceiling is the poll plus the lease, as that default is.
+		opts.HTTP = &http.Client{
+			Timeout:   *wait + *lease + 30*time.Second,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: serverRoots, MinVersion: tls.VersionTLS12}},
+		}
+	}
+	w := worker.New(opts)
 
 	logging.Info(logging.WorkerStarting, "working jobs for a running Atlas",
 		slog.String("server", *server), slog.String("id", *id),

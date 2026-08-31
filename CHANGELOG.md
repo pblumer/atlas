@@ -14,6 +14,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas can terminate TLS itself.** `--tls-cert` and `--tls-key` turn `--addr`
+  into a TLS 1.3 listener, so the reverse proxy that used to be mandatory before
+  anyone outside the host could reach the server is now a choice
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)). Unset — both unset — is
+  today's behaviour exactly: plain HTTP, nothing changes on upgrade.
+
+  **Both files or neither.** Naming one without the other stops the server rather
+  than falling back to plaintext on the port you believed you had just secured.
+  The pair is re-read when either file changes, so a renewal needs no restart of a
+  stateful engine; a renewal caught half-written keeps serving the certificate it
+  has and logs `server.tls_reload_failed` rather than refusing handshakes.
+
+  **TLS 1.3 only, and that is the point.** Its cipher suites are fixed by the
+  protocol, so there is no cipher list to expose, nothing to weaken, and no
+  `--tls-min-version`. A client that cannot negotiate 1.3 is refused rather than
+  quietly downgraded.
+
+  With TLS on, the server also opens a plaintext listener on `127.0.0.1` with an
+  ephemeral port for its own children — the MCP adapter's loopback calls and any
+  worker it supervises. A certificate issued for a host name carries no name for
+  `127.0.0.1`, and the alternative would be a switch to skip verification, which
+  Atlas does not have and will not get.
+
+- **`--tls-ca`, so two Atlas servers with an internal CA can talk.** A deployment
+  target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
+  and on-prem that certificate usually comes from a CA the sending host has never
+  heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
+  same bundle on an `atlas worker --server https://…` running on another host. It
+  is *added* to the host's roots, never a replacement, and it reaches only those
+  two conversations — a Worker Type calling a third party keeps the host's trust
+  store, because that endpoint is somebody else's.
+
+- **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
+  writes) and the chart passes the pair to the server and switches all three
+  probes to the HTTPS scheme. Off by default, because in a cluster the Ingress
+  usually holds the certificate.
+
+  **What TLS still does not cover:** `/metrics`, `/healthz` and `/readyz` are
+  unauthenticated by design, so a port reachable beyond the host still wants a
+  proxy in front of those paths — encryption is not authorization.
+
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
   back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).

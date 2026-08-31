@@ -29,8 +29,9 @@ const meshMaxNodes = 400
 // collectLandscape reads this server's resources and returns them filtered for the
 // caller, as the input the derived mesh is computed from (ADR-0211 §1).
 //
-// Run-loop goroutine only: it reads the project store, the call-override store and
-// the deployment registry.
+// Run-loop goroutine only: it reads the project store, the call-override store, the
+// deployment registry, the unresolved incidents and the worker registry — the last
+// two being the observations severity is computed from (ADR-0211 §4).
 //
 // Two things it deliberately does not do. It does not invent a visibility rule:
 // applications defer to their sharing scope (ADR-0071) and a deployment defers to
@@ -61,17 +62,29 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		return panorama.Landscape{}, err
 	}
 	principal := httpapi.PrincipalFrom(r.Context())
+	held, polled := s.workerHoldings()
 	workersByName := make(map[string]connector, len(confWorkers))
 	land := panorama.Landscape{}
 	for _, w := range confWorkers {
 		workersByName[w.Name] = w
+		state, reason := s.workerStatus(w.Kind, w.Name, polled, held)
 		land.Workers = append(land.Workers, panorama.Worker{
 			ID: w.ID, Name: w.Name, Type: w.Kind,
 			CanView: scopeRank(connectorRole(w, principal, s.authEnabled)) >= scopeRank(ScopeRoleViewer),
 			// Carried so the derivation can be tested for never emitting them.
 			Endpoint: w.Endpoint, CredentialsRef: w.CredentialsRef,
+			State: state, Reason: reason,
 		})
 	}
+
+	// Parked work is counted once for the whole landscape rather than per process:
+	// the alternative is one scan per definition, which on an instance with a few
+	// hundred processes is the difference between a view and an outage.
+	parked, partial, err := s.incidentsByDefinition()
+	if err != nil {
+		return panorama.Landscape{}, err
+	}
+	land.PartialStatus = partial
 
 	// Deployed decisions are engine-wide rather than owned by any application
 	// (ADR-0034), so there is no scope to apply and CanView is simply true. Saying
@@ -94,10 +107,12 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		if d == nil || d.cp == nil {
 			continue
 		}
+		state, reason := processStatus(parked[d.Key])
 		proc := panorama.Process{
 			Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
 			ApplicationID: d.ProjectID,
 			CanView:       s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs),
+			State:         state, Reason: reason,
 		}
 		for _, ref := range d.cp.CallActivities() {
 			call := panorama.Call{ElementID: ref.ElementId, CalledProcessID: ref.CalledProcessId}

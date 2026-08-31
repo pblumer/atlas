@@ -31,10 +31,10 @@ Narrow, *stated* exceptions: purely mechanical changes with no behavioral surfac
 ```bash
 go build ./...
 go test ./...
-go test -race ./...      # the race detector is mandatory before pushing
-go test -cover ./...     # repository-wide statement coverage must stay >= 95%
+go test -race -timeout=25m ./...   # mandatory before pushing; -timeout is too (see below)
+go test -cover ./...               # repository-wide statement coverage must stay >= 95%
 go vet ./...
-gofmt -l .               # must be empty
+gofmt -l .                         # must be empty
 ```
 
 CI runs build, test, `-race`, vet, formatting, and the 95% coverage floor. Please run them locally first.
