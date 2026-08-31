@@ -50,10 +50,7 @@ func Handler(store state.Reader, lookup ProcessLookup, client Client) job.Output
 		if res.ResultVariable == "" {
 			return nil, nil
 		}
-		if res.Format == formatRSS || res.Format == formatAtom {
-			return []model.VariableValue{feedResultVariable(res.ResultVariable, res.Entries)}, nil
-		}
-		return []model.VariableValue{resultVariable(res.ResultVariable, res.Values)}, nil
+		return []model.VariableValue{jsonResultVariable(res.ResultVariable, Items(res))}, nil
 	}
 }
 
@@ -114,31 +111,9 @@ func toExprKind(k model.VarKind) expr.ValueKind {
 	}
 }
 
-// resultVariable turns HTML scrape values into the historical JSON array of strings.
-func resultVariable(name string, values []string) model.VariableValue {
-	items := make([]any, len(values))
-	for i, v := range values {
-		items[i] = v
-	}
-	return jsonResultVariable(name, items)
-}
-
-// feedResultVariable turns structured entries into plain JSON-shaped maps before
-// passing them through expr. This keeps the process-variable boundary independent of
-// Go struct encoding and guarantees all four ADR-0190 keys are present.
-func feedResultVariable(name string, entries []FeedEntry) model.VariableValue {
-	items := make([]any, len(entries))
-	for i, entry := range entries {
-		items[i] = map[string]any{
-			"title":       entry.Title,
-			"link":        entry.Link,
-			"description": entry.Description,
-			"published":   entry.Published,
-		}
-	}
-	return jsonResultVariable(name, items)
-}
-
+// jsonResultVariable renders a result's items as the process variable they become,
+// through expr rather than through Go struct encoding — so the boundary is a JSON
+// value the engine already understands.
 func jsonResultVariable(name string, value any) model.VariableValue {
 	kind, b, text := expr.Classify(expr.FromJSON(value))
 	return model.VariableValue{Name: name, Kind: toVarKind(kind), Bool: b, Text: text}

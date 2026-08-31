@@ -478,13 +478,10 @@ func runWebScrape(ctx context.Context, j Job, client webscrape.Client) (map[stri
 	if res.ResultVariable == "" {
 		return nil, nil // the task writes nothing back
 	}
-	// The values travel as a plain list; the engine stores it the same way the
-	// in-process path does.
-	items := make([]any, len(res.Values))
-	for i, v := range res.Values {
-		items[i] = v
-	}
-	return map[string]any{res.ResultVariable: items}, nil
+	// The items travel as a plain list, built by the connector rather than here, so an
+	// offloaded scrape stores what the in-process path would have stored — strings for
+	// HTML, {title, link, description, published} objects for a feed.
+	return map[string]any{res.ResultVariable: webscrape.Items(res)}, nil
 }
 
 // runScript runs a resolved script task through this worker's interpreter. It shares

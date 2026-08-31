@@ -1,8 +1,9 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Proposed (amended 2026-08-21 four times — the operation set covers the
-  whole lifecycle, the connector runs on a worker, it can read a DirSync delta, and it
-  can create a contact; see the amendment notes below)
+- **Status:** Proposed (amended 2026-08-21 four times and 2026-08-31 once — the
+  operation set covers the whole lifecycle, the connector runs on a worker, it can read
+  a DirSync delta, it can create a contact, and it can search; see the amendment notes
+  below)
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -41,7 +42,9 @@
 > lifecycle. A little overlap between the two connectors is the cheaper mistake.
 >
 > **Still not here, and still deliberately:** search and read stay with the LDAP
-> connector (ADR-0154), as the *Negative* note below says. The follow-ups below are
+> connector (ADR-0154), as the *Negative* note below says. — *Superseded by the fifth
+> amendment below: search is here now, and for the reason this very paragraph gives
+> about the other three.* The follow-ups below are
 > unchanged — Kerberos/NTLM bind, userAccountControl helpers beyond enable/disable
 > (unlock, must-change-password-at-next-logon), a delta/DirSync read, and a marketplace
 > element-template.
@@ -144,9 +147,9 @@
 > is [`examples/galsync.bpmn`](../../examples/galsync.bpmn), a process. GALSync has no
 > wire protocol of its own — it is a rule about which objects in one forest should
 > appear in another's address book, and every mechanism it uses was already a
-> connector: the DirSync delta above, `ldap search` to find an existing contact (search
-> deliberately not being this connector's job), `update-attributes`, `delete`, and a
-> timer to loop. Only the contact primitive was missing. Building the rest in Go would
+> connector: the DirSync delta above, a search to find an existing contact (`ldap
+> search` at the time; this connector's own since the fifth amendment),
+> `update-attributes`, `delete`, and a timer to loop. Only the contact primitive was missing. Building the rest in Go would
 > have put business policy in the engine, which is the thing a BPMN engine exists to
 > avoid.
 >
@@ -155,6 +158,64 @@
 > group with tens of thousands of members, and it is left out deliberately rather than
 > forgotten: it changes the *shape* of what comes back (ranged attribute names), so how
 > that shape reaches a model deserves its own decision rather than a flag.
+>
+> **Amendment (2026-08-31, fifth): search comes here, reversing this record's own
+> line.** A `search` operation joins the set: a `baseDN`, a `scope`, a `filter`, an
+> entry cap, and a result variable.
+>
+> The original decision, and the first amendment above, kept search with the generic
+> LDAP connector and said so twice. That was consistent — a search is not an
+> AD-specific encoding — and it was wrong in exactly the way the first amendment
+> already diagnosed for `update-attributes`, `move` and `delete`: **it is a rule about
+> what a connector *is*, applied to a question about what a process *needs*.** A
+> membership change cannot be modelled without it. `add-group-member` takes the
+> group's distinguished name, and a distinguished name is a position in a tree rather
+> than something a requester supplies — so the step before it is always "find the
+> group", and a model that could not ask had to bind the LDAP connector to the same
+> forest, with a second place to configure it, in the middle of one lifecycle.
+> [`examples/galsync.bpmn`](../../examples/galsync.bpmn) shipped exactly that seam and
+> is now one connector throughout.
+>
+> **The result shape is the decision.** A search writes `{found, count, dn, entries}`:
+>
+> - **`found` and `count`** exist so a gateway reads `=gruppe.found` rather than an
+>   expression over a collection's length. The question a process asks is a boolean;
+>   making it derive one is making the model do the connector's work.
+> - **`dn`** is the first entry's distinguished name — the value the *next* task needs,
+>   and the only reason the search happened. Entries are **DN-sorted** before it is
+>   taken, because LDAP promises no order: delivery is at-least-once, so a redelivered
+>   job must write the same `dn`, and it must not depend on how a domain controller
+>   walked its index.
+> - **`entries`** is the whole result, in the same `{dn, attributes}` shape a DirSync
+>   pass and an LDAP search produce, so what a process does with directory entries is
+>   written once.
+>
+> **Finding nothing is a result, not a failure.** An empty answer completes the job
+> with `found=false`; only a directory that refuses the search fails it. Checking
+> whether an entry exists is the whole point, and a connector that turned "no" into an
+> incident would answer the question by refusing to be asked.
+>
+> Three smaller decisions, each inherited from a connector that already made it:
+>
+> - **The cap defaults to 1000, and exceeding it fails** rather than truncating
+>   (ADR-0154 amended, ADR-0173). A short result set is a wrong answer, not a partial
+>   one, and a process branching on "did I find it?" would branch on it confidently.
+>   This is the one place a search differs from the DirSync cap above, which costs
+>   nothing because a pass is resumable.
+> - **Paging is on, and is not authored.** Every search uses the simple paged-results
+>   control at 500. A domain controller's administrative size limit (1000 by default)
+>   otherwise refuses a perfectly reasonable search, and an author who has never met
+>   that limit has no reason to know the control exists.
+> - **`scope` is authored, unlike on sync.** "Anywhere under here" and "directly under
+>   here" are different questions about a directory, and a model that could only ask
+>   the first would find a same-named group in the wrong OU. A sync has no scope
+>   because AD answers DirSync only for the whole subtree.
+>
+> The mock directory (ADR-0181) answers a search too — applying the scope and the
+> filter, and refusing to truncate — with one deliberate infidelity recorded there: it
+> does not require the base itself to exist, because it already accepts an add whose
+> parent was never created, and demanding a seeded OU chain here would refuse the
+> mockup runs it exists to allow.
 
 ## Context and problem statement
 
@@ -212,7 +273,10 @@ Concretely:
   `newPassword` are literal-or-FEEL values; `operation` is one of create-user /
   create-group / update-attributes / set-password / enable / disable / move / delete /
   add-group-member / remove-group-member (the last four added by the 2026-08-21
-  amendment, which also adds the `newDN` attribute a move targets).
+  amendment, which also adds the `newDN` attribute a move targets), plus the two
+  reading operations the later amendments add: sync (`baseDN filter cookieVariable
+  maxEntries objectSecurity resultVariable`) and search (`baseDN scope filter
+  maxEntries resultVariable`).
 - The worker dials/binds like the LDAP connector (go-ldap, bounded by
   `nettimeout.Default`) and maps each operation: **set-password** replaces `unicodePwd`
   with the UTF-16LE quote-wrapped encoding (LDAPS/STARTTLS); **enable/disable** read
@@ -230,7 +294,8 @@ Concretely:
   AD encoding rules live in one worker, not every model; it reuses the LDAP protocol
   path and the go-ldap dependency (no new one).
 - **Negative / trade-offs accepted:** a second connector that overlaps the generic LDAP
-  one (search/read stays with LDAP, deliberately); enable/disable is a read-modify-
+  one — more so since the fifth amendment, which brought search here too;
+  enable/disable is a read-modify-
   write (two round-trips, not atomic); a password set requires an encrypted channel the
   model must configure (LDAPS or STARTTLS) — an unencrypted attempt is rejected by AD
   into an incident; no Kerberos/NTLM bind yet (simple bind over TLS only).
@@ -256,8 +321,8 @@ Concretely:
 
 ## Links
 
-- relates to ADR-0154 (generic LDAP connector) — the protocol path AD reuses; generic
-  search/read stays there
+- relates to ADR-0154 (generic LDAP connector) — the protocol path AD reuses, and the
+  search shape this connector's own search copies (fifth amendment)
 - relates to ADR-0041 (connector management and secret store)
 - relates to ADR-0149 (bounded connector call budget) — the dial/operation timeout
 - relates to ADR-0123 (sanctioned user provisioning) — the internal counterpart

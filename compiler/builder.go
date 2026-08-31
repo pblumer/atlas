@@ -1230,9 +1230,13 @@ type AdConfig struct {
 	NewPassword RestExpr
 	Retries     int32
 	NewDN       RestExpr
-	// The sync (DirSync) operation's own fields.
+	// The fields of the two operations that read a subtree rather than acting on one
+	// entry: sync (a DirSync delta) and search (what is there now). Scope belongs to
+	// search alone — AD answers DirSync only for the whole subtree — and CookieVar and
+	// ObjectSecurity to sync alone.
 	BaseDN         RestExpr
 	Filter         RestExpr
+	Scope          string
 	CookieVar      string
 	ResultVar      string
 	MaxEntries     int32
@@ -1261,8 +1265,9 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		ReduceSpec: -1,
 		Method:     -1, // the AD operation, not an HTTP method, is authored
 		Auth:       -1, // the bind password is a dedicated secret ref, not RestAuth
-		// Every AD operation but sync writes to the directory rather than back to a
-		// variable, so this interns "" (-1) for all of them.
+		// Only the two reading operations — sync and search — write back to a
+		// variable; every other AD operation's effect is in the directory, so this
+		// interns "" (-1) for all of them.
 		ResultVar:        b.intern(cfg.ResultVar),
 		Retries:          cfg.Retries,
 		AdURL:            cfg.URL,
@@ -1277,6 +1282,7 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdNewDN:          cfg.NewDN,
 		AdBaseDN:         cfg.BaseDN,
 		AdFilter:         cfg.Filter,
+		AdScope:          b.intern(cfg.Scope),
 		AdCookieVar:      b.intern(cfg.CookieVar),
 		AdMaxEntries:     cfg.MaxEntries,
 		AdObjectSecurity: cfg.ObjectSecurity,

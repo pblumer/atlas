@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Active Directory: Benutzer einer Gruppe zuweisen (ADR-0166, fünfte Ergänzung).
+
+  Der Prozess, der die AD-Suche erklärt: eine Mitgliedschaft lässt sich erst setzen,
+  wenn feststeht, dass es beide Seiten *gibt* — und die Gruppe muss man mit ihrem
+  Distinguished Name adressieren, nicht mit ihrem Namen.
+
+    Start (kuerzel, gruppenName, personenOU, gruppenOU, verzeichnis, bindDN)
+     -> [ad search] Benutzer suchen           -> benutzer  = {found, count, dn, entries}
+     -> <Benutzer gefunden?>  nein            -> Ende „Benutzer unbekannt"
+     -> [ad search] Gruppe suchen             -> gruppe    = {found, count, dn, entries}
+     -> <Gruppe gefunden?>    nein            -> [Script] + [ad create-group]
+     -> [Script] gruppenDN bestimmen
+     -> [ad add-group-member] Benutzer zuweisen
+     -> Ende
+
+  Drei Dinge stehen absichtlich so im Modell:
+
+  * **`found` ist die Verzweigung, `dn` die Adresse.** Das Ergebnis einer Suche ist
+    `{found, count, dn, entries}`; das Gateway fragt `=benutzer.found`, und der
+    Zuweisungs-Task adressiert die Gruppe mit `=gruppenDN`. Nichts baut einen DN aus
+    Namen zusammen und hofft, dass der Baum so aussieht wie gedacht — ausser dem einen
+    Zweig, der die Gruppe selbst anlegt und deshalb weiss, wo sie liegt.
+  * **Nichts gefunden ist eine Antwort, kein Fehler.** Ein leeres Ergebnis schliesst
+    den Task mit `found = false` ab; nur was das Verzeichnis wirklich verweigert, wird
+    zum Incident. Deshalb ist „Benutzer unbekannt" ein Pfad im Diagramm und nicht ein
+    Zustand in der Betriebsansicht.
+  * **`maxEntries="1"` ist eine Aussage über die Fachlichkeit.** Ein sAMAccountName ist
+    im Verzeichnis eindeutig; kämen zwei Treffer, wäre etwas anderes falsch als dieser
+    Prozess. Die Suche scheitert dann, statt still den ersten Treffer zu nehmen — eine
+    gekürzte Antwort ist eine falsche, keine halbe.
+
+  Vor dem Start zu setzen:
+    kuerzel      — sAMAccountName des Kontos, z.B. "amaier"
+    gruppenName  — cn der Gruppe, z.B. "Vertrieb"
+    personenOU   — ou=users,dc=example,dc=com
+    gruppenOU    — ou=groups,dc=example,dc=com
+    verzeichnis  — ldaps://dc.example.com:636
+    bindDN       — cn=svc-atlas,ou=service,dc=example,dc=com
+  Das Bind-Passwort ist eine Referenz (ADR-0041): die Worker-Instanz löst
+  ATLAS_CONNECTOR_AD_BIND_TOKEN aus ihrer eigenen Umgebung auf, im Modell steht es
+  nie. Parkt auf jedem AD-Task, bis eine Worker-Instanz für den Worker-Typ `ad`
+  läuft — mit ATLAS_AD_MOCK auch gegen ein Verzeichnis, das es gar nicht gibt
+  (ADR-0181).
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="defs_ad_gruppenzuweisung"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="ad-gruppenzuweisung" name="AD: Benutzer einer Gruppe zuweisen" isExecutable="true">
+    <bpmn:documentation>Weist ein AD-Konto einer Gruppe zu und prüft vorher, dass es beide gibt. Startvariablen: kuerzel (sAMAccountName), gruppenName (cn der Gruppe), personenOU, gruppenOU, verzeichnis (ldaps://…), bindDN. Das Bind-Passwort ist die Secret-Referenz AD_BIND und steht nicht im Modell (ADR-0041).</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Start">
+      <bpmn:documentation>Startet mit dem Kürzel des Kontos und dem Namen der Gruppe — nicht mit deren Distinguished Names. Genau die beiden ermittelt der Prozess selbst, denn ein DN ist eine Position im Baum und keine Angabe, die eine Fachabteilung liefern kann.</bpmn:documentation>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="suche_benutzer" name="Benutzer suchen">
+      <bpmn:documentation>Sucht das Konto über seinen sAMAccountName und schreibt {found, count, dn, entries} nach `benutzer`. Der Filter ist FEEL, damit der Prozess nach dem Kürzel sucht, um das es gerade geht. maxEntries="1": ein sAMAccountName ist eindeutig, ein zweiter Treffer ist ein Befund und kein Detail — die Suche scheitert dann, statt den ersten zu nehmen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:adConnector url="=verzeichnis" bindDN="=bindDN" bindSecret="AD_BIND"
+                           operation="search" baseDN="=personenOU" scope="sub"
+                           filter="=&quot;(sAMAccountName=&quot; + kuerzel + &quot;)&quot;"
+                           maxEntries="1" resultVariable="benutzer"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="benutzer_da" name="Benutzer gefunden?">
+      <bpmn:documentation>Verzweigt auf =benutzer.found. Nichts gefunden ist die Antwort der Suche, nicht ihr Fehlschlag — deshalb ist der Fall hier ein Pfad und kein Incident.</bpmn:documentation>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="ende_unbekannt" name="Benutzer unbekannt">
+      <bpmn:documentation>Das Konto gibt es (noch) nicht. Der Prozess endet hier, statt eine Mitgliedschaft auf einen DN zu setzen, den niemand geprüft hat.</bpmn:documentation>
+    </bpmn:endEvent>
+
+    <bpmn:serviceTask id="suche_gruppe" name="Gruppe suchen">
+      <bpmn:documentation>Sucht die Gruppe unter der Gruppen-OU und schreibt {found, count, dn, entries} nach `gruppe`. scope="one" heisst: direkt unter dieser OU — eine gleichnamige Gruppe zwei Ebenen tiefer ist eine andere Gruppe.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:adConnector url="=verzeichnis" bindDN="=bindDN" bindSecret="AD_BIND"
+                           operation="search" baseDN="=gruppenOU" scope="one"
+                           filter="=&quot;(&amp;(objectClass=group)(cn=&quot; + gruppenName + &quot;))&quot;"
+                           maxEntries="1" resultVariable="gruppe"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gruppe_da" name="Gruppe gefunden?">
+      <bpmn:documentation>Verzweigt auf =gruppe.found. Ohne diese Frage bliebe nur, die Gruppe blind anzulegen — was beim zweiten Lauf mit „entry already exists" scheitert, weil ein Create in AD kein Upsert ist.</bpmn:documentation>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:scriptTask id="baue_gruppe" name="Gruppenattribute bilden">
+      <bpmn:documentation>Die Attribute der neuen Gruppe als Objekt. objectClass fehlt absichtlich: create-group ergänzt die Klassenkette top/group selbst, wenn das Objekt keine nennt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="={ cn: gruppenName, sAMAccountName: gruppenName, groupType: &quot;-2147483646&quot; }"
+                      resultVariable="neueGruppe"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="lege_gruppe_an" name="Gruppe anlegen">
+      <bpmn:documentation>Legt die Gruppe unter der Gruppen-OU an. Das ist die eine Stelle, an der ein DN zusammengebaut werden darf: hier bestimmt der Prozess selbst, wo die Gruppe liegt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:adConnector url="=verzeichnis" bindDN="=bindDN" bindSecret="AD_BIND"
+                           operation="create-group"
+                           dn="=&quot;cn=&quot; + gruppenName + &quot;,&quot; + gruppenOU"
+                           entryVariable="neueGruppe"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="zusammen" name="">
+      <bpmn:documentation>Führt die beiden Wege zusammen: gefunden oder eben gerade angelegt.</bpmn:documentation>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:scriptTask id="bestimme_gruppen_dn" name="Gruppen-DN bestimmen">
+      <bpmn:documentation>Der DN, unter dem die Gruppe jetzt wirklich steht: der gefundene, sonst der eben angelegte. Ein Ausdruck an einer Stelle statt derselben Zeile in beiden Zweigen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=if gruppe.found then gruppe.dn else &quot;cn=&quot; + gruppenName + &quot;,&quot; + gruppenOU"
+                      resultVariable="gruppenDN"/>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:serviceTask id="weise_zu" name="Benutzer der Gruppe zuweisen">
+      <bpmn:documentation>Setzt die Mitgliedschaft: Ziel-DN ist die Gruppe, memberDN das Konto — beide aus den Suchen, keiner geraten. add-group-member ist ein inkrementelles Hinzufügen eines member-Werts, nimmt also niemandem sonst die Mitgliedschaft weg.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:adConnector url="=verzeichnis" bindDN="=bindDN" bindSecret="AD_BIND"
+                           operation="add-group-member" dn="=gruppenDN" memberDN="=benutzer.dn"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Zugewiesen"/>
+
+    <bpmn:sequenceFlow id="f_start_suche" sourceRef="start" targetRef="suche_benutzer"/>
+    <bpmn:sequenceFlow id="f_suche_gw" sourceRef="suche_benutzer" targetRef="benutzer_da"/>
+    <bpmn:sequenceFlow id="f_benutzer_nein" name="nein" sourceRef="benutzer_da" targetRef="ende_unbekannt">
+      <bpmn:conditionExpression>=not(benutzer.found)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_benutzer_ja" name="ja" sourceRef="benutzer_da" targetRef="suche_gruppe"/>
+    <bpmn:sequenceFlow id="f_gruppe_gw" sourceRef="suche_gruppe" targetRef="gruppe_da"/>
+    <bpmn:sequenceFlow id="f_gruppe_nein" name="nein" sourceRef="gruppe_da" targetRef="baue_gruppe">
+      <bpmn:conditionExpression>=not(gruppe.found)</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_gruppe_ja" name="ja" sourceRef="gruppe_da" targetRef="zusammen"/>
+    <bpmn:sequenceFlow id="f_baue_lege" sourceRef="baue_gruppe" targetRef="lege_gruppe_an"/>
+    <bpmn:sequenceFlow id="f_lege_zusammen" sourceRef="lege_gruppe_an" targetRef="zusammen"/>
+    <bpmn:sequenceFlow id="f_zusammen_dn" sourceRef="zusammen" targetRef="bestimme_gruppen_dn"/>
+    <bpmn:sequenceFlow id="f_dn_zuweisen" sourceRef="bestimme_gruppen_dn" targetRef="weise_zu"/>
+    <bpmn:sequenceFlow id="f_zuweisen_ende" sourceRef="weise_zu" targetRef="ende"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="ad-gruppenzuweisung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="153" y="204" width="50" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_suche_benutzer" bpmnElement="suche_benutzer">
+        <dc:Bounds x="240" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_benutzer_da" bpmnElement="benutzer_da" isMarkerVisible="true">
+        <dc:Bounds x="390" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="366" y="118" width="98" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_unbekannt" bpmnElement="ende_unbekannt">
+        <dc:Bounds x="397" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="365" y="344" width="100" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_suche_gruppe" bpmnElement="suche_gruppe">
+        <dc:Bounds x="490" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gruppe_da" bpmnElement="gruppe_da" isMarkerVisible="true">
+        <dc:Bounds x="640" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="618" y="118" width="94" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_baue_gruppe" bpmnElement="baue_gruppe">
+        <dc:Bounds x="690" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lege_gruppe_an" bpmnElement="lege_gruppe_an">
+        <dc:Bounds x="840" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zusammen" bpmnElement="zusammen" isMarkerVisible="true">
+        <dc:Bounds x="990" y="155" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_bestimme_gruppen_dn" bpmnElement="bestimme_gruppen_dn">
+        <dc:Bounds x="1090" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_weise_zu" bpmnElement="weise_zu">
+        <dc:Bounds x="1240" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="1390" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1372" y="204" width="72" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_suche" bpmnElement="f_start_suche">
+        <di:waypoint x="196" y="180" /><di:waypoint x="240" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_suche_gw" bpmnElement="f_suche_gw">
+        <di:waypoint x="340" y="180" /><di:waypoint x="390" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_benutzer_ja" bpmnElement="f_benutzer_ja">
+        <di:waypoint x="440" y="180" /><di:waypoint x="490" y="180" />
+        <bpmndi:BPMNLabel><dc:Bounds x="452" y="158" width="18" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_benutzer_nein" bpmnElement="f_benutzer_nein">
+        <di:waypoint x="415" y="205" /><di:waypoint x="415" y="302" />
+        <bpmndi:BPMNLabel><dc:Bounds x="423" y="228" width="30" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_gw" bpmnElement="f_gruppe_gw">
+        <di:waypoint x="590" y="180" /><di:waypoint x="640" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_ja" bpmnElement="f_gruppe_ja">
+        <di:waypoint x="690" y="180" /><di:waypoint x="990" y="180" />
+        <bpmndi:BPMNLabel><dc:Bounds x="702" y="158" width="18" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppe_nein" bpmnElement="f_gruppe_nein">
+        <di:waypoint x="665" y="205" /><di:waypoint x="665" y="320" /><di:waypoint x="690" y="320" />
+        <bpmndi:BPMNLabel><dc:Bounds x="673" y="236" width="30" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_baue_lege" bpmnElement="f_baue_lege">
+        <di:waypoint x="790" y="320" /><di:waypoint x="840" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lege_zusammen" bpmnElement="f_lege_zusammen">
+        <di:waypoint x="940" y="320" /><di:waypoint x="1015" y="320" /><di:waypoint x="1015" y="205" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_zusammen_dn" bpmnElement="f_zusammen_dn">
+        <di:waypoint x="1040" y="180" /><di:waypoint x="1090" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_dn_zuweisen" bpmnElement="f_dn_zuweisen">
+        <di:waypoint x="1190" y="180" /><di:waypoint x="1240" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_zuweisen_ende" bpmnElement="f_zuweisen_ende">
+        <di:waypoint x="1340" y="180" /><di:waypoint x="1390" y="180" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

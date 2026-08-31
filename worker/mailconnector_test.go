@@ -334,6 +334,88 @@ const scrapeConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>`
 
+// TestWorkerScrapesAnOffloadedFeed is the same seam carrying *structured* work back,
+// and the case that was broken: a feed scrape (ADR-0190) whose format and item cap are
+// compile-time data. Both have to survive the hand-over, and the entries have to come
+// back as the four-key objects the in-process path writes — otherwise the model that
+// asked for headlines gets an empty list, or a CSS selector applied to XML.
+//
+// webscrape is offloaded by default, so this is the path a shipped feed model actually
+// takes: examples/blick-schlagzeilen.bpmn ran through exactly here.
+func TestWorkerScrapesAnOffloadedFeed(t *testing.T) {
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel>
+			<item><title>erste</title><link>https://example.com/1</link>
+			      <description>eins</description><pubDate>Mon, 31 Aug 2026 08:00:00 GMT</pubDate></item>
+			<item><title>zweite</title><link>https://example.com/2</link>
+			      <description>zwei</description><pubDate>Mon, 31 Aug 2026 09:00:00 GMT</pubDate></item>
+			<item><title>dritte</title><link>https://example.com/3</link>
+			      <description>drei</description><pubDate>Mon, 31 Aug 2026 10:00:00 GMT</pubDate></item>
+		</channel></rss>`))
+	}))
+	defer feed.Close()
+
+	ts := liveAtlasWith(t, feedConnectorModel, `{"target":"`+feed.URL+`"}`,
+		api.WithOffloadedConnectorKinds([]string{"webscrape"}))
+
+	built, err := worker.BuiltinConnectors(nil, "webscrape")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	w := worker.New(worker.Options{Server: ts.URL, ID: "feeder-1", Handlers: built.Handlers})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if running := runningInstances(t, ts); running != 0 {
+		t.Errorf("%d instances still running, want 0 — the scrape job was not completed", running)
+	}
+	vars := instanceVariables(t, ts)
+	got, ok := vars["schlagzeilen"]
+	if !ok {
+		t.Fatalf("the result variable was not written; variables = %v", vars)
+	}
+	list, ok := got.([]any)
+	if !ok {
+		t.Fatalf("schlagzeilen = %v, want a list of entries", got)
+	}
+	// maxItems="2" caps the three the feed offers — the cap travels or it does not.
+	if len(list) != 2 {
+		t.Fatalf("schlagzeilen = %v, want the 2 the item cap allows", got)
+	}
+	first, ok := list[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entry = %v, want the {title, link, description, published} object the in-process path writes", list[0])
+	}
+	for _, key := range []string{"title", "link", "description", "published"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("entry has no %q: %v", key, first)
+		}
+	}
+	if first["title"] != "erste" {
+		t.Errorf("title = %v, want the feed's first item", first["title"])
+	}
+}
+
+const feedConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0" id="defs">
+  <bpmn:process id="feed" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:webscrapeConnector url="=target" format="rss" maxItems="2" resultVariable="schlagzeilen"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
 // TestWorkerRunsAnOffloadedScript is the shape where moving the work is most
 // obviously right: a script task needs an *interpreter on the machine*, and until
 // now that meant installing every one of them beside the engine. Here the engine

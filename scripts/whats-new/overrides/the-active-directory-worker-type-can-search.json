@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Connectors",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Active Directory: look an account or a group up first",
+    "de": "Active Directory: Konto oder Gruppe zuerst nachschlagen"
+  },
+  "summary": {
+    "en": "A new operation, Find entry (search), asks the directory whether an account or a group is there — and hands back its full name in the tree, ready for the next step to use. That is what a membership change was missing: you can only put somebody into a group once you know the group exists and where it sits. Finding nothing is an answer, not an error: the step completes and a gateway takes the other path.",
+    "de": "Ein neuer Vorgang, Eintrag suchen, fragt das Verzeichnis, ob es ein Konto oder eine Gruppe gibt — und liefert deren vollständigen Namen im Verzeichnisbaum gleich mit, verwendbar im nächsten Schritt. Genau das fehlte einer Gruppenzuweisung: jemanden in eine Gruppe aufzunehmen geht erst, wenn feststeht, dass es die Gruppe gibt und wo sie liegt. Nichts gefunden ist dabei eine Antwort und kein Fehler: der Schritt wird abgeschlossen, und ein Gateway nimmt den anderen Weg."
+  },
+  "tutorial": {
+    "en": [
+      "Open the Modeler and put a service task on the canvas.",
+      "In Implement, choose the Active Directory Connector, then Operation → Find entry (search).",
+      "Set the Base DN to where you want to look (e.g. ou=groups,dc=example,dc=com), the Scope, and a Filter such as (&(objectClass=group)(cn=Vertrieb)).",
+      "Name a Result variable, e.g. gruppe.",
+      "Branch on =gruppe.found with an exclusive gateway, and give the next task's Target DN the value =gruppe.dn."
+    ],
+    "de": [
+      "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
+      "Unter Implement den Active Directory Connector wählen, dann Operation → Find entry (search).",
+      "Base DN setzen, wo gesucht werden soll (z.B. ou=groups,dc=example,dc=com), dazu Scope und einen Filter wie (&(objectClass=group)(cn=Vertrieb)).",
+      "Eine Result variable vergeben, z.B. gruppe.",
+      "Mit einem exklusiven Gateway auf =gruppe.found verzweigen und dem nächsten Task als Target DN den Wert =gruppe.dn geben."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

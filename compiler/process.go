@@ -649,7 +649,8 @@ type ConnectorTaskDetail struct {
 	// AdBindSecret is the interned name of the server-side bind-password secret (interned
 	// "" → anonymous); AdStartTLS upgrades a plain connection. AdOp is the interned
 	// operation ("create-user"|"set-password"|"enable"|"disable"|"add-group-member"|
-	// "remove-group-member", "update-attributes", "move", "delete", "create-group").
+	// "remove-group-member", "update-attributes", "move", "delete", "create-group",
+	// "search").
 	// AdDN is the target user or group entry; AdMemberDN is the
 	// member added/removed for the group operations; AdEntryVar is the interned name of
 	// the process variable holding the create-user attribute object; AdNewPassword is the
@@ -668,15 +669,21 @@ type ConnectorTaskDetail struct {
 	// entry's new place in the tree, new relative name, or both — a mover in a
 	// directory *is* a DN change, so one value expresses all three.
 	AdNewDN RestExpr
-	// DirSync fields (AdOp == "sync", ADR-0166 amended). AdBaseDN is the naming
-	// context the delta is read from and AdFilter narrows it — literal-or-FEEL values.
-	// AdCookieVar is the interned name of the variable holding the opaque resume
-	// cookie, which the operation reads *and writes back* so a loop carries itself
-	// forward. AdMaxEntries caps one pass (0 = the connector's default), and
-	// AdObjectSecurity sets the DirSync flag that lets an account without the
-	// replication right read the changes it can see.
+	// Read fields, shared by the two AD operations that read a subtree instead of
+	// acting on one entry: "sync" (a DirSync delta) and "search" (what is there now).
+	// AdBaseDN is the base the read starts from and AdFilter narrows it —
+	// literal-or-FEEL values. AdMaxEntries caps the result (0 = the connector's
+	// default), and ResultVar (above) receives it.
+	//
+	// AdScope is the interned search scope ("base"|"one"|"sub", interned "" → -1 for
+	// every other operation); a sync authors none, because AD answers DirSync only for
+	// the whole subtree. AdCookieVar is the interned name of the variable holding the
+	// sync's opaque resume cookie, which the operation reads *and writes back* so a
+	// loop carries itself forward, and AdObjectSecurity sets the DirSync flag that
+	// lets an account without the replication right read the changes it can see.
 	AdBaseDN         RestExpr
 	AdFilter         RestExpr
+	AdScope          int32
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool

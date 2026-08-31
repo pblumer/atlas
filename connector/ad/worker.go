@@ -162,7 +162,8 @@ func dispatch(j Job, conn Conn) error {
 }
 
 // variablesFrom turns what an operation completed with into process variables. Only
-// sync produces any: every other AD operation's effect is in the directory.
+// the two reading operations — sync and search — produce any: every other AD
+// operation's effect is in the directory.
 func variablesFrom(out map[string]any) []model.VariableValue {
 	if len(out) == 0 {
 		return nil

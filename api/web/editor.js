@@ -2337,18 +2337,34 @@ const SERVICE_TASK_KINDS = [
           { v: "delete", l: "Delete entry" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
+          { v: "search", l: "Find entry (search)" },
           { v: "sync", l: "Read changes (DirSync)" },
         ],
       },
       {
-        key: "baseDN", label: "Base DN", placeholder: "dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation === "sync",
-        hint: "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+        key: "baseDN", label: "Base DN", fx: true,
+        placeholder: (v) => (v.operation === "search" ? "ou=groups,dc=example,dc=com" : "dc=example,dc=com"),
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Where in the tree to look — e.g. ou=groups,dc=example,dc=com. Together with the scope below it decides what the search may find at all. May be a FEEL expression (fx)."
+          : "The naming context the delta is read from. Active Directory answers DirSync only at a naming context root and only for the whole subtree, so there is no scope to choose. May be a FEEL expression (fx).",
+      },
+      {
+        key: "scope", label: "Scope", type: "select",
+        showIf: (v) => v.operation === "search",
+        options: [
+          { v: "", l: "Subtree — the base and everything below it" },
+          { v: "one", l: "One level — the base's immediate children" },
+          { v: "base", l: "Base — the entry at the base DN itself" },
+        ],
+        hint: "How far below the base DN to look. Subtree is the default and the answer to \"does this exist anywhere under here\"; one level is what you want when the base is the OU the entry must sit directly in.",
       },
       {
         key: "filter", label: "Filter", placeholder: "(objectClass=user)", fx: true,
-        showIf: (v) => v.operation === "sync",
-        hint: "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Which entries count as a match. An RFC 4515 filter, e.g. (&(objectClass=group)(cn=Vertrieb)) for one group or (sAMAccountName=amaier) for one account; empty matches everything under the base. May be a FEEL expression (fx), so the process can look for the name it is actually about — e.g. =\"(sAMAccountName=\" + kuerzel + \")\"."
+          : "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
       },
       {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
@@ -2357,8 +2373,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "maxEntries", label: "Maximum entries", placeholder: "1000",
-        showIf: (v) => v.operation === "sync",
-        hint: "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Caps what the search may return. Exceeding it fails the task rather than shortening the answer — a truncated result is a wrong answer, not a partial one, and a process branching on \"did I find it?\" would branch on it confidently. Empty uses 1000; 0 is unbounded."
+          : "Caps one pass. Unlike a plain search this costs nothing but a second pass, because the cookie says where this one got to. Empty uses 1000; 0 is unbounded.",
       },
       {
         key: "objectSecurity", label: "Object security", type: "select",
@@ -2368,7 +2386,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "dn", label: "Target DN", placeholder: "cn=Arno Meier,ou=users,dc=example,dc=com", fx: true,
-        showIf: (v) => v.operation !== "sync",
+        showIf: (v) => v.operation !== "sync" && v.operation !== "search",
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
@@ -2391,11 +2409,14 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "add-group-member" || v.operation === "remove-group-member",
         hint: "The member added to or removed from the group named in Target DN. May be a FEEL expression (fx).",
       },
-      { group: "Output", showIf: (v) => v.operation === "sync" },
+      { group: "Output", showIf: (v) => v.operation === "sync" || v.operation === "search" },
       {
-        key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "aenderungen",
-        showIf: (v) => v.operation === "sync",
-        hint: "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+        key: "resultVariable", label: "Result variable", resultType: "object",
+        placeholder: (v) => (v.operation === "search" ? "gruppe" : "aenderungen"),
+        showIf: (v) => v.operation === "sync" || v.operation === "search",
+        hint: (v) => v.operation === "search"
+          ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
+          : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
       },
     ],
   },
@@ -3130,13 +3151,20 @@ function loadConfiguredKinds(api, onChange) {
 // extension, generic over text/select/map fields, section groups, and showIf visibility.
 function stKindFieldsHTML(cur, ext) {
   let fields = "";
-  for (const f of cur.fields) {
-    if (f.group) {
-      if (f.showIf && !f.showIf(ext)) continue;
-      fields += `<h3>${esc(f.group)}</h3>`;
+  for (const field of cur.fields) {
+    if (field.group) {
+      if (field.showIf && !field.showIf(ext)) continue;
+      fields += `<h3>${esc(field.group)}</h3>`;
       continue;
     }
-    if (f.showIf && !f.showIf(ext)) continue;
+    if (field.showIf && !field.showIf(ext)) continue;
+    // A placeholder is usually a static string; a field two operations share (the AD
+    // base DN and result variable, which a search and a sync both author) may give a
+    // function of the current extension values, so the example matches the operation
+    // actually chosen rather than the other one.
+    const f = typeof field.placeholder === "function"
+      ? { ...field, placeholder: field.placeholder(ext) }
+      : field;
     if (f.type === "map") {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
       const rowsHTML = list.map((kv) => stMapRowHTML(f.key, kv.name, kv.value)).join("");

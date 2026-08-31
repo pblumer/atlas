@@ -55,6 +55,28 @@ _Changed_ / _Removed_ for each version.
   unauthenticated by design, so a port reachable beyond the host still wants a
   proxy in front of those paths — encryption is not authorization.
 
+- **The Active Directory Worker Type can search.** A new `search` operation answers
+  "is this group there, and what is its distinguished name?" —
+  ([ADR-0166](docs/adr/0166-active-directory-connector.md), fifth amendment). It takes
+  a base DN, a scope (`base`/`one`/`sub`, default `sub`), an RFC 4515 filter and an
+  entry cap, and writes `{found, count, dn, entries}` into its result variable.
+
+  It exists because a membership change cannot be modelled without it: `add-group-member`
+  addresses the group by its distinguished name, and a distinguished name is a position
+  in a tree rather than something a requester supplies. Until now the answer was to bind
+  the generic LDAP connector to the same directory just to ask — a second connector and
+  a second place to configure it, in the middle of one lifecycle. `found` is what a
+  gateway branches on (`=gruppe.found`), and `dn` is what the next task addresses
+  (`=gruppe.dn`); entries come back DN-sorted, so a redelivered job writes the same
+  answer. **Finding nothing completes the task with `found=false`** — checking whether
+  an entry exists is the point, so "no" is an answer rather than an incident. Exceeding
+  the cap fails instead of truncating, and every search is paged, so a domain
+  controller's size limit does not refuse a legitimate one.
+
+  New: [`examples/ad-gruppenzuweisung.bpmn`](examples/ad-gruppenzuweisung.bpmn) — find
+  the account, find the group (create it if it is not there), assign. The AD mockup
+  answers a search too, so the whole model runs without a domain controller.
+
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
   back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
@@ -117,6 +139,33 @@ _Changed_ / _Removed_ for each version.
   `atlas worker --connector mail` still names the worker type — the handbook now
   says so explicitly, in a note that explains why. Every example's prose moved to
   the new vocabulary; not one line of BPMN did.
+
+### Fixed
+
+- **A feed scrape reached its worker without knowing it was a feed.** The resolved
+  job carried `format` and `maxItems`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)), but the engine's payload
+  dropped both — so an offloaded `format="rss"` task fetched the feed as HTML and
+  failed compiling a CSS selector it had never authored, parking the instance on an
+  incident that named a selector nobody wrote. `webscrape` is offloaded by default,
+  so that was the path [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn)
+  actually took; only `--in-process-connectors webscrape` worked. Both fields travel
+  now, and the entries come back as the `{title, link, description, published}`
+  objects the in-process path writes — the two paths share one definition of what a
+  scrape's result *is* (`webscrape.Items`) instead of building it twice.
+
+  The same class of gap in two connectors in one week is a missing check, not two
+  slips: every payload arm is now pinned against the resolved-job struct a worker
+  unmarshals into, in both directions. A field the job carries and the payload omits
+  fails the build, as does a key nothing on the far side reads.
+
+- **An AD task naming a Console-configured directory reached its worker without the
+  name.** The resolved job dropped `connector`, so a task authored the
+  [ADR-0206](docs/adr/0206-ad-as-a-console-connector.md) way — a directory an operator
+  created in the Console, rather than a `url` in the model — failed on the worker with
+  "has an empty url". The name travels now, and the Modeler's own descriptor learned
+  the `connector` attribute as well: bpmn-js drops an attribute it has no property for,
+  so opening such a task and pressing Save silently stripped it.
 
 ### Security
 
