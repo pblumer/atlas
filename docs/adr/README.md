@@ -265,6 +265,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted |
 | [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted |
+| [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed |
 
 ## Status values
 

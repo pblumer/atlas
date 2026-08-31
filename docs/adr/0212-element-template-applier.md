@@ -1,4 +1,4 @@
-# ADR-DRAFT: The element-template applier, and what a template binding means in Atlas
+# ADR-0212: The element-template applier, and what a template binding means in Atlas
 
 - **Status:** Proposed
 - **Date:** 2026-08-31
