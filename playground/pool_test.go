@@ -192,3 +192,25 @@ func TestAPoolNeedsCapacity(t *testing.T) {
 		t.Fatal("a pool with no seats should be refused")
 	}
 }
+
+// A window that ends at or before it starts is a mistake, not an empty schedule:
+// it would be reported as an opening by one calendar question and as closed by
+// another, and the two disagreeing is worse than either answer.
+func TestAPoolWindowMustHaveLength(t *testing.T) {
+	for name, w := range map[string]playground.Window{
+		"ends when it starts":   {From: 9 * time.Hour, To: 9 * time.Hour},
+		"ends before it starts": {From: 17 * time.Hour, To: 8 * time.Hour},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := playground.Open(playground.Options{
+				ModelXML: fixture(t, "user-task.bpmn"), BaseDir: t.TempDir(), StartTime: simStart,
+				Stubs: playground.StubSet{Pools: map[string]playground.Pool{
+					"clerks": {Capacity: 1, Calendar: playground.Calendar{Open: []playground.Window{w}}},
+				}},
+			})
+			if err == nil {
+				t.Error("this window should be refused")
+			}
+		})
+	}
+}

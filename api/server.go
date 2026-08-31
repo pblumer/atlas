@@ -239,6 +239,9 @@ type Server struct {
 	// so neither field is guarded by this server's run loop (ADR-draft-modeler-playground).
 	playground         *playgroundapi.Service
 	playgroundSessions *playground.Registry
+	// playgroundTTL is how long an untouched sandbox is kept and playgroundSweep
+	// how often the reaper looks; WithPlaygroundSessions overrides both.
+	playgroundTTL, playgroundSweep time.Duration
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
 	panorama         *panorama.Service
@@ -749,6 +752,21 @@ func WithRetentionInterval(d time.Duration) Option {
 	}
 }
 
+// WithPlaygroundSessions sets how long an untouched Playground sandbox is kept and
+// how often the sweep looks for one to reclaim. Non-positive values restore the
+// defaults. An operator with long-running exploratory sessions can raise the TTL;
+// tests pass a short one to exercise the sweep.
+func WithPlaygroundSessions(ttl, sweep time.Duration) Option {
+	return func(s *Server) {
+		if ttl > 0 {
+			s.playgroundTTL = ttl
+		}
+		if sweep > 0 {
+			s.playgroundSweep = sweep
+		}
+	}
+}
+
 // WithRetentionBatch caps how many finished instances one retention sweep tick
 // evaluates and purges (ADR-0115), bounding the work a single tick does on the run
 // loop; a larger backlog then drains as bounded catch-up across ticks. A non-positive
@@ -1053,6 +1071,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
+		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
+		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
@@ -1100,12 +1120,6 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
-	// The Playground's sandboxes are engines of their own, so the registry is not
-	// behind this server's run loop — but *finding* the model a session runs is
-	// design-time state and authorization, and both stay here (ADR-draft-modeler-playground).
-	s.playgroundSessions = playground.NewRegistry(playgroundSessionTTL, playgroundMaxSessions)
-	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
-
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the
@@ -1130,6 +1144,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	// The Playground's sandboxes are engines of their own, so the registry is not
+	// behind this server's run loop — but *finding* the model a session runs is
+	// design-time state and authorization, and both stay here
+	// (ADR-draft-modeler-playground). Built after the options, so
+	// WithPlaygroundSessions reaches the registry it configures.
+	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
+	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred
 	// and never persisted; absent one, a key is loaded from — or generated into —
@@ -1423,7 +1444,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// from holding either for ever. Like the collaboration reaper it runs off the
 	// run loop: sessions own their own writers.
 	s.wg.Add(1)
-	go s.playgroundReaper(playgroundReapInterval)
+	go s.playgroundReaper(s.playgroundSweep)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -2169,7 +2190,7 @@ func (s *Server) playgroundReaper(every time.Duration) {
 			if n := s.playgroundSessions.Reap(time.Now()); n > 0 {
 				logging.Info(logging.PlaygroundSessionsReaped,
 					"closed Playground sessions nobody came back to",
-					slog.Int("sessions", n), slog.Duration("ttl", playgroundSessionTTL))
+					slog.Int("sessions", n), slog.Duration("ttl", s.playgroundTTL))
 			}
 		}
 	}

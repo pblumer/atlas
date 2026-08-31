@@ -993,25 +993,28 @@ dataset of up to 50 000 cases":
   occurrence at a time or run it to rest, jump the clock, and answer the jobs waiting
   for a person yourself — with the run drawn onto the canvas in the runtime view's own
   markers. [`api/web/playground.js`](api/web/playground.js).
-- 🔲 **Data in**: a case list from a CSV upload (reusing the ADR-0084/0139 row
-  parsing), from a form-based list editor over the start variables, or from a
-  generator that draws values per field.
-- 🔲 **Timing profile**: all at once, sequential, a fixed rate, a Poisson arrival
-  stream, or a day profile with a load curve — realized as an arrival plan over the
-  sandbox's **virtual clock**, so a simulated day runs in milliseconds.
-- 🔲 **Stub and resource policy as run config, not model content**: per element a
-  duration distribution, an optional FEEL result, an optional failure probability
-  with an incident or a business error code — the ADR-0120 mockup vocabulary applied
-  to an untouched draft — plus named **resource pools** with a capacity and a
-  calendar, so elapsed time splits into queue time and work time and capacity
-  questions become answerable.
-- 🔲 **Analysis aggregated as the run proceeds** (the 50 000-case ceiling rules out
-  one object per case): counters per element and sequence flow for the heat map, path
-  coverage, bucketed histograms for the duration percentiles, pool utilization and
-  queue length as fixed-bucket time series.
-- 🔲 **Results as data**: a server-side result store read page by page (inputs, end
-  event, outputs, duration, incidents, expectation verdict), streamed out as CSV/JSON,
-  one click from a case to the existing replay/timeline view of that simulated instance.
+- 🚧 **Data in**: a case list sent inline, or uploaded as a CSV parsed by the
+  ADR-0084/0139 row parsing against the file's own header. A form-based list editor
+  and a per-field generator are not there yet.
+- ✅ **Timing profile**: all at once, sequential, a fixed takt or a Poisson stream,
+  each confined to business hours — realized as an arrival plan over the sandbox's
+  **virtual clock**, computed up front from the seed so the stream is reproducible
+  input rather than something the run improvises.
+- ✅ **Stub and resource policy as run config, not model content**: per element a
+  duration band, an optional result, an optional failure probability with an incident
+  or a business error code — the ADR-0120 mockup vocabulary applied to an untouched
+  draft — plus named **resource pools** with a capacity and a calendar. Work started
+  before closing time carries on when the pool opens again, and elapsed time splits
+  into queue time and work time, which is what makes a bottleneck ranking more than
+  a restatement of the durations somebody typed in.
+- 🚧 **Analysis aggregated in one pass** (the 50 000-case ceiling rules out one
+  object per case): outcome counts, the duration distribution, per-element run/wait/
+  work times, per-pool seat time and longest queue, and the per-element visit counts
+  the heat map draws. Path coverage and the arrival/WIP time series are not there yet.
+- 🚧 **Results as data**: the per-case rows are read a page at a time out of the
+  sandbox's own store (inputs, end event, outputs, duration, incidents) and streamed
+  whole as CSV. The expectation verdict and the click from a case into the replay view
+  are not there yet.
 - 🔲 **Saved scenarios**: (dataset, config, seed) stored against the draft so a run
   is reproducible, comparable against the previous run, and later runnable from CI.
 

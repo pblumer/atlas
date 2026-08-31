@@ -118,6 +118,9 @@ func (s *Sandbox) StartPlan(p Plan) error {
 	if len(p.Cases) == 0 {
 		return errors.New("playground: a plan needs at least one case")
 	}
+	if err := p.Arrival.Calendar.validate("the arrival calendar"); err != nil {
+		return err
+	}
 	at, err := s.arrivalTimes(p)
 	if err != nil {
 		return err

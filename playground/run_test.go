@@ -149,3 +149,76 @@ func TestClosingASessionStopsItsBatch(t *testing.T) {
 		t.Errorf("a closed session accepted work: %v", err)
 	}
 }
+
+// A batch whose sandbox stops being readable does not stop silently: the status
+// carries what went wrong, because the caller is watching the status rather than
+// the goroutine.
+func TestAFailedBatchSaysWhatHappened(t *testing.T) {
+	r := newRegistry(t)
+	sess := batchSession(t, r, playground.StubSet{
+		Human: &playground.Stub{Min: time.Hour, Max: time.Hour},
+	})
+	if err := sess.StartRun(playground.Plan{
+		Cases:   rows(4000),
+		Arrival: playground.Arrival{Mode: playground.ArrivalEvery, Interval: time.Minute},
+	}); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	// Break the record of a case that is still running, so the next slice reads it
+	// while resolving the job it is parked on. A finished case is never read again
+	// by the run itself, which is why the newest one is the one to break.
+	waitFor(t, "the batch to create a case", func() bool { return sess.RunStatus().Cases > 0 })
+	if err := sess.With(func(sb *playground.Sandbox) error {
+		_, total, err := sb.Cases(0, 0)
+		if err != nil || total == 0 {
+			return err
+		}
+		newest, _, err := sb.Cases(total-1, 1)
+		if err != nil || len(newest) == 0 {
+			return err
+		}
+		return sb.InjectUnreadableCase(newest[0].InstanceKey)
+	}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	waitFor(t, "the batch to fail", func() bool { return sess.RunStatus().State == playground.RunFailed })
+	if st := sess.RunStatus(); st.Err == "" {
+		t.Error("a failed run reports no reason")
+	}
+}
+
+// A paused session holds its batch rather than spinning through it, and resuming
+// carries it on.
+func TestAPausedSessionHoldsItsBatch(t *testing.T) {
+	r := newRegistry(t)
+	sess := batchSession(t, r, playground.StubSet{
+		Human: &playground.Stub{Min: time.Minute, Max: time.Minute},
+	})
+	sess.Pause()
+	if err := sess.StartRun(playground.Plan{Cases: rows(50)}); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	// It is running, but held: nothing is carried out while the pause stands.
+	time.Sleep(50 * time.Millisecond)
+	if st := sess.RunStatus(); st.State == playground.RunFinished {
+		t.Fatal("a paused batch finished anyway")
+	}
+	sess.Resume()
+	waitFor(t, "the batch to finish", func() bool { return sess.RunStatus().State == playground.RunFinished })
+	if st := sess.RunStatus(); st.Completed != 50 {
+		t.Errorf("completed = %d, want 50 once resumed", st.Completed)
+	}
+}
+
+// A closed session refuses to start a batch rather than starting one nobody can
+// read.
+func TestAClosedSessionRefusesABatch(t *testing.T) {
+	r := newRegistry(t)
+	sess := batchSession(t, r, playground.DefaultStubs())
+	if err := r.Close(sess.ID()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := sess.StartRun(playground.Plan{Cases: rows(1)}); !playground.ErrClosedSession(err) {
+		t.Errorf("StartRun on a closed session = %v, want a closed-session error", err)
+	}
+}

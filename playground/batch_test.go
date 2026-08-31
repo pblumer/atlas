@@ -393,3 +393,99 @@ func BenchmarkBatch(b *testing.B) {
 		b.Fatalf("the batch did not finish: %+v", prog)
 	}
 }
+
+// What a plan refuses before anything runs.
+func TestArrivalConfigurationRefusals(t *testing.T) {
+	sb := openSandbox(t, "sequence.bpmn", playground.StubSet{})
+	cases := map[string]playground.Arrival{
+		"a takt with no interval":       {Mode: playground.ArrivalEvery},
+		"a Poisson stream with no rate": {Mode: playground.ArrivalPoisson},
+		"an arrival mode nobody has":    {Mode: playground.ArrivalMode(42)},
+	}
+	for name, a := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := sb.StartPlan(playground.Plan{Cases: rows(1), Arrival: a}); err == nil {
+				t.Error("this plan should be refused")
+			}
+		})
+	}
+	// A calendar that never opens cannot carry a stream either.
+	never := playground.Calendar{Open: []playground.Window{{From: 9 * time.Hour, To: 9 * time.Hour}}}
+	if err := sb.StartPlan(playground.Plan{
+		Cases:   rows(1),
+		Arrival: playground.Arrival{Mode: playground.ArrivalEvery, Interval: time.Minute, Calendar: never},
+	}); err == nil {
+		t.Error("a stream on a calendar that never opens should be refused")
+	}
+}
+
+// A sandbox with no plan has no arrivals to show.
+func TestASandboxWithNoPlanHasNoArrivals(t *testing.T) {
+	sb := openSandbox(t, "sequence.bpmn", playground.StubSet{})
+	if got := sb.Arrivals(); len(got) != 0 {
+		t.Errorf("arrivals = %v, want none", got)
+	}
+}
+
+// The page bounds are clamped rather than refused: a caller walking pages should
+// not have to reason about the last one.
+func TestPageBoundsAreClamped(t *testing.T) {
+	sb := openSandbox(t, "sequence.bpmn", playground.StubSet{})
+	runPlan(t, sb, playground.Plan{Cases: rows(3)})
+
+	if rows, total, err := sb.Cases(-5, 2); err != nil || total != 3 || len(rows) != 2 || rows[0].Index != 0 {
+		t.Errorf("a negative offset gave %d rows starting at %v (err %v)", len(rows), rows, err)
+	}
+	if rows, _, err := sb.Cases(1, 99); err != nil || len(rows) != 2 {
+		t.Errorf("a limit past the end gave %d rows (err %v)", len(rows), err)
+	}
+	if rows, _, err := sb.Cases(0, 0); err != nil || len(rows) != 0 {
+		t.Errorf("a zero limit gave %d rows (err %v)", len(rows), err)
+	}
+}
+
+// A pool whose calendar cannot fit the work says so rather than running for ever.
+func TestWorkThatOutlastsItsPoolCalendarIsReported(t *testing.T) {
+	sb := openSandbox(t, "user-task.bpmn", playground.StubSet{
+		Human: &playground.Stub{Min: 2 * time.Hour, Max: 2 * time.Hour},
+		Pools: map[string]playground.Pool{"clerks": {
+			Capacity: 1,
+			Calendar: playground.Calendar{Open: []playground.Window{{From: 9 * time.Hour, To: 9*time.Hour + time.Minute}}},
+		}},
+		PoolOf: map[string]string{"approve": "clerks"},
+	})
+	if _, err := sb.StartCase(); err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	if _, err := sb.Run(playground.DefaultBudget()); err == nil {
+		t.Error("a pool that works a minute a day cannot finish two hours of work; the run should say so")
+	}
+}
+
+// An interrupting boundary event takes a case away while it is queued for a seat.
+// The seat and the queue have to forget it, or the pool works for a case that no
+// longer exists.
+func TestAnInterruptedCaseLeavesItsPool(t *testing.T) {
+	sb := openSandbox(t, "boundary-timer.bpmn", playground.StubSet{
+		Default: &playground.Stub{Min: 4 * time.Hour, Max: 4 * time.Hour},
+		Pools:   map[string]playground.Pool{"machines": {Capacity: 1}},
+		PoolOf:  map[string]string{"work": "machines"},
+	})
+	// Two cases for one seat: the first is served, the second waits — and the
+	// ten-minute boundary timer takes both before either finishes.
+	runPlan(t, sb, playground.Plan{Cases: rows(2)})
+
+	rep, err := sb.Report()
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if rep.Completed != 2 {
+		t.Errorf("completed = %d, want both cases down the escalation branch", rep.Completed)
+	}
+	if p := rep.Pools["machines"]; p.Served != 0 {
+		t.Errorf("the pool served %d, want none: neither case's work ever finished", p.Served)
+	}
+	if got, want := sb.Now(), simStart.Add(10*time.Minute); !got.Equal(want) {
+		t.Errorf("simulated end = %s, want %s — the timer, not the four-hour work", got, want)
+	}
+}

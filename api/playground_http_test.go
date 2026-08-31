@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // playgroundBPMN is a model with one human task, so a session has something that
@@ -203,4 +206,32 @@ func itoa(v uint64) string {
 func jsonQuote(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// An abandoned sandbox is reclaimed: it is a live engine and a directory on
+// disk, and a closed browser tab never says goodbye. The sweep is what makes the
+// session limit a limit rather than a high-water mark.
+func TestAnIdlePlaygroundSessionIsReaped(t *testing.T) {
+	ts := newTestServerWith(t, api.WithPlaygroundSessions(time.Millisecond, 5*time.Millisecond))
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/playground/sessions",
+		`{"source":"xml","xml":`+jsonQuote(playgroundBPMN)+`}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("open = %d, body %s", code, body)
+	}
+	var sess struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &sess); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/playground/sessions/"+sess.ID, "", ""); code == http.StatusNotFound {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Error("a session nobody touched was still there after its TTL")
 }

@@ -65,6 +65,15 @@ func TestAnUnreadableProcessInstanceIsReported(t *testing.T) {
 	if err := sb.PublishMessage("m", "K"); err == nil {
 		t.Error("publishing should stop on a store it cannot read")
 	}
+	// The report and the results pages read every case, so both have to report the
+	// one they cannot decode rather than leaving it out of a total that then looks
+	// complete.
+	if _, err := sb.Report(); err == nil {
+		t.Error("the report should stop on a case it cannot read")
+	}
+	if _, _, err := sb.Cases(0, 10); err == nil {
+		t.Error("a results page should stop on a case it cannot read")
+	}
 }
 
 func TestAnUnreadableElementInstanceIsReported(t *testing.T) {
@@ -181,5 +190,60 @@ func TestAnUnreadableLiveCaseStopsTheScanForANewOne(t *testing.T) {
 	}
 	if _, err := sb.StartCase(); err == nil {
 		t.Error("the scan over live instances should report a record it cannot read")
+	}
+}
+
+// An unreadable incident record reaches the results pages as well as the case
+// read: both count a case's parked tokens, and both have to stop rather than
+// report a case as clean because its incident would not decode.
+func TestAnUnreadableIncidentReachesTheResultsPage(t *testing.T) {
+	sb := openInternal(t, "user-task.bpmn")
+	if _, err := sb.StartCase(); err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	tasks, err := sb.OpenTasks()
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("open tasks = %+v, err %v", tasks, err)
+	}
+	jv, _, err := sb.store.GetJob(tasks[0].JobKey)
+	if err != nil {
+		t.Fatalf("read job: %v", err)
+	}
+	if err := sb.store.InjectCorruptIncident(jv.ElementInstanceKey); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	if _, _, err := sb.Cases(0, 10); err == nil {
+		t.Error("a results page should stop on an incident it cannot read")
+	}
+	if _, err := sb.Report(); err == nil {
+		t.Error("the report should stop on an incident it cannot read")
+	}
+}
+
+// An unreadable element instance reaches the results page too, through the path
+// each row carries.
+func TestAnUnreadableElementInstanceReachesTheResultsPage(t *testing.T) {
+	sb := openInternal(t, "user-task.bpmn")
+	key, err := sb.StartCase()
+	if err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	tasks, err := sb.OpenTasks()
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("open tasks = %+v, err %v", tasks, err)
+	}
+	jv, _, err := sb.store.GetJob(tasks[0].JobKey)
+	if err != nil {
+		t.Fatalf("read job: %v", err)
+	}
+	if err := sb.store.InjectCorruptElementInstance(jv.ElementInstanceKey); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	// The case itself still reads: its own record is intact.
+	if _, err := sb.Case(key); err != nil {
+		t.Errorf("reading the case should still work: %v", err)
+	}
+	if _, _, err := sb.Counts(); err != nil {
+		t.Errorf("the counters are maintained and should still read: %v", err)
 	}
 }

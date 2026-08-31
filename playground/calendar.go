@@ -1,6 +1,9 @@
 package playground
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Calendar says when something works: which weekdays, and which stretches of
 // those days. It is shared by the pools that do the work and by the arrival plan
@@ -19,6 +22,19 @@ type Calendar struct {
 // Window is a stretch of a day a calendar is open in, as offsets from midnight UTC.
 // 08:00–17:00 is {From: 8 * time.Hour, To: 17 * time.Hour}.
 type Window struct{ From, To time.Duration }
+
+// validate reports what is wrong with a calendar. A window that ends before it
+// starts — or at the same instant — is the mistake worth catching: an empty
+// window is reported as an opening by opensAfter and as closed by openAt, and the
+// two disagreeing is worse than either answer.
+func (c Calendar) validate(what string) error {
+	for _, w := range c.Open {
+		if w.To <= w.From {
+			return fmt.Errorf("playground: %s has a window that ends at or before it starts (%s–%s)", what, w.From, w.To)
+		}
+	}
+	return nil
+}
 
 // alwaysOpen reports whether the pool has no calendar at all.
 func (c Calendar) alwaysOpen() bool { return len(c.Open) == 0 && c.Days == [7]bool{} }
@@ -111,10 +127,10 @@ func (c Calendar) finishAt(t int64, d time.Duration) (int64, bool) {
 	}
 	remaining := int64(d)
 	at := t
+	// No special case for work of no duration: the loop below already answers it,
+	// and it answers it *better* — a task that takes no time still happens when the
+	// calendar is open, not the moment it was handed over at midnight.
 	for guard := 0; guard <= calendarSearchDays*len(c.Open)+calendarSearchDays+1; guard++ {
-		if remaining <= 0 {
-			return at, true
-		}
 		open, ok := c.opensAfter(at)
 		if !ok {
 			return 0, false
@@ -137,6 +153,12 @@ func (c Calendar) finishAt(t int64, d time.Duration) (int64, bool) {
 // closesAfter is the end of the working stretch that contains t.
 func (c Calendar) closesAfter(t int64) (int64, bool) {
 	ts := time.Unix(0, t).UTC()
+	// A day the calendar does not work on contains no working stretch at all, so
+	// there is nothing for it to end. Without this the hour windows would answer
+	// for a Sunday as readily as for a Tuesday.
+	if !c.worksOn(ts.Weekday()) {
+		return 0, false
+	}
 	midnight := time.Date(ts.Year(), ts.Month(), ts.Day(), 0, 0, 0, 0, time.UTC)
 	if len(c.Open) == 0 {
 		return midnight.AddDate(0, 0, 1).UnixNano(), true // the whole working day

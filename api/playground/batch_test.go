@@ -3,6 +3,7 @@ package playground
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/playground"
 )
 
 // waitForRun polls the status endpoint until the batch reaches one of the given
@@ -263,5 +267,224 @@ func TestBatchRoutesOnAnUnknownSession(t *testing.T) {
 				t.Errorf("status = %d, want 404", rec.Code)
 			}
 		})
+	}
+}
+
+// Business hours and weekdays travel over the wire as minutes and day numbers,
+// because a JSON body has no duration type and a caller should not have to
+// encode one.
+func TestCalendarOnTheWire(t *testing.T) {
+	c := calendarReq{
+		Open: []windowReq{{FromMinutes: 8 * 60, ToMinutes: 17 * 60}},
+		Days: []int{1, 2, 3, 4, 5, 9, -1}, // Monday to Friday; the two impossible ones are ignored
+	}
+	got := c.toCalendar()
+	if len(got.Open) != 1 || got.Open[0].From != 8*time.Hour || got.Open[0].To != 17*time.Hour {
+		t.Errorf("windows = %+v, want 08:00–17:00", got.Open)
+	}
+	for d := 1; d <= 5; d++ {
+		if !got.Days[d] {
+			t.Errorf("weekday %d should be selected", d)
+		}
+	}
+	if got.Days[0] || got.Days[6] {
+		t.Error("the weekend should not be selected")
+	}
+}
+
+// Every arrival mode has a name on the wire, and one that is not a mode is
+// refused rather than silently treated as the default.
+func TestArrivalModesOnTheWire(t *testing.T) {
+	for name, want := range map[string]playground.ArrivalMode{
+		"":           playground.ArrivalAllAtOnce,
+		"allAtOnce":  playground.ArrivalAllAtOnce,
+		"sequential": playground.ArrivalSequential,
+		"every":      playground.ArrivalEvery,
+		"poisson":    playground.ArrivalPoisson,
+	} {
+		got, err := arrivalReq{Mode: name}.toArrival()
+		if err != nil || got.Mode != want {
+			t.Errorf("mode %q = %v (err %v), want %v", name, got.Mode, err, want)
+		}
+	}
+	if _, err := (arrivalReq{Mode: "telepathy"}).toArrival(); err == nil {
+		t.Error("an unknown mode should be refused")
+	}
+}
+
+// What the CSV upload refuses, and why.
+func TestCSVUploadRefusals(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+
+	t.Run("not a multipart body", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("plain text"))
+		r.SetPathValue("id", id)
+		rec := httptest.NewRecorder()
+		svc.HandleStartRunFromCSV(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("no file part", func(t *testing.T) {
+		var body strings.Builder
+		mw := multipart.NewWriter(&body)
+		_ = mw.WriteField("arrival", `{"mode":"allAtOnce"}`)
+		_ = mw.Close()
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body.String()))
+		r.Header.Set("Content-Type", mw.FormDataContentType())
+		r.SetPathValue("id", id)
+		rec := httptest.NewRecorder()
+		svc.HandleStartRunFromCSV(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("arrival that is not JSON", func(t *testing.T) {
+		var body strings.Builder
+		mw := multipart.NewWriter(&body)
+		part, _ := mw.CreateFormFile("file", "cases.csv")
+		_, _ = part.Write([]byte("a\n1\n"))
+		_ = mw.WriteField("arrival", "{oops")
+		_ = mw.Close()
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body.String()))
+		r.Header.Set("Content-Type", mw.FormDataContentType())
+		r.SetPathValue("id", id)
+		rec := httptest.NewRecorder()
+		svc.HandleStartRunFromCSV(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("a CSV the parser refuses", func(t *testing.T) {
+		var body strings.Builder
+		mw := multipart.NewWriter(&body)
+		part, _ := mw.CreateFormFile("file", "cases.csv")
+		_, _ = part.Write([]byte("a,a\n1,2\n"))
+		_ = mw.Close()
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body.String()))
+		r.Header.Set("Content-Type", mw.FormDataContentType())
+		r.SetPathValue("id", id)
+		rec := httptest.NewRecorder()
+		svc.HandleStartRunFromCSV(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+// A case whose variables the server cannot express is refused with its row
+// number: a dataset of fifty thousand needs to say which one is wrong.
+func TestACaseWithUnconvertibleVariablesNamesItsRow(t *testing.T) {
+	reg := playground.NewRegistry(time.Hour, 4)
+	t.Cleanup(reg.CloseAll)
+	picky := func(in map[string]any) ([]model.VariableValue, error) {
+		if _, bad := in["nope"]; bad {
+			return nil, errors.New("unsupported value type")
+		}
+		return vars(in)
+	}
+	svc := New(reg, func(*http.Request, string, string) ([]byte, int, string) {
+		return nil, http.StatusNotFound, "no"
+	}, picky)
+	var sess sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+		`{"source":"xml","xml":`+jsonString(userTaskXML)+`}`, nil), &sess)
+
+	rec := call(t, svc.HandleStartRun, http.MethodPost,
+		`{"cases":[{"a":1},{"nope":1}]}`, map[string]string{"id": sess.ID})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "case 1") {
+		t.Errorf("the refusal %s should name the row", rec.Body)
+	}
+}
+
+// Starting a batch on a session that closed underneath the request is a 404, not
+// a conflict: the session is gone, and a retry with the same id will not help.
+func TestStartingABatchOnAClosedSession(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+	live, ok := svc.sessions.Get(id)
+	if !ok {
+		t.Fatal("the registry lost the session")
+	}
+	if err := live.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	rec := call(t, svc.HandleStartRun, http.MethodPost, `{"cases":[{}]}`, map[string]string{"id": id})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+}
+
+// The results page reads its bounds from the query, clamps a limit nobody should
+// ask for, and ignores one that is not a number.
+func TestResultsPageBounds(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+	if rec := call(t, svc.HandleStartRun, http.MethodPost,
+		`{"cases":[{"n":"0"},{"n":"1"},{"n":"2"}]}`, map[string]string{"id": id}); rec.Code != http.StatusAccepted {
+		t.Fatalf("start = %d, body %s", rec.Code, rec.Body)
+	}
+	waitForRun(t, svc, id, "finished")
+
+	page := func(query string) resultsResp {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/?"+query, nil)
+		r.SetPathValue("id", id)
+		rec := httptest.NewRecorder()
+		svc.HandleResults(rec, r)
+		var out resultsResp
+		decodeInto(t, rec, &out)
+		return out
+	}
+	if got := page("offset=1&limit=1"); len(got.Rows) != 1 || got.Rows[0].Index != 1 || got.Offset != 1 {
+		t.Errorf("offset/limit = %+v", got)
+	}
+	if got := page("limit=99999"); len(got.Rows) != 3 {
+		t.Errorf("an oversized limit should be clamped, not refused: %+v", got)
+	}
+	if got := page("offset=nonsense&limit=-4"); len(got.Rows) != 3 || got.Offset != 0 {
+		t.Errorf("unreadable bounds should fall back to the defaults: %+v", got)
+	}
+}
+
+// A run with no cases still downloads: an empty table is a header and nothing
+// else, not an error.
+func TestTheCSVOfAnEmptyRunIsEmpty(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+	rec := call(t, svc.HandleResultsCSV, http.MethodGet, "", map[string]string{"id": id})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("csv = %d", rec.Code)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "" {
+		t.Errorf("csv of a run with no cases = %q, want nothing", body)
+	}
+}
+
+// A CSV with a header and no rows is a dataset of nothing, refused where an
+// inline dataset of nothing is refused.
+func TestACSVWithNoRowsIsRefused(t *testing.T) {
+	svc := newService(t)
+	id := openBatchSession(t, svc)
+
+	var body strings.Builder
+	mw := multipart.NewWriter(&body)
+	part, _ := mw.CreateFormFile("file", "cases.csv")
+	_, _ = part.Write([]byte("kunde,betrag\n"))
+	_ = mw.Close()
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body.String()))
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r.SetPathValue("id", id)
+	rec := httptest.NewRecorder()
+	svc.HandleStartRunFromCSV(rec, r)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (body %s)", rec.Code, rec.Body)
 	}
 }

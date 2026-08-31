@@ -88,10 +88,8 @@ func (ss StubSet) validate() error {
 		if p.Capacity < 1 {
 			return fmt.Errorf("playground: pool %q has no capacity; a pool with no seats never works", name)
 		}
-		for _, w := range p.Open {
-			if w.To <= w.From {
-				return fmt.Errorf("playground: pool %q has a window that ends before it starts (%s–%s)", name, w.From, w.To)
-			}
+		if err := p.Calendar.validate(fmt.Sprintf("pool %q", name)); err != nil {
+			return err
 		}
 	}
 	for element, name := range ss.PoolOf {
