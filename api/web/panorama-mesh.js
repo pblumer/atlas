@@ -107,6 +107,82 @@ function viewBoxFor(nodes, width, height) {
   return `${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`;
 }
 
+// DEPENDENCY_EDGES are the edge kinds impact analysis walks. Containment is
+// deliberately absent: an application *contains* its processes, it does not depend
+// on them, and walking it would drag every sibling into the answer through their
+// shared application — which would make "what breaks if this goes down" name half
+// the landscape and mean nothing.
+const DEPENDENCY_EDGES = new Set(["calls", "uses"]);
+
+// impactFrom answers ADR-0211 §6's question over the graph the viewer already has:
+// what breaks if this node goes down (direction "dependents", walking edges
+// backwards), or what this node needs to work at all ("dependencies", forwards).
+// "both" walks either way.
+//
+// It runs on the delivered graph rather than through a second endpoint, and that is
+// the point: the answer must be about the picture on screen. A server-side walk over
+// an unfiltered graph could name resources this viewer cannot see, and a second
+// implementation could disagree with the drawing it is supposed to explain.
+//
+// Two rules carry the honesty of the answer:
+//
+//   - A restricted placeholder is included but never walked through. We may not see
+//     past it, so the reachable set beyond it is unknown — the result records every
+//     placeholder it stopped at and reports complete: false. An impact answer that
+//     quietly stopped at a permission boundary would read as "nothing further
+//     depends on this", which is the one thing it must not say.
+//   - Unknown ids return null rather than an empty set, for the same reason: an
+//     empty answer means "nothing depends on this", and that is a claim.
+//
+// Returns { nodes, edges, truncatedBy, complete } or null.
+export function impactFrom(graph, startId, { direction = "dependents", depth = Infinity } = {}) {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  if (!byId.has(startId)) return null;
+
+  const forward = new Map(), backward = new Map();
+  for (const e of graph.edges) {
+    if (!DEPENDENCY_EDGES.has(e.kind)) continue;
+    if (!forward.has(e.from)) forward.set(e.from, []);
+    if (!backward.has(e.to)) backward.set(e.to, []);
+    forward.get(e.from).push(e);
+    backward.get(e.to).push(e);
+  }
+  const step = (id) => {
+    const out = [];
+    if (direction !== "dependencies") out.push(...(backward.get(id) || []).map((e) => [e, e.from]));
+    if (direction !== "dependents") out.push(...(forward.get(id) || []).map((e) => [e, e.to]));
+    return out;
+  };
+
+  const seen = new Set([startId]);
+  const edges = [];
+  const truncatedBy = [];
+  let frontier = [startId];
+  for (let hop = 0; hop < depth && frontier.length; hop++) {
+    const next = [];
+    for (const id of frontier) {
+      // A placeholder stands for something we may not see, so its own edges are not
+      // ours to follow — it is a boundary, not a waypoint.
+      if (byId.get(id)?.kind === "restricted") continue;
+      for (const [edge, other] of step(id)) {
+        if (!edges.includes(edge)) edges.push(edge);
+        if (seen.has(other)) continue;
+        seen.add(other);
+        if (byId.get(other)?.kind === "restricted") truncatedBy.push(other);
+        next.push(other);
+      }
+    }
+    frontier = next;
+  }
+
+  return {
+    nodes: [...seen],
+    edges,
+    truncatedBy,
+    complete: truncatedBy.length === 0,
+  };
+}
+
 // hrefFor is the drilldown. A process node leads to the Operations live view —
 // Panorama owns the landscape and application altitudes and links into the
 // process and instance ones rather than reimplementing them (ADR-0211 §5).
@@ -190,7 +266,7 @@ function legendHTML(graph, layoutMs) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs) {
+function renderGraph(graph, layoutMs, highlight) {
   const width = 1200, height = 720;
   const nodes = graph.nodes.map((n) => ({ ...n }));
   const ms = layout(nodes, graph.edges, { width, height }) + layoutMs;
@@ -200,28 +276,73 @@ function renderGraph(graph, layoutMs) {
     const a = at.get(e.from), b = at.get(e.to);
     if (!a || !b) return "";
     const dashed = e.kind === "contains";
+    const state = highlight
+      ? (highlight.has(e.from) && highlight.has(e.to) ? " mesh-in-impact" : " mesh-dimmed")
+      : "";
     return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
       x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
-      class="mesh-edge${dashed ? " mesh-edge-contains" : ""}"/>`;
+      class="mesh-edge${dashed ? " mesh-edge-contains" : ""}${state}"/>`;
   }).join("");
 
   const circles = nodes.map((n) => {
     const style = KIND[n.kind] || KIND.process;
-    const href = hrefFor(n);
     const label = n.kind === "restricted" ? "" : esc(n.name || "");
-    const shape = `<circle r="${style.r}" fill="${style.fill}" stroke="${style.stroke}"
+    // Selecting a node is what runs impact analysis, so the node itself is the
+    // control. The drilldown into Operations moved into the selection panel: a node
+    // cannot both navigate away and select, and selecting is the more frequent act.
+    const state = highlight
+      ? (highlight.has(n.id) ? " mesh-in-impact" : " mesh-dimmed")
+      : "";
+    return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
+      class="mesh-node mesh-${n.kind}${state}" data-node-id="${esc(n.id)}"
+      tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
+      <circle r="${style.r}" fill="${style.fill}" stroke="${style.stroke}"
         stroke-width="2" ${style.dashed ? 'stroke-dasharray="4 3"' : ""}/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}">${label}</text>
-      <title>${esc(nodeTitle(n))}</title>`;
-    const body = `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind}">${shape}</g>`;
-    return href ? `<a href="${href}">${body}</a>` : body;
+      <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
   return { ms, svg: `<svg class="mesh-canvas" viewBox="${viewBoxFor(nodes, width, height)}"
     role="img" aria-label="Derived landscape mesh">
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
+}
+
+
+// impactPanelHTML states the answer in words beside the picture. The counts are the
+// point — a highlighted subgraph tells you *which*, a count tells you *how many*,
+// and "17 things depend on this connector" is the sentence somebody repeats in a
+// change-approval meeting.
+function impactPanelHTML(node, result, direction, depth) {
+  if (!node) {
+    return `<div class="mesh-panel mesh-panel-empty">
+      <b>Nothing selected</b>
+      <p>Select a node to see what depends on it, and what it depends on.</p></div>`;
+  }
+  const kindLabel = (KIND[node.kind] || {}).label || node.kind;
+  const others = result ? result.nodes.length - 1 : 0;
+  const word = direction === "dependents" ? "depend on this" : "are needed by this";
+  const drill = node.kind === "process"
+    ? `<a class="mesh-drill" href="${hrefFor(node)}">Open in Operations →</a>`
+    : "";
+  // An answer that stopped at a permission boundary must not read as a complete
+  // one. This is the same rule the mesh applies to the picture, applied to the
+  // analysis over it: the count below is a floor, not a total.
+  const truncation = result && !result.complete
+    ? `<p class="mesh-note mesh-truncated"><b>Incomplete.</b> The walk stopped at
+        ${result.truncatedBy.length} node(s) outside your access, so there may be more
+        beyond them. Treat the count as a lower bound.</p>`
+    : "";
+  return `<div class="mesh-panel">
+    <div class="mesh-panel-head">
+      <b>${esc(node.name || kindLabel)}</b>
+      <span class="muted">${esc(kindLabel)}</span>
+    </div>
+    <div class="mesh-impact-count"><b>${others}</b> node(s) ${word}
+      <span class="muted">within ${depth === Infinity ? "any" : depth} hop(s)</span></div>
+    ${truncation}
+    ${drill}
+  </div>`;
 }
 
 export async function mountPanoramaMesh(view, { api, toast }) {
@@ -252,26 +373,84 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       <span id="mesh-count" class="muted"></span>
     </div>
     <div id="mesh-legend-slot"></div>
-    <div id="mesh-surface" class="mesh-surface"></div>
+    <div class="mesh-body">
+      <div id="mesh-surface" class="mesh-surface"></div>
+      <aside class="mesh-side">
+        <div class="mesh-controls">
+          <!-- Explicit for/id rather than a wrapping label: a select nested inside
+               its label takes the option text into its accessible name, which makes
+               the control hard to address by name for a screen reader and for a test
+               alike. -->
+          <label for="mesh-direction">Show</label>
+          <select id="mesh-direction">
+            <option value="dependents">what depends on it</option>
+            <option value="dependencies">what it depends on</option>
+            <option value="both">both directions</option>
+          </select>
+          <label for="mesh-depth">Depth</label>
+          <select id="mesh-depth">
+            <option value="1">1 hop</option>
+            <option value="2" selected>2 hops</option>
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div id="mesh-panel-slot"></div>
+      </aside>
+    </div>
   </div>`;
 
   const search = document.getElementById("mesh-search");
   const surface = document.getElementById("mesh-surface");
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
+  const panel = document.getElementById("mesh-panel-slot");
+  const dirSelect = document.getElementById("mesh-direction");
+  const depthSelect = document.getElementById("mesh-depth");
+
+  let selected = null;
 
   function paint() {
     const term = search.value.trim().toLowerCase();
     const shown = filterGraph(graph, term);
-    const { ms, svg } = renderGraph(shown, 0);
+    // A selection that the filter removed is no longer selected: highlighting a node
+    // that is not on screen would leave the panel describing something invisible.
+    if (selected && !shown.nodes.some((n) => n.id === selected)) selected = null;
+
+    const direction = dirSelect.value;
+    const depth = depthSelect.value === "all" ? Infinity : Number(depthSelect.value);
+    const result = selected ? impactFrom(shown, selected, { direction, depth }) : null;
+    const highlight = result ? new Set(result.nodes) : null;
+
+    const { ms, svg } = renderGraph(shown, 0, highlight);
     surface.innerHTML = shown.nodes.length
       ? svg
       : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
     legendSlot.innerHTML = legendHTML(shown, ms);
+    panel.innerHTML = impactPanelHTML(
+      shown.nodes.find((n) => n.id === selected) || null, result, direction, depth);
     count.textContent = term
       ? `${shown.nodes.length} of ${graph.nodes.length} node(s)`
       : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
   }
+
+  function select(id) {
+    selected = selected === id ? null : id; // clicking the selection again clears it
+    paint();
+  }
+  surface.addEventListener("click", (event) => {
+    const node = event.target.closest("[data-node-id]");
+    if (node) select(node.getAttribute("data-node-id"));
+    else selected = null, paint();
+  });
+  surface.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const node = event.target.closest("[data-node-id]");
+    if (!node) return;
+    event.preventDefault();
+    select(node.getAttribute("data-node-id"));
+  });
+  dirSelect.addEventListener("change", paint);
+  depthSelect.addEventListener("change", paint);
 
   // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
   // simulation costs a few hundred milliseconds. A short debounce keeps typing

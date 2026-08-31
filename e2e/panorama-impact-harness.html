@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Panorama impact-analysis e2e harness</title>
+    <!-- Drives the *real* impactFrom from api/web/panorama-mesh.js directly, so the
+         graph traversal can be tested case by case rather than only through a
+         rendered mesh (ADR-0211 §6). No fetch, no layout, no DOM: the function is a
+         pure function over a graph, and this harness keeps it testable as one. -->
+  </head>
+  <body>
+    <div id="ready">loading</div>
+    <script type="module">
+      import { impactFrom } from "/panorama-mesh.js";
+      // Exposed for the spec; the spec passes a graph and options and reads the
+      // result back, so every case is a table row rather than a click sequence.
+      window.impactFrom = (graph, id, opts) => impactFrom(graph, id, opts);
+      document.getElementById("ready").textContent = "ready";
+    </script>
+  </body>
+</html>
