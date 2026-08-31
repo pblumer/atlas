@@ -126,6 +126,13 @@ day" becomes a question the report answers rather than a number the author had t
 guess and configure. This needs no engine change: it is the sandbox's own job runner
 deciding *when* to complete a job it already holds, in virtual time.
 
+A pool's **utilisation is measured against the calendar, not the wall clock**: the
+denominator is capacity times the working time the calendar offered over the run,
+so the nights and the weekend a simulated fortnight spans are not counted as
+capacity the pool declined to use. Dividing by the run's span instead reports a
+pool with three hundred cases queued as a quarter busy — two numbers in the same
+report that cannot both be acted on.
+
 **Isolation by absence.** The sandbox registers **no connector factories, no vault,
 no mail transport, no HTTP client at all**. A REST task in the sandbox cannot reach
 the network because there is nothing in the sandbox that can. Side-effect freedom is

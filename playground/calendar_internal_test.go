@@ -137,3 +137,46 @@ func TestWorkThatDoesNotFitTheCalendar(t *testing.T) {
 		t.Error("two hours of work at one minute a day should not report a finish")
 	}
 }
+
+// workingTimeBetween is the denominator of every utilisation the report prints,
+// and it is arithmetic nobody will check by eye: a span of ten days over a
+// nine-hour weekday calendar offers about ninety hours, not two hundred and
+// forty, and getting that wrong is the difference between "saturated" and
+// "quiet" on the same run.
+func TestWorkingTimeBetween(t *testing.T) {
+	weekdays := Calendar{
+		Open: []Window{{From: 8 * time.Hour, To: 12 * time.Hour}, {From: 13 * time.Hour, To: 17 * time.Hour}},
+		Days: [7]bool{time.Monday: true, time.Tuesday: true, time.Wednesday: true, time.Thursday: true, time.Friday: true},
+	}
+	cases := []struct {
+		name     string
+		c        Calendar
+		from, to int64
+		want     time.Duration
+	}{
+		{"an empty span offers nothing", weekdays, at(time.Hour), at(time.Hour), 0},
+		{"a backwards span offers nothing", weekdays, at(time.Hour), at(0), 0},
+		{"always open is the whole span", Calendar{}, at(0), at(30 * time.Hour), 30 * time.Hour},
+		// Monday 09:00 to Monday 14:00: the rest of the morning plus an hour after lunch.
+		{"one day, clipped by both ends", weekdays, at(0), at(5 * time.Hour), 4 * time.Hour},
+		// Monday 09:00 through Wednesday 09:00: 7h left of Monday, 8h on Tuesday, and
+		// 1h of Wednesday morning.
+		{"across two nights", weekdays, at(0), at(48 * time.Hour), 16 * time.Hour},
+		// Friday 09:00 through Monday 09:00: Friday's remaining 7h and nothing else,
+		// because the weekend is not capacity.
+		{"across a weekend", weekdays, at(96 * time.Hour), at(168 * time.Hour), 8 * time.Hour},
+		// A minute a day, over sixty days. calendarSearchDays is how far ahead one
+		// question about the next opening looks; it is not a ceiling on how many
+		// openings a span contains, and a run measured in months must not come back
+		// reporting a fortnight of capacity.
+		{"a long span of small windows", Calendar{Open: []Window{{From: 9 * time.Hour, To: 9*time.Hour + time.Minute}}},
+			at(0), at(60 * 24 * time.Hour), 60 * time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.c.workingTimeBetween(tc.from, tc.to); got != tc.want {
+				t.Errorf("workingTimeBetween = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

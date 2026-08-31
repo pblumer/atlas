@@ -162,8 +162,7 @@ func (c Calendar) workingTimeBetween(from, to int64) time.Duration {
 		return time.Duration(to - from)
 	}
 	var total time.Duration
-	at := from
-	for guard := 0; at < to && guard <= calendarSearchDays*(len(c.Open)+1)+1; guard++ {
+	for at := from; at < to; {
 		open, ok := c.opensAfter(at)
 		if !ok || open >= to {
 			break
@@ -177,6 +176,16 @@ func (c Calendar) workingTimeBetween(from, to int64) time.Duration {
 			end = to
 		}
 		total += time.Duration(end - open)
+		// The loop is bounded by the span, not by calendarSearchDays: that horizon
+		// is how far ahead a *single* question about the next opening will look, and
+		// borrowing it as an iteration count here would silently stop summing after a
+		// fortnight of windows and report a quarter-year run as a fortnight of
+		// capacity. What bounds the loop instead is that closesAfter always answers
+		// past the opening it was given, so at strictly increases towards to — and if
+		// that ever stopped being true we would rather stop than spin.
+		if closes <= at {
+			break
+		}
 		at = closes
 	}
 	return total
