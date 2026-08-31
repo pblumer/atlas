@@ -1,33 +1,49 @@
 # Atlas — Brand assets
 
-The Atlas mark is a **hexagon holding a converging flow** — two nodes join into
-one, a BPMN gateway. The hexagon is the durable tile Atlas carries; the flow is
-what runs inside it. A single bold blue, no fine detail, so it stays legible
+The Atlas mark is a **white peak carrying a cross, on a black tile** — the load
+Atlas bears, with the Swiss cross of where it is built. It is one solid shape:
+the notch at the base and the cross are cut out of the peak (SVG `evenodd`), so
+there are no strokes and no fine detail to lose. That is what keeps it readable
 from a hero down to a 16px favicon.
 
-The mark uses a fixed color (no theme dependency) so it reads on **any**
+The mark uses fixed colors (no theme dependency) so it reads on **any**
 background, light or dark.
 
 | Color | Hex | Used for |
 |-------|-----|----------|
-| Blue | `#2563EB` | The whole mark (hexagon + flow) |
-| Blue (bright) | `#4C8DF5` | Mark on dark grounds (e.g. the social card) |
+| Black | `#000000` | The tile |
+| White | `#FFFFFF` | The peak |
+| Off-white | `#F4F7FB` | The tile-less glyph on dark grounds (the social card) |
+
+**Three cuts, one drawing.** `atlas-mark.svg` is the mark as it ships. Where the
+ground is already dark, or the container draws its own tile (the Console's `.mark`
+box), use the tile-less `atlas-glyph.svg`, which inherits `currentColor`.
+`favicon.svg` is the same drawing pushed heavier — a larger peak and a thicker
+cross — because at 16px the shipped weights close up.
 
 ## Files
 
 | File | What it is |
 |------|-----------|
-| `atlas-mark.svg` | Full mark — README, docs, wherever the logo appears |
-| `favicon.svg` | Simplified mark that stays legible to 16px |
+| `atlas-mark.svg` | Full mark (tile + peak) — README, docs, wherever the logo appears |
+| `atlas-glyph.svg` | Peak only, `currentColor`, no tile — inlined by the Console's `.mark` box |
+| `favicon.svg` | Heavier cut of the mark that stays legible to 16px |
 | `favicon-16.png` `favicon-32.png` `favicon-48.png` | Raster favicons |
 | `apple-touch-icon.png` | 180×180 home-screen icon |
-| `atlas-mark-256.png` `atlas-mark-512.png` | Raster logo (transparent) |
+| `atlas-mark-256.png` `atlas-mark-512.png` | Raster logo (tile included; transparent outside its rounded corners) |
 | `atlas-social.svg` / `atlas-social.png` | 1200×630 social / link-preview card |
 | `icons/*.svg` | The feature icons the README's Highlights list carries |
 
-The PNGs are rendered from the SVGs. To regenerate them, re-run the render
-step used to produce them (headless Chromium screenshot of each SVG at the
-target size) — the SVGs are the source of truth.
+The PNGs are rendered from the SVGs — the SVGs are the source of truth. To
+regenerate them, screenshot each SVG at the target size with headless Chromium
+(the page needs `margin:0` and the `<svg>` sized in CSS; crop the shot, because
+the headless viewport comes back shorter than `--window-size` asks for).
+
+**The mark also lives inline in three other places**, because the Console is
+buildless and cannot fetch a file before it paints: the `<link rel="icon">` data
+URI at the top of each page in `api/web/` (the `favicon.svg` cut), the `.mark`
+spans in those same pages, and `BUILTIN_MARK` in `api/web/logo.js` (both the
+`atlas-glyph.svg` cut). Change the drawing here and change those with it.
 
 ## Feature icons (`icons/`)
 
@@ -35,9 +51,14 @@ Eight icons, one per Highlights bullet. They exist because the alternative was
 emoji, and a row of emoji down the left of a feature list reads as generated
 filler no matter what the words say.
 
-They are **drawn from the mark's own vocabulary** so the set and the logo look
-like one family: the hexagon tile, flow lines, and nodes as filled dots. Same
-constants throughout —
+They are **drawn from a shared vocabulary** so the set looks like one family:
+an enclosing tile, flow lines, and nodes as filled dots. Same constants
+throughout —
+
+> They predate the current mark and still carry the old hexagon-and-flow
+> vocabulary in blue. They read as a coherent set on their own, so they were
+> left alone when the mark changed; redrawing them against the peak is open
+> work, and an all-or-nothing job when it happens.
 
 | | |
 |---|---|
