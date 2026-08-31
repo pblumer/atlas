@@ -3,6 +3,7 @@ package ad
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/expr"
@@ -94,5 +95,31 @@ func TestBindVars(t *testing.T) {
 	}
 	if bindVars(1, vars, nil) != nil {
 		t.Error("bindVars(no names) should be nil")
+	}
+}
+
+// An unresolvable bind secret has to name the variable it looked for, spelled out.
+//
+// The message an operator meets is the whole of what they have to act on, and
+// "ATLAS_CONNECTOR_<REF>_TOKEN" leaves them to apply the fold to a reference by hand
+// — which is where "I set that variable and it still says it is missing" comes from.
+// Both places the secret can live are named, because a supervised worker reads the
+// Console vault and one you run yourself reads its own environment.
+func TestBindSecretErrorNamesTheVariableAndTheConsole(t *testing.T) {
+	_, _, _, _, err := target(Job{
+		URL: "ldaps://dc.example.com", BindDN: "cn=svc", BindSecret: "ad-demo bind",
+		Operation: "disable", DN: "cn=x",
+	}, func(string) string { return "" }, nil)
+	if err == nil {
+		t.Fatal("a bind DN with an unresolvable secret was accepted")
+	}
+	for _, want := range []string{
+		`"ad-demo bind"`,                     // the reference as the model authored it
+		"ATLAS_CONNECTOR_AD_DEMO_BIND_TOKEN", // the variable, folded, not a pattern
+		"Console > Connectors > Secrets",     // the other place it can live
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
 	}
 }

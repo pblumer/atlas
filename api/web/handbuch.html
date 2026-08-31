@@ -2106,9 +2106,18 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="de">Eingeschaltet wird es in der Konsole: <a href="/#/console/connectors">Connectors</a> →
         Karte <b>Active Directory</b> → <i>Serve Active Directory tasks against a mockup</i> → Speichern. Der
         AD-Worker startet daraufhin neu und kommt gemockt zurück; Atlas läuft dabei weiter.</p>
+      <p data-l="de">Ein <b>Bind-Passwort braucht es trotzdem</b>. Der Mock ist genau dort streng, wo Strengsein
+        der Zweck ist: Ein Simple Bind, der einen DN nennt und kein Passwort schickt, wird abgelehnt – so, wie
+        ein echtes Active Directory ihn ablehnt. Die Token-Referenz, die deine Aufgabe nennt, muss also auch im
+        Mockup auflösbar sein; <i>welchen Wert</i> sie hat, ist dabei völlig egal. Leg sie unter demselben Namen
+        in <a href="/#/console/connectors">Connectors</a> → Karte <b>Secrets</b> an, oder setze die Variable,
+        die der Incident nennt, in der Umgebung des Workers. Fehlt sie, scheitert die Aufgabe, <i>bevor</i> der
+        Mock überhaupt gefragt wird – der Incident nennt dann die Referenz und die Variable, die ihr fehlt.</p>
       <p data-l="de">Dieselbe Karte nimmt optional einen <b>Startbestand</b> entgegen – die Konten und Gruppen,
-        die dein Prozess vorzufinden erwartet. Ein Joiner braucht keinen, der legt sein Konto ja selbst an; ein
-        Leaver hat in einem leeren Verzeichnis nichts zu deaktivieren. Du wählst eine LDIF- oder DSML-Datei aus
+        die dein Prozess vorzufinden erwartet. Ein Joiner braucht keinen, solange er nur sein eigenes Konto
+        anlegt; sobald er es einer Gruppe zuweist, muss diese Gruppe da sein, sonst scheitert er mit
+        <code>no such object</code>. Ein Leaver hat in einem leeren Verzeichnis ohnehin nichts zu deaktivieren.
+        Du wählst eine LDIF- oder DSML-Datei aus
         oder fügst den Inhalt direkt ein – <b>einen Pfad gibst du nirgends an</b>: Atlas speichert den Bestand
         selbst und legt ihn dem Worker hin. Beim Speichern wird er geprüft, und Atlas sagt dir, wie viele
         Einträge er gelesen hat. Wenn dir nichts einfällt, liefert <i>Example</i> ein kleines Verzeichnis mit
@@ -2116,9 +2125,17 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="en">You switch it on in the Console: <a href="/#/console/connectors">Connectors</a> → the
         <b>Active Directory</b> card → <i>Serve Active Directory tasks against a mockup</i> → Save. The AD worker
         restarts and comes back mocked; Atlas keeps running.</p>
+      <p data-l="en">A <b>bind password is still needed</b>. The mockup is strict exactly where being strict is
+        the point: a simple bind that names a DN and sends no password is refused, the way a real Active
+        Directory refuses it. So the token reference your task names has to resolve in mockup mode too;
+        <i>what its value is</i> does not matter in the slightest. Store it under the same name in
+        <a href="/#/console/connectors">Connectors</a> → the <b>Secrets</b> card, or set the variable the
+        incident names in the worker's environment. Without it the task fails <i>before</i> the mock is ever
+        asked – and the incident names the reference and the variable it is missing.</p>
       <p data-l="en">The same card takes optional <b>starting entries</b> – the accounts and groups your process
-        expects to find. A joiner needs none, since it creates its own account; a leaver has nothing to disable in
-        an empty directory. Pick an LDIF or DSML file, or paste the content straight in – <b>there is no path to
+        expects to find. A joiner needs none while it only creates its own account; the moment it adds that
+        account to a group, the group has to be there or it fails with <code>no such object</code>. A leaver has
+        nothing to disable in an empty directory at all. Pick an LDIF or DSML file, or paste the content straight in – <b>there is no path to
         type</b>: Atlas stores the entries itself and puts them where the worker will find them. They are checked
         when you save, and Atlas tells you how many entries it read. If nothing comes to mind, <i>Example</i>
         gives you a small directory with two accounts and a group – enough to try a leaver against.</p>

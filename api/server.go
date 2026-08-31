@@ -53,6 +53,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -109,22 +110,12 @@ func temisRegistryFromEnv() *temis.Registry {
 // connectorEnvKey normalizes a connector name into its environment-variable
 // fragment: upper-case, with each run of non-alphanumeric characters collapsed to
 // a single underscore and leading/trailing underscores trimmed.
-func connectorEnvKey(name string) string {
-	var b strings.Builder
-	pendingSep := false
-	for _, r := range strings.ToUpper(name) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			if pendingSep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-			pendingSep = false
-			b.WriteRune(r)
-		} else {
-			pendingSep = true
-		}
-	}
-	return b.String()
-}
+//
+// The fold itself is [envname.Key], because a worker reads the variables this
+// renders and a connector has to name the one it could not resolve. Three packages
+// applying the same rule separately is a bug an operator meets as "I set that
+// variable and it still says it is missing".
+func connectorEnvKey(name string) string { return envname.Key(name) }
 
 //go:embed web
 var webFS embed.FS
@@ -583,6 +574,32 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // Passing the handler in makes that a decision this package owns rather than one
 // the wiring in cmd can make differently (ADR-0196).
 func WithMCP(h http.Handler) Option { return func(s *Server) { s.mcpHandler = h } }
+
+// mcpTransport is the MCP handler with one thing added: every request entering it
+// is stamped with mcpTransportHeader, which the adapter forwards on the API calls
+// its tools make. That is what lets the boundary tell a tool call apart from a
+// client driving /api/v1 with a token approved only for the transport — the two
+// carry the same credential and are otherwise the same request.
+//
+// Stamping rather than trusting: whatever the caller sent under that name is
+// replaced, so the marker is only ever a value this server put there. With
+// authentication off there is no internal token and the header is removed instead,
+// which keeps "no secret" from reading as "matched".
+//
+// The header goes on a clone, so the request the mux handed us is not mutated —
+// nothing downstream of this handler expects its headers to have been rewritten.
+func (s *Server) mcpTransport() http.Handler {
+	h := s.mcpHandler
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.Clone(r.Context())
+		if s.internalToken == "" {
+			r.Header.Del(mcpTransportHeader)
+		} else {
+			r.Header.Set(mcpTransportHeader, s.internalToken)
+		}
+		h.ServeHTTP(w, r)
+	})
+}
 
 // WithPublicFormsCORS allows the given web origins to call the unauthenticated
 // /public/forms endpoints cross-origin, so a process's start form can be embedded
@@ -2272,8 +2289,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// wiring is not a place where that decision should be makeable
 	// (ADR-0196).
 	if s.mcpHandler != nil {
-		mount(accessAuthenticated, roleAny, "/mcp", s.mcpHandler)
-		mount(accessAuthenticated, roleAny, "/mcp/", s.mcpHandler)
+		transport := s.mcpTransport()
+		mount(accessAuthenticated, roleAny, "/mcp", transport)
+		mount(accessAuthenticated, roleAny, "/mcp/", transport)
 	}
 
 	// Anything under /api/v1 that no route above claimed. Without this the UI's "/"
