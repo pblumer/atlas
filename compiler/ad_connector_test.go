@@ -340,3 +340,75 @@ func TestAdConnectorTaskNeedsADirectoryOneWayOrTheOther(t *testing.T) {
 		}
 	}
 }
+
+// The search operation reads: it addresses a base rather than an entry, and answers
+// "is this group there, and what is its DN?" — the question a membership change has
+// to settle before it can name a group (ADR-0166, amended a fifth time).
+func TestParseAdSearch(t *testing.T) {
+	cp, d := adDetail(t, `url="ldaps://dc" bindSecret="AD_BIND" operation="search"
+	    baseDN="ou=groups,dc=example,dc=com" filter="(&amp;(objectClass=group)(cn=Vertrieb))"
+	    scope="one" maxEntries="50" resultVariable="gruppe"`)
+	if got := cp.Intern(d.AdOp); got != "search" {
+		t.Errorf("operation = %q, want search", got)
+	}
+	if d.AdBaseDN.Literal != "ou=groups,dc=example,dc=com" {
+		t.Errorf("baseDN = %+v", d.AdBaseDN)
+	}
+	if d.AdFilter.Literal != "(&(objectClass=group)(cn=Vertrieb))" {
+		t.Errorf("filter = %+v", d.AdFilter)
+	}
+	if got := cp.Intern(d.AdScope); got != "one" {
+		t.Errorf("scope = %q, want one", got)
+	}
+	if d.AdMaxEntries != 50 {
+		t.Errorf("maxEntries = %d, want 50", d.AdMaxEntries)
+	}
+	if got := cp.Intern(d.ResultVar); got != "gruppe" {
+		t.Errorf("resultVariable = %q, want gruppe", got)
+	}
+	// A search addresses a subtree, not an entry, and needs no cookie: it is a read of
+	// what is there now, not of what changed.
+	if d.AdDN.Literal != "" || d.AdCookieVar != -1 {
+		t.Errorf("dn / cookieVariable = %q / %d, want neither for a search", d.AdDN.Literal, d.AdCookieVar)
+	}
+}
+
+// The two bounds a search does not have to author: the whole subtree, and the same
+// 1000-entry cap the LDAP connector applies.
+func TestAdSearchDefaults(t *testing.T) {
+	cp, d := adDetail(t, `url="ldaps://dc" operation="search" baseDN="dc=x" resultVariable="r"`)
+	if got := cp.Intern(d.AdScope); got != "sub" {
+		t.Errorf("scope = %q, want the whole subtree by default", got)
+	}
+	if d.AdMaxEntries != defaultAdSearchMaxEntries {
+		t.Errorf("maxEntries = %d, want the default %d", d.AdMaxEntries, defaultAdSearchMaxEntries)
+	}
+	// An operation that acts on one entry authors no scope at all, so nothing
+	// downstream can read one off a task that never meant it.
+	_, d2 := adDetail(t, `url="ldaps://dc" operation="disable" dn="cn=a"`)
+	if d2.AdScope != -1 {
+		t.Errorf("scope = %d, want none for a non-search", d2.AdScope)
+	}
+}
+
+func TestAdSearchValidation(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"no baseDN", `url="ldaps://dc" operation="search" resultVariable="r"`, "baseDN"},
+		{"no result variable", `url="ldaps://dc" operation="search" baseDN="dc=x"`, "resultVariable"},
+		{"unknown scope", `url="ldaps://dc" operation="search" baseDN="dc=x" resultVariable="r" scope="tief"`, "scope"},
+		{"scope on a write", `url="ldaps://dc" operation="disable" dn="cn=a" scope="sub"`, "scope"},
+		{"maxEntries negative", `url="ldaps://dc" operation="search" baseDN="dc=x" resultVariable="r" maxEntries="-1"`, "maxEntries"},
+		{"bad FEEL baseDN", `url="ldaps://dc" operation="search" baseDN="=" resultVariable="r"`, "baseDN"},
+		{"bad FEEL filter", `url="ldaps://dc" operation="search" baseDN="dc=x" filter="=" resultVariable="r"`, "filter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(adTaskBPMN(tc.attrs)))
+			if err == nil {
+				t.Fatalf("want an error mentioning %q, got none", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}

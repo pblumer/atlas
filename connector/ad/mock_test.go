@@ -521,3 +521,155 @@ func syncEntries(t *testing.T, out map[string]any) []any {
 	}
 	return entries
 }
+
+// The search a joiner process does before it puts anybody in a group: find the group,
+// take its DN, add the member. Against the mock the whole sequence runs with no domain
+// controller anywhere near it.
+func TestMockSearchFindsTheGroupAMembershipChangeNeeds(t *testing.T) {
+	d := ad.NewMockDirectory(
+		ad.Entry{DN: "cn=Vertrieb,ou=groups,dc=example,dc=com", Attributes: map[string][]string{
+			"objectClass": {"top", "group"}, "cn": {"Vertrieb"},
+		}},
+		ad.Entry{DN: "cn=Einkauf,ou=groups,dc=example,dc=com", Attributes: map[string][]string{
+			"objectClass": {"top", "group"}, "cn": {"Einkauf"},
+		}},
+		ad.Entry{DN: arnoDN, Attributes: map[string][]string{"objectClass": {"top", "user"}}},
+	)
+	out := run(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN, Scope: "sub",
+		Filter: "(&(objectClass=group)(cn=Vertrieb))", ResultVariable: "gruppe",
+	})
+	res, ok := out["gruppe"].(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v, want the search's own object", out)
+	}
+	if res["found"] != true || res["count"] != 1 {
+		t.Errorf("found/count = %v / %v, want the one group", res["found"], res["count"])
+	}
+	if res["dn"] != "cn=Vertrieb,ou=groups,dc=example,dc=com" {
+		t.Errorf("dn = %v, want the group's own distinguished name", res["dn"])
+	}
+	// And the DN it handed back is the one the next task can act on.
+	run(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "add-group-member",
+		DN: res["dn"].(string), MemberDN: arnoDN,
+	})
+	if got := entry(t, d, "cn=Vertrieb,ou=groups,dc=example,dc=com").Attributes["member"]; len(got) != 1 || got[0] != arnoDN {
+		t.Errorf("member = %v, want the account the search's DN let us add", got)
+	}
+}
+
+// A group that is not there is an empty answer, not a failure — that is the question
+// the operation exists to answer.
+func TestMockSearchFindingNothingIsNotAFailure(t *testing.T) {
+	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN, Attributes: map[string][]string{"cn": {"Arno"}}})
+	out := run(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN,
+		Filter: "(cn=Gibtsnicht)", ResultVariable: "treffer",
+	})
+	res := out["treffer"].(map[string]any)
+	if res["found"] != false || res["count"] != 0 || res["dn"] != "" {
+		t.Errorf("result = %v, want an empty answer", res)
+	}
+}
+
+// Scope is applied, not ignored: a mock that answered "one" with the whole subtree
+// would hand a process entries the real directory would not.
+func TestMockSearchAppliesTheScope(t *testing.T) {
+	d := ad.NewMockDirectory(
+		ad.Entry{DN: usersDN, Attributes: map[string][]string{"ou": {"users"}}},
+		ad.Entry{DN: arnoDN, Attributes: map[string][]string{"cn": {"Arno"}}},
+		ad.Entry{DN: "cn=Clara," + usersDN, Attributes: map[string][]string{"cn": {"Clara"}}},
+		ad.Entry{DN: "cn=Berta,ou=extern," + usersDN, Attributes: map[string][]string{"cn": {"Berta"}}},
+	)
+	counts := map[string]int{}
+	for _, scope := range []string{"base", "one", "sub"} {
+		out := run(t, d, ad.Job{
+			URL: mockTLSURL, Operation: "search", BaseDN: usersDN, Scope: scope,
+			ResultVariable: "r",
+		})
+		counts[scope] = out["r"].(map[string]any)["count"].(int)
+	}
+	// base is the OU itself; one is its two immediate children and *not* the OU, the
+	// way LDAP's single-level scope reads; sub is the OU and everything below it.
+	if counts["base"] != 1 || counts["one"] != 2 || counts["sub"] != 4 {
+		t.Errorf("base/one/sub = %d / %d / %d, want 1 / 2 / 4", counts["base"], counts["one"], counts["sub"])
+	}
+}
+
+// A deleted entry is gone from a search even though a delta still reports it: AD
+// answers a search from the live directory, and an existence check that found a
+// tombstone would say an account is there that nobody can use.
+func TestMockSearchDoesNotFindATombstone(t *testing.T) {
+	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN, Attributes: map[string][]string{"cn": {"Arno"}}})
+	run(t, d, ad.Job{URL: mockTLSURL, Operation: "delete", DN: arnoDN})
+	out := run(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN, Filter: "(cn=Arno)",
+		ResultVariable: "r",
+	})
+	if res := out["r"].(map[string]any); res["found"] != false {
+		t.Errorf("result = %v, want the deleted account not to be found", res)
+	}
+}
+
+// Exceeding the cap fails rather than truncating: a short result set is a wrong
+// answer, and a process branching on the count would branch on it confidently.
+func TestMockSearchRefusesToTruncate(t *testing.T) {
+	d := ad.NewMockDirectory(
+		ad.Entry{DN: arnoDN, Attributes: map[string][]string{"objectClass": {"user"}}},
+		ad.Entry{DN: "cn=Berta," + usersDN, Attributes: map[string][]string{"objectClass": {"user"}}},
+	)
+	err := runErr(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN, Filter: "(objectClass=user)",
+		MaxEntries: 1, ResultVariable: "r",
+	})
+	if !strings.Contains(err.Error(), "cap") {
+		t.Errorf("error = %v, want it to name the cap it exceeded", err)
+	}
+}
+
+// A filter the mock cannot apply is refused rather than dropped, for the same reason
+// a dropped filter is refused everywhere else here: silently answering a wider
+// question hands a process more than the real directory would.
+func TestMockSearchRefusesAFilterItCannotApply(t *testing.T) {
+	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN})
+	err := runErr(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN,
+		Filter: "(badPwdCount>=3)", ResultVariable: "r",
+	})
+	if !strings.Contains(err.Error(), "filter") {
+		t.Errorf("error = %v, want it to name the filter it could not apply", err)
+	}
+}
+
+// The journal carries the search, so a mockup run shows what was asked as well as
+// what was written.
+func TestMockSearchIsJournaled(t *testing.T) {
+	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN, Attributes: map[string][]string{"cn": {"Arno"}}})
+	run(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: baseDN, Filter: "(cn=Arno)",
+		ResultVariable: "r",
+	})
+	var found bool
+	for _, op := range d.Operations() {
+		if op.Op == "search" && op.DN == baseDN && strings.Contains(op.Detail, "(cn=Arno)") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no search in the journal: %+v", d.Operations())
+	}
+}
+
+// An empty base is refused before it reaches the directory: it is what a FEEL baseDN
+// over an unset variable resolves to, and a server would answer it either with a
+// refusal or with the whole tree.
+func TestMockSearchRefusesAnEmptyBase(t *testing.T) {
+	d := ad.NewMockDirectory(ad.Entry{DN: arnoDN})
+	err := runErr(t, d, ad.Job{
+		URL: mockTLSURL, Operation: "search", BaseDN: "", ResultVariable: "r",
+	})
+	if !strings.Contains(err.Error(), "baseDN") {
+		t.Errorf("error = %v, want it to name the missing baseDN", err)
+	}
+}

@@ -115,6 +115,30 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			fields: map[string]any{"operation": "add-group-member", "memberDN": "cn=ada,dc=example,dc=com"},
 		},
 		{
+			// A task that names a Console-configured directory instead of carrying its
+			// own url (ADR-0206). The *name* is what has to travel: the worker holds
+			// that directory's URL and bind credentials under it, so a payload that
+			// dropped the name would leave the worker with nothing to dial.
+			name:    "ad-named-directory",
+			element: `<atlas:adConnector connector="prod-forest" operation="disable" dn="cn=Arno,dc=example,dc=com"/>`,
+			jobType: compiler.AdJobType,
+			want:    "ad",
+			fields:  map[string]any{"connector": "prod-forest", "operation": "disable"},
+		},
+		{
+			// The search a membership change does first. The scope travels with it,
+			// because "is this group anywhere under here" and "is it directly under
+			// here" are different questions (ADR-0166, amended a fifth time).
+			name:    "ad-search",
+			element: `<atlas:adConnector url="ldaps://dc.example.com" operation="search" baseDN="ou=groups,dc=example,dc=com" scope="one" filter="(cn=Vertrieb)" resultVariable="gruppe"/>`,
+			jobType: compiler.AdJobType,
+			want:    "ad",
+			fields: map[string]any{
+				"operation": "search", "baseDN": "ou=groups,dc=example,dc=com",
+				"scope": "one", "filter": "(cn=Vertrieb)", "resultVariable": "gruppe",
+			},
+		},
+		{
 			name:    "webscrape",
 			element: `<atlas:webscrapeConnector url="https://example.com" selector=".price" resultVariable="hits"/>`,
 			jobType: compiler.WebScrapeJobType,

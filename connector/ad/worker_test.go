@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"unicode/utf16"
@@ -37,6 +38,8 @@ type fakeConn struct {
 	delDN                      string
 	syncReq                    *ad.DirSyncRequest
 	syncRes                    ad.DirSyncResult
+	searchReq                  *ad.SearchRequest
+	searchRes                  []ad.Entry
 	closed                     bool
 }
 
@@ -57,6 +60,10 @@ func (c *fakeConn) Delete(dn string) error { c.delDN = dn; return c.err }
 func (c *fakeConn) DirSync(req ad.DirSyncRequest) (ad.DirSyncResult, error) {
 	c.syncReq = &req
 	return c.syncRes, c.err
+}
+func (c *fakeConn) Search(req ad.SearchRequest) ([]ad.Entry, error) {
+	c.searchReq = &req
+	return c.searchRes, c.err
 }
 func (c *fakeConn) Close() error { c.closed = true; return nil }
 
@@ -803,4 +810,205 @@ func TestAdConnectorSeesInputMappedLocal(t *testing.T) {
 	if got := conn.addAt["cn"]; len(got) != 1 || got[0] != "Arno" {
 		t.Errorf("add attrs cn = %v, want the input-mapped entry's cn", got)
 	}
+}
+
+// TestAdSearch is the read a membership change has to do first: find the group, and
+// hand the process its distinguished name so the next task can name it.
+func TestAdSearch(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "search", BaseDN: lit("ou=groups,dc=example,dc=com"),
+		Filter: lit("(&(objectClass=group)(cn=Vertrieb))"), Scope: "one",
+		MaxEntries: 50, ResultVar: "gruppe",
+	}, true)
+
+	// Returned out of order on purpose: LDAP promises none, and the result a process
+	// branches on must not depend on how the server walked its index.
+	conn := &fakeConn{searchRes: []ad.Entry{
+		{DN: "cn=Vertrieb,ou=intern,ou=groups,dc=example,dc=com", Attributes: map[string][]string{"cn": {"Vertrieb"}}},
+		{DN: "cn=Vertrieb,ou=extern,ou=groups,dc=example,dc=com", Attributes: map[string][]string{"cn": {"Vertrieb"}}},
+	}}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+
+	if conn.searchReq == nil {
+		t.Fatal("no search was performed")
+	}
+	if conn.searchReq.BaseDN != "ou=groups,dc=example,dc=com" || conn.searchReq.Scope != "one" {
+		t.Errorf("request = %+v", conn.searchReq)
+	}
+	if conn.searchReq.Filter != "(&(objectClass=group)(cn=Vertrieb))" {
+		t.Errorf("filter = %q", conn.searchReq.Filter)
+	}
+	if conn.searchReq.MaxEntries != 50 {
+		t.Errorf("maxEntries = %d, want the authored cap", conn.searchReq.MaxEntries)
+	}
+	if conn.searchReq.PageSize == 0 {
+		t.Error("the search was not paged; a domain controller's size limit would refuse it")
+	}
+
+	var res struct {
+		Found   bool   `json:"found"`
+		Count   int    `json:"count"`
+		DN      string `json:"dn"`
+		Entries []struct {
+			DN         string              `json:"dn"`
+			Attributes map[string][]string `json:"attributes"`
+		} `json:"entries"`
+	}
+	vars := instanceVars(t, store)
+	if err := json.Unmarshal([]byte(vars["gruppe"]), &res); err != nil {
+		t.Fatalf("result is not JSON: %v (%s)", err, vars["gruppe"])
+	}
+	if !res.Found || res.Count != 2 {
+		t.Errorf("found/count = %v / %d, want the two entries reported", res.Found, res.Count)
+	}
+	// DN-sorted, so dn is the same entry on a redelivery rather than whichever one
+	// arrived first.
+	if res.DN != "cn=Vertrieb,ou=extern,ou=groups,dc=example,dc=com" {
+		t.Errorf("dn = %q, want the first entry in DN order", res.DN)
+	}
+	if len(res.Entries) != 2 || res.Entries[0].DN != res.DN {
+		t.Fatalf("entries = %+v", res.Entries)
+	}
+	if res.Entries[0].Attributes["cn"][0] != "Vertrieb" {
+		t.Errorf("attributes did not survive: %+v", res.Entries[0])
+	}
+}
+
+// Finding nothing is a result, not a failure: checking whether a group exists is the
+// whole reason the operation is there, so an empty answer completes the job with
+// found=false rather than parking the instance on an incident.
+func TestAdSearchFindingNothingIsAnAnswer(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "search", BaseDN: lit("ou=groups,dc=x"),
+		Filter: lit("(cn=Gibtsnicht)"), ResultVar: "gruppe",
+	}, true)
+	drive(t, cp, jobType, &fakeDialer{conn: &fakeConn{}}, noSecret, store, log)
+
+	var res struct {
+		Found   bool   `json:"found"`
+		Count   int    `json:"count"`
+		DN      string `json:"dn"`
+		Entries []any  `json:"entries"`
+	}
+	vars := instanceVars(t, store)
+	if err := json.Unmarshal([]byte(vars["gruppe"]), &res); err != nil {
+		t.Fatalf("result is not JSON: %v (%s)", err, vars["gruppe"])
+	}
+	if res.Found || res.Count != 0 || res.DN != "" || len(res.Entries) != 0 {
+		t.Errorf("result = %+v, want an empty answer rather than an error", res)
+	}
+	if mustActiveProcs(t, store) != 1 {
+		t.Error("the instance did not survive an empty search")
+	}
+}
+
+// A search that the directory refuses fails the job, so the incident says what the
+// directory said rather than the process continuing on an empty result.
+func TestAdSearchFailureParksTheJob(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := adProcess(t, compiler.AdConfig{
+		URL: lit(adURL), Op: "search", BaseDN: lit("ou=weg,dc=x"), ResultVar: "gruppe",
+	}, false)
+	conn := &fakeConn{err: context.DeadlineExceeded}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log)
+
+	if mustActiveProcs(t, store) != 1 {
+		t.Error("want the job parked on an incident")
+	}
+}
+
+// TestExampleAdGruppenzuweisung runs the shipped examples/ad-gruppenzuweisung.bpmn
+// end to end against the mock directory: the two searches, the gateways that branch on
+// what they found, and the membership change that addresses the group by the DN a
+// search handed back. It is the whole point of the operation in one run — and it keeps
+// the example a runnable scenario rather than a file that merely compiles.
+func TestExampleAdGruppenzuweisung(t *testing.T) {
+	const (
+		userDN  = "cn=Anna Maier,ou=users,dc=example,dc=com"
+		groupDN = "cn=Vertrieb,ou=groups,dc=example,dc=com"
+	)
+	startVars := []model.VariableValue{
+		{Name: "kuerzel", Kind: model.VarString, Text: "amaier"},
+		{Name: "gruppenName", Kind: model.VarString, Text: "Vertrieb"},
+		{Name: "personenOU", Kind: model.VarString, Text: "ou=users,dc=example,dc=com"},
+		{Name: "gruppenOU", Kind: model.VarString, Text: "ou=groups,dc=example,dc=com"},
+		{Name: "verzeichnis", Kind: model.VarString, Text: adURL},
+		{Name: "bindDN", Kind: model.VarString, Text: "cn=svc,dc=example,dc=com"},
+	}
+	konto := ad.Entry{DN: userDN, Attributes: map[string][]string{
+		"objectClass": {"top", "person", "user"}, "sAMAccountName": {"amaier"},
+	}}
+	gruppe := ad.Entry{DN: groupDN, Attributes: map[string][]string{
+		"objectClass": {"top", "group"}, "cn": {"Vertrieb"},
+	}}
+
+	for _, tc := range []struct {
+		name string
+		seed []ad.Entry
+	}{
+		{"group already there", []ad.Entry{konto, gruppe}},
+		// The other branch: the group is created first, and the membership is then set
+		// on the DN the process itself chose rather than on one a search returned.
+		{"group created on the way", []ad.Entry{konto}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			log, store := openStore(t)
+			cp := parseExample(t, "../../examples/ad-gruppenzuweisung.bpmn")
+			dir := ad.NewMockDirectory(tc.seed...)
+			drive(t, cp, compiler.AdJobTypeIndex, dir,
+				func(string) string { return "s3cr3t" }, store, log, startVars...)
+
+			if n := mustActiveProcs(t, store); n != 0 {
+				t.Fatalf("live instances = %d, want the process to have run to its end", n)
+			}
+			var members []string
+			for _, e := range dir.Entries() {
+				if e.DN == groupDN {
+					members = e.Attributes["member"]
+				}
+			}
+			if len(members) != 1 || members[0] != userDN {
+				t.Errorf("member of %s = %v, want the account the search found", groupDN, members)
+			}
+		})
+	}
+}
+
+// An account nobody can find ends the process at "Benutzer unbekannt" — a path in the
+// diagram rather than an incident, because finding nothing is the search's answer.
+func TestExampleAdGruppenzuweisungUnknownAccount(t *testing.T) {
+	log, store := openStore(t)
+	cp := parseExample(t, "../../examples/ad-gruppenzuweisung.bpmn")
+	dir := ad.NewMockDirectory()
+	drive(t, cp, compiler.AdJobTypeIndex, dir, func(string) string { return "s3cr3t" }, store, log,
+		model.VariableValue{Name: "kuerzel", Kind: model.VarString, Text: "gibtsnicht"},
+		model.VariableValue{Name: "gruppenName", Kind: model.VarString, Text: "Vertrieb"},
+		model.VariableValue{Name: "personenOU", Kind: model.VarString, Text: "ou=users,dc=example,dc=com"},
+		model.VariableValue{Name: "gruppenOU", Kind: model.VarString, Text: "ou=groups,dc=example,dc=com"},
+		model.VariableValue{Name: "verzeichnis", Kind: model.VarString, Text: adURL},
+		model.VariableValue{Name: "bindDN", Kind: model.VarString, Text: "cn=svc,dc=example,dc=com"},
+	)
+	if n := mustActiveProcs(t, store); n != 0 {
+		t.Errorf("live instances = %d, want the process ended rather than parked", n)
+	}
+	if len(dir.Entries()) != 0 {
+		t.Errorf("the directory was written to despite an unknown account: %v", dir.Entries())
+	}
+}
+
+// parseExample compiles a shipped model, so a test can run the file a reader opens.
+func parseExample(t *testing.T, path string) *compiler.CompiledProcess {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+	cp, err := compiler.Parse(1, 1, f)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return cp
 }

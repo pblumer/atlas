@@ -25,9 +25,10 @@ import (
 // production. So a replayed create fails with "entry already exists" (delivery is
 // at-least-once, and that is the failure a create actually has), a password may only
 // be written over an encrypted channel and must carry AD's own UTF-16LE encoding, a
-// group member cannot be added twice, a container with children cannot be deleted,
-// and DirSync is answered only at a naming context root — the one error a first sync
-// almost always earns.
+// group member cannot be added twice, a container with children cannot be deleted, a
+// search applies the scope and filter it was given rather than handing back the whole
+// forest, and DirSync is answered only at a naming context root — the one error a
+// first sync almost always earns.
 //
 // **The password is the exception, deliberately.** A set-password is checked and then
 // *not kept*: the entry records that one was set (`pwdLastSet`), never the value, and
@@ -36,11 +37,13 @@ import (
 //
 // **What it is not.** There is no schema, no ACL, no password policy, no replication
 // and no naming context beyond the DirSync check above — an add whose parent does not
-// exist is accepted, because a mock that demanded a seeded OU chain would cost every
-// test a fixture and prove nothing. Only the equality, presence and trailing-wildcard
-// parts of an LDAP filter are applied; anything else is refused rather than ignored,
-// because a filter silently dropped hands a process more than the real directory
-// would. Nothing here is durable: it is memory, and a restart is an empty forest.
+// exist is accepted, and a search under a base nobody created finds nothing rather
+// than refusing, because a mock that demanded a seeded OU chain would cost every test
+// a fixture and prove nothing. Of an LDAP filter it applies equality, presence,
+// wildcards and the &/|/! that compose them; anything else — ordering, approximate,
+// extensible matches — is refused rather than ignored, because a filter silently
+// dropped hands a process more than the real directory would. Nothing here is
+// durable: it is memory, and a restart is an empty forest.
 
 // maxMockOperations bounds the operation journal. A mock worker left running is a
 // long-lived process, and a stand-in for a directory must not grow into the memory of
@@ -61,7 +64,7 @@ const mockCookiePrefix = "atlas-ad-mock:"
 // password redacted.
 type MockOperation struct {
 	Seq    uint64
-	Op     string // bind, add, modify, modifydn, delete, dirsync
+	Op     string // bind, add, modify, modifydn, delete, dirsync, search
 	DN     string
 	Detail string
 }
@@ -278,6 +281,9 @@ func (c *mockConn) ModifyDN(dn, newRDN, newSuperior string) error {
 func (c *mockConn) Delete(dn string) error { return c.dir.del(c.forest, dn) }
 func (c *mockConn) DirSync(req DirSyncRequest) (DirSyncResult, error) {
 	return c.dir.dirSync(c.forest, req)
+}
+func (c *mockConn) Search(req SearchRequest) ([]Entry, error) {
+	return c.dir.search(c.forest, req)
 }
 
 // Close is a no-op: the directory outlives the connection, which is the whole point —
@@ -500,6 +506,100 @@ func (d *MockDirectory) del(f *mockForest, dn string) error {
 		e.attrs = map[string][]string{"isDeleted": {"TRUE"}}
 		return "delete", dn, "", nil
 	})
+}
+
+// search answers what is under a base right now: the live entries the scope selects
+// and the filter matches, DN-sorted, capped.
+//
+// Two ways it is faithful, and one way it deliberately is not. It applies the filter
+// and the scope, because a mock that returned more than the real directory would teach
+// a process to be wrong; and it refuses to truncate at the cap, because a short result
+// set is a wrong answer rather than a partial one. But it does **not** require the base
+// itself to exist: this directory accepts an add whose parent was never created (see
+// the note on the type), so demanding a seeded OU chain here would refuse the very
+// mockup runs the rest of the mock is built to allow. A base with nothing under it
+// finds nothing, which is also the answer an existence check is asking for.
+func (d *MockDirectory) search(f *mockForest, req SearchRequest) ([]Entry, error) {
+	d.mu.Lock()
+	out, err := d.searchLocked(f, req)
+	if err != nil {
+		d.mu.Unlock()
+		return nil, err
+	}
+	rec := d.record("search", req.BaseDN, fmt.Sprintf("%s %s → %d entr%s", scopeName(req.Scope), filterDetail(req.Filter), len(out), plural(len(out))))
+	obs := d.observe
+	d.mu.Unlock()
+	if obs != nil {
+		obs(rec)
+	}
+	return out, nil
+}
+
+// searchLocked is the search itself. The caller holds the lock.
+func (d *MockDirectory) searchLocked(f *mockForest, req SearchRequest) ([]Entry, error) {
+	filter, err := parseFilter(req.Filter)
+	if err != nil {
+		return nil, err
+	}
+	baseKey := normalizeDN(req.BaseDN)
+	baseDepth := len(rdnComponents(req.BaseDN))
+	out := make([]Entry, 0, len(f.entries))
+	for k, e := range f.entries {
+		// A tombstone is not in the directory any more. It is a delta's business, not
+		// a search's: an existence check must not find an entry that was deleted.
+		if e.deleted || !inScope(req.Scope, k, baseKey, len(rdnComponents(e.dn)), baseDepth) {
+			continue
+		}
+		if !filter.match(e.attrs) {
+			continue
+		}
+		out = append(out, Entry{DN: e.dn, Attributes: copyAttrs(e.attrs)})
+	}
+	if max := int(req.MaxEntries); max > 0 && len(out) > max {
+		return nil, fmt.Errorf("ad: mock: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", req.BaseDN, max)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].DN < out[j].DN })
+	return out, nil
+}
+
+// inScope reports whether an entry is within the search scope: base is the entry at
+// the base itself, one its immediate children, and sub — the default — the base and
+// everything below it.
+func inScope(scope, key, baseKey string, depth, baseDepth int) bool {
+	below := strings.HasSuffix(key, ","+baseKey)
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "base":
+		return key == baseKey
+	case "one":
+		return below && depth == baseDepth+1
+	default:
+		return key == baseKey || below
+	}
+}
+
+// scopeName renders a scope for the journal, naming the default rather than leaving
+// the line silent about which one ran.
+func scopeName(scope string) string {
+	if s := strings.ToLower(strings.TrimSpace(scope)); s != "" {
+		return s
+	}
+	return "sub"
+}
+
+// filterDetail renders a filter for the journal, saying so when there is none.
+func filterDetail(filter string) string {
+	if f := strings.TrimSpace(filter); f != "" {
+		return f
+	}
+	return "(objectClass=*)"
+}
+
+// plural is the "y"/"ies" of the journal's entry count.
+func plural(n int) string {
+	if n == 1 {
+		return "y"
+	}
+	return "ies"
 }
 
 // dirSync performs one DirSync pass: everything under the naming context that

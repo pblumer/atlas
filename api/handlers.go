@@ -4736,11 +4736,16 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			return nil
 		}
 		return &connectorPayload{Kind: "ad", Fields: map[string]any{
-			"url": j.URL, "bindDN": j.BindDN, "bindSecretRef": j.BindSecret,
+			// The connector name, for a task that addresses a Console-configured
+			// directory instead of carrying its own url (ADR-0206): the worker holds
+			// that directory's URL and credentials under this name, so without it the
+			// job reaches a worker with nothing to dial.
+			"connector": j.Connector,
+			"url":       j.URL, "bindDN": j.BindDN, "bindSecretRef": j.BindSecret,
 			"startTLS": j.StartTLS, "operation": j.Operation, "dn": j.DN,
 			"memberDN": j.MemberDN, "newDN": j.NewDN, "newPassword": j.NewPassword,
 			"attributes": j.Attributes, "baseDN": j.BaseDN, "filter": j.Filter,
-			"cookie": j.Cookie, "cookieVariable": j.CookieVariable,
+			"scope": j.Scope, "cookie": j.Cookie, "cookieVariable": j.CookieVariable,
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
 			"resultVariable": j.ResultVariable,
 		}}

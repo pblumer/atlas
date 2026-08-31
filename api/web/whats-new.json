@@ -2,6 +2,51 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "the-active-directory-worker-type-can-search",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Active Directory: look an account or a group up first",
+        "de": "Active Directory: Konto oder Gruppe zuerst nachschlagen"
+      },
+      "summary": {
+        "en": "A new operation, Find entry (search), asks the directory whether an account or a group is there — and hands back its full name in the tree, ready for the next step to use. That is what a membership change was missing: you can only put somebody into a group once you know the group exists and where it sits. Finding nothing is an answer, not an error: the step completes and a gateway takes the other path.",
+        "de": "Ein neuer Vorgang, Eintrag suchen, fragt das Verzeichnis, ob es ein Konto oder eine Gruppe gibt — und liefert deren vollständigen Namen im Verzeichnisbaum gleich mit, verwendbar im nächsten Schritt. Genau das fehlte einer Gruppenzuweisung: jemanden in eine Gruppe aufzunehmen geht erst, wenn feststeht, dass es die Gruppe gibt und wo sie liegt. Nichts gefunden ist dabei eine Antwort und kein Fehler: der Schritt wird abgeschlossen, und ein Gateway nimmt den anderen Weg."
+      },
+      "link": {
+        "label": "ADR-0166",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0166-active-directory-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and put a service task on the canvas.",
+          "In Implement, choose the Active Directory Connector, then Operation → Find entry (search).",
+          "Set the Base DN to where you want to look (e.g. ou=groups,dc=example,dc=com), the Scope, and a Filter such as (&(objectClass=group)(cn=Vertrieb)).",
+          "Name a Result variable, e.g. gruppe.",
+          "Branch on =gruppe.found with an exclusive gateway, and give the next task's Target DN the value =gruppe.dn."
+        ],
+        "de": [
+          "Modeler öffnen und einen Service-Task auf die Fläche ziehen.",
+          "Unter Implement den Active Directory Connector wählen, dann Operation → Find entry (search).",
+          "Base DN setzen, wo gesucht werden soll (z.B. ou=groups,dc=example,dc=com), dazu Scope und einen Filter wie (&(objectClass=group)(cn=Vertrieb)).",
+          "Eine Result variable vergeben, z.B. gruppe.",
+          "Mit einem exklusiven Gateway auf =gruppe.found verzweigen und dem nächsten Task als Target DN den Wert =gruppe.dn geben."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "sign-in-with-your-identity-provider",
       "version": "Unreleased",
       "date": null,
@@ -71,6 +116,35 @@
           "de": "Worker öffnen"
         },
         "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "an-ad-task-naming-a-console-configured-directory-reached-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An AD task that names a configured directory now reaches it",
+        "de": "Ein AD-Task, der ein eingerichtetes Verzeichnis nennt, erreicht es jetzt"
+      },
+      "summary": {
+        "en": "If a task pointed at an Active Directory you had set up under Workers — by its name, instead of writing the server address into the model — the name was lost on the way to the worker, and the task failed with \"empty url\". It arrives now. The Modeler also stopped dropping that name when you opened such a task and pressed Save.",
+        "de": "Wenn ein Task auf ein Active Directory zeigte, das Sie unter Workers eingerichtet hatten — über dessen Namen, statt die Serveradresse ins Modell zu schreiben — ging der Name auf dem Weg zum Worker verloren, und der Task scheiterte mit „empty url\". Er kommt jetzt an. Und der Modeler wirft den Namen nicht mehr weg, wenn Sie so einen Task öffnen und speichern."
+      },
+      "link": {
+        "label": "ADR-0206",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0206-ad-as-a-console-connector.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console"
       }
     },
     {
@@ -276,57 +350,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "api-tokens-a-credential-a-machine-can-actually-be-given",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "API tokens: a credential you can hand to a machine",
-        "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
-      },
-      "summary": {
-        "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
-        "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-login-is-throttled-and-there-is-a-security-audit-trail",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Password guessing is slowed down, and sign-ins are recorded",
-        "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
-      },
-      "summary": {
-        "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
-        "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Organization"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }
