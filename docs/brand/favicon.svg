@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-label="Atlas">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Atlas">
   <title>Atlas</title>
-  <!-- Bolder hex + flow so it stays legible down to 16px. -->
-  <path d="M128 34 210 82 210 174 128 222 46 174 46 82Z" stroke="#2563EB" stroke-width="22" stroke-linejoin="round"/>
-  <path d="M102 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
-  <path d="M154 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="102" cy="104" r="13" fill="#2563EB"/>
-  <circle cx="154" cy="104" r="13" fill="#2563EB"/>
-  <circle cx="128" cy="162" r="15" fill="#2563EB"/>
+  <!-- Same mark as atlas-mark.svg, drawn heavier: the peak fills more of the tile
+       and the cross is thicker, so both survive at 16px where fine detail dies. -->
+  <rect width="256" height="256" rx="52" fill="#000"/>
+  <path fill="#fff" fill-rule="evenodd"
+        d="M128 26 244 214 12 214Z
+           M128 172 178 214 78 214Z
+           M111 72H145V99H172V133H145V160H111V133H84V99H111Z"/>
 </svg>

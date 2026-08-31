@@ -135,3 +135,59 @@ test("a viewer is not offered the edit control", async ({ page }) => {
   await expect(page.locator(".panorama-properties")).toContainText("Billing");
   await expect(page.getByRole("button", { name: "Change" })).toHaveCount(0);
 });
+
+// The C4 projection (ADR-0211 §8). What makes a projection trustworthy is that it
+// says what it could not express, so the loss report is asserted as hard as the
+// structure.
+const c4Projection = {
+  notation: "c4-projection", sourceNotation: "archimate-3.2",
+  sourceModelId: modelId, sourceRevision: 3, mappingVersion: 1, readOnly: true,
+  elements: [
+    { id: "app-orders", type: "SoftwareSystem", name: "Order Service", sourceType: "ApplicationComponent" },
+    { id: "db-1", type: "Container", name: "Order database", parent: "app-orders", sourceType: "Node" },
+  ],
+  relationships: [
+    { id: "r-1", source: "app-orders", target: "db-1", name: "reads", sourceType: "Access" },
+  ],
+  dropped: [
+    { id: "bp-fulfil", sourceType: "BusinessProcess", name: "Fulfil order",
+      reason: "C4 has no concept for an ArchiMate BusinessProcess" },
+  ],
+};
+
+test("projects into C4 and says what it could not express", async ({ page }) => {
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/applications") {
+      return route.fulfill({ json: [{ id: "app-1", name: "EA", myRole: "owner" }] });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}`) {
+      return route.fulfill({ json: { id: modelId, applicationId: "app-1", name: "Bound landscape", notation: "archimate-3.2", revision: 3 } });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/xml`) {
+      return route.fulfill({ contentType: "application/xml", body: xml });
+    }
+    if (path === `/api/v1/panorama/models/${modelId}/c4`) return route.fulfill({ json: c4Projection });
+    return route.fulfill({ json: [] });
+  });
+
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await page.getByRole("button", { name: "C4 projection" }).click();
+
+  const panel = page.locator(".c4-panel");
+  // Structure, with C4's nesting rather than an arrow for the composition.
+  await expect(panel).toContainText("SoftwareSystem");
+  await expect(panel).toContainText("Order Service");
+  await expect(panel.locator(".c4-tree .c4-tree")).toContainText("Order database");
+
+  // The loss report is the contractual half and is never a footnote.
+  await expect(panel).toContainText("Not projected (1)");
+  await expect(panel).toContainText("Fulfil order");
+  await expect(panel).toContainText("no concept for an ArchiMate BusinessProcess");
+
+  // It says it is a projection of a named revision, so a picture cannot circulate
+  // as though it were the authored artefact.
+  await expect(panel).toContainText("revision 3");
+  await expect(panel).toContainText("Nothing here is authored");
+});

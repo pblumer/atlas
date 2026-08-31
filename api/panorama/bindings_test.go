@@ -218,3 +218,48 @@ func TestExtractBindingsRefusesAnOversizedDocument(t *testing.T) {
 		t.Error("oversized document accepted")
 	}
 }
+
+// The overlay shows what the architect called a thing, so extraction carries the
+// element's own name alongside its bindings. Without it the mesh could only ever
+// show Atlas's name for a resource, and a modeled-but-absent element would have no
+// name at all — Atlas has none to offer for something it does not have.
+func TestExtractBindingsCarriesTheElementName(t *testing.T) {
+	set, err := ExtractBindings(model(twoDefs))
+	if err != nil {
+		t.Fatalf("ExtractBindings: %v", err)
+	}
+	names := map[string]string{}
+	for _, b := range set.Bindings {
+		names[b.ElementID] = b.ElementName
+	}
+	if names["app-1"] != "Order Service" || names["bp-1"] != "Fulfil order" {
+		t.Errorf("element names = %v", names)
+	}
+}
+
+// A model's own name, and a relationship's, must not be mistaken for an element's:
+// they are different <name> elements in the same document.
+func TestExtractBindingsDoesNotBorrowAnotherElementsName(t *testing.T) {
+	set, err := ExtractBindings(model(`  <elements>
+    <element identifier="bp-1" xsi:type="BusinessProcess">
+      <properties>
+        <property propertyDefinitionRef="p-proc"><value>order</value></property>
+      </properties>
+    </element>
+  </elements>
+  <propertyDefinitions>
+    <propertyDefinition identifier="p-proc" type="string"><name>atlas.processId</name></propertyDefinition>
+  </propertyDefinitions>
+`))
+	if err != nil {
+		t.Fatalf("ExtractBindings: %v", err)
+	}
+	if len(set.Bindings) != 1 {
+		t.Fatalf("bindings = %#v", set.Bindings)
+	}
+	// This element has no name of its own; it must not inherit the model's or the
+	// property definition's.
+	if got := set.Bindings[0].ElementName; got != "" {
+		t.Errorf("element name = %q, want empty rather than borrowed", got)
+	}
+}

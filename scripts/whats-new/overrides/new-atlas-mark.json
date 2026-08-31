@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Console",
+    "Organization"
+  ],
+  "title": {
+    "en": "Atlas has a new mark",
+    "de": "Atlas hat eine neue Marke"
+  },
+  "summary": {
+    "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
+    "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
+  }
+}

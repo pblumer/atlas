@@ -35,7 +35,7 @@ func TestMeshHandleGraphServesTheDerivedGraph(t *testing.T) {
 			Applications: []Application{app("a1", "Billing")},
 			Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
 		}, nil
-	}, 0)
+	}, nil, 0)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -58,7 +58,7 @@ func TestMeshHandleGraphServesTheDerivedGraph(t *testing.T) {
 func TestMeshHandleGraphReportsACollectorFailure(t *testing.T) {
 	mesh := NewMesh(meshLoop(t), func(*http.Request) (Landscape, error) {
 		return Landscape{}, errors.New("store is on fire")
-	}, 0)
+	}, nil, 0)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -82,7 +82,7 @@ func TestMeshHandleGraphRefusesWhenTheLoopIsClosing(t *testing.T) {
 	mesh := NewMesh(stoppedLoop(), func(*http.Request) (Landscape, error) {
 		collected = true
 		return Landscape{}, nil
-	}, 0)
+	}, nil, 0)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))
@@ -107,7 +107,7 @@ func TestMeshAppliesItsConfiguredSizeBudget(t *testing.T) {
 			land.Processes = append(land.Processes, proc(uint64(i), "p", "P", "a1"))
 		}
 		return land, nil
-	}, 5)
+	}, nil, 5)
 
 	rec := httptest.NewRecorder()
 	mesh.HandleGraph(rec, httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil))

@@ -76,6 +76,28 @@
       }
     },
     {
+      "id": "new-atlas-mark",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Atlas has a new mark",
+        "de": "Atlas hat eine neue Marke"
+      },
+      "summary": {
+        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
+        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
+      },
+      "link": {
+        "label": "ADR-0148",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
+      },
+      "tags": [
+        "Console",
+        "Organization"
+      ]
+    },
+    {
       "id": "the-handbook-and-the-examples-teach-workers-not-connectors",
       "version": "Unreleased",
       "date": null,
@@ -323,28 +345,6 @@
       "link": {
         "label": "ADR-0200",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "metrics-moved-behind-the-boundary-the-last-route-that-had-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "The monitoring endpoint asks for a credential now",
-        "de": "Der Monitoring-Endpunkt verlangt jetzt einen Zugang"
-      },
-      "summary": {
-        "en": "`/metrics` was the last address on the server that anybody could read without presenting anything — for a plain reason: until now a monitoring scraper had nothing it could present. With API tokens it does, so the exposition is gated like every other route, and a token scope named `metrics` reaches exactly this one address and nothing else. Worth being plain about the size of this: what `/metrics` carries is instance counts, batch times and queue depth — no process data and no business data. What it buys is that \"nothing here is reachable without a credential\" is now true without an exception. Breaking: every existing scrape configuration needs the token added, which for Prometheus is two lines. The health probes stay open, because a readiness check that needs a credential is useless in the incident it exists for.",
-        "de": "`/metrics` war die letzte Adresse dieses Servers, die jeder ohne Ausweis lesen konnte — aus einem einfachen Grund: Ein Monitoring-Scraper hatte bisher nichts, was er hätte vorzeigen können. Mit API-Tokens hat er es, und deshalb liegt die Metrik-Ausgabe jetzt hinter derselben Anmeldung wie jede andere Route; ein Token-Scope namens `metrics` erreicht genau diese eine Adresse und sonst nichts. Zur Grössenordnung, ganz offen: Was unter `/metrics` steht, sind Instanzzahlen, Batch-Zeiten und Warteschlangenlängen — keine Prozessdaten, keine Geschäftsdaten. Der Gewinn ist, dass „nichts ist ohne Zugang erreichbar\" jetzt ohne Fussnote stimmt. Brechend: Jede bestehende Scrape-Konfiguration braucht das Token — bei Prometheus sind das zwei Zeilen. Die Health-Probes bleiben offen, denn eine Bereitschaftsprüfung, die einen Zugang braucht, hilft in genau dem Vorfall nicht, für den es sie gibt."
-      },
-      "link": {
-        "label": "ADR-0142",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
       },
       "tags": [
         "Security",
