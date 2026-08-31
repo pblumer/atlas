@@ -667,11 +667,11 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		// ADR-0203: configured Workers are the design-time configuration resource;
 		// /api/v1/workers remains the existing runtime/Operations view above.
-		{"GET", "/api/v1/configured-workers", s.handleListConnectors, apiOp{
+		{"GET", "/api/v1/configured-workers", s.handleListConfiguredWorkers, apiOp{
 			summary: "List configured Workers", tag: "Workers", role: roleAny, resp: jsonBody("Configured Workers", tArray())}},
-		{"POST", "/api/v1/configured-workers", s.handleCreateConnector, apiOp{
+		{"POST", "/api/v1/configured-workers", s.handleCreateConfiguredWorker, apiOp{
 			summary: "Create a configured Worker", tag: "Workers", role: RoleModeler, req: jsonBody("Configured Worker", tObject()), resp: jsonBody("Created configured Worker", tObject())}},
-		{"PATCH", "/api/v1/configured-workers/{id}", s.handleUpdateConnector, apiOp{
+		{"PATCH", "/api/v1/configured-workers/{id}", s.handleUpdateConfiguredWorker, apiOp{
 			summary: "Update a configured Worker (endpoint, provider, sender, credential reference, enabled)", tag: "Workers", role: RoleModeler, req: jsonBody("Configured Worker update", tObject()), resp: jsonBody("Updated configured Worker", tObject())}},
 		{"DELETE", "/api/v1/configured-workers/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a configured Worker; refused while deployed models still reference it unless ?force=true", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
