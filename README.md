@@ -120,7 +120,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 
 **FEEL everywhere.** Gateway conditions, script tasks, timer schedules, multi-instance cardinality and completion conditions, and I/O mappings are compiled at deploy time and evaluated in-engine ([ADR-0008](docs/adr/0008-feel-expression-strategy.md), [ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 
-**Work that leaves the engine.** Job workers over the HTTP API, polyglot script tasks (JavaScript, Python, PowerShell) run by shelling out to the interpreter ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), a service-task connector catalog ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)) with REST, mail, SharePoint, BMC Remedy, Jira and web-scraping connectors, and an engine-internal encrypted secret vault so credentials never sit in the model ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md)). Service tasks can also be marked **mockup** ([ADR-0120](docs/adr/0120-mockup-service-task.md)) — the engine simulates the call, with a scripted answer, a random duration and a failure rate — so a process runs end to end before any of its integrations exist.
+**Work that leaves the engine.** Job workers over the HTTP API, polyglot script tasks (JavaScript, Python, PowerShell) run by shelling out to the interpreter ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), a service-task catalog of **Worker Types** ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md), [ADR-0203](docs/adr/0203-worker-execution-model.md)) covering REST, mail, SharePoint, BMC Remedy, Jira and web scraping, and an engine-internal encrypted secret vault so credentials never sit in the model ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md)). Service tasks can also be marked **mockup** ([ADR-0120](docs/adr/0120-mockup-service-task.md)) — the engine simulates the call, with a scripted answer, a random duration and a failure rate — so a process runs end to end before any of its integrations exist.
 
 ## Built to be driven by an agent
 
@@ -153,7 +153,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 - **[Benchmarks](benchmarks/)** — the performance harness and its published baseline
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
 - **[n8n comparison](docs/comparisons/n8n.md)** — where integration automation and durable BPMN orchestration differ, and how they can work together
-- **[MIM comparison](docs/comparisons/mim.md)** — Microsoft Identity Manager's connector surface mapped to Atlas, and the connector gaps that remain
+- **[MIM comparison](docs/comparisons/mim.md)** — Microsoft Identity Manager's connector surface mapped to Atlas Worker Types, and the gaps that remain
 - **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
 - **[Compliance](docs/compliance/)** — the Swiss federal **ISDS-Konzept** (P042-Hi01) answered for Atlas, in German, plus the product gaps a Bund deployment would have to close
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release

@@ -199,7 +199,7 @@ Tag, **M** ≈ zwei bis vier Tage, **L** ≈ mehr als eine Woche.
 | M9 ✅ | Rollen je Endpunktgruppe | L | O-02, R-04, R-09 | G2, G4 |
 | M10 ✅ | OAuth für gehostete MCP-Clients | M–L | Folgelücke aus M2/M4; bereitet O-01 | G1, G3, G4 |
 | M11 ✅ | Berechtigungen auf Worker-Ebene | M–L | Neubefund 1.5; Teil O-02, R-04 | G1, G4 |
-| M12 ◐ | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
+| M12 ✅ | Föderierte Authentisierung (OIDC) | L | O-01, R-03 | G1, G5 |
 
 ### M1 — Zugriffsklassen je Route, mit Inventar-Test
 
@@ -845,7 +845,7 @@ befragt.
     abgewiesen, ist auch der erste nicht registriert.
     `TestDeployingAProjectStopsBeforeItStarts`.
 
-### M12 — Föderierte Authentisierung ◐
+### M12 — Föderierte Authentisierung ✅
 
 **Problem, gemessen.** Atlas kennt genau **einen** Weg, wie aus einem Menschen ein
 Prinzipal wird: Benutzername und lokales Passwort.
@@ -886,7 +886,7 @@ entfernt.
    genau wie ein lokal angelegtes (M9), und Rollen vergibt eine Administratorin in
    Atlas. Die Abbildung von Claims auf Rollen und Gruppen ist der **zweite**
    Schritt, ausdrücklich konfiguriert, mit «leere Abbildung heisst: kein Claim
-   vergibt etwas».
+   vergibt etwas». *(Beide Schritte sind inzwischen gebaut; siehe «Stand» unten.)*
 4. **Das lokale Login bleibt**, mindestens als Notfallzugang. Eine Installation,
    deren Anbieter nicht erreichbar ist, muss administrierbar bleiben; die
    Aussperr-Sperre aus ADR-0044 gilt unverändert.
@@ -964,10 +964,71 @@ Drei Dinge kamen beim Bauen dazu:
 6. ✅ Das lokale Login funktioniert unverändert weiter; das Passwortformular bleibt
    auch bei konfiguriertem Anbieter stehen.
 
-**Offen bleibt Schritt 2**: die Abbildung von Claims auf Rollen und Gruppen, und
-damit der Teil, der R-03 wirklich grün macht — solange Rollen hier vergeben werden,
-entzieht ein Austritt beim Anbieter zwar den Zugang, aber die Rollenpflege bleibt
-manuell. Dazu die vom Anbieter ausgelöste Abmeldung.
+**Stand: Schritt 2 ist ebenfalls umgesetzt** (`api/oidcmapping.go`). Eine
+Administratorin benennt **einen** Claim und eine Liste **exakter Werte**, und jeder
+Wert benennt die Rollen, die er vergibt, und die Atlas-Gruppen, in die er die Person
+setzt. Bearbeitet wird das unter Console → Organization → Single sign-on
+(`GET`/`PUT /api/v1/settings/oidc-mapping`, in beide Richtungen `admin` — die Regeln
+nennen die Gruppenkennungen des Anbieters, und die Anmeldemaske braucht sie nicht).
+
+Vier Eigenschaften machen daraus keine Falltür:
+
+- **Ein Claim vergibt, er vergibt nie durch Abwesenheit.** Jede Regel ist ein
+  exakter Wertevergleich. Wer beim Anbieter in keiner der genannten Gruppen ist,
+  trifft auf nichts und bekommt nichts. Eine Regel «alle, die sich anmelden können,
+  bekommen `modeler`» gibt es nicht — das wäre ein Konfigurationsschalter im Kostüm
+  eines Claims.
+- **`user` ist ein Boden, keine Vergabe.** Die Abbildung entscheidet über `admin`,
+  `modeler` und `operator`. Wer sich überhaupt anmelden kann, behält `user`; eine
+  verschwundene Gruppe beim Anbieter nimmt niemandem die eigene Aufgabenliste.
+- **Sie besitzt die Gruppen, die sie nennt, und keine anderen.** Rollen sind ein
+  geschlossener Satz von vier Namen, die Atlas selbst vergibt — «die Abbildung
+  entscheidet die Rollen» ist deshalb ein vollständiger Satz, und eine von Hand
+  vergebene Rolle überlebt die nächste Anmeldung nicht. Gruppen sind ein offener
+  Satz, den Menschen aus eigenen Gründen anlegen; über eine Gruppe, die in keiner
+  Regel vorkommt, hat die Abbildung nichts gesagt, und eine von Hand gesetzte
+  Mitgliedschaft dort bleibt bestehen.
+- **Eine Abbildung, die nichts bedeuten kann, wird dort abgewiesen, wo sie
+  geschrieben wird.** Eine Regel, die eine Rolle nennt, die Atlas nicht durchsetzt,
+  oder eine gelöschte Gruppe, vergibt nichts — still, bei jeder Anmeldung, bis
+  jemand herausfindet, warum die neue Kollegin nicht deployen kann. Geprüft wird
+  beim Schreiben, gegen die Gruppen im selben Lauf-Schleifen-Zug, der den Datensatz
+  ablegt.
+
+Und zwei Zustände bleiben unterscheidbar: Eine Abbildung, die niemand geschrieben
+hat, vergibt *absichtlich* nichts; eine, die nicht gelesen werden kann, ist eine
+kaputte Installation und weist die Anmeldung ab. Das Zweite als das Erste zu lesen
+hiesse, dass ein Plattenfehler bei der nächsten Anmeldung stillschweigend allen die
+Rollen nimmt.
+
+**Eine Aussperr-Sperre beim Login gibt es bewusst nicht.** Eine Prüfung «nimm die
+letzte `admin`-Rolle nicht weg» müsste ausgerechnet bei der Anmeldung laufen, die
+am dringendsten gelingen soll, und machte die Wiederherstellbarkeit einer
+Installation davon abhängig, in welcher Reihenfolge sich Menschen anmelden. Der
+Notfallzugang ist der bereits dokumentierte: das lokale Administratorkonto und
+`atlas reset-password` auf dem Host.
+
+**Abnahme Schritt 2** — der Nachweis ist Code:
+
+7. ✅ Ein Claim vergibt Rollen und Gruppenmitgliedschaft, eine nicht abgebildete
+   Gruppe vergibt nichts (`TestAClaimDecidesRolesAndGroups`).
+8. ✅ Verschwindet der Claim, verschwinden Rolle und Mitgliedschaft bei der nächsten
+   Anmeldung — eine von Hand gesetzte Mitgliedschaft in einer nicht genannten Gruppe
+   bleibt (`TestAClaimThatGoesAwayTakesItsGrantsWithIt`).
+9. ✅ Eine ausgeschaltete Abbildung entscheidet nichts, auch mit passenden Claims
+   (`TestAMappingThatIsOffDecidesNothing`).
+10. ✅ Eine vergebene Rolle öffnet genau die Routen, die sie benennt, und keine
+    darüber hinaus (`TestAMappedRoleReachesTheRouteItNames`).
+11. ✅ Eine Abbildung mit unbekannter Rolle oder nicht existierender Gruppe wird
+    beim Schreiben abgewiesen und nennt die Stelle; lesen und schreiben darf nur
+    `admin` (`TestAMappingIsRefusedWhenItCannotMeanAnything`,
+    `TestTheMappingEndpointIsAdminOnlyAndChecked`).
+12. ✅ Eine unlesbare Abbildung ist keine ausgeschaltete: Die Anmeldung wird
+    abgewiesen, statt still alle Rollen zu entziehen
+    (`TestAMappingThatCannotBeReadIsNotAMappingThatIsOff`).
+
+**Offen bleibt** die vom Anbieter ausgelöste Abmeldung (RP-initiated logout) und
+SAML, falls eIAM es verlangt.
 
 ---
 
@@ -1011,14 +1072,18 @@ ist erledigt, O-03 und O-04 sind weitgehend erledigt.
 
 ### Stufe 2 — vor breiterem Einsatz
 
-~~M9 (Rollen, O-02)~~ ✅ → **M12** (Föderation OIDC/eIAM, O-01, setzt auf den Rollen
-auf) → dauerhafte Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender
-Daten (O-06).
+~~M9 (Rollen, O-02)~~ ✅ → ~~M12 (Föderation OIDC/eIAM, O-01)~~ ✅ → dauerhafte
+Sessions und Sitzungsverwaltung (O-14) → Verschlüsselung ruhender Daten (O-06).
 
 **M9 ist umgesetzt.** Damit gibt es die vier Namen, auf die eine Föderation ihre
-Claims abbilden kann — und sie sind ab jetzt eine öffentliche Zusage, kein
-Implementierungsdetail: `admin`, `modeler`, `operator`, `user`. Die Föderation
-wartet damit auf nichts mehr; sie ist als **M12** ausgearbeitet.
+Claims abbildet — und sie sind eine öffentliche Zusage, kein Implementierungsdetail:
+`admin`, `modeler`, `operator`, `user`.
+
+**M12 ist umgesetzt**, beide Schritte: der Anmeldeweg über OpenID Connect und die
+Abbildung der Claims auf genau diese vier Namen und auf die Gruppen. Damit ist der
+automatische Rollenentzug beim Austritt gebaut — für Installationen, die einen
+Anbieter konfigurieren und die Abbildung einschalten. Offen bleibt daraus die vom
+Anbieter ausgelöste Abmeldung und SAML, falls eIAM es verlangt.
 
 **M10 stand quer dazu** und ist umgesetzt — beide Hälften und die dynamische
 Client-Registrierung, in der Reihenfolge des Entscheids. Offen bleibt daraus nur

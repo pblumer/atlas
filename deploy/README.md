@@ -26,6 +26,14 @@ with `-e ATLAS_ADMIN_PASSWORD=…` before that first start. For a throwaway cont
 you just want to click around in, append `--auth=false`; it runs open and says so at
 startup.
 
+To let people sign in with an identity provider instead, pass
+`-e ATLAS_OIDC_ISSUER=… -e ATLAS_OIDC_CLIENT_ID=… -e ATLAS_OIDC_CLIENT_SECRET=…`
+together with `-e ATLAS_EXTERNAL_URL=…`, and register
+`<external-url>/auth/oidc/callback` at the provider. Keep the local administrator:
+it is the way back in when the provider is unreachable. Details, and how the
+provider's groups can decide Atlas roles, are in
+[`docs/install.md`](../docs/install.md#single-sign-on-with-an-identity-provider).
+
 The image is a Debian-slim build running as nonroot (uid 65532), storing durable
 state under `/data` — mount a volume there. It bundles the **python3** and
 **node** interpreters for script tasks; build with

@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Operations"
+  ],
+  "title": {
+    "en": "Publishing to another Atlas works with your own certificate authority",
+    "de": "Publizieren auf einen anderen Atlas klappt jetzt auch mit eigener CA"
+  },
+  "summary": {
+    "en": "Publishing an application to another Atlas has always required that server to be reachable over https, and rightly so: the token that authorises the push would otherwise cross the network in the clear. On-prem, that certificate is usually issued by your own certificate authority, which the sending machine has never heard of — so the push failed at verification, and the only fixes were touching the host's trust store or building your own container image. You can now point the sending server, and any worker on another host, at your CA's bundle. It is added to the certificates the host already trusts rather than replacing them, so a target with a publicly issued certificate keeps working, and it applies only to Atlas talking to Atlas — a worker calling Jira, a mail server or Microsoft Graph keeps the machine's own trust store, because those endpoints are somebody else's. What it is deliberately not is a way to skip verification: there is no such switch anywhere in Atlas, because it would be the first thing reached for at exactly the moment a certificate must not be ignored.",
+    "de": "Eine Applikation auf einen anderen Atlas zu publizieren verlangt seit jeher, dass dieser Server über https erreichbar ist — zu Recht, denn sonst liefe das Token, das den Push autorisiert, im Klartext über das Netz. On-Prem stammt dieses Zertifikat meist von der eigenen Zertifizierungsstelle, die der sendende Rechner nicht kennt: Der Push scheiterte an der Prüfung, und helfen konnte nur, den Trust-Store des Hosts anzufassen oder ein eigenes Container-Image zu bauen. Jetzt lässt sich dem sendenden Server — und einem Worker auf einem anderen Host — das Bundle der eigenen CA nennen. Es kommt zu den Zertifikaten hinzu, denen der Host ohnehin traut, statt sie zu ersetzen; ein Ziel mit öffentlich ausgestelltem Zertifikat funktioniert also unverändert weiter. Und es gilt nur für Atlas-zu-Atlas: Ein Worker, der Jira, einen Mailserver oder Microsoft Graph aufruft, behält den Trust-Store der Maschine, denn diese Endpunkte gehören jemand anderem. Was es bewusst nicht ist: ein Weg, die Prüfung zu überspringen. Einen solchen Schalter gibt es in Atlas nirgends — er wäre das Erste, wonach man griffe, genau in dem Moment, in dem ein Zertifikat nicht ignoriert werden darf."
+  }
+}

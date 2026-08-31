@@ -14,7 +14,7 @@ plan (unlike the immutable ADR) and may be edited as slices land.
   new sidecar store is reloaded on startup. Keep repo-wide coverage ≥ 95%.
 - **No forced migration.** On disk stays `projects/` + `projectId`. New stores are
   additive.
-- Definition of done per slice: `go build ./...`, `go test -race ./...`,
+- Definition of done per slice: `go build ./...`, `go test -race -timeout=25m ./...`,
   `go vet ./...` green and `gofmt -l .` empty.
 
 ---

@@ -88,6 +88,6 @@ Before considering a change done, confirm:
 - [ ] `applyToState` stays deterministic and side-effect-free; live == replay (I4)
 - [ ] No parsing/interning/string-lookup added to the hot path (I5)
 - [ ] Only events persisted; keys/timestamps frozen into events, not regenerated on replay (I6)
-- [ ] `go build ./...`, `go test -race ./...`, `go vet ./...` pass; `gofmt -l .` empty
+- [ ] `go build ./...`, `go test -race -timeout=25m ./...`, `go vet ./...` pass; `gofmt -l .` empty
 - [ ] New behavior has tests; persistence/processor changes have a recovery test
 - [ ] Any architectural change is captured in a new ADR

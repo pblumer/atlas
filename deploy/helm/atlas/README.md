@@ -84,6 +84,46 @@ kubectl exec statefulset/atlas -- \
   /atlas reset-password --data-dir /data --create-admin admin
 ```
 
+### Single sign-on with an identity provider
+
+The chart has no dedicated values for it, because the server takes it as a handful
+of environment variables and `extraEnv` carries them without a new schema. Point
+Atlas at an OpenID Connect provider by putting the issuer and client id there and
+the secret in a Secret you manage:
+
+```yaml
+# values.yaml — four settings, one of them from a Secret you manage.
+atlas:
+  extraEnv:
+    - name: ATLAS_EXTERNAL_URL
+      value: https://atlas.example.com
+    - name: ATLAS_OIDC_ISSUER
+      value: https://login.example.com/realms/atlas
+    - name: ATLAS_OIDC_CLIENT_ID
+      value: atlas
+    - name: ATLAS_OIDC_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: atlas-oidc
+          key: client-secret
+```
+
+```bash
+kubectl create secret generic atlas-oidc \
+  --from-literal=client-secret='the-secret-the-provider-issued'
+helm upgrade --install atlas ./deploy/helm/atlas -f values.yaml
+```
+
+`ATLAS_EXTERNAL_URL` matters here: the redirect URI is built from it, and
+`<external-url>/auth/oidc/callback` is the exact string to register at the
+provider. Set it to the origin your Ingress serves, not the Service name.
+
+Keep the bootstrap administrator above — it is the way back in when the
+provider is unreachable. Which Atlas roles the provider's groups grant is
+configured in the running instance, under Console → Organization → Single
+sign-on, and is off until somebody turns it on. See
+[`docs/install.md`](../../../docs/install.md#single-sign-on-with-an-identity-provider).
+
 ## Secret vault
 
 The encrypted vault is on by default. Without an explicit key the server
@@ -124,9 +164,15 @@ helm install atlas ./deploy/helm/atlas \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly.
-Atlas speaks plain HTTP, so the proxy is what terminates TLS; `/mcp` itself is
-gated by `--auth` like every other route and no longer depends on a proxy rule.
+Terminate TLS before exposing Atlas publicly. In a cluster the Ingress usually
+does it and Atlas serves plain HTTP behind it, which is what the chart defaults
+to. Where that last hop must be encrypted as well — an Ingress on another node, or
+another Atlas publishing an application to this one, which requires `https` of its
+target — set `atlas.tls.enabled` with a `kubernetes.io/tls` Secret and the pod
+terminates TLS itself; the probes then switch to the HTTPS scheme automatically.
+Either way `/mcp` is gated by `--auth` like every other route and no longer depends
+on a proxy rule, while `/metrics`, `/healthz` and `/readyz` stay unauthenticated by
+design — encryption is not authorization.
 
 ## Values
 
@@ -143,6 +189,9 @@ common knobs:
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |
+| `atlas.tls.enabled` | `false` | Terminate TLS in the pod. Needs `atlas.tls.existingSecret`; the probes switch to HTTPS with it |
+| `atlas.tls.existingSecret` | `""` | `kubernetes.io/tls` Secret with the certificate and key (what cert-manager writes) |
+| `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another Atlas (`--tls-ca`) |
 | `service.type` / `service.port` | `ClusterIP` / `8080` | Service exposure |
 | `ingress.enabled` | `false` | Create an Ingress |
 
