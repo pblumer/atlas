@@ -452,6 +452,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Panorama shows the landscape you already have.** Panorama's landing view is now
+  a derived mesh of the whole instance
+  ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
+  processes deployed under them, and the call activities between them, computed from
+  what Atlas already holds rather than from anything anybody drew. It therefore says
+  something on a server with no architecture model in it at all, and its edges are
+  facts the server can point at — a call activity *is* a dependency — resolved
+  through the same overrides the engine would follow, so the picture matches what
+  would actually run.
+
+  The graph is computed per requesting principal against the existing sharing scopes
+  (ADR-0071); nothing new to configure. Where your access cuts a dependency, the mesh
+  draws a **restricted** placeholder and keeps the edge instead of dropping it, and
+  the legend states how many there are — "this process depends on nothing" would be a
+  false statement when it means "you may not see what it depends on". A call target
+  that no deployment provides is shown as **unresolved**, which is a different finding
+  from a hidden one and is drawn differently. Clicking a process opens it in the
+  Operations live view: Panorama owns the landscape, and links into the process and
+  instance views rather than repeating them.
+
+  Nothing is stored — the mesh is a projection, recomputed on request, and it never
+  writes to an ArchiMate model. Above 400 nodes it collapses to applications and says
+  so in the legend rather than handing your browser a graph it cannot lay out; that
+  number is measured (a 400-node graph paints in about a second in Chromium), not
+  guessed.
+
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`
   canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
