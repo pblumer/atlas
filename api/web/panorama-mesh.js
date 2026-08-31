@@ -24,7 +24,7 @@ const KIND = {
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
-  connector: { r: 15, fill: "#e8f5ec", stroke: "var(--ok)", label: "Connector" },
+  worker: { r: 15, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
   decision: { r: 15, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
   restricted: { r: 14, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
   unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
@@ -200,14 +200,14 @@ function nodeTitle(node) {
   }
   if (node.kind === "unresolved") {
     // The id carries what kind of thing is missing, which is what makes the
-    // sentence actionable: a missing deployment and a missing connector are
-    // fixed in different places.
+    // sentence actionable: a missing deployment and a missing worker are fixed in
+    // different places.
     const of = node.id.split(":")[1] || "dependency";
     return `Nothing on this server provides the ${of} "${node.name}". Work reaching it would park.`;
   }
   const parts = [node.name || node.id];
   if (node.processId) parts.push(`${node.processId} v${node.version}`);
-  if (node.connectorKind) parts.push(`${node.connectorKind} connector`);
+  if (node.workerType) parts.push(`${node.workerType} worker`);
   if (node.children) parts.push(`${node.children} process(es) collapsed`);
   return parts.join(" · ");
 }
@@ -217,7 +217,7 @@ function nodeTitle(node) {
 // node id, whose prefixes would make every term match its own kind by accident.
 function matches(node, term) {
   if (!term) return true;
-  const hay = [node.name, node.kind, node.processId, node.connectorKind]
+  const hay = [node.name, node.kind, node.processId, node.workerType]
     .filter(Boolean).join(" ").toLowerCase();
   return hay.includes(term);
 }
@@ -311,7 +311,7 @@ function renderGraph(graph, layoutMs, highlight) {
 
 // impactPanelHTML states the answer in words beside the picture. The counts are the
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
-// and "17 things depend on this connector" is the sentence somebody repeats in a
+// and "17 things depend on this worker" is the sentence somebody repeats in a
 // change-approval meeting.
 function impactPanelHTML(node, result, direction, depth) {
   if (!node) {

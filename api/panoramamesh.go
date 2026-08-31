@@ -53,20 +53,23 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		ovByPID[rec.CalledProcessID] = rec
 	}
 
-	conns, err := s.connectors.LoadAll()
+	// Configured workers still live in the connector store, whose record still spells
+	// the Worker Type Kind — names ADR-0203 leaves in place until the packages move.
+	// What the mesh emits is Worker vocabulary.
+	confWorkers, err := s.connectors.LoadAll()
 	if err != nil {
 		return panorama.Landscape{}, err
 	}
 	principal := httpapi.PrincipalFrom(r.Context())
-	connByName := make(map[string]connector, len(conns))
+	workersByName := make(map[string]connector, len(confWorkers))
 	land := panorama.Landscape{}
-	for _, c := range conns {
-		connByName[c.Name] = c
-		land.Connectors = append(land.Connectors, panorama.Connector{
-			ID: c.ID, Name: c.Name, Kind: c.Kind,
-			CanView: scopeRank(connectorRole(c, principal, s.authEnabled)) >= scopeRank(ScopeRoleViewer),
+	for _, w := range confWorkers {
+		workersByName[w.Name] = w
+		land.Workers = append(land.Workers, panorama.Worker{
+			ID: w.ID, Name: w.Name, Type: w.Kind,
+			CanView: scopeRank(connectorRole(w, principal, s.authEnabled)) >= scopeRank(ScopeRoleViewer),
 			// Carried so the derivation can be tested for never emitting them.
-			Endpoint: c.Endpoint, CredentialsRef: c.CredentialsRef,
+			Endpoint: w.Endpoint, CredentialsRef: w.CredentialsRef,
 		})
 	}
 
@@ -111,27 +114,28 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 			}
 			proc.Calls = append(proc.Calls, call)
 		}
-		proc.Connectors = connectorUses(d.cp, connByName)
+		proc.Workers = workerUses(d.cp, workersByName)
 		proc.Decisions = d.cp.BusinessRuleDecisions()
 		land.Processes = append(land.Processes, proc)
 	}
 	return land, nil
 }
 
-// connectorUses resolves a process's connector references against the configured
-// connectors, mirroring the deploy-time check in connectorWarnings — including the
-// two references that are deliberately *not* findings there, because treating them
-// as findings here would put false "not configured" nodes on the landscape:
+// workerUses resolves a process's worker references — the names its tasks state in
+// connector="…" — against the configured workers, mirroring the deploy-time check in
+// connectorWarnings, including the two references that are deliberately *not*
+// findings there, because treating them as findings here would put false "not
+// configured" nodes on the landscape:
 //
-//   - a reference whose job type no managed kind claims is not a connector
+//   - a reference whose job type no managed Worker Type claims is not a worker
 //     reference at all (a local decision names its connector field the same way); and
-//   - a name authored as a FEEL expression (entra, ADR-0172) names no fixed
-//     connector — which one it reaches is known only at call time, so there is
-//     nothing on this server to resolve it against.
+//   - a name authored as a FEEL expression (entra, ADR-0172) names no fixed worker —
+//     which one it reaches is known only at call time, so there is nothing on this
+//     server to resolve it against.
 //
 // Run-loop goroutine only, via its caller.
-func connectorUses(cp *compiler.CompiledProcess, byName map[string]connector) []panorama.ConnectorUse {
-	var out []panorama.ConnectorUse
+func workerUses(cp *compiler.CompiledProcess, byName map[string]connector) []panorama.WorkerUse {
+	var out []panorama.WorkerUse
 	for _, ref := range cp.ConnectorRefs() {
 		if connectorKindOfJobType(ref.JobType) == "" {
 			continue
@@ -139,7 +143,7 @@ func connectorUses(cp *compiler.CompiledProcess, byName map[string]connector) []
 		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
 			continue
 		}
-		use := panorama.ConnectorUse{ElementID: ref.ElementId, Name: ref.Connector}
+		use := panorama.WorkerUse{ElementID: ref.ElementId, Name: ref.Connector}
 		if rec, ok := byName[ref.Connector]; ok {
 			use.TargetID = rec.ID
 		}

@@ -19,6 +19,7 @@ type meshNode struct {
 	Application string `json:"application"`
 	ProcessID   string `json:"processId"`
 	Version     int32  `json:"version"`
+	WorkerType  string `json:"workerType"`
 	Children    int    `json:"children"`
 }
 
@@ -166,9 +167,10 @@ func meshProcessID(key uint64) string {
 	return "process:" + strconv.FormatUint(key, 10)
 }
 
-// connectorMeshBPMN names a mail connector, the way every model refers to a
-// server-registered one (ADR-0036/0041) — by name, with no endpoint and no secret.
-const connectorMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
+// workerMeshBPMN names a mail worker the way every model names one (ADR-0036/0041):
+// by name, with no endpoint and no secret. The attribute is still connector="…" —
+// that is the model contract ADR-0203 deliberately leaves alone.
+const workerMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas.dev/schema/1.0/bpmn">
   <process id="notifier" name="Notifier" isExecutable="true">
     <startEvent id="start"/>
     <serviceTask id="notify">
@@ -180,15 +182,15 @@ const connectorMeshBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/2010
   </process>
 </definitions>`
 
-// TestPanoramaMeshShowsAnUnconfiguredConnector is the finding a model cannot make
-// about itself. It names a connector by name and carries nothing that says whether
-// that name exists here, so a process can deploy clean and then park its first token
-// (ADR-0158). The landscape is on the outside, next to the connector store, and says
-// so before anything runs.
-func TestPanoramaMeshShowsAnUnconfiguredConnector(t *testing.T) {
+// TestPanoramaMeshShowsAnUnconfiguredWorker is the finding a model cannot make
+// about itself. It names a worker by name and carries nothing that says whether that
+// name exists here, so a process can deploy clean and then park its first token
+// (ADR-0158). The landscape is on the outside, next to the configured workers, and
+// says so before anything runs.
+func TestPanoramaMeshShowsAnUnconfiguredWorker(t *testing.T) {
 	ts := newTestServer(t)
 
-	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", connectorMeshBPMN, "application/xml")
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml")
 	if code != http.StatusOK {
 		t.Fatalf("deploy status = %d, body = %s", code, body)
 	}
@@ -200,26 +202,26 @@ func TestPanoramaMeshShowsAnUnconfiguredConnector(t *testing.T) {
 	}
 
 	g := getMesh(t, ts)
-	if n := meshNodeByID(t, g, "unresolved:connector:ops-mail"); n.Name != "ops-mail" {
-		t.Errorf("unresolved connector node = %+v", n)
+	if n := meshNodeByID(t, g, "unresolved:worker:ops-mail"); n.Name != "ops-mail" {
+		t.Errorf("unresolved worker node = %+v", n)
 	}
-	if !meshHasEdge(g, meshProcessID(dep.Key), "unresolved:connector:ops-mail", "uses") {
-		t.Errorf("uses edge to the unconfigured connector missing from %+v", g.Edges)
+	if !meshHasEdge(g, meshProcessID(dep.Key), "unresolved:worker:ops-mail", "uses") {
+		t.Errorf("uses edge to the unconfigured worker missing from %+v", g.Edges)
 	}
 }
 
-// TestPanoramaMeshNeverCarriesAConnectorEndpoint is the disclosure bound, asserted
-// against a real configured connector on a real server rather than against the
+// TestPanoramaMeshNeverCarriesAWorkerEndpoint is the disclosure bound, asserted
+// against a real configured worker on a real server rather than against the
 // derivation alone: the endpoint reaches the store, and must not reach the wire.
-func TestPanoramaMeshNeverCarriesAConnectorEndpoint(t *testing.T) {
+func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 	ts := newTestServer(t)
 
-	code, body := doReq(t, ts, http.MethodPost, "/api/v1/connectors",
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers",
 		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
-		t.Fatalf("create connector status = %d, body = %s", code, body)
+		t.Fatalf("create worker status = %d, body = %s", code, body)
 	}
-	if code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", connectorMeshBPMN, "application/xml"); code != http.StatusOK {
+	if code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml"); code != http.StatusOK {
 		t.Fatalf("deploy status = %d, body = %s", code, body)
 	}
 
@@ -239,11 +241,17 @@ func TestPanoramaMeshNeverCarriesAConnectorEndpoint(t *testing.T) {
 	}
 	var found bool
 	for _, n := range g.Nodes {
-		if n.Kind == "connector" && n.Name == "ops-mail" {
+		if n.Kind == "worker" && n.Name == "ops-mail" {
 			found = true
+			// The Worker Type is what a worker node carries besides its name, and
+			// it is named workerType on the wire: this surface is new, so it speaks
+			// the vocabulary of ADR-0203 rather than the store's older spelling.
+			if n.WorkerType != "mail" {
+				t.Errorf("worker node = %+v, want workerType %q", n, "mail")
+			}
 		}
 	}
 	if !found {
-		t.Errorf("configured connector missing from %+v", g.Nodes)
+		t.Errorf("configured worker missing from %+v", g.Nodes)
 	}
 }
