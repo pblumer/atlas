@@ -15,8 +15,8 @@
         "de": "Atlas kann die Anmeldung jetzt an einen OpenID-Connect-Anbieter übergeben — Entra ID, Keycloak, Google, jeden konformen. Die Person drückt auf der Anmeldemaske eine Schaltfläche, authentisiert sich dort, wo sie es ohnehin tut, und kommt angemeldet zurück; Zweitfaktor und Passwortregeln werden zur Sache des Anbieters, und ein dort geschlossenes Konto hört hier auf zu funktionieren. Die erste Anmeldung legt ein Konto an, verknüpft mit dem Subjekt des Anbieters, mit der Rolle «user» und sonst nichts — eine neue Person sieht ihre eigenen Aufgaben und bis auf Weiteres nichts anderes. Ohne konfigurierten Anbieter ändert sich gar nichts: Atlas baut dann keine ausgehende Verbindung auf, und das lokale Passwort bleibt der einzige Weg hinein. Es bleibt in jedem Fall erhalten, mit Absicht — ein nicht erreichbarer Anbieter darf keine Administratorin aus ihrer eigenen Installation aussperren."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0210",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0210-federated-authentication.md"
       },
       "tags": [
         "Security",
@@ -57,6 +57,49 @@
           "de": "Organization öffnen"
         },
         "route": "#/console/org"
+      }
+    },
+    {
+      "id": "the-handbook-and-the-examples-teach-workers-not-connectors",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The handbook now explains Workers — and what a Worker actually is",
+        "de": "Das Handbuch erklärt jetzt Worker — und was ein Worker eigentlich ist"
+      },
+      "summary": {
+        "en": "The Console calls them Workers now, but the handbook still said Connectors, and used the word for three different things: the capability Atlas has, the account and endpoint you configured, and the process that does the work. The chapter Forms & workers now separates them by name. A Worker Type is a capability — Jira, Mail, Active Directory. A Worker is one configured target of that type, with its endpoint and its credential reference, and it is the name a task states. A Worker Instance is a running process that picks jobs up; you scale by starting more of those, not by configuring the same worker twice. The Active Directory chapter shows where that matters: two forests are two Workers, and one Worker Instance serves both. Nothing in your models changes — a task still says connector=\"…\", and the handbook now has a note explaining why it stays that way.",
+        "de": "Die Konsole nennt sie inzwischen Worker, das Handbuch sagte weiter Connectors — und meinte damit drei verschiedene Dinge: die Fähigkeit, die Atlas mitbringt, das konfigurierte Zielsystem samt Zugang und den Prozess, der die Arbeit tut. Das Kapitel Formulare & Worker trennt sie jetzt beim Namen. Ein Worker-Typ ist eine Fähigkeit — Jira, Mail, Active Directory. Ein Worker ist ein konfiguriertes Ziel dieses Typs, mit Endpoint und Verweis auf das Geheimnis im Vault, und genau diesen Namen nennt eine Aufgabe. Eine Worker-Instanz ist ein laufender Prozess, der Jobs abholt; skaliert wird über mehr Instanzen, nicht über einen zweiten Worker. Das Active-Directory-Kapitel zeigt, wozu das gut ist: zwei Forests sind zwei Worker, und eine Worker-Instanz bedient beide. An Ihren Modellen ändert sich nichts — eine Aufgabe schreibt weiterhin connector=\"…\", und das Handbuch erklärt jetzt in einer eigenen Notiz, warum das so bleibt."
+      },
+      "link": {
+        "label": "ADR-0203",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0203-worker-execution-model.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the handbook and go to Forms & workers — the three levels are the table at the top of the chapter.",
+          "Under Console › Workers, the Worker catalog card is level one: everything this Atlas can do. Configured workers below it is level two: the targets you have set up.",
+          "Operations › Workers is level three: the processes actually leasing jobs right now.",
+          "The Test & simulate chapter walks the distinction through Active Directory, where two directories are two workers served by one instance."
+        ],
+        "de": [
+          "Öffnen Sie das Handbuch und gehen Sie zu Formulare & Worker — die drei Ebenen stehen als Tabelle am Anfang des Kapitels.",
+          "Unter Console › Workers ist die Karte Worker catalog die erste Ebene: alles, was dieses Atlas kann. Configured workers darunter ist die zweite: die Ziele, die Sie eingerichtet haben.",
+          "Operations › Workers ist die dritte Ebene: die Prozesse, die gerade wirklich Jobs abholen.",
+          "Das Kapitel Testen & Simulieren führt den Unterschied an Active Directory vor, wo zwei Verzeichnisse zwei Worker sind, die eine Instanz bedient."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
       }
     },
     {
@@ -284,35 +327,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "the-login-is-throttled-and-there-is-a-security-audit-trail",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Password guessing is slowed down, and sign-ins are recorded",
-        "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
-      },
-      "summary": {
-        "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
-        "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Organization"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }

@@ -9,6 +9,7 @@ import (
 	goldap "github.com/go-ldap/ldap/v3"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -182,7 +183,14 @@ func target(j Job, secret SecretResolver, dirs *Registry) (url, bindDN, password
 	if j.BindSecret != "" {
 		password = resolveSecret(secret, j.BindSecret)
 		if password == "" {
-			return "", "", "", false, fmt.Errorf("ad: bind secret %q is not configured (set ATLAS_CONNECTOR_<REF>_TOKEN where this job runs)", j.BindSecret)
+			// The variable is named as it is spelled, not as a pattern to apply in your
+			// head. An operator meeting this has one question — *what do I set* — and
+			// ATLAS_CONNECTOR_<REF>_TOKEN answers it only if they perform the fold
+			// correctly on a reference that may carry punctuation. Both ways out are
+			// named because both are real: the Console vault reaches a worker Atlas
+			// supervises, and the environment is what a worker you run yourself reads.
+			return "", "", "", false, fmt.Errorf("ad: bind secret %q is not configured where this job runs: store it under that name in Console > Connectors > Secrets, or set %s in the environment of the worker that leases ad jobs",
+				j.BindSecret, envname.ConnectorToken(j.BindSecret))
 		}
 	}
 	return j.URL, j.BindDN, password, j.StartTLS, nil

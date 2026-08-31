@@ -165,6 +165,18 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/panorama/models/{id}":     "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"DELETE /api/v1/panorama/models/{id}":  "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"GET /api/v1/panorama/models/{id}/xml": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	// The derived landscape mesh (ADR-0211) is read-only and would make an obvious
+	// agent tool — "what depends on this connector" is exactly the question. It is
+	// omitted for now because its payload shape is still moving: P2.5 adds node and
+	// edge kinds across several slices, and an MCP tool is a public contract that
+	// would pin that shape before it settles. Revisit once the slice is complete.
+	"GET /api/v1/panorama/mesh": "landscape mesh payload is still gaining node kinds across P2.5; exposing it now would freeze a shape that is about to change",
+	// Bindings ride with the Panorama authoring surface: an agent that could set
+	// one could rewrite an architecture model, which is the authoring contract
+	// deferred above rather than a read-only query.
+	"GET /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"PUT /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	"GET /api/v1/panorama/models/{id}/bindings/candidates": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 
 	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI

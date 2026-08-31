@@ -3,7 +3,7 @@
   Konten-Rezertifizierung (Entra ID) — was `list-users` einem Prozess erlaubt.
 
   Das Gegenstück zu entra-create-account.bpmn: dort legt ein Prozess ein Konto an,
-  hier *befragt* er das Verzeichnis. Genau das konnte der Entra-Konnektor bis
+  hier *befragt* er das Verzeichnis. Genau das konnte der Entra-Worker bis
   ADR-0172 (amended) nicht — er konnte ein Konto ändern, das der Prozess bereits
   beim Namen kannte, aber keines finden.
 
@@ -17,15 +17,15 @@
 
   Der Lehrsatz des Modells steht im Diagramm — als das, was *nicht* darin steht:
   nirgends wird geblättert. Eine Graph-Collection kommt seitenweise hinter einem
-  @odata.nextLink, aber der Konnektor folgt diesen Seiten selbst, also erhält
+  @odata.nextLink, aber der Worker folgt diesen Seiten selbst, also erhält
   `konten` die *ganze* Trefferliste als ein JSON-Array. Erst dadurch kann der
   nächste Schritt ein einzelner FEEL-Filter sein statt einer Schleife über einen
   Continuation-Token.
 
-  Läuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
-  Tenant-Credential liegt nie in der Engine. Beide Service-Tasks parken also, bis
-  ein Entra-Worker sie abholt — wie der zu starten ist, steht in der Dokumentation
-  des Prozesses selbst, damit es mit dem Modell reist.
+  Läuft nicht ohne Worker-Instanz: Der Worker-Typ entra ist worker-only
+  (ADR-0164/0172), das Tenant-Credential liegt nie in der Engine. Beide Service-Tasks
+  parken also, bis eine Entra-Worker-Instanz sie abholt — wie die zu starten ist, steht
+  in der Dokumentation des Prozesses selbst, damit es mit dem Modell reist.
 
   Startvariablen:
     bereich              "IT"                        — der zu prüfende Bereich
@@ -51,11 +51,11 @@ zugeordnet sind — und deren Deaktivierung im Verzeichnis.
 
 Der Prozess zeigt, was `list-users` möglich macht: das Verzeichnis zu *befragen*
 statt nur zu ändern. Die Trefferliste kommt als ein einziges JSON-Array an, weil
-der Konnektor Graphs Seitenwechsel selbst nachverfolgt — deshalb kommt der
+der Worker Graphs Seitenwechsel selbst nachverfolgt — deshalb kommt der
 Abgleich mit einem FEEL-Ausdruck aus und braucht keine Schleife im Diagramm.
 
-Beide Service-Tasks parken, bis ein Entra-Worker sie abholt — der Konnektor ist
-worker-only, damit das Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
+Beide Service-Tasks parken, bis eine Entra-Worker-Instanz sie abholt; der Worker-Typ
+ist worker-only, damit das Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
 
     export ATLAS_ENTRA_CONNECTORS=contoso
     export ATLAS_ENTRA_CONTOSO_TENANT_ID=… ATLAS_ENTRA_CONTOSO_CLIENT_ID=…
@@ -75,7 +75,7 @@ Prozess rezertifiziert jeden Bereich.</bpmn:documentation>
 
     <bpmn:serviceTask id="auflisten" name="Konten des Bereichs auflisten">
       <bpmn:documentation>Ein Service-Task, weil hier ein Umsystem antwortet und kein Mensch — und ein
-*Konnektor*-Task statt eines generischen REST-Tasks, weil das Modell eine
+*Worker*-Task statt eines generischen REST-Tasks, weil das Modell eine
 benannte Operation wählt ("list-users") statt eine URL und ein JSON-Fragment von
 Hand zu schreiben (ADR-0172).
 
@@ -153,7 +153,7 @@ hängen bleibt, wenn `zuSperren` einmal nicht das ist, was hier erwartet wird.</
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="deaktivieren" name="Konto deaktivieren">
-      <bpmn:documentation>Wieder ein Entra-Konnektor-Task, jetzt mit der Operation "disable" — in Graph ein
+      <bpmn:documentation>Wieder eine Aufgabe des Entra-Worker-Typs, jetzt mit der Operation "disable" — in Graph ein
 PATCH von `accountEnabled` auf false, den niemand von Hand schreiben soll.
 
 Der Task ist eine **parallele Multi-Instance** über `zuSperren`: eine Instanz je

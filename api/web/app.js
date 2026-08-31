@@ -182,7 +182,7 @@ function viewLogin() {
       </p>
     </div>`;
   // A federated login, when an operator configured one
-  // (ADR-draft-federated-authentication). The endpoint is public and answers an
+  // (ADR-0210). The endpoint is public and answers an
   // empty list on an instance with no provider, which is the ordinary case — so
   // nothing appears unless there is somewhere to go, and a server that cannot
   // answer leaves the password form exactly as it is.
@@ -466,7 +466,7 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama", on: true, role: "modeler" },
+  { id: "panorama", name: "Panorama", route: "#/panorama/landscape", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -497,7 +497,10 @@ const TOPNAV = {
     { name: "Inbox", route: "#/tasks", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
-  panorama: [{ name: "Models", route: "#/panorama", role: "modeler" }],
+  panorama: [
+    { name: "Landscape", route: "#/panorama/landscape", role: "modeler" },
+    { name: "Models", route: "#/panorama", role: "modeler" },
+  ],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -733,7 +736,7 @@ function initShell() {
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
-  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
@@ -743,10 +746,12 @@ function handbookHelp(path) {
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
-  // Organization pointed at the connector chapter only because the connector cards
-  // used to sit on it; with those on their own page it points there instead, and
-  // Organization falls through to the Console's own chapter.
-  if (path.startsWith("#/console/connectors")) return H("formulare", "Forms & connectors");
+  // Organization pointed at the worker chapter only because the worker cards used to
+  // sit on it; with those on their own page it points there instead, and Organization
+  // falls through to the Console's own chapter. Both spellings of the route resolve:
+  // #/console/workers is canonical, #/console/connectors the compatibility alias the
+  // legacy router still receives (ADR-0203).
+  if (path.startsWith("#/console/workers") || path.startsWith("#/console/connectors")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
   return H("willkommen", "Welcome to Atlas");
 }
@@ -1880,7 +1885,7 @@ async function viewConsoleOrg() {
   });
 }
 
-// ---------- Single sign-on (ADR-draft-federated-authentication) ----------
+// ---------- Single sign-on (ADR-0210) ----------
 //
 // Two questions are answered here, and only these two: which claim in the
 // provider's token to read, and what its values grant. Where the provider is —
@@ -6392,10 +6397,9 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
-// Panorama P1 is deliberately a model library, not a pretend ArchiMate editor:
-// it imports, validates, preserves and exports the canonical Open Exchange XML.
-// The diagram-js canvas arrives in P2 once its renderer and semantic rules can
-// show the document without discarding unsupported standard content (ADR-0189).
+// Panorama keeps the Open Exchange XML canonical. The library owns documents;
+// its diagram-js viewer is a read-only projection and therefore cannot discard
+// unsupported standard content when a model is opened (ADR-0189).
 async function viewPanoramaModels() {
   view.innerHTML = `<p class="muted">Loading architecture models…</p>`;
 
@@ -6430,7 +6434,7 @@ async function viewPanoramaModels() {
     );
     return `<tr data-name="${esc(`${model.name} ${app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">ARCHI</span>
-        <a href="/api/v1/panorama/models/${encodeURIComponent(model.id)}/xml"><b>${esc(model.name)}</b></a></div>
+        <a href="#/panorama/models/${encodeURIComponent(model.id)}"><b>${esc(model.name)}</b></a></div>
         <div class="muted" style="font-size:12px; padding-left:54px">${esc(model.id)}</div></td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
       <td><span class="chip">ArchiMate 3.2</span></td>
@@ -6547,6 +6551,23 @@ async function viewPanoramaModels() {
       toast(e.message, "err");
     }
   });
+}
+
+// The derived landscape mesh (ADR-0211). Panorama's landing view: it is computed
+// from what this server already holds, so it has something to show before anybody
+// has modeled anything.
+async function viewPanoramaLandscape() {
+  const gen = navGen;
+  const mod = await import("./panorama-mesh.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaMesh(view, { api, toast });
+}
+
+async function viewPanoramaModel(id) {
+  const gen = navGen;
+  const mod = await import("./panorama-viewer.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaViewer(view, { api, toast, id });
 }
 
 // resolveProject looks up a project's display name so the editor can render a
@@ -6926,6 +6947,8 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/panorama\/landscape$/, "Landscape · Panorama"],
+    [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
   ];
   for (const [re, label] of rules) if (re.test(path)) return label;
@@ -7006,7 +7029,10 @@ async function route() {
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
+    if (path === "#/panorama/landscape") return await viewPanoramaLandscape();
     if (path === "#/panorama") return await viewPanoramaModels();
+    const pm = path.match(/^#\/panorama\/models\/(.+)$/);
+    if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

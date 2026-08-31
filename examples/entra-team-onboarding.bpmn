@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Team-Onboarding (Entra ID) — was der Konnektor nach ADR-0172 (amended) beherrscht.
+  Team-Onboarding (Entra ID) — was der Entra-Worker nach ADR-0172 (amended) beherrscht.
 
   Das dritte Entra-Beispiel neben entra-create-account.bpmn (anlegen) und
   entra-konten-rezertifizierung.bpmn (befragen): hier *baut* ein Prozess einen
@@ -29,11 +29,11 @@
   `tempPasswort` — ein Laufzeitwert, nie Modelltext. (assign-license zeigt zum Vergleich
   weiter den Variablen-Weg über `lizenz`.)
 
-  Läuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
-  Tenant-Credential liegt nie in der Engine. Jeder Service-Task parkt, bis ein
-  Entra-Worker ihn abholt — wie der zu starten ist und welche Anwendungsberechtigungen
-  die App-Registrierung braucht, steht in der Dokumentation des Prozesses selbst, damit
-  es mit dem Modell reist.
+  Läuft nicht ohne Worker-Instanz: Der Worker-Typ entra ist worker-only
+  (ADR-0164/0172), das Tenant-Credential liegt nie in der Engine. Jeder Service-Task
+  parkt, bis eine Entra-Worker-Instanz ihn abholt — wie die zu starten ist und welche
+  Anwendungsberechtigungen die App-Registrierung braucht, steht in der Dokumentation des
+  Prozesses selbst, damit es mit dem Modell reist.
 
   Startvariablen:
     vorname, nachname   Namensbestandteile → displayName (FEEL: vorname + " " + nachname)
@@ -62,10 +62,12 @@ create-user und `gruppe` aus create-group tragen jeden folgenden Schritt. Die
 Team-Schritte adressieren dieselbe Gruppe, denn die id eines Teams ist die seiner
 Microsoft-365-Gruppe.
 
-Jeder Service-Task ist ein Entra-Konnektor-Task: das Modell wählt eine benannte
-Operation statt eine Graph-URL und ein JSON-Fragment von Hand zu schreiben
-(ADR-0172). Die Tasks parken, bis ein Entra-Worker sie abholt — der Konnektor ist
-worker-only, damit das Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
+Jeder Service-Task ist eine Aufgabe des Entra-Worker-Typs: das Modell wählt eine
+benannte Operation statt eine Graph-URL und ein JSON-Fragment von Hand zu schreiben
+(ADR-0172), und mit `connector="contoso"` den Worker, an dessen Tenant sie geht — das
+Attribut trägt weiterhin den alten Namen. Die Tasks parken, bis eine
+Entra-Worker-Instanz sie abholt; der Worker-Typ ist worker-only, damit das
+Tenant-Credential nie in die Engine gelangt (ADR-0164/0172):
 
     export ATLAS_ENTRA_CONNECTORS=contoso
     export ATLAS_ENTRA_CONTOSO_TENANT_ID=… ATLAS_ENTRA_CONTOSO_CLIENT_ID=…
@@ -124,7 +126,7 @@ und mailNickname kommen per FEEL aus `projektName`/`projektNick`. Die angelegte 
     <bpmn:serviceTask id="mitglied" name="In die Gruppe aufnehmen">
       <bpmn:documentation>add-group-member: ein POST auf die $ref-Sammlung der Gruppe, dessen Body die
 absolute @odata.id des Kontos trägt — eine URL, die man nicht von Hand schreiben
-soll, weshalb der Konnektor sie baut. `userId="=konto.id"`, `groupId="=gruppe.id"`.</bpmn:documentation>
+soll, weshalb der Worker sie baut. `userId="=konto.id"`, `groupId="=gruppe.id"`.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="contoso" operation="add-group-member"
                               userId="=konto.id" groupId="=gruppe.id"/>
@@ -136,7 +138,7 @@ soll, weshalb der Konnektor sie baut. `userId="=konto.id"`, `groupId="=gruppe.id
     <bpmn:serviceTask id="team" name="Team aus der Gruppe erstellen">
       <bpmn:documentation>create-team: ein PUT /groups/{id}/team, das die Gruppe zum Team macht. Die id des
 Teams ist die der Gruppe, deshalb genügt `groupId="=gruppe.id"` und es gibt kein
-eigenes Team-Feld. Die Team-Einstellungen setzt der Konnektor ausdrücklich, damit
+eigenes Team-Feld. Die Team-Einstellungen setzt der Worker ausdrücklich, damit
 dasselbe Modell überall dasselbe Team ergibt.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="contoso" operation="create-team"

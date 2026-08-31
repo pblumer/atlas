@@ -13,7 +13,7 @@ import (
 )
 
 // What a provider's claims are allowed to decide here
-// (ADR-draft-federated-authentication, step two).
+// (ADR-0210, step two).
 //
 // The unit half: reading a claim out of a token, and turning what it says into
 // roles and groups. The half that matters most is what happens when the claim says

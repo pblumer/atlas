@@ -354,7 +354,7 @@ sign in locally — or reset that password on the host with
 ### 7. Back up the vault key
 
 With the vault enabled (the default), the first start generates a master key at
-`<data-dir>/vault.key` and encrypts every stored connector secret with it. **A
+`<data-dir>/vault.key` and encrypts every stored worker secret with it. **A
 data directory without its key is not recoverable** — the secrets in it cannot be
 read back.
 
@@ -408,40 +408,45 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
-### Who may configure a connector
+### Who may configure a worker
 
-A connector has an **owner**: whoever created it. They, whoever they share it with,
-and administrators can see its endpoint and credential reference, change it, delete
-it, or give it an inbound subscription
-([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)). Everybody else
-still sees that it exists — its name, kind and whether it is usable — because that
-is what the modeler needs to author a task against it.
+A **worker** — one configured target of a Worker Type, which the Console used to call
+a connector ([ADR-0203](adr/0203-worker-execution-model.md)) — has an **owner**:
+whoever created it. They, whoever they share it with, and administrators can see its
+endpoint and credential reference, change it, delete it, or give it an inbound
+subscription ([ADR-0205](adr/0205-connector-ownership-and-event-delivery.md)).
+Everybody else still sees that it exists — its name, Worker Type and whether it is
+usable — because that is what the modeler needs to author a task against it.
 
-Sharing is in **Console → Connectors**, beside each connector: add a person or a
-whole group as *may see it* or *may change it*, and withdraw either at any time.
-Ownership can be handed on, which is how a connector survives the person who made
-it — an ownerless connector is administrators-only.
+Sharing is in **Console → Workers**, beside each worker: add a person or a whole
+group as *may see it* or *may change it*, and withdraw either at any time. Ownership
+can be handed on, which is how a worker survives the person who made it — an
+ownerless worker is administrators-only.
 
 **Its events reach only the processes you allow.** An inbound subscription claims
 the message name it publishes under: a process deployed by somebody who cannot
-reach the connector will not be delivered those events, and pointing a connector at
-a name somebody else's process already listens for is refused rather than silently
+reach the worker will not be delivered those events, and pointing a worker at a name
+somebody else's process already listens for is refused rather than silently
 forwarding your post to them. Both refusals name the message, never the other
 party. If a deploy or a subscription is refused this way, rename the message in
-your model — or ask whoever owns the connector to share it with you.
+your model — or ask whoever owns the worker to share it with you.
 
 One thing this does **not** do: it does not reach the runtime. A deployed process
-resolves its connector by name whoever started it, and while a message correlates
-the engine still matches on name and key alone. This is a gate at the two points
-where a model and a connector meet, not isolation inside the engine.
+resolves its worker by name whoever started it, and while a message correlates the
+engine still matches on name and key alone. This is a gate at the two points where a
+model and a worker meet, not isolation inside the engine.
 
-**Upgrading:** connectors stored before this carry no owner and become
+**Upgrading:** workers stored before this carry no owner and become
 administrators-only until one is assigned. An administrator can hand each to its
 real owner from the same page. Processes deployed before this carry no deployer
 either, so they keep any message name they already listen for until they are
 redeployed — deploy them again to bring them under the claim.
 
 ### Connecting a hosted AI connector
+
+> **A different "connector".** This section is about an *MCP client* — claude.ai's
+> custom connectors and their equivalents — not about Atlas workers. The Atlas
+> concept that used to carry this name is a **worker** (above).
 
 A connector that runs on somebody else's infrastructure — claude.ai's, for
 instance — has nowhere for you to paste a token. Those connect over OAuth
@@ -609,7 +614,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--oidc-name` | *(the issuer host)* | What the button on the login screen says. Also `ATLAS_OIDC_NAME` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
-| `--vault` | `true` | Encrypted secret vault for connector credentials |
+| `--vault` | `true` | Encrypted secret vault for worker credentials |
 | `--user-provisioning` | `true` | Let the system project's approved processes manage Atlas logins |
 | `--powershell` | `true` | Run PowerShell script tasks via `pwsh` |
 | `--python` | `true` | Run Python script tasks via `python3` |
@@ -662,9 +667,9 @@ history.
 | `ATLAS_RETENTION_INTERVAL` | Default for `--retention-interval` |
 | `ATLAS_RETENTION_BATCH` | Default for `--retention-batch` |
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
-| `ATLAS_TEMIS_CONNECTORS` | Comma-separated connector names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN` |
-| `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the REST connector named `<REF>` |
-| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Connectors → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
+| `ATLAS_TEMIS_CONNECTORS` | Comma-separated temis worker names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN`. The variable keeps the pre-ADR-0203 spelling |
+| `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the credential reference `<REF>` a REST task names. The variable keeps the pre-ADR-0203 spelling |
+| `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
 
@@ -804,6 +809,11 @@ atlas worker --server https://atlas.example.com --token "$ATLAS_TOKEN" --connect
 atlas mcp    --server https://atlas.example.com --token "$ATLAS_TOKEN"
 ```
 
+`--connector` names the **Worker Type** this instance serves, not a configured
+worker: it keeps the pre-ADR-0203 spelling, like the `ATLAS_*_CONNECTORS` variables
+below. One such process is a *Worker Instance*, and starting more of them against the
+same server is how a job type is scaled.
+
 For Prometheus, that is two lines in the scrape config:
 
 ```yaml
@@ -871,7 +881,7 @@ unit; the parts are not independently consistent.
 | `state/` | Materialized state (embedded LSM store), rebuildable from the WAL |
 | `checkpoints/` | Recovery checkpoints, so a restart replays only the log after the newest one |
 | `vault.key` | Vault master key, mode `0600`, only when generated rather than supplied |
-| `vault/` | Encrypted connector secrets |
+| `vault/` | Encrypted worker secrets |
 | `deployments/`, `drafts/`, `forms/`, `projects/`, `releases/`, `users/`, `connectors/`, `settings/`, … | Design-time and administrative stores |
 | `dmn-models/` | DMN models, unless resolved remotely |
 | `exporter/` | OpenSearch export position, when the exporter is on |

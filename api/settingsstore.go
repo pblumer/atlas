@@ -165,7 +165,7 @@ func (s *settingsStore) saveRegistration(r registrationSetting) error {
 	return sidecar.WriteJSON(s.dir, s.regFile, r)
 }
 
-// ---------- Claim mapping for a federated login (ADR-draft-federated-authentication) ----------
+// ---------- Claim mapping for a federated login (ADR-0210) ----------
 
 // getOIDCMapping returns the stored claim mapping, or the zero value when nobody
 // has written one. A missing file is not an error: it is the ordinary state of an

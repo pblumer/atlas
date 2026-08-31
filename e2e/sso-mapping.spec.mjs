@@ -1,5 +1,5 @@
 // What a provider's claims decide here, from the browser
-// (ADR-draft-federated-authentication, measure M12 step two; the Single sign-on
+// (ADR-0210, measure M12 step two; the Single sign-on
 // card in app.js, viewConsoleOrg).
 //
 // The card is the whole editable surface of the mapping, and everything that makes

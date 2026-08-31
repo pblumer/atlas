@@ -19,7 +19,7 @@ import (
 // is a bearer statement about who somebody is, and everything downstream — the
 // account, the session, the roles — follows from believing it. So the checks are
 // tested one at a time, each by a token that is valid except for the one thing
-// under test (ADR-draft-federated-authentication).
+// under test (ADR-0210).
 
 // signingKey is a test provider's key pair plus the key id it publishes under.
 type signingKey struct {

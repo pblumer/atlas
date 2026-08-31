@@ -13,7 +13,7 @@ import (
 )
 
 // What a provider's claims are allowed to decide here
-// (ADR-draft-federated-authentication, step two).
+// (ADR-0210, step two).
 //
 // Step one made a federated login possible and deliberately let it grant nothing:
 // a first login produced an account with `user` and an administrator granted the

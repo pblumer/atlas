@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Handbook",
+    "Workers"
+  ],
+  "title": {
+    "en": "The handbook now explains Workers — and what a Worker actually is",
+    "de": "Das Handbuch erklärt jetzt Worker — und was ein Worker eigentlich ist"
+  },
+  "summary": {
+    "en": "The Console calls them Workers now, but the handbook still said Connectors, and used the word for three different things: the capability Atlas has, the account and endpoint you configured, and the process that does the work. The chapter Forms & workers now separates them by name. A Worker Type is a capability — Jira, Mail, Active Directory. A Worker is one configured target of that type, with its endpoint and its credential reference, and it is the name a task states. A Worker Instance is a running process that picks jobs up; you scale by starting more of those, not by configuring the same worker twice. The Active Directory chapter shows where that matters: two forests are two Workers, and one Worker Instance serves both. Nothing in your models changes — a task still says connector=\"…\", and the handbook now has a note explaining why it stays that way.",
+    "de": "Die Konsole nennt sie inzwischen Worker, das Handbuch sagte weiter Connectors — und meinte damit drei verschiedene Dinge: die Fähigkeit, die Atlas mitbringt, das konfigurierte Zielsystem samt Zugang und den Prozess, der die Arbeit tut. Das Kapitel Formulare & Worker trennt sie jetzt beim Namen. Ein Worker-Typ ist eine Fähigkeit — Jira, Mail, Active Directory. Ein Worker ist ein konfiguriertes Ziel dieses Typs, mit Endpoint und Verweis auf das Geheimnis im Vault, und genau diesen Namen nennt eine Aufgabe. Eine Worker-Instanz ist ein laufender Prozess, der Jobs abholt; skaliert wird über mehr Instanzen, nicht über einen zweiten Worker. Das Active-Directory-Kapitel zeigt, wozu das gut ist: zwei Forests sind zwei Worker, und eine Worker-Instanz bedient beide. An Ihren Modellen ändert sich nichts — eine Aufgabe schreibt weiterhin connector=\"…\", und das Handbuch erklärt jetzt in einer eigenen Notiz, warum das so bleibt."
+  },
+  "tutorial": {
+    "en": [
+      "Open the handbook and go to Forms & workers — the three levels are the table at the top of the chapter.",
+      "Under Console › Workers, the Worker catalog card is level one: everything this Atlas can do. Configured workers below it is level two: the targets you have set up.",
+      "Operations › Workers is level three: the processes actually leasing jobs right now.",
+      "The Test & simulate chapter walks the distinction through Active Directory, where two directories are two workers served by one instance."
+    ],
+    "de": [
+      "Öffnen Sie das Handbuch und gehen Sie zu Formulare & Worker — die drei Ebenen stehen als Tabelle am Anfang des Kapitels.",
+      "Unter Console › Workers ist die Karte Worker catalog die erste Ebene: alles, was dieses Atlas kann. Configured workers darunter ist die zweite: die Ziele, die Sie eingerichtet haben.",
+      "Operations › Workers ist die dritte Ebene: die Prozesse, die gerade wirklich Jobs abholen.",
+      "Das Kapitel Testen & Simulieren führt den Unterschied an Active Directory vor, wo zwei Verzeichnisse zwei Worker sind, die eine Instanz bedient."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

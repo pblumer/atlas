@@ -1,8 +1,35 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Proposed
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; see the amendment note below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-08-31): the landscape altitude is derived, not drawn.** Everything
+> this record describes is authored — a view exists because a person placed elements on
+> it. That leaves an instance nobody has modeled showing nothing, and leaves no altitude
+> above a single view.
+> [ADR-0211](0211-panorama-derived-landscape-mesh.md)
+> adds one: a whole-instance graph computed from resources Atlas already holds — process
+> applications, deployed processes, call activities, connectors, job and worker types,
+> releases, deployment targets, DMN decisions — with the ArchiMate model of this record
+> as an annotation over it rather than its source.
+>
+> Three things in the text below are affected, and none of them is reversed:
+>
+> - **§6's seven observation states remain the contract.** The mesh aggregates them into
+>   three severity classes for zoom-out only, keeping *unreachable* and *stale* out of
+>   the critical class and attributing every worst-of parent to the descendant that
+>   caused it. It does not replace the states, and §6's rule that layer fills are never
+>   recolored holds there too.
+> - **§7's ban on notation-as-a-theme holds.** C4 is added as a one-directional,
+>   read-only projection under a versioned mapping that reports what it drops — never
+>   authored, never round-tripped, and not a peer notation. An authorable second
+>   notation, UAF included, still needs its own record, exactly as §7 says.
+> - **The delivery slices below gain P2.5**, between P2 and P3, and **P5 loses
+>   dependency/impact analysis and discovered-but-unmodeled resources to it** — the
+>   derived graph produces the edges both need, so they arrive with it rather than three
+>   slices later. P5 keeps desired-versus-observed drift over time and the optional
+>   Prometheus/OpenSearch adapters.
 
 ## Context
 
@@ -341,14 +368,20 @@ diagnostics, and retention of the original source model.
    backup/restore, and interoperability fixtures.
 2. **P2 — ArchiMate editor:** vendored `diagram-js` bundle, bounded palette,
    property panel, multi-view canvas, undo/redo, save/reload, and browser E2E tests.
-3. **P3 — Atlas bindings:** namespaced properties and selectors for process
+3. **P2.5 — Landscape mesh** (added by the 2026-08-31 amendment): the derived
+   whole-instance graph, computed per requesting principal with explicit restricted
+   placeholders where a sharing scope cuts a path; search, filter, and impact analysis;
+   a measured size budget; then the model overlay and the C4 projection on P3, and
+   severity aggregation on P4.
+4. **P3 — Atlas bindings:** namespaced properties and selectors for process
    applications, BPMN processes, connectors/job types, releases, runtimes, and
    deployment targets; no secret material.
-4. **P4 — Live Panorama:** stable node descriptor, local and remote observation
+5. **P4 — Live Panorama:** stable node descriptor, local and remote observation
    projection, freshness/partial-failure semantics, and accessible overlays.
-5. **P5 — Landscape intelligence:** desired-versus-observed drift, discovery of
-   unmodeled resources, dependency/impact analysis, and optional
-   Prometheus/OpenSearch adapters for historical context.
+6. **P5 — Landscape intelligence:** desired-versus-observed drift over time and
+   optional Prometheus/OpenSearch adapters for historical context. Dependency/impact
+   analysis and discovery of unmodeled resources moved to P2.5 in the 2026-08-31
+   amendment.
 
 Each slice ships end to end: API, persistence where applicable, embedded UI,
 authorization, tests, documentation, and OpenAPI contract. A slice is not complete

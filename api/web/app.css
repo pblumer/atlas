@@ -592,6 +592,47 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .deploy-wrap { position: relative; }
 .coming { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; }
 
+/* ---------- Panorama ArchiMate viewer ---------- */
+.panorama-editor .editor-bar { padding-left: 14px; }
+.panorama-view-tabs { display: flex; min-width: 0; overflow-x: auto; align-self: stretch; }
+.panorama-view-tab {
+  flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; background: none;
+  padding: 0 12px; color: var(--muted); font: 600 12px/42px ui-sans-serif, system-ui, sans-serif; cursor: pointer;
+}
+.panorama-view-tab:hover { color: var(--text); background: var(--bg); }
+.panorama-view-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.panorama-status { color: var(--muted); font-size: 12px; white-space: nowrap; margin: 0 4px; }
+.panorama-lock { color: var(--ok); }
+.panorama-tools {
+  position: absolute; left: 12px; top: 56px; z-index: 8; display: flex; flex-direction: column;
+  padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.panorama-tools .icon-btn { width: 30px; height: 28px; border-radius: 4px; font-weight: 700; }
+.panorama-canvas { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; background: var(--diagram-bg); }
+.panorama-canvas .djs-container { font-family: inherit; }
+.panorama-canvas .archimate-label { font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; fill: #20252a; pointer-events: none; }
+.panorama-canvas .djs-element.selected .djs-outline { stroke: var(--accent); stroke-width: 2px; }
+.panorama-properties { width: 300px; }
+.panorama-props-empty { margin: auto; padding: 32px 24px; text-align: center; color: var(--muted); }
+.panorama-props-empty b { color: var(--text); }
+.panorama-props-empty p { font-size: 12px; line-height: 1.5; }
+.panorama-selection-icon { font-size: 28px; color: var(--accent); margin-bottom: 8px; }
+.panorama-kv { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: start; margin: 8px 0; font-size: 12px; }
+.panorama-kv span { color: var(--muted); }
+.panorama-kv b, .panorama-kv code { min-width: 0; overflow-wrap: anywhere; }
+.panorama-kv code { font-size: 11px; }
+.panorama-no-view { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--muted); }
+.panorama-no-view > div { color: var(--accent); font-size: 38px; }
+.panorama-no-view h2 { color: var(--text); margin: 8px 0 0; }
+.panorama-no-view p { margin: 6px 0; }
+.panorama-problems { cursor: default; }
+@media (max-width: 820px) {
+  .panorama-properties { display: none; }
+  .panorama-status { display: none; }
+  .panorama-editor .crumb-current { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
 /* ---------- FEEL editor ---------- */
 /* A textarea layered over a highlighted <pre> that mirrors its text and scroll
    (see feel.js). Both layers MUST share identical box metrics so the coloured
@@ -3138,3 +3179,92 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .conn-share-head { font-size: 13px; font-weight: 600; }
 /* A connector somebody else configures: present, referenceable, and visibly not yours. */
 .conn-foreign td { opacity: .72; }
+
+/* Panorama's derived landscape mesh (ADR-0211). The graph is computed by the
+   server and laid out in the browser; these rules only style the result. Node
+   fills come from the kind table in panorama-mesh.js so the legend and the
+   canvas cannot drift apart. */
+.mesh-card { display: flex; flex-direction: column; gap: 12px; }
+.mesh-head { display: flex; align-items: baseline; gap: 12px; }
+.mesh-head h1 { margin: 0; }
+.mesh-legend {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.mesh-swatches { display: flex; flex-wrap: wrap; gap: 16px; }
+.mesh-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.mesh-meta { font-size: 13px; color: var(--text); }
+/* A filtered or collapsed picture states so in words, not only in shading — the
+   whole point is that incompleteness is legible rather than inferred. */
+.mesh-note { margin: 0; font-size: 13px; color: var(--muted); }
+.mesh-surface { overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.mesh-canvas { display: block; width: 100%; height: auto; min-height: 420px; background: var(--card); }
+.mesh-edge { stroke: var(--border-strong); stroke-width: 1.5; }
+.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.7; }
+.mesh-label { font-size: 12px; fill: var(--text); }
+.mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
+.mesh-node { cursor: default; }
+a .mesh-node { cursor: pointer; }
+a:hover .mesh-node circle { stroke-width: 3; }
+a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
+.mesh-search {
+  flex: 1; min-width: 0; max-width: 320px; padding: 6px 10px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--card); color: var(--text); font: inherit; font-size: 13px;
+}
+.mesh-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mesh-empty-filter { margin: 0; padding: 32px; text-align: center; color: var(--muted); }
+
+/* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
+   highlight says which, the panel says how many and whether the count is a floor. */
+.mesh-body { display: flex; gap: 12px; align-items: flex-start; }
+.mesh-body .mesh-surface { flex: 1; min-width: 0; }
+.mesh-side { width: 260px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.mesh-controls { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.mesh-controls label { color: var(--muted); }
+.mesh-controls select {
+  padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--card); color: var(--text); font: inherit; font-size: 13px;
+}
+.mesh-panel {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); font-size: 13px; display: flex; flex-direction: column; gap: 8px;
+}
+.mesh-panel-empty { color: var(--muted); }
+.mesh-panel-empty p, .mesh-panel p { margin: 0; }
+.mesh-panel-head { display: flex; flex-direction: column; gap: 2px; }
+.mesh-impact-count { font-size: 13px; }
+.mesh-impact-count b { font-size: 18px; }
+/* A truncated answer is a warning, not a footnote: the number above it is a floor. */
+.mesh-truncated { color: var(--warn); }
+.mesh-drill { font-size: 13px; }
+.mesh-node { cursor: pointer; }
+.mesh-node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
+.mesh-in-impact circle { stroke-width: 3; }
+line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
+/* Dimmed rather than hidden: the rest of the landscape stays visible as context,
+   so an impact set reads as a part of the whole rather than as the whole. */
+.mesh-dimmed { opacity: 0.22; }
+@media (max-width: 900px) {
+  .mesh-body { flex-direction: column; }
+  .mesh-side { width: 100%; }
+}
+
+/* Atlas bindings in the Panorama properties panel (ADR-0189 §4). A binding shows
+   the server-resolved name; the id stays visible because it is what the document
+   actually stores and what another tool will read. */
+.panorama-binding { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.panorama-binding:last-child { border-bottom: 0; }
+.panorama-binding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panorama-binding-head span { font-size: 13px; color: var(--muted); }
+.panorama-binding p { margin: 4px 0 0; font-size: 13px; }
+.panorama-bound-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.panorama-bound { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.panorama-bound code { font-size: 12px; }
+/* An unresolved binding is shown rather than hidden: removing it would make a
+   broken binding look like an absent one, and the model would then look correct. */
+.panorama-bound.unresolved { color: var(--warn); }
+.panorama-unresolved { font-size: 12px; }
+.panorama-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.panorama-pick label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; font-size: 13px; }

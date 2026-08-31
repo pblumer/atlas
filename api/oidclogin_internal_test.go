@@ -17,7 +17,7 @@ import (
 )
 
 // A federated login, end to end against a provider that behaves like a real one
-// (ADR-draft-federated-authentication).
+// (ADR-0210).
 //
 // The tests are internal because the provider has to sign tokens with the same
 // helpers that test the validation itself, and because what they assert about is

@@ -422,6 +422,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/panorama/validate", s.panorama.HandleValidate, apiOp{
 			summary: "Validate an ArchiMate Open Exchange document without storing it (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			req: xmlBody("ArchiMate Open Exchange XML"), resp: jsonBody("Validation result", tObject())}},
+		// The derived landscape mesh (ADR-0211): computed from this server's own
+		// resources per requesting principal, never stored, and never mixed into the
+		// ArchiMate documents above.
+		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
+			summary: "Derive the landscape mesh from this server's resources, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Derived landscape graph", tObject())}},
 		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
 			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Panorama models", tArray())}},
@@ -441,6 +447,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expectedRevision")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"DELETE", "/api/v1/panorama/models/{id}", s.panorama.HandleDelete, apiOp{
 			summary: "Delete a Panorama model (ADR-0189)", tag: "Panorama", role: RoleModeler, status: http.StatusNoContent}},
+		// Atlas bindings (ADR-0189 §4): which Atlas resource an ArchiMate element
+		// refers to. Read resolves ids to names for this caller; write sets one key
+		// on one element and leaves the rest of the document byte-for-byte alone.
+		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
+			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Resolved Atlas bindings", tObject())}},
+		{"GET", "/api/v1/panorama/models/{id}/bindings/candidates", s.panorama.HandleBindingCandidates, apiOp{
+			summary: "List the Atlas resources the caller may bind one key to (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Binding candidates", tObject())}},
+		{"PUT", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleSetBinding, apiOp{
+			summary: "Set one Atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			req: jsonBody("Binding assignment", schemaObj(map[string]any{
+				"expectedRevision": tInteger(), "elementId": tString(), "key": tString(), "values": tArray(),
+			}, "expectedRevision", "elementId", "key")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/xml", s.panorama.HandleXML, apiOp{
 			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: xmlBody("ArchiMate Open Exchange XML")}},
@@ -780,10 +800,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
-			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-draft-federated-authentication)", tag: "Auth", role: RoleAdmin,
+			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
 			resp: jsonBody("Claim mapping", tObject())}},
 		{"PUT", "/api/v1/settings/oidc-mapping", s.handleSetOIDCMapping, apiOp{
-			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-draft-federated-authentication)", tag: "Auth", role: RoleAdmin,
+			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-0210)", tag: "Auth", role: RoleAdmin,
 			req:  jsonBody("Claim mapping", tObject()),
 			resp: jsonBody("Claim mapping", tObject())}},
 
@@ -796,7 +816,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
 			summary: "Log out the current session", tag: "Auth", role: roleAny, resp: jsonBody("Logout result", tObject())}},
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
-			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-draft-federated-authentication)", tag: "Auth", role: roleAny,
+			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
 		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
 			summary: "Report auth status and the current user", tag: "Auth", role: roleAny,

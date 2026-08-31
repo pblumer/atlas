@@ -134,7 +134,7 @@ ELEMENTS = [
     ("role-ops", "BusinessRole", "Operations", "business",
      "Monitoring, incident resolution, timeline inspection.", {}),
     ("role-integrator", "BusinessRole", "Integration Developer", "business",
-     "Authors job workers / connectors.", {}),
+     "Authors Worker Types and the workers that run them.", {}),
     ("role-admin", "BusinessRole", "Administrator", "business",
      "Deploys the binary, manages secrets and sharing scopes.", {}),
 
@@ -202,13 +202,13 @@ ELEMENTS = [
      "Authoring & operations over MCP, as a stdio adapter over the HTTP API.",
      {"adr": "ADR-0016"}),
 
-    ("conn-rest", "ApplicationComponent", "REST connector", "application",
+    ("conn-rest", "ApplicationComponent", "REST worker type", "application",
      "Service task calls an external HTTP API.", {}),
-    ("conn-mail", "ApplicationComponent", "Mail connector", "application",
+    ("conn-mail", "ApplicationComponent", "Mail worker type", "application",
      "Email via Gmail / Microsoft Graph (OAuth).", {}),
-    ("conn-script", "ApplicationComponent", "Script-task worker", "application",
-     "Polyglot scripts (e.g. PowerShell) as workers.", {"adr": "ADR-0047"}),
-    ("conn-dmn", "ApplicationComponent", "DMN / temis connector", "application",
+    ("conn-script", "ApplicationComponent", "Script worker type", "application",
+     "Polyglot scripts (e.g. PowerShell) run outside the engine.", {"adr": "ADR-0047"}),
+    ("conn-dmn", "ApplicationComponent", "DMN / temis worker type", "application",
      "Business-rule tasks against the temis engine.", {"adr": "ADR-0050"}),
     ("conn-clio", "ApplicationComponent", "clio event bridge", "application",
      "At-least-once ingestion of external events, idempotent delivery.", {"adr": "ADR-0075"}),
@@ -293,7 +293,7 @@ ELEMENTS = [
     ("plat-m5", "Plateau", "M5 Scale-out", "implementation",
      "Cross-partition messaging and horizontal scale.", {"status": "planned"}),
     ("plat-m6", "Plateau", "M6 Ecosystem", "implementation",
-     "A broader connector / integration surface.", {"status": "planned"}),
+     "A broader Worker Type / integration surface.", {"status": "planned"}),
     ("wp-server", "WorkPackage", "Milestone S: single-binary server & web UI", "implementation",
      "Parallel workstream to the engine timeline.", {}),
     ("wp-authoring", "WorkPackage", "Milestone A: Modeler & authoring experience", "implementation",
@@ -405,7 +405,7 @@ RELATIONSHIPS = [
     ("r-feel-adec", "Assignment", "app-feel", "asvc-decision", "", {}),
     ("r-proc-aht", "Assignment", "app-processor", "asvc-humantask", "", {}),
     ("r-proc-atl", "Assignment", "app-processor", "asvc-timeline", "", {}),
-    # Job distribution serves connectors; connectors serve the domain process
+    # Job distribution serves the worker types; they serve the domain process
     ("r-ajob-crest", "Serving", "asvc-jobdist", "conn-rest", "", {}),
     ("r-ajob-cmail", "Serving", "asvc-jobdist", "conn-mail", "", {}),
     ("r-ajob-cscript", "Serving", "asvc-jobdist", "conn-script", "", {}),
@@ -453,7 +453,7 @@ RELATIONSHIPS = [
     ("r-artwal-elog", "Realization", "art-wal", "dobj-eventlog", "", {}),
     ("r-artsst-sstore", "Realization", "art-sst", "dobj-statestore", "", {}),
     ("r-artmodels-bpmn", "Realization", "art-models", "bobj-bpmn", "", {}),
-    # External systems serve their connectors
+    # External systems serve their worker types
     ("r-exttemis-cdmn", "Serving", "ext-temis", "conn-dmn", "", {}),
     ("r-extclio-cclio", "Serving", "ext-clio", "conn-clio", "", {}),
     ("r-extmail-cmail", "Serving", "ext-mail", "conn-mail", "", {}),
@@ -534,7 +534,7 @@ VIEWS = [
         ("Channels", ["chan-webui", "chan-rest", "chan-mcp"]),
         ("Atlas Engine — core",
          ["app-compiler", "app-processor", "app-datamodel", "app-wal", "app-statestore"]),
-        ("Connectors — job workers",
+        ("Worker types — job execution",
          ["conn-rest", "conn-mail", "conn-script", "conn-dmn", "conn-clio"]),
     ]),
     ("view-technology", "Technology & deployment layer", [

@@ -15,7 +15,7 @@ const (
 	SourceLocal = "local"
 
 	// SourceOIDC marks an account an OpenID Connect provider vouches for
-	// (ADR-draft-federated-authentication). Its ExternalID is that provider's
+	// (ADR-0210). Its ExternalID is that provider's
 	// subject, it carries no password hash, and the pair (source, external id) is
 	// what a federated login resolves by.
 	SourceOIDC = "oidc"

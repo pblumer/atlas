@@ -311,7 +311,7 @@ type oauthConfig struct {
 	dynamicRegistration bool
 
 	// oidc is the identity provider people may sign in with, when an operator named
-	// one (ADR-draft-federated-authentication). It rides along here because it shares
+	// one (ADR-0210). It rides along here because it shares
 	// the one thing that has to be right for both — the origin this server is
 	// reachable under, which is what a redirect URI is built from.
 	oidc api.OIDCConfig

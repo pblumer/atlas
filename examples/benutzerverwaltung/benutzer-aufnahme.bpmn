@@ -21,8 +21,8 @@
   der Freigabe (ba-konto); der userConnector uebernimmt sie aus [rolle].
    -> (X) Gateway "Angelegt?"  (default -> anlegen; entscheidung="ablehnen" -> Bypass)
         [anlegen]  -> Service-Task "Konto anlegen" (userConnector create)
-                   -> Service-Task "Zugangsdaten senden" (Mail-Connector)
-        [ablehnen] -> Service-Task "Ablehnung senden"    (Mail-Connector, unten)
+                   -> Service-Task "Zugangsdaten senden" (Mail-Worker)
+        [ablehnen] -> Service-Task "Ablehnung senden"    (Mail-Worker, unten)
    -> (X) Join
    -> Ende "Aufnahme abgeschlossen"
 

@@ -76,7 +76,7 @@ Teil der Applikation "Bewerbermanagement": ruft bw-interview auf und nutzt die D
     <serviceTask id="eingang" name="Eingangsbestätigung senden">
       <documentation>Bestätigt der bewerbenden Person den Eingang — die erste Zusage, die eine Bewerbung verdient, und der Grund, warum dieser Schritt vor der Prüfung steht.
 
-Läuft im Mockup-Modus: die Engine simuliert das Mailsystem mit ein bis drei Sekunden Antwortzeit. Für den Produktivbetrieb wird hier ein Mail-Connector gebunden — das Modell ändert sich dabei nur an diesem einen Element.</documentation>
+Läuft im Mockup-Modus: die Engine simuliert das Mailsystem mit ein bis drei Sekunden Antwortzeit. Für den Produktivbetrieb wird hier ein Mail-Worker gebunden — das Modell ändert sich dabei nur an diesem einen Element.</documentation>
       <extensionElements>
         <atlas:mockupConnector minDuration="PT1S" maxDuration="PT3S"
           resultExpression="={ kanal: &quot;E-Mail&quot;, an: email }"
@@ -165,7 +165,7 @@ Bitte begründe kurz: die Begründung geht in die Absage bzw. in die Personalakt
     </boundaryEvent>
 
     <serviceTask id="erinnerung" name="Erinnerung senden">
-      <documentation>Stupst HR an, dass eine Entscheidung offen ist. Ebenfalls Mockup — im Produktivbetrieb ein Mail-Connector an die Gruppe hr.</documentation>
+      <documentation>Stupst HR an, dass eine Entscheidung offen ist. Ebenfalls Mockup — im Produktivbetrieb ein Mail-Worker an die Gruppe hr.</documentation>
       <extensionElements>
         <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
           resultExpression="={ erinnert: true }"

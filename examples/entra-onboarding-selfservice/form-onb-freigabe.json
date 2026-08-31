@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Onboarding freigeben\n\nPrüfe den Antrag. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Konnektor legt daraufhin das Konto in blumer.net an (`create-user`).\n\n> Das Passwort ist ein **Laufzeitwert** — es steht nie im Modell, sondern wird hier gesetzt und als `passwordProfile` an Microsoft Graph übergeben (`forceChangePasswordNextSignIn`). Der UPN wurde bereits gegen die Test-Objekt-Regel geprüft; du siehst hier nur Anträge, die sie bestanden haben."
+      "text": "# 🔑 Onboarding freigeben\n\nPrüfe den Antrag. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Worker legt daraufhin das Konto in blumer.net an (`create-user`).\n\n> Das Passwort ist ein **Laufzeitwert** — es steht nie im Modell, sondern wird hier gesetzt und als `passwordProfile` an Microsoft Graph übergeben (`forceChangePasswordNextSignIn`). Der UPN wurde bereits gegen die Test-Objekt-Regel geprüft; du siehst hier nur Anträge, die sie bestanden haben."
     },
     {
       "key": "vorname",

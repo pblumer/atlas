@@ -13,6 +13,12 @@ jobs:
   check:
     name: build · vet · fmt · race · cover
     runs-on: ubuntu-latest
+    # Same reasoning as the e2e job below: the expensive failure mode is the hang,
+    # not the error, and this job had no ceiling at all — a wedged test would have
+    # held a runner for the six-hour default. It takes ~14 minutes today, and the
+    # race step's per-package timeout is raised below, so the cap is what keeps that
+    # from turning one stuck package into hours of runner time.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +64,15 @@ jobs:
             exit 1
           fi
 
+      # The api package needs 8-10 minutes of Go's default 10-minute *per-package*
+      # timeout on its own, so the default leaves no headroom and the step fails on
+      # runner variance rather than on a defect: it passed at 526s on one run and
+      # timed out at 600s on the next, where the only change between them was a
+      # single line in an unrelated test file. Nothing is skipped or quarantined by
+      # raising it — every test still runs, and a real hang still ends the job well
+      # inside the job's 30-minute cap above.
       - name: Test (race detector)
-        run: go test -race ./...
+        run: go test -race -timeout=25m ./...
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 95

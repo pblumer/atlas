@@ -134,8 +134,8 @@ curl -sX POST $BASE/messages -H 'Content-Type: application/json' \
 ## Weiterbauen
 
 - **Echte Anbindungen** statt Mockups: `Eingangsbestätigung senden` und
-  `Absage senden` an einen Mail-Connector hängen, `Vertrag im HR-System anlegen`
-  an einen REST-Connector. Es ändert sich je ein Element — der Rest des Modells
+  `Absage senden` an einen Mail-Worker hängen, `Vertrag im HR-System anlegen`
+  an einen REST-Worker. Es ändert sich je ein Element — der Rest des Modells
   bleibt, wie er ist.
 - **Eine dritte Runde** für Führungsstellen: eine Zeile in `vorpruefung.dmn`.
 - **Absagen mit Frist**: einen Timer vor `Absage senden`, damit keine Absage

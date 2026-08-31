@@ -1,4 +1,4 @@
-# ADR-DRAFT: Federated authentication
+# ADR-0210: Federated authentication
 
 - **Status:** Accepted
 - **Date:** 2026-08-29

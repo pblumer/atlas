@@ -16,7 +16,7 @@ _Changed_ / _Removed_ for each version.
 
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
-  back with a session ([ADR-draft-federated-authentication](docs/adr/draft-federated-authentication.md)).
+  back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
   Point it at any compliant provider with `ATLAS_OIDC_ISSUER`,
   `ATLAS_OIDC_CLIENT_ID` and `ATLAS_OIDC_CLIENT_SECRET`, and register
   `<external-url>/auth/oidc/callback` as the redirect URI.
@@ -46,6 +46,27 @@ _Changed_ / _Removed_ for each version.
   no rule and holds `user`, which everybody who can sign in has either way. A rule
   that could never work — a role Atlas does not enforce, a group that has been
   deleted — is refused when you save it rather than ignored on every login.
+
+### Changed
+
+- **The handbook and the examples teach Workers, not connectors.** The Console
+  renamed *Connectors* to *Workers* with the first slice of
+  [ADR-0203](docs/adr/0203-worker-execution-model.md); the documentation still
+  called the same thing three different things. It now uses one vocabulary
+  throughout: a **Worker Type** is a capability Atlas has (Jira, Mail, Active
+  Directory), a **Worker** is one configured target and identity of that type —
+  the name a task states — and a **Worker Instance** is a running process that
+  leases jobs. *Forms & connectors* is now *Forms & workers* and explains the
+  three levels and the `Task → Job → Worker` chain they sit on; the Active
+  Directory chapter uses two forests to show where they come apart (a second
+  directory is a second Worker, more throughput is more Worker Instances); the
+  glossary gained all three terms and keeps *Connector* as a legacy entry.
+
+  **No model changes.** A task still names its worker with `connector="…"`, the
+  extension elements are still `<atlas:mailConnector>` and friends, and
+  `atlas worker --connector mail` still names the worker type — the handbook now
+  says so explicitly, in a note that explains why. Every example's prose moved to
+  the new vocabulary; not one line of BPMN did.
 
 ### Security
 
@@ -466,6 +487,86 @@ _Changed_ / _Removed_ for each version.
   served without a credential, now by declaration rather than by accident.
 
 ### Added
+
+- **Panorama models can say which Atlas resource an element means.** An ArchiMate
+  element in a Panorama model now carries **Atlas bindings**
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
+  an Application Component names a process application, a Business Process names a
+  BPMN process id, an Application Service names a worker or job type, a Node names a
+  deployment target, an Artifact names a release. Select an element in the model
+  viewer to see what it is bound to, and bind it from a picker of the resources you
+  may see.
+
+  Bindings are ordinary ArchiMate properties in an `atlas.` namespace, so a bound
+  model stays a standard model: it exports as Open Exchange XML like any other and
+  its bindings travel into Archi or any conformant tool. The keys are an allowlist,
+  which is what keeps credentials out — `atlas.credentialRef` is refused because it
+  was never permitted, and a rejected value is never echoed back.
+
+  **The document stores an opaque id and nothing else.** Names come from the server
+  at read time, filtered by what you may see, so a model can never hold a stale copy
+  of one. A binding that no longer resolves stays visible and says which of three
+  things it is: outside your access, no longer on this server, or a kind this Atlas
+  version cannot resolve yet. Removing it would make a broken binding look like an
+  absent one, and the model would then look correct.
+
+  **Editing a binding does not reformat your document.** The writer splices the
+  bytes it needs to change and leaves everything else exactly as it was — comments,
+  indentation, attribute order, and any standard content Atlas does not model.
+
+- **Panorama shows the landscape you already have.** Panorama's landing view is now
+  a derived mesh of the whole instance
+  ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
+  processes deployed under them, and the call activities between them, computed from
+  what Atlas already holds rather than from anything anybody drew. It therefore says
+  something on a server with no architecture model in it at all, and its edges are
+  facts the server can point at — a call activity *is* a dependency — resolved
+  through the same overrides the engine would follow, so the picture matches what
+  would actually run.
+
+  The graph is computed per requesting principal against the existing sharing scopes
+  (ADR-0071); nothing new to configure. Where your access cuts a dependency, the mesh
+  draws a **restricted** placeholder and keeps the edge instead of dropping it, and
+  the legend states how many there are — "this process depends on nothing" would be a
+  false statement when it means "you may not see what it depends on". A call target
+  that no deployment provides is shown as **unresolved**, which is a different finding
+  from a hidden one and is drawn differently. Clicking a process opens it in the
+  Operations live view: Panorama owns the landscape, and links into the process and
+  instance views rather than repeating them.
+
+  Nothing is stored — the mesh is a projection, recomputed on request, and it never
+  writes to an ArchiMate model. Above 400 nodes it collapses to applications and says
+  so in the legend rather than handing your browser a graph it cannot lay out; that
+  number is measured (a 400-node graph paints in about a second in Chromium), not
+  guessed.
+
+  **The landscape also draws what a process depends on besides another process:** the
+  **workers** its service tasks name, and the **decisions** its business-rule tasks
+  delegate to. That is the question a model cannot answer about itself — a task names
+  its worker by name and carries no endpoint and no secret, so nothing inside the
+  model can tell whether that name is configured on this server (ADR-0158). A process
+  pointing at a worker nobody configured deploys clean and parks its first token;
+  here it shows as **unresolved** before anything runs. A worker node carries its name
+  and its Worker Type and nothing else — the endpoint and the credential reference
+  stay on the server. Two references are deliberately *not* findings, mirroring the
+  deploy-time check exactly: one whose job type no managed Worker Type claims is not a
+  worker reference at all, and a name authored as a FEEL expression names no fixed
+  worker, since which one it reaches is known only at call time. Configured workers
+  and registered decisions that nothing references stay off the picture: the mesh is
+  the dependency graph, not an inventory.
+
+  **A search box** filters the mesh by name, kind or process id and reports how much
+  it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
+- **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
+  library now opens its Open Exchange Diagram views on a read-only `diagram-js`
+  canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
+  the same canvas/properties/problems frame as the BPMN and DMN editors
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)).
+  Selecting an element or relationship shows its standard type and identifier;
+  switching views projects the same reusable model elements into their stored
+  positions. The XML remains canonical and byte-preserved: viewing issues no
+  writes, while export remains available beside the canvas.
 
 - **A Jira connector.** Atlassian Jira is a first-class connector kind
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked

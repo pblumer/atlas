@@ -5,7 +5,7 @@
   MIM ships this as a management agent. In Atlas it is a *process*, and that is the
   point of the model rather than an apology for it: GALSync is not a protocol, it is a
   policy — "represent forest A's mailboxes as contacts in forest B's address book".
-  Every mechanism it needs already exists as a connector; what MIM buries in sync
+  Every mechanism it needs already exists as a worker type; what MIM buries in sync
   rules and join logic is here as sequence flow anyone can read and change.
 
   The loop carries its own position. The DirSync cookie goes out of `dirsyncCookie`
@@ -66,9 +66,9 @@
         </bpmn:extensionElements>
       </bpmn:serviceTask>
 
-      <!-- Is this person already in the target address book? The AD connector
+      <!-- Is this person already in the target address book? The AD worker type
            deliberately has no search (ADR-0166) — reading a directory belongs to the
-           generic LDAP connector, so that is what looks the contact up. -->
+           generic LDAP worker type, so that is what looks the contact up. -->
       <bpmn:serviceTask id="suche_kontakt" name="Kontakt suchen">
         <bpmn:extensionElements>
           <atlas:ldapConnector url="=zielForest" bindDN="=zielBindDN" bindSecret="GALSYNC_ZIEL"
