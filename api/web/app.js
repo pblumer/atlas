@@ -16,7 +16,7 @@ import {
   incidentConnectorChip,
   repairFormFlow,
 } from "./incidents.js";
-import { editConnectorFlow, connectorShape, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
+import { editConnectorFlow, connectorShape, connectorCreateBody, connectorUsageHTML, deleteConnectorFlow } from "./connectordialog.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
@@ -3378,7 +3378,7 @@ function wireConnectorManagement(connectors) {
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="off" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
+        <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password" placeholder="postgresql://postgres.abc:\u2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit" title="Add this connector">Add</button>
         <button class="btn neutral mail-only" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
@@ -3412,7 +3412,18 @@ function wireConnectorManagement(connectors) {
         // one field that appears for those kinds and for no other. It is not marked
         // required: an operator who already keeps the DSN in the vault names its key in
         // the reference field instead, and the server refuses a record with neither.
-        form.querySelectorAll(".sql-only").forEach((el) => { el.style.display = sh.sql ? "" : "none"; });
+        // Hidden is not enough: a display:none input is still in the form, so its value
+        // is still submitted — and a type="password" field is exactly what a password
+        // manager fills in whether or not anyone can see it. Disabling it takes it out
+        // of the FormData entirely, and clearing it means switching kinds cannot carry
+        // a DSN typed for a previous one into the next create.
+        form.querySelectorAll(".sql-only").forEach((el) => {
+          el.style.display = sh.sql ? "" : "none";
+          el.querySelectorAll("input").forEach((inp) => {
+            if (!sh.sql) inp.value = "";
+            inp.disabled = !sh.sql;
+          });
+        });
         senderIn.required = sh.sender;
         endpointField.style.display = sh.endpoint ? "" : "none";
         endpointIn.required = sh.endpoint;
@@ -3456,20 +3467,7 @@ function wireConnectorManagement(connectors) {
       });
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const f = new FormData(e.target);
-        const body = {
-          name: (f.get("name") || "").trim(),
-          kind: (f.get("kind") || "temis").trim(),
-          endpoint: (f.get("endpoint") || "").trim(),
-          sender: (f.get("sender") || "").trim(),
-          credentialsRef: (f.get("credentialsRef") || "").trim(),
-        };
-        if (body.kind === "mail") body.provider = (f.get("provider") || "smtp").trim();
-        // Sent only when there is one, so a non-SQL create never carries the field and
-        // the server's "this applies only to a SQL connector" check cannot misfire on
-        // an empty string the form always renders.
-        const conn = (f.get("connectionString") || "").trim();
-        if (conn) body.connectionString = conn;
+        const body = connectorCreateBody(e.target);
         try {
           await api("POST", "/api/v1/connectors", body);
           toast("Connector added", "ok");
