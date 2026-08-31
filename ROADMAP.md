@@ -979,6 +979,30 @@ the hand-written Details panel one vertical slice at a time:
   from the Modeler and overlaid with the existing runtime overlay. No JS token
   simulator — identical semantics to production by construction.
 
+**Playground** — a third Modeler tab beside Design and Implement
+([ADR-draft-modeler-playground](docs/adr/draft-modeler-playground.md)), building on
+the Play-mode sandbox above and extending it from "step one instance" to "run a
+dataset":
+- 🔲 **Data in**: a case list from a CSV upload (reusing the ADR-0084/0139 row
+  parsing), from a form-based list editor over the start variables, or from a
+  generator that draws values per field.
+- 🔲 **Timing profile**: all at once, sequential, a fixed rate, a Poisson arrival
+  stream, or a day profile with a load curve — realized as an arrival plan over the
+  sandbox's **virtual clock**, so a simulated day runs in milliseconds.
+- 🔲 **Stub policy as run config, not model content**: per element a duration
+  distribution, an optional FEEL result, an optional failure probability with an
+  incident or a business error code — the ADR-0120 mockup vocabulary applied to an
+  untouched draft, so the tested model is the shipped model.
+- 🔲 **Analysis from the sandbox's own event log**: a heat map over tasks *and*
+  sequence flows, path coverage (what the dataset never reached), per-element
+  duration and wait-time percentiles, a bottleneck ranking, and a temporal view of
+  arrivals, work in progress and completions.
+- 🔲 **Results as data**: a per-case outcome table (inputs, end event, outputs,
+  duration, incidents) downloadable as CSV/JSON, one click from a case to the
+  existing replay/timeline view of that simulated instance.
+- 🔲 **Saved scenarios**: (dataset, config, seed) stored against the draft so a run
+  is reproducible, comparable against the previous run, and later runnable from CI.
+
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
   beside the overwrite-in-place draft (ADR-0021) — history without autosave spam,

@@ -1,0 +1,209 @@
+# ADR-DRAFT: The Modeler Playground — batch simulation and analysis of a draft
+
+- **Status:** Proposed
+- **Date:** 2026-08-31
+- **Deciders:** Atlas maintainers
+
+## Context and problem statement
+
+The Modeler has two top-level tabs today: **Design** (draw the flow) and
+**Implement** (wire the technical detail). Between "the diagram looks right" and
+"the process behaves right" there is nothing. An author who wants to know what a
+model actually *does* has three unsatisfying options:
+
+- The **token simulation** in the Design view ([ADR-0078](0078-design-view-token-simulation.md),
+  [ADR-0096](0096-token-simulation-events-and-inclusive-gateways.md)) — a
+  browser-side teaching aid. It moves tokens along flows; it deliberately does not
+  evaluate FEEL, conditions, DMN or data. It answers "where can a token go", never
+  "what happens with *this* data".
+- **Deploy & run** — real, durable, versioned instances in the engine's log. It
+  answers everything, at the cost of polluting the runtime with throwaway data and
+  firing real side effects, and it is one instance at a time.
+- Nothing at all for the question authors actually ask before a go-live: *"here are
+  200 real cases — what does the process do with them, which paths does it take,
+  where does it pile up, and how long does it take?"*
+
+[ADR-0030](0030-play-mode-simulation.md) already decided the *shape* of the answer
+for the single-case question — an ephemeral engine sandbox rather than a second
+control-flow implementation — but it was scoped to stepping one instance by hand,
+and it has not been built. The question this record answers is the broader one:
+
+**How does the Modeler let an author run a whole dataset through a draft, on a
+timeline they control, and get an analysis back — without deploying, without side
+effects, and without a second engine to keep in sync with the real one?**
+
+## Decision drivers
+
+- **The tested model is the shipped model.** Making a model testable must not mean
+  editing it. If an author has to swap a REST task for a mockup task
+  ([ADR-0120](0120-mockup-service-task.md)) to try the process, what they tested is
+  not what they deploy, and the swap-back is a manual step that will be forgotten.
+- **Same semantics as production, by construction.** A simulator that disagrees with
+  the engine teaches authors a lie. No second control-flow implementation
+  (invariant I5's spirit; the reason [ADR-0030](0030-play-mode-simulation.md)
+  rejected a JS engine).
+- **Provably side-effect-free.** A playground run must not be able to send mail,
+  call a REST endpoint, write to clio, or create a Jira issue — not "is configured
+  not to", but *cannot*.
+- **Nothing durable.** No version minted, no instance in Operations, no row in the
+  durable log, nothing to clean up afterwards.
+- **A day in a second.** "Spread these 200 cases over a working day" must not take a
+  working day. Simulated time has to be decoupled from wall-clock time.
+- **Reproducible.** The same dataset, config and seed must produce the same report,
+  or the feature cannot be used as a regression check and its numbers cannot be
+  cited in a review.
+- **Bounded.** An abandoned or oversized run must not eat the server.
+
+## Considered options
+
+1. **Extend the browser token simulation** to batch mode and collect statistics
+   client-side.
+2. **Deploy to a throwaway namespace** on the real engine, run the dataset there,
+   analyse the resulting runtime data, then delete it.
+3. **An ephemeral engine sandbox per run** — the real compiler and the real
+   processor over a non-durable partition with a **virtual clock**, driven by an
+   arrival scheduler, with every external leaf answered by a sandbox-local stub
+   policy, reporting from the sandbox's own event log.
+4. **A dedicated simulation engine**: derive a queueing / discrete-event model from
+   the BPMN and simulate that.
+
+## Decision outcome
+
+Chosen option: **Option 3 — an ephemeral engine sandbox per playground run**,
+extending [ADR-0030](0030-play-mode-simulation.md) from "step one instance" to
+"run a dataset on a simulated timeline and report on it".
+
+A Playground run is a **Sandbox**: its own partition, its own single-writer
+goroutine (invariant I3), its own WAL in a temp directory and its own state store,
+none of them reachable from the durable engine, all discarded when the run ends. It
+compiles the *current draft* with the real compiler (reusing the dry-run compile of
+[ADR-0026](0026-problems-panel-and-versioned-validation.md), so a model that will
+not deploy also will not run) and executes it on the real processor. Control flow,
+FEEL conditions, gateways, multi-instance, boundary events, DMN decisions, data
+objects: all of them are the production code path, because there is no other one.
+
+Four pieces make it a *playground* rather than a second engine:
+
+**A virtual clock.** The sandbox's `engine.Clock` is owned by the run's scheduler,
+not by the wall. Time advances in two ways: the scheduler releases the next arrival,
+or — when nothing is runnable — it jumps to the next due timer. A process with a
+three-day escalation timer therefore finishes in milliseconds, and "arrivals spread
+over a working day" is a property of the plan, not of how long the author waits.
+The engine already takes a `Clock` (`engine.New(..., clock)`) and already freezes
+timestamps into events (invariant I6), so this needs no engine change — the same
+trick the conformance driver uses (`conformance/runner.go`).
+
+**An arrival plan.** The dataset (one row = one case) is turned into a list of
+`(virtual time, start variables)` pairs by a *timing profile*: all at once,
+sequentially (next starts when the previous finishes), a fixed rate, a Poisson
+arrival stream, or a day profile with a load curve and business hours. The plan is
+computed up front from the seed, so it is part of the reproducible input.
+
+**A stub policy that lives in the run, not in the model.** Every leaf that would
+leave the process — a job task, a connector task, a user task, a send task, an
+inbound message — is answered by the sandbox from a per-element policy: a duration
+distribution, an optional FEEL result expression, an optional failure probability
+with an incident or a business error code. This is deliberately the same semantic
+vocabulary as the mockup service task ([ADR-0120](0120-mockup-service-task.md)) —
+but supplied as **run configuration** against the untouched draft, so the model that
+was tested is byte-for-byte the model that deploys. Defaults are derived
+(a connector task's kind suggests a latency band; a user task defaults to a work
+duration plus a queue; an element's example data is the default result), so a run is
+possible before a single stub is configured by hand.
+
+**Isolation by absence.** The sandbox registers job handlers only for the job types
+its own compiled process names, and it registers **no connector factories, no vault,
+no mail transport, no HTTP client at all**. A REST task in the sandbox cannot reach
+the network because there is nothing in the sandbox that can. Side-effect freedom is
+a structural property here, not a configuration flag.
+
+The report is computed from the sandbox's **own event log** — the same
+`(ValueType, Intent)` facts Operations reads, with their frozen timestamps — so the
+analysis is derived from what the engine did, not from a parallel accounting the UI
+keeps. That gives, for free and without new instrumentation: per-element and
+per-sequence-flow visit counts (the heat map, the same `visits` shape the runtime
+overlay already draws), per-element activate→complete durations, per-instance path
+and outcome, incidents, and the timeline of everything that happened.
+
+Option 1 is rejected for the reason ADR-0030 gave: a browser walker that also
+produced *numbers* would be a second engine whose statistics look authoritative and
+are not. Option 2 is rejected because it is exactly what Play mode exists to avoid —
+durable versions, real instances, real side effects — and because the real engine
+cannot fast-forward a day. Option 4 is rejected because a derived queueing model
+diverges from the engine on the first non-trivial construct (event subprocesses,
+compensation, correlation), and because we already own a fast, deterministic
+executor of the real semantics.
+
+### Consequences
+
+- **Positive:** the analysis is the real engine's behavior, so it cannot drift from
+  production; nothing durable is created and nothing can leave the process; the
+  model under test is unmodified; a run is reproducible from (dataset, config, seed)
+  and therefore usable as a saved regression scenario, not just a demo; the heat map
+  and the timeline reuse the runtime overlay and the event log rather than adding an
+  instrumentation path; a day-long scenario runs in milliseconds.
+- **Negative / trade-offs accepted:** a sandbox is a second processor in the
+  process, so isolation from durable partitions has to be guaranteed structurally
+  (reserved partition range, separate stores, separate run loop) and resources have
+  to be bounded (instance cap, virtual-time horizon, wall-clock budget, session
+  TTL). The stub policy is a real design surface of its own, and every number the
+  report gives is only as good as the durations the author configured — the report
+  must say so rather than presenting a modelled duration as a measurement. Timing
+  fidelity is *modelled*, not measured: the playground answers "given these service
+  times, where does it pile up", never "how fast is our REST endpoint".
+- **Follow-ups / risks to watch:** the sandbox's WAL is non-durable by construction,
+  which is a deliberate, contained deviation from "durable before visible"
+  (invariant I2) — nothing outside the sandbox ever observes it, and it must stay
+  that way. Deciding how far the *saved scenario* goes (a design-time store keyed to
+  the draft, and later a CLI runner so the same scenarios can gate a deploy in CI)
+  is deliberately left to a follow-up record. Resource capacity modelling ("three
+  clerks share this queue") is a natural extension of the stub policy and is
+  explicitly out of scope here.
+
+## Pros and cons of the options
+
+### Option 1 — batch mode in the browser token simulation
+- Good: no server work, instant, already exists for control flow.
+- Bad: no FEEL, no data, no DMN, no timers — so it cannot answer any question a
+  dataset asks; and statistics coming out of a second control-flow implementation
+  would be trusted exactly as far as they are wrong.
+
+### Option 2 — deploy to a throwaway namespace
+- Good: unquestionably the real engine; no new code path.
+- Bad: durable versions and instances for throwaway work; real side effects unless
+  every connector is rewired; cannot compress time, so a day-long scenario takes a
+  day; cleanup is manual and fallible.
+
+### Option 3 — ephemeral engine sandbox (chosen)
+- Good: real semantics by construction; provably side-effect-free; nothing durable;
+  virtual time; reproducible; reuses compiler, processor, event log and the existing
+  runtime overlay.
+- Bad: a second processor to isolate and bound; a stub-policy design surface;
+  modelled durations can be mistaken for measurements if the UI is careless.
+
+### Option 4 — a derived discrete-event simulation model
+- Good: fast, and the natural home for queueing and capacity questions.
+- Bad: a second semantics that must be kept in step with the engine — the fork the
+  invariants exist to prevent; diverges first on exactly the constructs authors most
+  need help reasoning about.
+
+## Links
+
+- extends [ADR-0030](0030-play-mode-simulation.md) (ephemeral engine sandbox) from
+  single-instance stepping to batch runs and analysis
+- reuses [ADR-0026](0026-problems-panel-and-versioned-validation.md) (dry-run
+  compile), [ADR-0084](0084-csv-batch-validation.md) and
+  [ADR-0139](0139-csv-to-json-connector.md) (CSV parsing and the row-list shape),
+  [ADR-0025](0025-full-properties-panel.md) (example data as default stub results),
+  the runtime overlay's visit counters ([ADR-0080](0080-runtime-aggregate-counters.md))
+- borrows the stub vocabulary of [ADR-0120](0120-mockup-service-task.md) as run
+  configuration rather than model content
+- leaves [ADR-0078](0078-design-view-token-simulation.md) /
+  [ADR-0096](0096-token-simulation-events-and-inclusive-gateways.md) in place: the
+  Design view keeps its engine-free teaching aid
+- follows [ADR-0147](0147-splitting-the-api-server-object.md) (a new API area is its own
+  service package) and [ADR-0012](0012-web-ui-app-shell.md) /
+  [ADR-0013](0013-embed-bpmn-js-modeler.md) (buildless, self-contained UI)
+- honors invariants I3 (single writer per partition — the sandbox owns its own),
+  I5 (compile, don't interpret) and I6 (frozen timestamps, deterministic replay);
+  deliberately non-durable, unlike the design-time sidecar stores of [ADR-0019](0019-durable-deployments.md)
