@@ -12,7 +12,7 @@ const graph = {
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1 },
     { id: "restricted:1", kind: "restricted", provenance: "derived" },
     { id: "unresolved:process:archive", kind: "unresolved", name: "archive", provenance: "derived" },
-    { id: "connector:c1", kind: "connector", name: "ops-mail", provenance: "derived", connectorKind: "mail" },
+    { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
     { id: "decision:credit", kind: "decision", name: "Credit score", provenance: "derived" },
   ],
   edges: [
@@ -21,7 +21,7 @@ const graph = {
     { from: "process:1", to: "process:2", kind: "calls" },
     { from: "process:1", to: "restricted:1", kind: "calls" },
     { from: "process:2", to: "unresolved:process:archive", kind: "calls" },
-    { from: "process:1", to: "connector:c1", kind: "uses" },
+    { from: "process:1", to: "worker:c1", kind: "uses" },
     { from: "process:2", to: "decision:credit", kind: "uses" },
   ],
   restricted: 1,
@@ -143,8 +143,8 @@ test("filters the landscape and says how much it is hiding", async ({ page }) =>
   await expect(page.locator(".mesh-canvas")).toContainText("Invoice");
 
   // Filtering by kind is the other half: "what does this instance talk to".
-  await page.getByLabel("Filter the landscape").fill("connector");
-  await expect(page.locator(".mesh-connector")).toHaveCount(1);
+  await page.getByLabel("Filter the landscape").fill("worker");
+  await expect(page.locator(".mesh-worker")).toHaveCount(1);
   await expect(page.locator(".mesh-canvas")).toContainText("ops-mail");
 
   await page.getByLabel("Filter the landscape").fill("nothing-matches-this");
@@ -156,19 +156,19 @@ test("filters the landscape and says how much it is hiding", async ({ page }) =>
 });
 
 // An unresolved node must say what kind of thing is missing: a missing deployment
-// and a missing connector are fixed in different places.
+// and a missing worker are fixed in different places.
 test("an unresolved dependency names what kind of thing is missing", async ({ page }) => {
   installMock(page, {
     nodes: [
       { id: "process:1", kind: "process", name: "Notifier", provenance: "derived", processId: "notifier", version: 1 },
-      { id: "unresolved:connector:ops-mail", kind: "unresolved", name: "ops-mail", provenance: "derived" },
+      { id: "unresolved:worker:ops-mail", kind: "unresolved", name: "ops-mail", provenance: "derived" },
     ],
-    edges: [{ from: "process:1", to: "unresolved:connector:ops-mail", kind: "uses" }],
+    edges: [{ from: "process:1", to: "unresolved:worker:ops-mail", kind: "uses" }],
     restricted: 0,
     clustered: false,
   });
   await page.goto("/index.html#/panorama/landscape");
 
-  await expect(page.locator(".mesh-unresolved title")).toContainText("connector");
+  await expect(page.locator(".mesh-unresolved title")).toContainText("worker");
   await expect(page.locator(".mesh-unresolved title")).toContainText("park");
 });

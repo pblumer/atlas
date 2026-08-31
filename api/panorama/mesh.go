@@ -22,13 +22,17 @@ import (
 const (
 	KindApplication = "application"
 	KindProcess     = "process"
-	KindConnector   = "connector"
-	KindDecision    = "decision"
+	// KindWorker is one configured Worker — a target and identity of a Worker Type
+	// (ADR-0203). The store behind it is still the connector store and the model
+	// still names it with connector="…"; those are the contracts that cannot move
+	// yet, and this is new surface, so it says Worker.
+	KindWorker   = "worker"
+	KindDecision = "decision"
 	// KindRestricted is a resource that exists but which this caller may not see.
 	// It stands in for a real node so the edge to it survives (ADR-0211 §3).
 	KindRestricted = "restricted"
 	// KindUnresolved is a dependency nothing on this server provides: a call target
-	// with no deployment, or a connector name nobody configured. Distinct from
+	// with no deployment, or a worker name nobody configured. Distinct from
 	// restricted on purpose — "not here" and "not yours to see" are different
 	// findings, and an operator chasing a broken dependency needs to tell them apart.
 	KindUnresolved = "unresolved"
@@ -39,7 +43,7 @@ const (
 	EdgeContains = "contains"
 	EdgeCalls    = "calls"
 	// EdgeUses is a process depending on something that is not a process: a
-	// configured connector, or a decision it delegates to.
+	// configured worker, or a decision it delegates to.
 	EdgeUses = "uses"
 )
 
@@ -69,35 +73,37 @@ type Call struct {
 	TargetKey       uint64
 }
 
-// ConnectorUse is one model reference to a server-registered connector, already
-// resolved by the server. A model names a connector by name and never carries an
-// endpoint or a secret (ADR-0036/0041), so nothing inside it can tell whether that
-// name is configured anywhere — which is exactly why the references are enumerable
-// from outside (ADR-0158), and why the mesh can answer it. TargetID is empty when
-// no connector by that name is configured.
-type ConnectorUse struct {
+// WorkerUse is one model reference to a configured worker, already resolved by the
+// server. A model names a worker by name and never carries an endpoint or a secret
+// (ADR-0036/0041), so nothing inside it can tell whether that name is configured
+// anywhere — which is exactly why the references are enumerable from outside
+// (ADR-0158), and why the mesh can answer it. TargetID is empty when no worker by
+// that name is configured.
+type WorkerUse struct {
 	ElementID string
 	Name      string
 	TargetID  string
 }
 
-// Connector is one configured connector as the mesh sees it. Endpoint and
-// CredentialsRef are carried so the derivation can be tested for *not* emitting
-// them: a landscape picture is opened by anyone with modeler access, and an
-// internal hostname is precisely what ADR-0211 §10 keeps out of what leaves the
-// server. Neither field ever reaches a [Node].
-type Connector struct {
+// Worker is one configured worker as the mesh sees it — a target and identity of a
+// Worker Type (ADR-0203), which is what Type names. Endpoint and CredentialsRef are
+// carried so the derivation can be tested for *not* emitting them: a landscape
+// picture is opened by anyone with modeler access, and an internal hostname is
+// precisely what ADR-0211 §10 keeps out of what leaves the server. Neither field
+// ever reaches a [Node].
+type Worker struct {
 	ID             string
 	Name           string
-	Kind           string
+	Type           string
 	CanView        bool
 	Endpoint       string
 	CredentialsRef string
 }
 
 // Decision is one local DMN decision a business-rule task delegates to. A remote
-// (connector-mode) decision is deliberately not one of these: it arrives as a
-// ConnectorUse instead, which is where its dependency actually points.
+// decision, evaluated by a worker rather than in this engine, is deliberately not
+// one of these: it arrives as a [WorkerUse] instead, which is where its dependency
+// actually points.
 type Decision struct {
 	ID      string
 	Name    string
@@ -113,7 +119,7 @@ type Process struct {
 	ApplicationID string
 	CanView       bool
 	Calls         []Call
-	Connectors    []ConnectorUse
+	Workers       []WorkerUse
 	Decisions     []string
 }
 
@@ -121,7 +127,7 @@ type Process struct {
 type Landscape struct {
 	Applications []Application
 	Processes    []Process
-	Connectors   []Connector
+	Workers      []Worker
 	Decisions    []Decision
 }
 
@@ -147,9 +153,9 @@ type Node struct {
 	// Operations view (L2) without a second lookup.
 	ProcessID string `json:"processId,omitempty"`
 	Version   int32  `json:"version,omitempty"`
-	// ConnectorKind is a connector's kind ("rest", "mail", …). Never its endpoint
-	// and never its credential reference — see [Connector].
-	ConnectorKind string `json:"connectorKind,omitempty"`
+	// WorkerType is a worker node's Worker Type ("rest", "mail", …). Never its
+	// endpoint and never its credential reference — see [Worker].
+	WorkerType string `json:"workerType,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -177,12 +183,12 @@ type Graph struct {
 
 func applicationNodeID(id string) string  { return KindApplication + ":" + id }
 func processNodeID(key uint64) string     { return fmt.Sprintf("%s:%d", KindProcess, key) }
-func connectorNodeID(id string) string    { return KindConnector + ":" + id }
+func workerNodeID(id string) string       { return KindWorker + ":" + id }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
 
 // unresolvedNodeID names what is missing *and* what kind of thing it is. A BPMN
-// process id and a connector name can be the same string while being two entirely
+// process id and a worker name can be the same string while being two entirely
 // different findings, so the kind is part of the identity rather than a label on it.
 func unresolvedNodeID(kind, name string) string { return KindUnresolved + ":" + kind + ":" + name }
 
@@ -237,7 +243,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// Restricted placeholders are keyed internally by the hidden resource — kind and
 	// id together — so repeated references to one resource share a placeholder, two
 	// resources never merge into one, and a hidden process is never confused with a
-	// hidden connector. Any of those mistakes invents or erases a dependency. The key
+	// hidden worker. Any of those mistakes invents or erases a dependency. The key
 	// never leaves this function; the response carries an opaque per-response ordinal.
 	restricted := map[string]string{}
 	restrictedOrdinal := func(key string) string {
@@ -274,19 +280,19 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// Dependencies are walked in a second pass so every visible process node already
 	// exists; a placeholder is minted only for a target genuinely not among them.
 	//
-	// Connectors and decisions become nodes only where a process references them.
-	// The mesh is the dependency picture, not an inventory: a configured connector
-	// nothing uses is not a landscape edge, and putting it on screen would bury the
-	// ones that are.
-	connectors := map[string]Connector{}
-	for _, c := range land.Connectors {
-		connectors[c.ID] = c
+	// Workers and decisions become nodes only where a process references them. The
+	// mesh is the dependency picture, not an inventory: a configured worker nothing
+	// uses is not a landscape edge, and putting it on screen would bury the ones
+	// that are.
+	workers := map[string]Worker{}
+	for _, w := range land.Workers {
+		workers[w.ID] = w
 	}
 	decisions := map[string]Decision{}
 	for _, d := range land.Decisions {
 		decisions[d.ID] = d
 	}
-	usedConnectors := map[string]bool{}
+	usedWorkers := map[string]bool{}
 	usedDecisions := map[string]bool{}
 
 	for _, p := range visible {
@@ -308,19 +314,19 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 				addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
 			}
 		}
-		for _, u := range p.Connectors {
-			target, ok := connectors[u.TargetID]
+		for _, u := range p.Workers {
+			target, ok := workers[u.TargetID]
 			switch {
 			case u.TargetID != "" && ok && target.CanView:
-				usedConnectors[target.ID] = true
-				addEdge(Edge{From: from, To: connectorNodeID(target.ID), Kind: EdgeUses})
+				usedWorkers[target.ID] = true
+				addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses})
 			case u.TargetID != "" && ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(connectorNodeID(target.ID)), Kind: EdgeUses})
+				addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses})
 			default:
-				// The model asks for a connector nobody configured, so the task would
+				// The model asks for a worker nobody configured, so the task would
 				// fail at run time. This is the question a model cannot answer about
 				// itself, and the name is safe: it is in this caller's own model.
-				id := unresolvedNodeID(KindConnector, u.Name)
+				id := unresolvedNodeID(KindWorker, u.Name)
 				unresolved[id] = u.Name
 				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
 			}
@@ -341,14 +347,14 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		}
 	}
 
-	for _, id := range sortedKeys(usedConnectors) {
-		c := connectors[id]
-		// Name and kind only. The record also holds an endpoint and a credential
-		// reference; a landscape picture is opened by anyone with modeler access, and
-		// neither belongs in one (ADR-0211 §10, I6).
+	for _, id := range sortedKeys(usedWorkers) {
+		w := workers[id]
+		// Name and Worker Type only. The record also holds an endpoint and a
+		// credential reference; a landscape picture is opened by anyone with modeler
+		// access, and neither belongs in one (ADR-0211 §10, I6).
 		g.Nodes = append(g.Nodes, Node{
-			ID: connectorNodeID(c.ID), Kind: KindConnector, Name: c.Name,
-			Provenance: ProvenanceDerived, ConnectorKind: c.Kind,
+			ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
+			Provenance: ProvenanceDerived, WorkerType: w.Type,
 		})
 	}
 	for _, id := range sortedKeys(usedDecisions) {
@@ -377,12 +383,12 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
-	// The kind tiebreak keeps the comparator total. With today's two kinds it is
-	// unreachable — a contains edge always leaves an application and a calls edge
-	// always leaves a process, so no two edges share both endpoints — and it is
-	// deliberately not covered by a contrived test. It is here because the next edge
-	// kinds (releases, connectors, targets) will make it reachable, and a comparator
-	// that is only total by accident sorts unstably the day that happens.
+	// The kind tiebreak keeps the comparator total. With today's three kinds it is
+	// unreachable — contains leaves an application, calls reaches a process, and uses
+	// reaches something that is not one, so no two edges share both endpoints — and
+	// it is deliberately not covered by a contrived test. It is here because the next
+	// edge kinds (releases, targets) will make it reachable, and a comparator that is
+	// only total by accident sorts unstably the day that happens.
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
 			return g.Edges[i].From < g.Edges[j].From
