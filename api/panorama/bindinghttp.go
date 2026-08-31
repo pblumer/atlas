@@ -215,3 +215,45 @@ func (s *Service) HandleBindingCandidates(w http.ResponseWriter, r *http.Request
 	})
 	httpapi.JSON(w, http.StatusOK, out)
 }
+
+// OverlaysOnLoop returns every model this caller may view, as overlays for the
+// landscape mesh (ADR-0211 §11). It is a composition-root hook like the counting
+// helpers: callers must already be executing on the Service's run loop, as the name
+// says, so it deliberately does not call Loop.Do recursively.
+//
+// A model whose XML no longer parses is skipped rather than failing the whole
+// overlay: one broken document must not blank out the comparison for every other
+// model. Its bindings are simply not there to compare, which the mesh already has a
+// vocabulary for.
+func (s *Service) OverlaysOnLoop(r *http.Request) ([]Overlay, error) {
+	models, err := s.store.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	var out []Overlay
+	for _, model := range models {
+		access, err := s.access(r, model.ApplicationID)
+		if err != nil {
+			return nil, err
+		}
+		if !access.Exists || !access.CanView {
+			continue
+		}
+		set, err := ExtractBindings([]byte(model.XML))
+		if err != nil {
+			continue
+		}
+		if len(set.Bindings) == 0 {
+			continue
+		}
+		overlay := Overlay{ModelID: model.ID, ModelName: model.Name}
+		for _, binding := range set.Bindings {
+			overlay.Elements = append(overlay.Elements, ModelElement{
+				ElementID: binding.ElementID, ElementType: binding.ElementType,
+				Name: binding.ElementName, Key: binding.Key, Values: binding.Values,
+			})
+		}
+		out = append(out, overlay)
+	}
+	return out, nil
+}

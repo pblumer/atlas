@@ -233,3 +233,51 @@ test("filtering away the selection clears it", async ({ page }) => {
   await page.getByLabel("Filter the landscape").fill("invoice");
   await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });
+
+// The model overlay (ADR-0211 §11, P2.5b): the mesh compared against the
+// architecture models, in both directions.
+const overlaidGraph = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "both",
+      modelElementId: "app-orders", modelElementType: "ApplicationComponent", modelName: "Order Service" },
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", processId: "invoice", version: 1 },
+    { id: "modeled:application:a-ghost", kind: "application", name: "Reporting", provenance: "modeled",
+      modelElementId: "app-ghost", modelElementType: "ApplicationComponent", modelName: "Reporting" },
+  ],
+  edges: [{ from: "application:a1", to: "process:1", kind: "contains" }],
+  restricted: 0, clustered: false, modeled: 1, unmodeled: 1, outOfScope: 2,
+};
+
+test("shows what is modeled, what is not, and what could not be compared", async ({ page }) => {
+  installMock(page, overlaidGraph);
+  await page.goto("/index.html#/panorama/landscape");
+
+  // Provenance is on the node itself, not only in the legend.
+  await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-prov-both/);
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-prov-derived/);
+  await expect(page.locator('[data-node-id="modeled:application:a-ghost"]')).toHaveClass(/mesh-prov-modeled/);
+
+  const legend = page.locator(".mesh-legend");
+  // Drift the drawing alone could not show.
+  await expect(legend).toContainText("declared by a");
+  await expect(legend).toContainText("not present here");
+  // What exists and nobody wrote down.
+  await expect(legend).toContainText("no");
+  // Bindings at an altitude this picture does not draw are counted, not dropped —
+  // calling them missing would invent drift that is not there.
+  await expect(legend).toContainText("neither matched nor missing");
+
+  // A node whose Atlas name and modeled name differ says both.
+  await expect(page.locator('[data-node-id="application:a1"] title')).toContainText("Order Service");
+});
+
+// Without an overlay the legend must not imply the landscape was checked: "0
+// unmodeled" would be a claim about a comparison nobody made.
+test("says nothing about drift when no model was compared", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  const legend = page.locator(".mesh-legend");
+  await expect(legend).toContainText("nothing on this");
+  await expect(legend).not.toContainText("neither matched nor missing");
+});

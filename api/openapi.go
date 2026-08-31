@@ -450,6 +450,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		// Atlas bindings (ADR-0189 §4): which Atlas resource an ArchiMate element
 		// refers to. Read resolves ids to names for this caller; write sets one key
 		// on one element and leaves the rest of the document byte-for-byte alone.
+		// The C4 projection (ADR-0211 §8). Read-only by construction: ArchiMate stays
+		// the only authored notation, and there is deliberately no write counterpart.
+		{"GET", "/api/v1/panorama/models/{id}/c4", s.panorama.HandleC4, apiOp{
+			summary: "Project a Panorama model into C4, reporting what the mapping cannot express (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("C4 projection", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},
@@ -776,7 +781,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG logo bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
-			summary: "Remove the org-wide brand logo, restoring the built-in letter mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
+			summary: "Remove the org-wide brand logo, restoring the built-in Atlas mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
 			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings", role: roleAny,

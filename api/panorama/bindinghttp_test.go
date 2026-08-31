@@ -395,3 +395,52 @@ func TestBindingCandidatesOrderIsStableForEqualNames(t *testing.T) {
 		t.Errorf("candidates = %#v, want the id to break the tie", out.Candidates)
 	}
 }
+
+// The mesh compares against every model the caller may view, and only those: a
+// model in an application outside their access must not contribute a comparison
+// they could then read facts out of.
+func TestOverlaysOnLoopSkipsModelsTheCallerCannotView(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	if err := fx.store.Save(Model{
+		ID: "ffffffffffffffffffffffffffffffff", ApplicationID: "hidden", Name: "Secret",
+		Notation: NotationArchiMate32, Revision: 1, XML: boundModelXML,
+	}); err != nil {
+		t.Fatalf("seed hidden: %v", err)
+	}
+
+	var overlays []Overlay
+	var err error
+	fx.service.loop.Do(func() {
+		overlays, err = fx.service.OverlaysOnLoop(httptest.NewRequest(http.MethodGet, "/", nil))
+	})
+	if err != nil {
+		t.Fatalf("OverlaysOnLoop: %v", err)
+	}
+	if len(overlays) != 1 || overlays[0].ModelID != testModelID {
+		t.Fatalf("overlays = %#v, want only the visible model", overlays)
+	}
+	if len(overlays[0].Elements) != 1 || overlays[0].Elements[0].Name != "Order Service" {
+		t.Errorf("elements = %#v, want the bound element with its modeled name", overlays[0].Elements)
+	}
+}
+
+// One unreadable document must not blank out the comparison for every other model.
+// Its bindings are simply not there to compare, which the mesh already has a
+// vocabulary for.
+func TestOverlaysOnLoopSkipsAnUnreadableModel(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	if err := fx.store.Save(Model{
+		ID: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", ApplicationID: "app-1", Name: "Broken",
+		Notation: NotationArchiMate32, Revision: 1, XML: "<model><elements>",
+	}); err != nil {
+		t.Fatalf("seed broken: %v", err)
+	}
+
+	var overlays []Overlay
+	fx.service.loop.Do(func() { overlays, _ = fx.service.OverlaysOnLoop(httptest.NewRequest(http.MethodGet, "/", nil)) })
+	if len(overlays) != 1 {
+		t.Errorf("overlays = %#v, want the readable model to survive its broken neighbour", overlays)
+	}
+}

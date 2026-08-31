@@ -18,14 +18,13 @@
   <rect width="1200" height="630" fill="url(#bg)"/>
   <rect width="1200" height="630" fill="url(#grid)" mask="url(#gm)"/>
 
-  <!-- Hex-flow mark, scaled from the 256 grid -->
-  <g transform="translate(68,133) scale(1.42)" fill="none">
-    <path d="M128 38 208 84 208 172 128 218 48 172 48 84Z" stroke="#4C8DF5" stroke-width="18" stroke-linejoin="round"/>
-    <path d="M104 106 128 160" stroke="#4C8DF5" stroke-width="9" stroke-linecap="round"/>
-    <path d="M152 106 128 160" stroke="#4C8DF5" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="104" cy="106" r="11" fill="#4C8DF5"/>
-    <circle cx="152" cy="106" r="11" fill="#4C8DF5"/>
-    <circle cx="128" cy="160" r="13" fill="#4C8DF5"/>
+  <!-- The Atlas mark, scaled from the 256 grid. The card ground is already dark,
+       so the glyph carries it alone — no tile. -->
+  <g transform="translate(68,133) scale(1.42)">
+    <path fill="#F4F7FB" fill-rule="evenodd"
+          d="M128 34 236 206 20 206Z
+             M128 166 174 206 82 206Z
+             M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/>
   </g>
 
   <!-- Wordmark + copy -->

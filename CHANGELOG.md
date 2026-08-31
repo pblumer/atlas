@@ -75,6 +75,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **New Atlas mark.** The logo and the favicon are now a white peak carrying a
+  cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`
+  letter tile the Console showed in its top bar, drawer, login screen, handbook,
+  public forms and consent page. Nothing about branding *behaviour* changed: an
+  org-wide logo uploaded under Appearance
+  ([ADR-0148](docs/adr/0148-org-wide-brand-logo.md)) still overrides it
+  everywhere, and removing that logo now restores the new mark instead of the
+  letter.
+
 - **The handbook and the examples teach Workers, not connectors.** The Console
   renamed *Connectors* to *Workers* with the first slice of
   [ADR-0203](docs/adr/0203-worker-execution-model.md); the documentation still
