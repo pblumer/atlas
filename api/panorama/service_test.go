@@ -20,6 +20,9 @@ type serviceFixture struct {
 	service *Service
 	store   *Store
 	access  map[string]ApplicationAccess
+	// catalog is what binding resolution resolves against; a test sets it before
+	// calling a binding handler.
+	catalog Catalog
 }
 
 func newServiceFixture(t *testing.T) *serviceFixture {
@@ -40,14 +43,16 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		"hidden": {Exists: true},
 		"viewer": {Exists: true, CanView: true},
 	}
-	service := New(loop, store,
+	fx := &serviceFixture{store: store, access: access}
+	fx.service = New(loop, store,
 		func(_ *http.Request, applicationID string) (ApplicationAccess, error) {
 			return access[applicationID], nil
 		},
 		func() (string, error) { return testModelID, nil },
 		func() time.Time { return time.Unix(1_700_000_000, 0) },
+		func(*http.Request) (Catalog, error) { return fx.catalog, nil },
 	)
-	return &serviceFixture{service: service, store: store, access: access}
+	return fx
 }
 
 func TestServiceModelLifecycleAndRevisionConflict(t *testing.T) {

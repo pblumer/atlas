@@ -25,6 +25,12 @@ const (
 	StatusForbidden = "forbidden"
 	// StatusMissing: nothing on this server has that id.
 	StatusMissing = "missing"
+	// StatusUnsupported: this server cannot resolve this kind of binding yet,
+	// because nothing supplies a catalog for it. Distinct from missing because
+	// missing is a claim — "nothing here has that id" — and it would be false: the
+	// resolver did not look. A binding to a runtime id before the node descriptor
+	// exists (ADR-0189 §6, delivered by P4) is the case this is for.
+	StatusUnsupported = "unsupported"
 )
 
 // ResourceRef is one Atlas resource as the resolver sees it. CanView is decided by
@@ -122,7 +128,13 @@ func ResolveBindings(set BindingSet, catalog Catalog) Resolution {
 			Key: binding.Key, Values: []ResolvedValue{},
 		}
 		for _, value := range binding.Values {
+			// A nil map means no catalog was supplied for this kind at all; an empty
+			// one means the server looked and holds none. Go distinguishes the two,
+			// and so must the answer.
 			entry := ResolvedValue{Value: value, Status: StatusMissing}
+			if lookup == nil {
+				entry.Status = StatusUnsupported
+			}
 			if ref, found := lookup[value]; found {
 				if ref.CanView {
 					entry.Status, entry.Name = StatusResolved, ref.Name

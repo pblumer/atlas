@@ -168,3 +168,28 @@ func TestResolveBindingsMarshalsEmptyCollections(t *testing.T) {
 		t.Errorf("empty resolution marshals as %s", body)
 	}
 }
+
+// A key whose catalog the server cannot supply yet must not be reported missing.
+// "Nothing here has that id" is a claim, and it would be false — the resolver did
+// not look. A runtime binding before the node descriptor exists (P4) is the case.
+func TestResolveBindingsSeparatesUnsupportedFromMissing(t *testing.T) {
+	res := ResolveBindings(
+		setOf(
+			Binding{ElementID: "node-1", ElementType: "Node", Key: KeyRuntimeID, Values: []string{"rt-1"}},
+			Binding{ElementID: "node-2", ElementType: "Node", Key: KeyDeploymentTargetID, Values: []string{"t-gone"}},
+		),
+		// Targets is present but empty: the server looked and holds none. Runtimes is
+		// absent entirely: nothing supplies that catalog yet.
+		Catalog{Targets: map[string]ResourceRef{}},
+	)
+
+	if got := resolvedValues(t, res, "node-1", KeyRuntimeID); got[0].Status != StatusUnsupported {
+		t.Errorf("runtime binding status = %q, want %q", got[0].Status, StatusUnsupported)
+	}
+	if got := resolvedValues(t, res, "node-2", KeyDeploymentTargetID); got[0].Status != StatusMissing {
+		t.Errorf("target binding status = %q, want %q", got[0].Status, StatusMissing)
+	}
+	if res.Unresolved != 2 {
+		t.Errorf("Unresolved = %d, want both counted", res.Unresolved)
+	}
+}

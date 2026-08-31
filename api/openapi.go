@@ -447,6 +447,17 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expectedRevision")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"DELETE", "/api/v1/panorama/models/{id}", s.panorama.HandleDelete, apiOp{
 			summary: "Delete a Panorama model (ADR-0189)", tag: "Panorama", role: RoleModeler, status: http.StatusNoContent}},
+		// Atlas bindings (ADR-0189 §4): which Atlas resource an ArchiMate element
+		// refers to. Read resolves ids to names for this caller; write sets one key
+		// on one element and leaves the rest of the document byte-for-byte alone.
+		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
+			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Resolved Atlas bindings", tObject())}},
+		{"PUT", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleSetBinding, apiOp{
+			summary: "Set one Atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			req: jsonBody("Binding assignment", schemaObj(map[string]any{
+				"expectedRevision": tInteger(), "elementId": tString(), "key": tString(), "values": tArray(),
+			}, "expectedRevision", "elementId", "key")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/xml", s.panorama.HandleXML, apiOp{
 			summary: "Export a Panorama model as its original ArchiMate Open Exchange XML (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: xmlBody("ArchiMate Open Exchange XML")}},
