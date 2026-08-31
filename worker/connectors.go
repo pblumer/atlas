@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -368,23 +369,11 @@ func (o *httpOutbox) Deliver(m mail.OutboxMessage) error {
 // upper case, with anything that cannot appear in a variable name becoming an
 // underscore. It is applied the one way, and the error messages quote the result, so
 // an operator sets exactly the variable that was looked for.
-func envFold(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-	pendingSep := false
-	for _, r := range strings.ToUpper(name) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			if pendingSep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-			pendingSep = false
-			b.WriteRune(r)
-			continue
-		}
-		pendingSep = true
-	}
-	return b.String()
-}
+//
+// "The one way" is [envname.Key], shared with the engine that renders these
+// variables and with the connectors that name them when a reference resolves to
+// nothing — the property only holds if all three fold identically.
+func envFold(name string) string { return envname.Key(name) }
 
 // splitAndTrim reads a comma-separated list, dropping blanks so a trailing comma
 // does not become a nameless connector.

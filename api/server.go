@@ -53,6 +53,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
@@ -109,22 +110,12 @@ func temisRegistryFromEnv() *temis.Registry {
 // connectorEnvKey normalizes a connector name into its environment-variable
 // fragment: upper-case, with each run of non-alphanumeric characters collapsed to
 // a single underscore and leading/trailing underscores trimmed.
-func connectorEnvKey(name string) string {
-	var b strings.Builder
-	pendingSep := false
-	for _, r := range strings.ToUpper(name) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			if pendingSep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-			pendingSep = false
-			b.WriteRune(r)
-		} else {
-			pendingSep = true
-		}
-	}
-	return b.String()
-}
+//
+// The fold itself is [envname.Key], because a worker reads the variables this
+// renders and a connector has to name the one it could not resolve. Three packages
+// applying the same rule separately is a bug an operator meets as "I set that
+// variable and it still says it is missing".
+func connectorEnvKey(name string) string { return envname.Key(name) }
 
 //go:embed web
 var webFS embed.FS
