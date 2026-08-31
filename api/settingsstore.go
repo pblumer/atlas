@@ -87,10 +87,11 @@ type adMockSetting struct {
 // CRUD-by-id surface. Owned by the run-loop goroutine (accessed through s.do), so
 // it needs no locking, and it holds no secret material.
 type settingsStore struct {
-	dir     string
-	file    string // theme.json
-	regFile string // registration.json
-	adFile  string // admock.json
+	dir      string
+	file     string // theme.json
+	regFile  string // registration.json
+	adFile   string // admock.json
+	nodeFile string // node.json
 }
 
 // newSettingsStore opens (creating if needed) the settings directory.
@@ -99,10 +100,11 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		return nil, fmt.Errorf("settingsstore: create dir: %w", err)
 	}
 	return &settingsStore{
-		dir:     dir,
-		file:    filepath.Join(dir, "theme.json"),
-		regFile: filepath.Join(dir, "registration.json"),
-		adFile:  filepath.Join(dir, "admock.json"),
+		dir:      dir,
+		file:     filepath.Join(dir, "theme.json"),
+		regFile:  filepath.Join(dir, "registration.json"),
+		adFile:   filepath.Join(dir, "admock.json"),
+		nodeFile: filepath.Join(dir, "node.json"),
 	}, nil
 }
 
@@ -319,4 +321,31 @@ func (s *settingsStore) writeADSeed(a adMockSetting) error {
 		}
 	}
 	return sidecar.FsyncDir(s.dir)
+}
+
+// getNode returns the stored node identity (ADR-0189 §6) and whether a record
+// exists. A missing file returns (zero, false, nil): on a server that has never
+// started before there is nothing to read, and ensureNodeIdentity is what turns
+// that into an id rather than leaving the caller to guess one.
+func (s *settingsStore) getNode() (nodeIdentity, bool, error) {
+	data, err := os.ReadFile(s.nodeFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nodeIdentity{}, false, nil
+		}
+		return nodeIdentity{}, false, fmt.Errorf("settingsstore: read node: %w", err)
+	}
+	var n nodeIdentity
+	if err := json.Unmarshal(data, &n); err != nil {
+		return nodeIdentity{}, false, fmt.Errorf("settingsstore: decode node: %w", err)
+	}
+	return n, true, nil
+}
+
+// saveNode writes the node identity durably (atomic write + directory fsync). The
+// id has to survive a crash for the same reason it has to survive a restart: a
+// runtime that comes back with a different identity looks to every correlator like
+// a node that vanished and a new one that appeared.
+func (s *settingsStore) saveNode(n nodeIdentity) error {
+	return sidecar.WriteJSON(s.dir, s.nodeFile, n)
 }

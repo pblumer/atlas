@@ -288,3 +288,95 @@ func TestLogoWritesRequireAdmin(t *testing.T) {
 		t.Fatal("PUT logo must be gated")
 	}
 }
+
+// TestSettingsStoreReportsAStaleArtifactItCannotRemove covers the half of these
+// writes that is easy to overlook: the cleanup. Both the logo and the AD mock seed
+// are content-addressed, so saving a new one has to delete the old one — and a
+// stale file that survives is not untidy, it is a second answer to a question that
+// should have exactly one.
+//
+// A logo left behind under another extension is served alongside the new one; an
+// AD seed left behind is a directory a restarted worker can still find and start
+// from, which is the outage that design exists to end. So a removal that fails is
+// reported rather than swallowed, and these drive it by putting a non-empty
+// directory where the stale file would be.
+func TestSettingsStoreReportsAStaleArtifactItCannotRemove(t *testing.T) {
+	t.Run("logo", func(t *testing.T) {
+		st, err := newSettingsStore(filepath.Join(t.TempDir(), "settings"))
+		if err != nil {
+			t.Fatalf("newSettingsStore: %v", err)
+		}
+		if err := st.saveLogo([]byte("<svg xmlns=\"http://www.w3.org/2000/svg\"/>"), "image/svg+xml"); err != nil {
+			t.Fatalf("save the first logo: %v", err)
+		}
+		// The stale path becomes something os.Remove cannot delete.
+		stale := st.logoPath("svg")
+		if err := os.Remove(stale); err != nil {
+			t.Fatalf("remove the stale logo: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(stale, "occupied"), 0o755); err != nil {
+			t.Fatalf("occupy the stale path: %v", err)
+		}
+
+		err = st.saveLogo([]byte("\x89PNG\r\n\x1a\n"), "image/png")
+		if err == nil {
+			t.Fatal("a stale logo that could not be removed was reported as a clean save")
+		}
+		if !strings.Contains(err.Error(), "stale logo") {
+			t.Errorf("error = %v, want it to name what could not be removed", err)
+		}
+	})
+
+	t.Run("ad mock seed", func(t *testing.T) {
+		st, err := newSettingsStore(filepath.Join(t.TempDir(), "settings"))
+		if err != nil {
+			t.Fatalf("newSettingsStore: %v", err)
+		}
+		first := adMockSetting{Enabled: true, Seed: "dn: dc=example,dc=test\n"}
+		if err := st.saveADMock(first); err != nil {
+			t.Fatalf("save the first seed: %v", err)
+		}
+		stale := st.adSeedPath(first)
+		if err := os.Remove(stale); err != nil {
+			t.Fatalf("remove the stale seed: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(stale, "occupied"), 0o755); err != nil {
+			t.Fatalf("occupy the stale path: %v", err)
+		}
+
+		// The seed write has to fail the whole save: the record is what a restarted
+		// worker is pointed at, and a record naming a seed that is not there yet is
+		// worse than no new record at all.
+		err = st.saveADMock(adMockSetting{Enabled: true, Seed: "dn: dc=other,dc=test\n"})
+		if err == nil {
+			t.Fatal("a stale seed that could not be removed was reported as a clean save")
+		}
+		if !strings.Contains(err.Error(), "stale ad mock seed") {
+			t.Errorf("error = %v, want it to name what could not be removed", err)
+		}
+	})
+}
+
+// TestWriteADSeedReportsASeedItCannotWrite: the seed is written under a
+// content-addressed name, and if that path is not writable the save must fail
+// before the record lands. A record that named an unwritten seed would point a
+// restarted worker at nothing.
+func TestWriteADSeedReportsASeedItCannotWrite(t *testing.T) {
+	st, err := newSettingsStore(filepath.Join(t.TempDir(), "settings"))
+	if err != nil {
+		t.Fatalf("newSettingsStore: %v", err)
+	}
+	a := adMockSetting{Enabled: true, Seed: "dn: dc=example,dc=test\n"}
+	// Occupy the seed's own path with a directory, so creating its temp file is
+	// fine but the rename onto it cannot succeed.
+	if err := os.MkdirAll(st.adSeedPath(a), 0o755); err != nil {
+		t.Fatalf("occupy the seed path: %v", err)
+	}
+	if err := st.saveADMock(a); err == nil {
+		t.Fatal("an unwritable seed was reported as a clean save")
+	}
+	// And no record was written, so nothing points at the seed that is not there.
+	if _, ok, err := st.getADMock(); err != nil || ok {
+		t.Errorf("a record landed despite the seed failing: ok=%v err=%v", ok, err)
+	}
+}
