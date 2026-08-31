@@ -52,6 +52,12 @@ effects, and without a second engine to keep in sync with the real one?**
 - **Reproducible.** The same dataset, config and seed must produce the same report,
   or the feature cannot be used as a regression check and its numbers cannot be
   cited in a review.
+- **Scale.** 50 000 cases in one run is a stated requirement, not a stretch goal.
+  That is what rules out holding the run in a request, the report in memory, or the
+  case list in the browser.
+- **Steppable, not only batchable.** An author must be able to stop mid-run, look at
+  a case, fill in a user task themselves and carry on. Without that the "play" in
+  playground is missing, and the only way to inspect a single case is to re-run it.
 - **Bounded.** An abandoned or oversized run must not eat the server.
 
 ## Considered options
@@ -99,23 +105,41 @@ sequentially (next starts when the previous finishes), a fixed rate, a Poisson
 arrival stream, or a day profile with a load curve and business hours. The plan is
 computed up front from the seed, so it is part of the reproducible input.
 
-**A stub policy that lives in the run, not in the model.** Every leaf that would
-leave the process — a job task, a connector task, a user task, a send task, an
-inbound message — is answered by the sandbox from a per-element policy: a duration
-distribution, an optional FEEL result expression, an optional failure probability
-with an incident or a business error code. This is deliberately the same semantic
-vocabulary as the mockup service task ([ADR-0120](0120-mockup-service-task.md)) —
-but supplied as **run configuration** against the untouched draft, so the model that
-was tested is byte-for-byte the model that deploys. Defaults are derived
-(a connector task's kind suggests a latency band; a user task defaults to a work
-duration plus a queue; an element's example data is the default result), so a run is
-possible before a single stub is configured by hand.
+**A stub and resource policy that lives in the run, not in the model.** Every leaf
+that would leave the process — a job task, a connector task, a user task, a send
+task, an inbound message — is answered by the sandbox from a per-element policy: a
+duration distribution, an optional FEEL result expression, an optional failure
+probability with an incident or a business error code. This is deliberately the same
+semantic vocabulary as the mockup service task
+([ADR-0120](0120-mockup-service-task.md)) — but supplied as **run configuration**
+against the untouched draft, so the model that was tested is byte-for-byte the model
+that deploys. Defaults are derived (a connector task's kind suggests a latency band;
+a user task defaults to a work duration; an element's example data is the default
+result), so a run is possible before a single stub is configured by hand.
+
+The policy also carries **resource pools**: a named pool with a capacity and a
+calendar, and the elements that draw on it. A job the sandbox picks up does not
+start being served immediately — it queues for a free slot in its pool, and it is
+only served while that pool's calendar is open. So a task's elapsed time splits into
+*queue time* and *work time*, and "do three clerks suffice for 200 applications a
+day" becomes a question the report answers rather than a number the author had to
+guess and configure. This needs no engine change: it is the sandbox's own job runner
+deciding *when* to complete a job it already holds, in virtual time.
 
 **Isolation by absence.** The sandbox registers job handlers only for the job types
 its own compiled process names, and it registers **no connector factories, no vault,
 no mail transport, no HTTP client at all**. A REST task in the sandbox cannot reach
 the network because there is nothing in the sandbox that can. Side-effect freedom is
 a structural property here, not a configuration flag.
+
+**A run is a session, not a request.** 50 000 cases will not finish inside an HTTP
+call, and stepping through one case by hand is a conversation rather than a call. So
+the sandbox is created as a server-side session with a lifetime: it is started,
+driven (free-run, pause, step, resume, complete a parked task by hand, publish a
+message, jump the clock), polled for progress, read for results, and torn down —
+explicitly, or by a TTL when the author walks away. Batch and interactive play are
+the *same* session with the scheduler either free-running or held; there is no
+second mode with second semantics.
 
 The report is computed from the sandbox's **own event log** — the same
 `(ValueType, Intent)` facts Operations reads, with their frozen timestamps — so the
@@ -124,6 +148,36 @@ keeps. That gives, for free and without new instrumentation: per-element and
 per-sequence-flow visit counts (the heat map, the same `visits` shape the runtime
 overlay already draws), per-element activate→complete durations, per-instance path
 and outcome, incidents, and the timeline of everything that happened.
+
+### Scope decided
+
+Four questions were open when this record was first drafted; all four are decided
+here, because each of them changes what has to be built.
+
+- **The run's source is either a draft or a deployed version.** The draft is the
+  everyday case; pointing the playground at a deployed definition answers the other
+  question authors ask — "why did version 7 behave like that?" — with the same
+  machinery. The source is a parameter of the session; everything after the compile
+  is identical, and a deployed source is still copied into a sandbox partition and
+  never touched in place.
+- **Interactive stepping is in scope from the start.** Pause, step, inspect a case's
+  variables, complete a parked user task through its real form, publish a message,
+  jump the clock. This is what ADR-0030 called Play, folded into the same session as
+  the batch run instead of shipped as a separate mode.
+- **The resource model is in the first round, not a follow-up.** Without pooled
+  capacity, every reported waiting time is just a sum of durations the author typed
+  in, and the bottleneck ranking says nothing they did not already know. Pools are
+  what make the temporal analysis worth reading.
+- **The ceiling is 50 000 cases per run.** This is affordable because the sandbox is
+  non-durable: the published baseline measures ~840 instances/sec when every batch
+  fsyncs to disk but ~6 900–16 500/sec for the same workloads with the log on tmpfs
+  (`benchmarks/results/baseline-5b1b9f2.md`), so 50 000 cases land in seconds to tens
+  of seconds rather than minutes. It is *not* affordable naively: at that size the
+  report must be aggregated as the run proceeds (counters per element and flow,
+  bucketed histograms for the percentiles, time series in fixed buckets), the case
+  list must live in a server-side result store read page by page, and the CSV must
+  be streamed rather than assembled. Anything that holds one object per case in
+  memory — in the server or in the browser — is ruled out by this number.
 
 Option 1 is rejected for the reason ADR-0030 gave: a browser walker that also
 produced *numbers* would be a second engine whose statistics look authoritative and
@@ -146,12 +200,24 @@ executor of the real semantics.
   process, so isolation from durable partitions has to be guaranteed structurally
   (reserved partition range, separate stores, separate run loop) and resources have
   to be bounded (instance cap, virtual-time horizon, wall-clock budget, session
-  TTL). The stub policy is a real design surface of its own, and every number the
+  TTL). The session lifecycle, the streaming aggregation and the paginated result
+  store are all consequences of the 50 000-case ceiling, and all three are work that
+  a one-shot "run and return a report" design would not have needed. Finished
+  instances stay in the sandbox's state store (that is the history the report and
+  the per-case replay read), so a run's footprint grows with the number of cases and
+  not merely with the peak work in progress — it needs a budget and a documented
+  degradation, not a promise. The stub policy is a real design surface of its own, and every number the
   report gives is only as good as the durations the author configured — the report
   must say so rather than presenting a modelled duration as a measurement. Timing
   fidelity is *modelled*, not measured: the playground answers "given these service
   times, where does it pile up", never "how fast is our REST endpoint".
-- **Follow-ups / risks to watch:** the sandbox's WAL is non-durable by construction,
+- **Follow-ups / risks to watch:** the fsync in the batch cycle is the one thing
+  standing between the durable path and the in-memory numbers above, so the sandbox
+  needs a log that does not fsync (a WAL option, or a temp dir on tmpfs) — a
+  deliberate, contained deviation, since nothing outside the sandbox observes it.
+  Per-case replay needs the log kept whole; at 50 000 cases that is a byte budget
+  worth capping, with the report staying complete (it is aggregated live) even where
+  the retained log no longer reaches back. The sandbox's WAL is non-durable by construction,
   which is a deliberate, contained deviation from "durable before visible"
   (invariant I2) — nothing outside the sandbox ever observes it, and it must stay
   that way. Deciding how far the *saved scenario* goes (a design-time store keyed to

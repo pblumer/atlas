@@ -982,24 +982,32 @@ the hand-written Details panel one vertical slice at a time:
 **Playground** — a third Modeler tab beside Design and Implement
 ([ADR-draft-modeler-playground](docs/adr/draft-modeler-playground.md)), building on
 the Play-mode sandbox above and extending it from "step one instance" to "run a
-dataset":
+dataset of up to 50 000 cases":
+- 🔲 **Sandbox session**: a sandbox over a draft *or* a deployed version — own
+  partition, own single-writer goroutine, non-durable log, virtual clock — driven as
+  a session (free-run, pause, step, resume, TTL) rather than inside one request.
+- 🔲 **Interactive play**: stop mid-run, inspect a case's variables, complete a
+  parked user task through its real form, publish a message, jump the clock. Same
+  session as the batch run, scheduler held instead of free-running.
 - 🔲 **Data in**: a case list from a CSV upload (reusing the ADR-0084/0139 row
   parsing), from a form-based list editor over the start variables, or from a
   generator that draws values per field.
 - 🔲 **Timing profile**: all at once, sequential, a fixed rate, a Poisson arrival
   stream, or a day profile with a load curve — realized as an arrival plan over the
   sandbox's **virtual clock**, so a simulated day runs in milliseconds.
-- 🔲 **Stub policy as run config, not model content**: per element a duration
-  distribution, an optional FEEL result, an optional failure probability with an
-  incident or a business error code — the ADR-0120 mockup vocabulary applied to an
-  untouched draft, so the tested model is the shipped model.
-- 🔲 **Analysis from the sandbox's own event log**: a heat map over tasks *and*
-  sequence flows, path coverage (what the dataset never reached), per-element
-  duration and wait-time percentiles, a bottleneck ranking, and a temporal view of
-  arrivals, work in progress and completions.
-- 🔲 **Results as data**: a per-case outcome table (inputs, end event, outputs,
-  duration, incidents) downloadable as CSV/JSON, one click from a case to the
-  existing replay/timeline view of that simulated instance.
+- 🔲 **Stub and resource policy as run config, not model content**: per element a
+  duration distribution, an optional FEEL result, an optional failure probability
+  with an incident or a business error code — the ADR-0120 mockup vocabulary applied
+  to an untouched draft — plus named **resource pools** with a capacity and a
+  calendar, so elapsed time splits into queue time and work time and capacity
+  questions become answerable.
+- 🔲 **Analysis aggregated as the run proceeds** (the 50 000-case ceiling rules out
+  one object per case): counters per element and sequence flow for the heat map, path
+  coverage, bucketed histograms for the duration percentiles, pool utilization and
+  queue length as fixed-bucket time series.
+- 🔲 **Results as data**: a server-side result store read page by page (inputs, end
+  event, outputs, duration, incidents, expectation verdict), streamed out as CSV/JSON,
+  one click from a case to the existing replay/timeline view of that simulated instance.
 - 🔲 **Saved scenarios**: (dataset, config, seed) stored against the draft so a run
   is reproducible, comparable against the previous run, and later runnable from CI.
 
