@@ -59,8 +59,11 @@ test("renders the derived landscape and drills into a process", async ({ page })
   await expect(page.locator(".mesh-meta")).toContainText("derived");
 
   // Panorama owns the landscape altitude and links into the existing Operations
-  // view for a process, rather than rendering a second BPMN canvas.
-  await page.locator('a[href="#/operations/p/1"] .mesh-node').click();
+  // view for a process, rather than rendering a second BPMN canvas. Since impact
+  // analysis landed, a node click selects rather than navigates — a node cannot do
+  // both — so the drilldown lives in the selection panel.
+  await page.locator('[data-node-id="process:1"]').click();
+  await page.getByRole("link", { name: "Open in Operations" }).click();
   await expect(page).toHaveURL(/#\/operations\/p\/1$/);
 
   expect(pageErrors).toEqual([]);
@@ -171,4 +174,62 @@ test("an unresolved dependency names what kind of thing is missing", async ({ pa
 
   await expect(page.locator(".mesh-unresolved title")).toContainText("connector");
   await expect(page.locator(".mesh-unresolved title")).toContainText("park");
+});
+
+// Impact analysis in the view (ADR-0211 §6). The traversal itself is covered case by
+// case in panorama-impact.spec.mjs; these cover what the viewer actually gets.
+test("selecting a node shows its blast radius and dims the rest", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await expect(page.locator(".mesh-panel-empty")).toContainText("Nothing selected");
+
+  // Dunning uses the credit decision, and Invoice calls Dunning. So at two hops the
+  // decision's blast radius is both processes; at one hop, only Dunning.
+  await page.locator('[data-node-id="decision:credit"]').click();
+  await expect(page.locator(".mesh-impact-count")).toContainText("2");
+  await expect(page.locator('[data-node-id="process:2"]')).toHaveClass(/mesh-in-impact/);
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-in-impact/);
+  // Context stays on screen, dimmed rather than removed, so the impact set reads as
+  // part of the landscape instead of as the whole of it. The application is dimmed
+  // even though it contains both: containment is not a dependency.
+  await expect(page.locator('[data-node-id="application:a1"]')).toHaveClass(/mesh-dimmed/);
+
+  // Depth is the chosen depth: one hop stops at the direct dependent.
+  await page.locator("#mesh-depth").selectOption("1");
+  await expect(page.locator(".mesh-impact-count")).toContainText("1");
+  await expect(page.locator('[data-node-id="process:1"]')).toHaveClass(/mesh-dimmed/);
+
+  // Clicking the selection again clears it.
+  await page.locator('[data-node-id="decision:credit"]').click();
+  await expect(page.locator(".mesh-panel-empty")).toBeVisible();
+});
+
+// The honesty rule, carried from the picture into the analysis over it: a walk that
+// stopped at a permission boundary must not present its count as a total.
+test("an impact answer that hits a restricted node says it is a lower bound", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  // The controls are addressed by id rather than by label: a node's aria-label is a
+  // descriptive sentence, and getByLabel matches by substring — "Show" collides with
+  // "…its identity is not shown" on a restricted node.
+  await page.locator('[data-node-id="process:1"]').click();
+  await page.locator("#mesh-direction").selectOption("dependencies");
+
+  await expect(page.locator(".mesh-truncated")).toContainText("Incomplete");
+  await expect(page.locator(".mesh-truncated")).toContainText("lower bound");
+});
+
+// A selection the filter removes cannot stay selected: the panel would describe a
+// node that is no longer on screen.
+test("filtering away the selection clears it", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+
+  await page.locator('[data-node-id="connector:c1"]').click();
+  await expect(page.locator(".mesh-impact-count")).toBeVisible();
+
+  await page.getByLabel("Filter the landscape").fill("invoice");
+  await expect(page.locator(".mesh-panel-empty")).toBeVisible();
 });

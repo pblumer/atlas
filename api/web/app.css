@@ -3215,3 +3215,38 @@ a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
 }
 .mesh-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mesh-empty-filter { margin: 0; padding: 32px; text-align: center; color: var(--muted); }
+
+/* Impact analysis (ADR-0211 §6). The canvas and the panel are one answer: the
+   highlight says which, the panel says how many and whether the count is a floor. */
+.mesh-body { display: flex; gap: 12px; align-items: flex-start; }
+.mesh-body .mesh-surface { flex: 1; min-width: 0; }
+.mesh-side { width: 260px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.mesh-controls { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.mesh-controls label { color: var(--muted); }
+.mesh-controls select {
+  padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--card); color: var(--text); font: inherit; font-size: 13px;
+}
+.mesh-panel {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); font-size: 13px; display: flex; flex-direction: column; gap: 8px;
+}
+.mesh-panel-empty { color: var(--muted); }
+.mesh-panel-empty p, .mesh-panel p { margin: 0; }
+.mesh-panel-head { display: flex; flex-direction: column; gap: 2px; }
+.mesh-impact-count { font-size: 13px; }
+.mesh-impact-count b { font-size: 18px; }
+/* A truncated answer is a warning, not a footnote: the number above it is a floor. */
+.mesh-truncated { color: var(--warn); }
+.mesh-drill { font-size: 13px; }
+.mesh-node { cursor: pointer; }
+.mesh-node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
+.mesh-in-impact circle { stroke-width: 3; }
+line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
+/* Dimmed rather than hidden: the rest of the landscape stays visible as context,
+   so an impact set reads as a part of the whole rather than as the whole. */
+.mesh-dimmed { opacity: 0.22; }
+@media (max-width: 900px) {
+  .mesh-body { flex-direction: column; }
+  .mesh-side { width: 100%; }
+}
