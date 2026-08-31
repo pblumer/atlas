@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Atlas">
+  <title>Atlas</title>
+  <!-- The mark without its tile, inheriting the surrounding text colour. This is
+       the variant the Console inlines into its ".mark" box, where the tile is a
+       CSS background — keep it in step with atlas-mark.svg. -->
+  <path fill="currentColor" fill-rule="evenodd"
+        d="M128 34 236 206 20 206Z
+           M128 166 174 206 82 206Z
+           M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/>
+</svg>

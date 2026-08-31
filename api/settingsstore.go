@@ -166,7 +166,7 @@ func (s *settingsStore) saveRegistration(r registrationSetting) error {
 // ---------- Org brand logo (ADR-0148) ----------
 //
 // The org logo is an opaque image (a customer's brand mark) that replaces the
-// built-in "A" letter mark across the Console and the login screen. It is
+// built-in Atlas mark across the Console and the login screen. It is
 // design-time operator configuration like the theme, so it lives in the same
 // settings directory (and is therefore captured by the design-time backup) and is
 // served to every browser. Only two formats are accepted: PNG for raster marks and
@@ -228,7 +228,7 @@ func (s *settingsStore) saveLogo(data []byte, contentType string) error {
 	return sidecar.FsyncDir(s.dir)
 }
 
-// clearLogo removes any stored logo, restoring the built-in letter mark. A missing
+// clearLogo removes any stored logo, restoring the built-in Atlas mark. A missing
 // logo is not an error (idempotent).
 func (s *settingsStore) clearLogo() error {
 	for _, ext := range logoExts {
