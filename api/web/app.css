@@ -3179,3 +3179,32 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .conn-share-head { font-size: 13px; font-weight: 600; }
 /* A connector somebody else configures: present, referenceable, and visibly not yours. */
 .conn-foreign td { opacity: .72; }
+
+/* Panorama's derived landscape mesh (ADR-0211). The graph is computed by the
+   server and laid out in the browser; these rules only style the result. Node
+   fills come from the kind table in panorama-mesh.js so the legend and the
+   canvas cannot drift apart. */
+.mesh-card { display: flex; flex-direction: column; gap: 12px; }
+.mesh-head { display: flex; align-items: baseline; gap: 12px; }
+.mesh-head h1 { margin: 0; }
+.mesh-legend {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.mesh-swatches { display: flex; flex-wrap: wrap; gap: 16px; }
+.mesh-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.mesh-meta { font-size: 13px; color: var(--text); }
+/* A filtered or collapsed picture states so in words, not only in shading — the
+   whole point is that incompleteness is legible rather than inferred. */
+.mesh-note { margin: 0; font-size: 13px; color: var(--muted); }
+.mesh-surface { overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.mesh-canvas { display: block; width: 100%; height: auto; min-height: 420px; background: var(--card); }
+.mesh-edge { stroke: var(--border-strong); stroke-width: 1.5; }
+.mesh-edge-contains { stroke-dasharray: 4 4; opacity: 0.7; }
+.mesh-label { font-size: 12px; fill: var(--text); }
+.mesh-count { font-size: 12px; font-weight: 600; fill: var(--accent); }
+.mesh-node { cursor: default; }
+a .mesh-node { cursor: pointer; }
+a:hover .mesh-node circle { stroke-width: 3; }
+a:focus-visible .mesh-node circle { stroke: var(--accent); stroke-width: 3; }
