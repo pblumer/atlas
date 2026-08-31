@@ -22,7 +22,7 @@ actually arrives with:
    that has to be paid up front, before any of it pays back. Every standalone
    architecture tool has this same cold-start problem, and Atlas has the one thing
    that could avoid it — it already knows its own process applications, deployed
-   processes, call activities, connectors, job types, releases, and deployment
+   processes, call activities, workers, job types, releases, and deployment
    targets. The structure is *present*, not hypothetical.
 
 2. **How does a user get from "the landscape" to "this instance is stuck"?** Atlas
@@ -124,8 +124,8 @@ The first derivation covers:
 |---|---|
 | Process application | the process-application store ([ADR-0128](0128-process-applications.md)) |
 | BPMN process | deployed processes, grouped under their application |
-| Connector | the connector store and connector placements |
-| Job type / worker type | job type registry and worker-type metadata |
+| Worker | the configured workers (the connector store, ADR-0203) and their placements |
+| Job type / Worker Type | job type registry and Worker Type metadata |
 | Deployment target | the target store |
 | Release | the release store |
 | DMN decision | the DMN registry |
@@ -134,10 +134,10 @@ and the following edges, each of which is a **fact Atlas can point at**, not a d
 assertion:
 
 - process → process, from call activities;
-- process → connector / job type, from service-task placements;
+- process → worker / job type, from service-task placements;
 - process → decision, from business-rule-task bindings;
 - application → release → deployment target, from release and target records;
-- application → process / connector / model, from artifact ownership.
+- application → process / worker / model, from artifact ownership.
 
 The mesh has **no persistence of its own**. It is computed on request from
 design-time stores and existing query endpoints, all reached through the API run
@@ -214,7 +214,7 @@ The drilldown is defined as four levels, and Panorama owns only the first two:
 | Level | Content | Owner |
 |---|---|---|
 | L0 Landscape | the derived mesh across the instance | Panorama (new) |
-| L1 Application | one application's processes, connectors, data, decisions, releases | Panorama (new) |
+| L1 Application | one application's processes, workers, data, decisions, releases | Panorama (new) |
 | L2 Process | BPMN diagram with live overlay | **Operations, existing** |
 | L3 Instance | token replay and causal lineage ([ADR-0065](0065-multi-token-process-replay.md)) | **Operations, existing** |
 
@@ -232,7 +232,7 @@ feature stops working is not the size at which it stops being shipped.
 
 **Impact analysis is part of the first mesh slice**, moved forward from ADR-0189's
 P5: selecting a node reveals its dependents and dependencies to a chosen depth
-("what breaks if this connector is down"). This is the capability a graph has and a
+("what breaks if this worker is down"). This is the capability a graph has and a
 diagram does not, and the edges it needs are the ones §1 already derives — deferring
 it would ship the cost of the mesh without its distinctive payoff. The remainder of
 P5 (desired-versus-observed drift over time, Prometheus/OpenSearch history) is

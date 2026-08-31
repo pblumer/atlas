@@ -499,6 +499,24 @@ _Changed_ / _Removed_ for each version.
   number is measured (a 400-node graph paints in about a second in Chromium), not
   guessed.
 
+  **The landscape also draws what a process depends on besides another process:** the
+  **workers** its service tasks name, and the **decisions** its business-rule tasks
+  delegate to. That is the question a model cannot answer about itself — a task names
+  its worker by name and carries no endpoint and no secret, so nothing inside the
+  model can tell whether that name is configured on this server (ADR-0158). A process
+  pointing at a worker nobody configured deploys clean and parks its first token;
+  here it shows as **unresolved** before anything runs. A worker node carries its name
+  and its Worker Type and nothing else — the endpoint and the credential reference
+  stay on the server. Two references are deliberately *not* findings, mirroring the
+  deploy-time check exactly: one whose job type no managed Worker Type claims is not a
+  worker reference at all, and a name authored as a FEEL expression names no fixed
+  worker, since which one it reaches is known only at call time. Configured workers
+  and registered decisions that nothing references stay off the picture: the mesh is
+  the dependency graph, not an inventory.
+
+  **A search box** filters the mesh by name, kind or process id and reports how much
+  it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
 - **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
   library now opens its Open Exchange Diagram views on a read-only `diagram-js`
   canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
