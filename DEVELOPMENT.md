@@ -26,7 +26,7 @@ All canonical commands live in the [`Makefile`](Makefile):
 |------|-------------|-------------|
 | Build | `make build` | `go build ./...` |
 | Test | `make test` | `go test ./...` |
-| Test + race (required) | `make race` | `go test -race ./...` |
+| Test + race (required) | `make race` | `go test -race -timeout=25m ./...` |
 | Vet | `make vet` | `go vet ./...` |
 | Format | `make fmt` | `gofmt -w .` |
 | Format check | `make fmt-check` | `gofmt -l .` (must be empty) |
@@ -88,7 +88,7 @@ Releases are driven entirely by a git tag — there is no manual binary building
    `## [x.y.z]` heading with today's date, and update the compare links at the
    bottom.
 2. Make sure the full check sequence is green on `main` (`go build ./...`,
-   `go test -race ./...`, `go vet ./...`, empty `gofmt -l .`).
+   `go test -race -timeout=25m ./...`, `go vet ./...`, empty `gofmt -l .`).
 3. Tag and push:
 
    ```bash

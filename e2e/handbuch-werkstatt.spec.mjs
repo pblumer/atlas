@@ -162,3 +162,27 @@ test("the chapter is reachable from the table of contents", async ({ page }) => 
   await expect(toc.locator('a[href="#rolle"]')).toBeVisible();
   await expect(toc.locator('a[href="#werkstatt"]')).toBeVisible();
 });
+
+// The accounts chapter is the one part of the handbook that documents something a
+// reader can lock themselves out with, so it is worth a test that it is there, that
+// it names all four roles, and that it says the two things an operator has to know
+// before switching the claim mapping on.
+test("the accounts chapter names the four roles and the cost of federating them", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+  await expect(page.locator('#toc a[href="#konten"]')).toBeVisible();
+
+  const chapter = page.locator("#konten");
+  for (const role of ["admin", "modeler", "operator", "user"]) {
+    await expect(chapter.locator("table code", { hasText: new RegExp(`^${role}$`) })).toBeVisible();
+  }
+  // Both languages, because a chapter that exists in one is half a chapter.
+  for (const [lang, text] of [
+    ["de", "Notfallzugang"],
+    ["en", "Break glass"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(chapter).toContainText(text);
+  }
+});

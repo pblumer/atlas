@@ -14,6 +14,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas can terminate TLS itself.** `--tls-cert` and `--tls-key` turn `--addr`
+  into a TLS 1.3 listener, so the reverse proxy that used to be mandatory before
+  anyone outside the host could reach the server is now a choice
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)). Unset — both unset — is
+  today's behaviour exactly: plain HTTP, nothing changes on upgrade.
+
+  **Both files or neither.** Naming one without the other stops the server rather
+  than falling back to plaintext on the port you believed you had just secured.
+  The pair is re-read when either file changes, so a renewal needs no restart of a
+  stateful engine; a renewal caught half-written keeps serving the certificate it
+  has and logs `server.tls_reload_failed` rather than refusing handshakes.
+
+  **TLS 1.3 only, and that is the point.** Its cipher suites are fixed by the
+  protocol, so there is no cipher list to expose, nothing to weaken, and no
+  `--tls-min-version`. A client that cannot negotiate 1.3 is refused rather than
+  quietly downgraded.
+
+  With TLS on, the server also opens a plaintext listener on `127.0.0.1` with an
+  ephemeral port for its own children — the MCP adapter's loopback calls and any
+  worker it supervises. A certificate issued for a host name carries no name for
+  `127.0.0.1`, and the alternative would be a switch to skip verification, which
+  Atlas does not have and will not get.
+
+- **`--tls-ca`, so two Atlas servers with an internal CA can talk.** A deployment
+  target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
+  and on-prem that certificate usually comes from a CA the sending host has never
+  heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
+  same bundle on an `atlas worker --server https://…` running on another host. It
+  is *added* to the host's roots, never a replacement, and it reaches only those
+  two conversations — a Worker Type calling a third party keeps the host's trust
+  store, because that endpoint is somebody else's.
+
+- **Helm: `atlas.tls`.** Mount a `kubernetes.io/tls` Secret (what cert-manager
+  writes) and the chart passes the pair to the server and switches all three
+  probes to the HTTPS scheme. Off by default, because in a cluster the Ingress
+  usually holds the certificate.
+
+  **What TLS still does not cover:** `/metrics`, `/healthz` and `/readyz` are
+  unauthenticated by design, so a port reachable beyond the host still wants a
+  proxy in front of those paths — encryption is not authorization.
+
 - **The Active Directory Worker Type can search.** A new `search` operation answers
   "is this group there, and what is its distinguished name?" —
   ([ADR-0166](docs/adr/0166-active-directory-connector.md), fifth amendment). It takes
@@ -48,11 +89,26 @@ _Changed_ / _Removed_ for each version.
   in — which is what every installation has today.
 
   A first sign-in creates an account linked to the provider's *subject*, not the
-  email address, with the `user` role and nothing else; grant more under
-  Organization as for any account. The local password form stays, deliberately: a
-  provider that is unreachable must not lock an administrator out of their own
-  instance. Mapping the provider's groups onto Atlas roles is the next step and not
-  in this one.
+  email address. The local password form stays, deliberately: a provider that is
+  unreachable must not lock an administrator out of their own instance.
+
+- **Let the provider's groups decide roles.** Under **Organization → Single
+  sign-on** an administrator names one claim in the token and a list of exact
+  values it may carry, and each value names the Atlas roles it grants and the
+  groups it puts a person in. Onboarding and offboarding become a group membership
+  somebody already maintains: the role and the shared projects arrive at the next
+  sign-in and go away at the sign-in after the membership does.
+
+  **It is off until you turn it on**, and worth one decision before you do: while
+  it is on, whoever administers those groups administers this instance's roles, and
+  a role granted by hand is replaced at that person's next sign-in. Group
+  membership follows only for the groups your rules name — a group no rule mentions
+  is left alone, so a membership you added by hand there survives.
+
+  Nothing is granted by absence: somebody the provider says nothing about matches
+  no rule and holds `user`, which everybody who can sign in has either way. A rule
+  that could never work — a role Atlas does not enforce, a group that has been
+  deleted — is refused when you save it rather than ignored on every login.
 
 ### Changed
 

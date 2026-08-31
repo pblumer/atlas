@@ -162,15 +162,48 @@ does — an operator who wants it points registration at that process instead.
 
 ### What a claim may grant, and what it may not
 
-In the first step: nothing. A federated login yields a `user`, and roles and group
-membership are granted in Atlas. The claim mapping of option A is the second step,
-configured explicitly, with the empty mapping meaning "no claim grants anything".
+In the first step: nothing. A federated login yielded a `user`, and roles and group
+membership were granted in Atlas. That is the safe half of federation and not the
+useful one — while roles are granted here, a leaver loses the door but keeps the
+role, and the offboarding a compliance officer asks about is still manual.
 
-The order matters and it is the ADR-0209 order: the day the mapping ships, whoever
-administers the provider's group memberships administers Atlas's roles. That is the
-point of federation and also its sharpest edge, so it should be a thing an operator
-turns on deliberately, on a screen, after the login itself is proven — not something
-that arrives with it.
+The second step is the claim mapping, and it is the mapping of option A: an
+administrator names **one claim** to read and a list of **exact values** it may
+carry, and each value names the roles it grants and the Atlas groups it puts a
+person in. It is off until somebody turns it on, and the switch carries the sentence
+that makes it a decision rather than a formality: from that moment, whoever
+administers the provider's groups administers this instance's roles.
+
+Four properties keep it from being a trapdoor:
+
+- **A claim grants; it never grants by absence.** Every rule is an exact match on a
+  value the token carries. Somebody the provider says nothing about matches nothing
+  and is granted nothing. There is no "everyone who signs in gets `modeler`" rule,
+  because that rule is a configuration flag wearing a claim's clothes.
+- **`user` is a floor, not a grant.** What the mapping decides is `admin`, `modeler`
+  and `operator` — the three that change what somebody may do to the instance.
+  Anybody who can sign in at all keeps `user`, so a group going away at the provider
+  does not leave a person unable to open their own task list.
+- **It owns the groups it names, and no others.** Roles are a closed set of four
+  Atlas defines, so "the mapping decides the roles" is a complete sentence and a
+  role granted by hand does not survive the next login. Groups are an open set
+  people create for their own reasons, and a mapping that never mentions a group has
+  said nothing about it — a membership an administrator added by hand to a group no
+  rule names is left alone.
+- **A mapping that cannot mean anything is refused where it is written.** A rule
+  naming a role Atlas does not enforce, or a group that has been deleted, grants
+  nothing — silently, on every login, until somebody works out why the new colleague
+  cannot deploy. The check runs at the write, against the groups as they are, in the
+  same run-loop turn that stores the record.
+
+And one state stays distinguishable from another: a mapping nobody wrote grants
+nothing *on purpose*, while a mapping that cannot be read is a broken instance and
+refuses the login. Reading the second as the first would let a disk fault quietly
+un-map everybody at their next sign-in.
+
+The order still mattered, and it was the ADR-0209 order: the login itself was
+proven first, on its own, and the mapping arrived after it as something an operator
+switches on from a screen.
 
 ### The break-glass account
 
@@ -179,6 +212,15 @@ expired, a discovery document moved, a network path closed — must still be
 administrable, and the lockout guard of ADR-0044 already refuses to leave an
 instance without an enabled administrator. Federation does not get to take that
 away.
+
+The mapping does not get a lockout guard of its own, and that is deliberate. A
+check at login time saying "refuse to take the last `admin` away" would have to run
+on the one login that most needs to succeed, and it would make an instance's
+recoverability depend on the order people happen to sign in. The recovery is the
+one that already exists and is already documented: the local administrator, plus
+`atlas reset-password` on the host. What the mapping *does* do is refuse, at the
+write, a rule that could never have worked — which is where a mistake of this shape
+is actually made.
 
 ### The authorization server stays
 
@@ -191,10 +233,15 @@ login is worth doing on its own, and the two halves are independent.
 
 ### What is built
 
-The relying-party flow, the token validation, the account, and the button. What is
-not: the claim mapping, which is the second step by design, and RP-initiated logout.
+Both steps. Step one is the relying-party flow, the token validation, the account
+and the button; step two is the claim mapping described above, stored as one record
+in the settings directory and edited by an administrator under
+Console → Organization → Single sign-on
+(`GET`/`PUT /api/v1/settings/oidc-mapping`, admin-only in both directions because
+the rules name the provider's group identifiers). What is not built:
+RP-initiated logout.
 
-Three things came out of building it that the proposal did not have:
+Four things came out of building it that the proposal did not have:
 
 - **The key-set refetch must not be rate limited.** The first draft of it allowed
   one refetch a minute, to keep an unknown key id from being a lever. A test that
@@ -213,6 +260,12 @@ Three things came out of building it that the proposal did not have:
   a flag in the URL and no reason. Which check failed is in the audit log, where an
   operator can read it, for the same reason a wrong password is not told which half
   was wrong.
+- **The mapping cannot own every group, only the ones it names.** The first draft of
+  step two made group membership exactly what the claims said, which is right for
+  the groups a rule mentions and wrong for every other group on the instance: an
+  administrator who had put somebody in a group by hand would have found them
+  removed at the next sign-in, by a mapping that had never heard of it. Roles are
+  different, and stay authoritative, because their set is closed and named by Atlas.
 
 ### Consequences
 
@@ -233,10 +286,17 @@ Three things came out of building it that the proposal did not have:
 - **Negative:** sessions remain in memory (ADR-0044, open point O-14), so a restart
   still signs everybody out. Federation makes that more visible, because the fix is
   now one redirect rather than a password prompt.
-- **Follow-ups / risks to watch:** claim mapping to roles and groups as the second
-  step; RP-initiated logout, so signing out of Atlas can end the provider session
-  too; SAML if eIAM requires it; and the ADR-0200 authorization-server question,
-  which this record deliberately leaves open rather than answering early.
+- **Positive, once the mapping is on:** offboarding is a group membership somebody
+  already maintains. A person removed from the provider's group loses the role and
+  the shared projects at their next sign-in, without anybody touching Atlas.
+- **Negative:** and that is also the cost. While the mapping is on, this instance's
+  roles are administered wherever those groups are administered, and a role granted
+  here by hand is replaced at the next login. An operator who wants both should keep
+  the mapping off.
+- **Follow-ups / risks to watch:** RP-initiated logout, so signing out of Atlas can
+  end the provider session too; SAML if eIAM requires it; and the ADR-0200
+  authorization-server question, which this record deliberately leaves open rather
+  than answering early.
 
 ## Pros and cons of the options
 

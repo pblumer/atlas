@@ -106,6 +106,9 @@ type Worker struct {
 	CanView        bool
 	Endpoint       string
 	CredentialsRef string
+	// State and Reason are this worker's observation, as on [Process].
+	State  string
+	Reason string
 }
 
 // Decision is one local DMN decision a business-rule task delegates to. A remote
@@ -129,6 +132,11 @@ type Process struct {
 	Calls         []Call
 	Workers       []WorkerUse
 	Decisions     []string
+	// State is the observation state (ADR-0189 §6) the server read for this
+	// process, and Reason is the sentence behind it. Empty means unbound: no
+	// observation applies, which is not a finding.
+	State  string
+	Reason string
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -137,6 +145,11 @@ type Landscape struct {
 	Processes    []Process
 	Workers      []Worker
 	Decisions    []Decision
+	// PartialStatus reports that the server stopped counting parked work before it
+	// had seen all of it. It travels with the landscape because only the collector
+	// knows it, and it must reach the payload: without it a process the scan never
+	// reached would be published as healthy on no evidence at all.
+	PartialStatus bool
 }
 
 // ModelElement is one bound ArchiMate element: what the architect called it, and
@@ -210,6 +223,18 @@ type Node struct {
 	ModelElementID   string `json:"modelElementId,omitempty"`
 	ModelElementType string `json:"modelElementType,omitempty"`
 	ModelName        string `json:"modelName,omitempty"`
+	// State is the observation state behind Severity (ADR-0189 §6), kept beside it
+	// because the three classes are a reading aid and never a replacement: an
+	// operator acting on a finding needs the state, not the color.
+	State    string `json:"state"`
+	Severity string `json:"severity"`
+	// Reason is the sentence behind this node's severity, in the words of whatever
+	// observed it. Empty on a node with nothing to report.
+	Reason string `json:"reason,omitempty"`
+	// SeverityFrom names the descendant a node inherited its severity from, and is
+	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
+	// parent that cannot say which child is red is not actionable.
+	SeverityFrom string `json:"severityFrom,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -242,6 +267,9 @@ type Graph struct {
 	// deployment targets, runtimes. They are neither matched nor absent, and the
 	// count keeps that visible instead of silently dropping them.
 	OutOfScope int `json:"outOfScope"`
+	// Status is the severity summary and, as importantly, the declaration of which
+	// observation states this build cannot produce at all (ADR-0211 §4).
+	Status Status `json:"status"`
 }
 
 func applicationNodeID(id string) string  { return KindApplication + ":" + id }
@@ -332,6 +360,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
+			State: p.State, Reason: p.Reason,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
 			node.Application = applicationNodeID(p.ApplicationID)
@@ -418,6 +447,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		g.Nodes = append(g.Nodes, Node{
 			ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
 			Provenance: ProvenanceDerived, WorkerType: w.Type,
+			State: w.State, Reason: w.Reason,
 		})
 	}
 	for _, id := range sortedKeys(usedDecisions) {
@@ -433,12 +463,20 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		return restricted[placeholders[i]] < restricted[placeholders[j]]
 	})
 	for _, key := range placeholders {
+		// No State, and therefore no severity beyond neutral. Whether a resource
+		// outside this caller's access is healthy or broken is a fact about that
+		// resource, and a placeholder that leaked it would turn the mesh into a
+		// side channel around the sharing scope it exists to honor (ADR-0211 §3).
 		g.Nodes = append(g.Nodes, Node{
 			ID: restricted[key], Kind: KindRestricted, Provenance: ProvenanceDerived,
 		})
 	}
 	g.Restricted = len(restricted)
 
+	// Unresolved nodes carry no state either, and for a different reason: there is
+	// no resource to observe. The finding is structural and the kind already states
+	// it; giving it a severity as well would report one fact twice, in two channels
+	// that could then disagree.
 	for _, id := range sortedKeys(unresolved) {
 		g.Nodes = append(g.Nodes, Node{
 			ID: id, Kind: KindUnresolved, Name: unresolved[id],
@@ -465,8 +503,9 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
-		return cluster(g, visible, appIDs, visibleApps)
+		return cluster(g, visible, appIDs, visibleApps, land.PartialStatus)
 	}
+	applyStatus(&g, land.PartialStatus)
 	return g
 }
 
@@ -555,11 +594,23 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 // cluster collapses an over-budget graph to its applications, recording how many
 // nodes each one stands for. It answers with less rather than with a picture the
 // browser cannot lay out, and Clustered says which of the two happened.
-func cluster(full Graph, visible []Process, appIDs []string, apps map[string]Application) Graph {
+func cluster(full Graph, visible []Process, appIDs []string, apps map[string]Application,
+	partial bool) Graph {
 	children := map[string]int{}
+	// Severity survives the collapse: an application hiding a critical process
+	// behind a count would be a worse picture than no picture. It is aggregated from
+	// the processes themselves rather than from the full graph's nodes, because the
+	// collapsed children are not in the result to be pointed at — which is also why
+	// the reason says how many were collapsed instead of naming one.
+	worst := map[string]Process{}
 	for _, p := range visible {
-		if _, ok := apps[p.ApplicationID]; ok {
-			children[p.ApplicationID]++
+		if _, ok := apps[p.ApplicationID]; !ok {
+			continue
+		}
+		children[p.ApplicationID]++
+		if have, seen := worst[p.ApplicationID]; !seen ||
+			severityRank[severityOf(p.State)] > severityRank[severityOf(have.State)] {
+			worst[p.ApplicationID] = p
 		}
 	}
 	out := Graph{
@@ -567,10 +618,16 @@ func cluster(full Graph, visible []Process, appIDs []string, apps map[string]App
 		Restricted: full.Restricted, Clustered: true,
 	}
 	for _, id := range appIDs {
-		out.Nodes = append(out.Nodes, Node{
+		node := Node{
 			ID: applicationNodeID(id), Kind: KindApplication, Name: apps[id].Name,
 			Provenance: ProvenanceDerived, Children: children[id],
-		})
+		}
+		if p, ok := worst[id]; ok && p.State != "" {
+			node.State = p.State
+			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s", children[id], p.Reason)
+		}
+		out.Nodes = append(out.Nodes, node)
 	}
+	applyStatus(&out, partial)
 	return out
 }

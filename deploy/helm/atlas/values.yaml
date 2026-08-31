@@ -132,6 +132,33 @@ atlas:
     keyKey: vault-key
     key: ""
 
+  # -- Terminate TLS in the pod rather than at the Ingress (--tls-cert/--tls-key,
+  # ADR-0191). Off by default: in a cluster the Ingress usually holds the
+  # certificate and Atlas serves plain HTTP on a ClusterIP nothing outside can
+  # reach. Turn it on where that last hop must be encrypted too — an Ingress on
+  # another node, or another Atlas publishing an application to this one, which
+  # requires https of its target (ADR-0129).
+  #
+  # With it on, the probes below switch to the HTTPS scheme automatically, and
+  # you must set --external-url (atlas.extraArgs) to the name on the certificate.
+  tls:
+    enabled: false
+    # -- Secret holding the pair. A standard kubernetes.io/tls Secret is what
+    # cert-manager writes, and its keys are the defaults below. Required when
+    # enabled: rendering fails loudly rather than starting a plaintext server on
+    # a port you believed you had just secured.
+    existingSecret: ""
+    certKey: tls.crt
+    keyKey: tls.key
+    # -- Optional key in the same Secret holding a CA bundle to trust in addition
+    # to the host's roots when this server publishes to another Atlas (--tls-ca).
+    # For a peer whose certificate an internal CA issued. It never replaces the
+    # system roots and is never a way to skip verification.
+    caKey: ""
+    # -- Where the Secret is mounted. Read-only; the server re-reads the pair
+    # when it changes, so a cert-manager renewal needs no restart.
+    mountPath: /etc/atlas/tls
+
   # -- Serve the OpenAPI spec and the Scalar API explorer (--docs).
   docs:
     enabled: true
@@ -157,7 +184,10 @@ atlas:
   extraEnv: []
 
 # -- Probes. /healthz and /readyz are both always unauthenticated, so they are safe
-# under --auth. They answer different questions and are deliberately not
+# under --auth. With atlas.tls.enabled the chart renders them with scheme: HTTPS,
+# because the kubelet would otherwise speak plaintext to a TLS listener and the pod
+# would never become ready; it does not verify the certificate on a probe, so an
+# internally issued one needs nothing further here. They answer different questions and are deliberately not
 # interchangeable (ADR-0142):
 #
 #   /healthz — is the process alive. Unconditional. The only remedy a liveness probe

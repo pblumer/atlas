@@ -113,14 +113,110 @@ func TestPanoramaBindingsResolveAgainstRealStores(t *testing.T) {
 	if statuses["proj-gone"] != "missing" {
 		t.Errorf("absent application status = %q, want missing", statuses["proj-gone"])
 	}
-	// Runtimes have no catalog until the node descriptor exists (P4). Reporting
-	// this as missing would claim the server looked, and it did not.
-	if statuses["rt-1"] != "unsupported" {
-		t.Errorf("runtime status = %q, want unsupported", statuses["rt-1"])
+	// Runtimes became answerable with the node descriptor (ADR-0189 §6): the server
+	// knows one runtime for certain, itself, so a binding to some *other* node is
+	// now missing rather than unsupported. That is a strictly better answer and a
+	// different claim — the server looked this time.
+	if statuses["rt-1"] != "missing" {
+		t.Errorf("runtime status = %q, want missing now that the node descriptor exists", statuses["rt-1"])
 	}
 	if res.Unresolved != 2 {
-		t.Errorf("unresolved = %d, want the absent and the unsupported", res.Unresolved)
+		t.Errorf("unresolved = %d, want the absent application and the absent runtime", res.Unresolved)
 	}
+}
+
+// TestPanoramaRuntimeBindingResolvesToThisNode closes the gap P3 shipped with. A
+// model that binds an ArchiMate node to the Atlas runtime it actually runs on now
+// gets a name back, which is the point of the binding: an architect looking at the
+// element learns which server it means, not that the question is unanswerable.
+func TestPanoramaRuntimeBindingResolvesToThisNode(t *testing.T) {
+	ts := newTestServer(t)
+	node := getNode(t, ts)
+
+	code, body := doReq(t, ts, http.MethodPut, "/api/v1/node",
+		`{"name":"Zurich primary","environment":"production"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("name the node: status = %d, body = %s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/applications", `{"name":"Billing"}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create application status = %d, body = %s", code, body)
+	}
+	var appRec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &appRec); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/panorama/models", mustJSON(t, map[string]any{
+		"applicationId": appRec.ID, "name": "Runtime bound", "xml": runtimeBoundArchiMate(node.ID),
+	}), "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create model status = %d, body = %s", code, body)
+	}
+	var model struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &model); err != nil {
+		t.Fatalf("decode model: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/panorama/models/"+model.ID+"/bindings", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("bindings status = %d, body = %s", code, body)
+	}
+	var res bindingResolution
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("decode bindings: %v (%s)", err, body)
+	}
+
+	var found bool
+	for _, binding := range res.Bindings {
+		for _, value := range binding.Values {
+			if value.Value != node.ID {
+				continue
+			}
+			found = true
+			if value.Status != "resolved" {
+				t.Errorf("this node's own id = %q, want resolved", value.Status)
+			}
+			// The operator's name, qualified by the environment: what somebody
+			// reading the model needs in order to recognise the server.
+			if value.Name != "Zurich primary (production)" {
+				t.Errorf("runtime name = %q, want the operator's name and environment", value.Name)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no binding for this node's id %q in %+v", node.ID, res.Bindings)
+	}
+	if res.Unresolved != 0 {
+		t.Errorf("unresolved = %d, want none", res.Unresolved)
+	}
+}
+
+// runtimeBoundArchiMate is one Node element bound to an Atlas runtime id — the
+// shape ADR-0189 §4 defines for atlas.runtimeId.
+func runtimeBoundArchiMate(runtimeID string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="id-model">
+  <name xml:lang="en">Runtime bound</name>
+  <elements>
+    <element identifier="id-node" xsi:type="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <name xml:lang="en">Atlas</name>
+      <properties>
+        <property propertyDefinitionRef="propid-runtime"><value xml:lang="en">` + runtimeID + `</value></property>
+      </properties>
+    </element>
+  </elements>
+  <propertyDefinitions>
+    <propertyDefinition identifier="propid-runtime" type="string">
+      <name xml:lang="en">atlas.runtimeId</name>
+    </propertyDefinition>
+  </propertyDefinitions>
+</model>`
 }
 
 // A connector's endpoint reaches the catalog's source but must never reach a

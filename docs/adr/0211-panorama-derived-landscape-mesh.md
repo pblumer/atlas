@@ -1,6 +1,7 @@
 # ADR-0211: Panorama's derived landscape mesh and notation projections
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-31 — §11 splits P2.5c's P4 dependency per
+  state instead of holding the whole stage behind it)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -314,7 +315,35 @@ This work sits between ADR-0189's P2 and P4, as **P2.5**, with staged dependenci
 2. **P2.5b — model overlay.** Modeled-versus-present comparison. Requires P3
    bindings.
 3. **P2.5c — severity on the mesh.** The three-class aggregation over live
-   observations. Requires P4.
+   observations. Requires P4 — *amended*: it requires P4 for two of the seven states,
+   not for the stage.
+
+   > **Amendment (2026-08-31).** Stating the dependency at the stage was too coarse.
+   > Three of §4's seven states are things the engine already knows about itself
+   > without contacting anything: work parked behind an unresolved incident
+   > (*degraded*), a configured worker that cannot serve work (*not ready*), and the
+   > absence of either (*healthy*). Only *unreachable* and *stale* need what P4
+   > brings — a source outside the process, and a freshness contract to exceed —
+   > and synthesizing them from a timeout invented here would make the mesh cry wolf
+   > on a schedule nobody chose. Holding the whole stage for them would withhold the
+   > answer an operator opens this view for, in exchange for two states that are
+   > *reported as unavailable* either way.
+   >
+   > So P2.5c ships the mapping, the aggregation and the states this build can
+   > observe, and **every mesh payload declares the states it cannot produce, with
+   > the reason**. That declaration is load-bearing, not a footnote: without it an
+   > instance nothing is watching renders as uniformly healthy, and a green picture
+   > that has no way to go red is worse than no picture — which is the same failure
+   > §4's neutral rendering of *unbound* exists to prevent, arriving one level up.
+   > It is the same discipline P3 applies to a binding it cannot resolve, where
+   > *unsupported*, *missing* and *forbidden* stay three different answers.
+   >
+   > Aggregation is also fixed here to **containment only**. Propagating severity
+   > along `calls` and `uses` would make a node's class a function of transitive
+   > reachability, so one unserved worker would repaint most of a few-hundred-node
+   > landscape — and a mesh that turns mostly red on a single fault is the mesh
+   > nobody believes on the second one. §6's impact analysis already answers the
+   > dependency question exactly, on demand and with its path.
 4. **C4 projection** rides with P2.5b, since it projects a model.
 
 Each stage ships end to end — API, embedded UI, authorization, tests, documentation,

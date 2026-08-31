@@ -244,7 +244,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0188](0188-console-managed-sql-connectors.md) | A database is a Console entry, not a start parameter — and a worker is never a thing you create | Proposed |
 | [0189](0189-panorama-architecture-modeling-and-live-overlays.md) | Panorama architecture modeling and live operational overlays | Accepted (amended) |
 | [0190](0190-webscrape-feed-extraction.md) | Add explicit RSS and Atom extraction to the web-scraping connector | Proposed |
-| [0191](0191-built-in-tls-listener.md) | TLS 1.3 in the binary — an optional listener with operator-supplied certificates | Proposed |
+| [0191](0191-built-in-tls-listener.md) | TLS 1.3 in the binary — an optional listener with operator-supplied certificates | Accepted |
 | [0192](0192-remedy-default-offload.md) | BMC Remedy runs on a worker by default | Proposed |
 | [0193](0193-ad-mock-in-the-console.md) | The Active Directory mockup switch belongs in the Console | Proposed |
 | [0194](0194-api-tokens.md) | API tokens — a credential a machine can actually be given | Proposed |
@@ -265,6 +265,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted |
 | [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted |
+| [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed |
 
 ## Status values
 

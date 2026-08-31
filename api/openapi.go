@@ -101,6 +101,25 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
 			}))}},
+		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
+		// to /api/v1/info's account of which binary. It is what makes cross-server
+		// correlation possible at all, so it is readable by any signed-in identity and
+		// by the least-privilege status scope a remote correlator is given; writing it
+		// is an operator act and stays with the administrator.
+		{"GET", "/api/v1/node", s.handleNode, apiOp{
+			summary: "This server's stable node descriptor: runtime identity, build, partition and supported features (ADR-0189)",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Node descriptor", schemaObj(map[string]any{
+				"id": tString(), "name": tString(), "environment": tString(),
+				"product": tString(), "version": tString(),
+				"partition": tInteger(), "partitions": tInteger(), "features": tArray(),
+			}, "id"))}},
+		{"PUT", "/api/v1/node", s.handleUpdateNode, apiOp{
+			summary: "Set this node's operator-owned display name, environment and labels (ADR-0189)",
+			tag:     "System", role: RoleAdmin,
+			req: jsonBody("Node identity", schemaObj(map[string]any{
+				"name": tString(), "environment": tString(), "labels": tObject(),
+			})), resp: jsonBody("Node descriptor", tObject())}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
@@ -424,9 +443,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: xmlBody("ArchiMate Open Exchange XML"), resp: jsonBody("Validation result", tObject())}},
 		// The derived landscape mesh (ADR-0211): computed from this server's own
 		// resources per requesting principal, never stored, and never mixed into the
-		// ArchiMate documents above.
+		// ArchiMate documents above. Its status block declares which of ADR-0189 §6's
+		// observation states this build cannot produce, so a consumer knows what the
+		// absence of a finding is worth.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
 			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
@@ -803,6 +824,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
 			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
+			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			resp: jsonBody("Claim mapping", tObject())}},
+		{"PUT", "/api/v1/settings/oidc-mapping", s.handleSetOIDCMapping, apiOp{
+			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			req:  jsonBody("Claim mapping", tObject()),
+			resp: jsonBody("Claim mapping", tObject())}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth", role: roleAny,

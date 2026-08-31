@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
-  <!-- The tile driven from outside, through two connectors — the MCP surface. -->
-  <path d="M150 44 226 86 226 170 150 212 74 170 74 86Z" stroke="#2563EB" stroke-width="18" stroke-linejoin="round"/>
-  <path d="M14 100H74M14 156H74" stroke="#2563EB" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="150" cy="128" r="24" fill="#2563EB"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
+  <!-- The peak driven from outside, through two connectors — the MCP surface. -->
+  <path fill="#6E7781" fill-rule="evenodd" d="M166 54 240 208 92 208ZM166 176 194 208 138 208Z"/>
+  <rect fill="#6E7781" x="8" y="92" width="127" height="26" rx="13"/>
+  <rect fill="#6E7781" x="8" y="150" width="99" height="26" rx="13"/>
 </svg>

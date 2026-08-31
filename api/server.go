@@ -202,8 +202,13 @@ type Server struct {
 	superviseURL     string
 	// offloadedKinds are the managed connector kinds this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
-	offloadedKinds   []string
-	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
+	offloadedKinds []string
+	drafts         *draftStore // durable sidecar for saved-but-not-deployed diagrams
+	// targetClient calls another Atlas — a deployment target (ADR-0129). It is set
+	// only where the operator named certificate authorities of their own with
+	// --tls-ca; nil means the default client, verifying against the host's roots
+	// (ADR-0191).
+	targetClient     *http.Client
 	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
 	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
@@ -1010,6 +1015,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	settings, err := newSettingsStore(filepath.Join(dataDir, "settings"))
 	if err != nil {
+		return nil, err
+	}
+	// The node identity is minted here rather than on the first read of the
+	// descriptor, for two reasons: a stable id must not be the side effect of
+	// somebody's GET, and a data directory this server cannot write to is an
+	// operator's problem to see at startup rather than weeks later on a request
+	// (ADR-0189 §6).
+	if _, err := ensureNodeIdentity(settings); err != nil {
 		return nil, err
 	}
 	// DMN reference models are resolved either from a temis model service (when
