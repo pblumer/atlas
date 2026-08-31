@@ -83,6 +83,9 @@ type Report struct {
 	Visits   map[string]int64
 	Elements map[string]ElementStat
 	Pools    map[string]PoolStat
+	// Timeline is the same run laid out over simulated time, so a reader can see
+	// when the work arrived and when it drained rather than only what it summed to.
+	Timeline Timeline
 }
 
 // CaseRow is one case in the results table.
@@ -291,6 +294,9 @@ func (s *Sandbox) Report() (Report, error) {
 		return Report{}, err
 	}
 
+	// One pass over the cases serves both the duration summary and the timeline:
+	// each case's record is read once, and neither of them keeps it.
+	tl := newTimeline(s.startedAt, s.clock.Now(), timelineBuckets)
 	durations := make([]time.Duration, 0, len(keys))
 	for _, k := range keys {
 		pi, ok, err := s.store.ProcessInstance(k)
@@ -300,11 +306,15 @@ func (s *Sandbox) Report() (Report, error) {
 		if !ok {
 			continue
 		}
-		if pi.State == model.PICompleted {
+		done := pi.State == model.PICompleted
+		if done {
 			rep.Completed++
 			durations = append(durations, time.Duration(pi.CompletedAt-pi.CreatedAt))
 		}
+		tl.add(pi.CreatedAt, done, pi.CompletedAt)
 	}
+	tl.finish()
+	rep.Timeline = *tl
 	if err := s.store.Incidents(func(_ uint64, _ *model.IncidentValue) error {
 		rep.Incidents++
 		return nil

@@ -553,3 +553,9 @@ func prefixEnd(prefix []byte) []byte {
 func trailingKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
+
+// instanceFromReplayKey extracts the process instance from an element-replay key,
+// which a whole-store scan needs and a per-instance one already knew.
+func instanceFromReplayKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[1:])
+}
