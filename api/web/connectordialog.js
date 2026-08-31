@@ -19,6 +19,36 @@
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// connectorCreateBody builds the POST /api/v1/connectors body from the add form.
+//
+// It lives here rather than in app.js for the reason the delete flow does: app.js
+// boots the whole console on import and cannot be exercised in isolation, and this is
+// a part worth exercising. "Which fields does this create carry" is a decision, not a
+// transcription — the form keeps every field in the DOM and only *hides* the ones a
+// kind does not use, so a hidden field still has a value and FormData still reports it.
+export function connectorCreateBody(form) {
+  const f = form instanceof FormData ? form : new FormData(form);
+  const get = (k) => String(f.get(k) || "").trim();
+  const body = {
+    name: get("name"),
+    kind: get("kind") || "temis",
+    endpoint: get("endpoint"),
+    sender: get("sender"),
+    credentialsRef: get("credentialsRef"),
+  };
+  if (body.kind === "mail") body.provider = get("provider") || "smtp";
+  // A connection string is a SQL connector's whole configuration and belongs to no
+  // other kind, so the gate is the kind — not whether the field happens to hold
+  // something. Asking only "is it non-empty" is what let a DSN typed for a kind picked
+  // earlier, or one a password manager put into a type="password" input nobody can
+  // see, refuse a jira create with a message about databases.
+  if (connectorShape(body.kind, body.provider).sql) {
+    const conn = get("connectionString");
+    if (conn) body.connectionString = conn;
+  }
+  return body;
+}
+
 // connectorShape says which fields a connector of this kind and provider actually
 // uses, and what to call them. It is the one description of that: a native mail
 // provider and SharePoint default their API base and authenticate with a vault
