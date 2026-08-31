@@ -892,7 +892,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
 A parallel track alongside Milestone S: turn Panorama from a placeholder into a
 standards-based architecture workspace that relates declared ArchiMate 3.2 models
 to current Atlas resources without mixing runtime observations into the model. See
-[ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md).
+[ADR-0189: Panorama architecture modeling and live operational overlays](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)
+for the drawn model, its bindings, and the observation projection, and
+[ADR-draft-panorama-derived-landscape-mesh](docs/adr/draft-panorama-derived-landscape-mesh.md)
+for the derived whole-instance mesh above them.
 
 - ✅ **P1 — Architecture model:** add application-owned Panorama artifacts in a
   design-time sidecar store; import, validate, preserve, and export Open Group
@@ -907,6 +910,25 @@ to current Atlas resources without mixing runtime observations into the model. S
   networks; state the supported subset explicitly. The read-only, multi-view
   `diagram-js` canvas, ArchiMate renderer, selection properties, and zoom/pan
   controls are complete; authoring, semantic rules, undo/redo, and save remain.
+- 🔲 **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
+  Atlas already holds — process applications, deployed processes, call activities,
+  connectors, job/worker types, releases, deployment targets, DMN decisions — so
+  Panorama is useful before anyone models anything, and treat the ArchiMate model as
+  an annotation over it rather than its source. Compute the graph per requesting
+  principal against the existing sharing scopes, and where a scope cuts a path,
+  render an explicit restricted placeholder instead of dropping the edge. Search,
+  filter, and dependency/impact analysis are acceptance criteria, not follow-ups; so
+  is a measured node/edge budget, with `api/layout` as the fallback if browser layout
+  falls short of it. Panorama owns the landscape and application altitudes only —
+  process and instance drilldown links into the existing Operations overlay and token
+  replay and must not reimplement them. Ships in three stages:
+  **a)** the derived mesh, which depends on neither P3 nor P4;
+  **b)** the model overlay — modeled-but-absent and present-but-unmodeled in both
+  directions — plus the read-only C4 projection with its versioned mapping and
+  reported loss, both of which need P3 bindings; and
+  **c)** severity on the mesh, aggregating P4's seven observation states into three
+  classes for zoom-out without replacing them, keeping unreachable and stale out of
+  critical and always attributing a worst-of parent to the descendant that caused it.
 - 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   connectors/job types, releases, local runtimes, and deployment targets. Preserve
@@ -918,10 +940,11 @@ to current Atlas resources without mixing runtime observations into the model. S
   bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
   stale/unbound states; show status as borders and badges without overwriting
   ArchiMate layer colors.
-- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments,
-  surface discovered-but-unmodeled resources, provide dependency and impact
-  analysis, and optionally query Prometheus/OpenSearch for historical context.
-  Panorama remains a correlation surface, not a time-series or log database.
+- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments
+  over time and optionally query Prometheus/OpenSearch for historical context.
+  Dependency/impact analysis and discovered-but-unmodeled resources move forward
+  into P2.5, which derives the edges they need. Panorama remains a correlation
+  surface, not a time-series or log database.
 
 ## Milestone A — Modeler & authoring experience 🔲
 
