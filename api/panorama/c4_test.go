@@ -2,6 +2,8 @@ package panorama
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -212,5 +214,81 @@ func TestProjectToC4IsDeterministic(t *testing.T) {
 	b, _ := json.Marshal(second)
 	if string(a) != string(b) {
 		t.Errorf("projection is not stable:\n%s\n%s", a, b)
+	}
+}
+
+// The route honours the same scope as every other Panorama read: a model the caller
+// may not see is a 404 here too, so a projection cannot become a way around it.
+func TestHandleC4RespectsTheModelScope(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "hidden")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+testModelID+"/c4", nil)
+	req.SetPathValue("id", testModelID)
+	invoke(t, fx.service.HandleC4, req, http.StatusNotFound)
+}
+
+func TestHandleC4ServesTheProjection(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+testModelID+"/c4", nil)
+	req.SetPathValue("id", testModelID)
+	rec := invoke(t, fx.service.HandleC4, req, http.StatusOK)
+
+	var p C4Projection
+	decodeResponse(t, rec, &p)
+	if !p.ReadOnly || p.SourceModelID != testModelID || p.Notation != NotationC4Projection {
+		t.Errorf("projection = %+v", p)
+	}
+	// The fixture's Application Component projects; its Business Process does not,
+	// and the projection says so rather than quietly leaving it out.
+	if len(p.Elements) != 1 || p.Elements[0].Type != C4SoftwareSystem {
+		t.Errorf("elements = %#v", p.Elements)
+	}
+	if len(p.Dropped) != 1 || p.Dropped[0].SourceType != "BusinessProcess" {
+		t.Errorf("dropped = %#v, want the business process reported", p.Dropped)
+	}
+}
+
+// A stored document the projector cannot read is a server fault, not an empty
+// projection. "This model projects to nothing" and "this model could not be read"
+// are different answers, and only one of them is safe to put in front of an
+// architect.
+func TestHandleC4ReportsAnUnreadableDocument(t *testing.T) {
+	fx := newServiceFixture(t)
+	if err := fx.store.Save(Model{
+		ID: testModelID, ApplicationID: "app-1", Name: "Broken",
+		Notation: NotationArchiMate32, Revision: 1, XML: "<model><elements>",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+testModelID+"/c4", nil)
+	req.SetPathValue("id", testModelID)
+	invoke(t, fx.service.HandleC4, req, http.StatusInternalServerError)
+}
+
+// XML directives are refused here as everywhere else in this package: a projection
+// is another parser, and it must not become the one door that accepts them.
+func TestProjectToC4RefusesDirectives(t *testing.T) {
+	doc := []byte(`<?xml version="1.0"?><!DOCTYPE model [<!ENTITY x "y">]>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"><name>x</name></model>`)
+	if _, err := ProjectToC4(doc, "m", 1); err == nil {
+		t.Error("a document with a directive was projected")
+	}
+}
+
+// An element with no name of its own still projects: C4 shows the identifier rather
+// than an empty box, and the projection must not drop it for lacking a label.
+func TestProjectToC4KeepsAnUnnamedElement(t *testing.T) {
+	p, err := ProjectToC4(c4doc(`  <elements>
+    <element identifier="app-1" xsi:type="ApplicationComponent"/>
+  </elements>
+`), "m", 1)
+	if err != nil {
+		t.Fatalf("ProjectToC4: %v", err)
+	}
+	if len(p.Elements) != 1 || p.Elements[0].ID != "app-1" {
+		t.Errorf("elements = %#v, want the unnamed component kept", p.Elements)
 	}
 }

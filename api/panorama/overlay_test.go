@@ -203,3 +203,35 @@ func TestOverlayDoesNotRevealHiddenResources(t *testing.T) {
 		t.Errorf("modeled node lost its own name: %s", body)
 	}
 }
+
+// Two models may bind the same resource. The first names it and the rest confirm
+// it, so a node is marked once rather than accumulating a second model's element id
+// over the first — an overlay that overwrote would make the last model read win by
+// accident.
+func TestOverlayMarksANodeOnceAcrossModels(t *testing.T) {
+	g := DeriveGraph(overlayLandscape(), Options{Overlays: []Overlay{
+		{ModelID: "m1", Elements: []ModelElement{elem("app-a", "ApplicationComponent", "First", KeyApplicationID, "a1")}},
+		{ModelID: "m2", Elements: []ModelElement{elem("app-b", "ApplicationComponent", "Second", KeyApplicationID, "a1")}},
+	}})
+
+	node := nodeByID(t, g, "application:a1")
+	if node.ModelElementID != "app-a" || node.ModelName != "First" {
+		t.Errorf("node = %+v, want the first binding to name it", node)
+	}
+	if node.Provenance != ProvenanceBoth {
+		t.Errorf("provenance = %q", node.Provenance)
+	}
+}
+
+// Two models declaring the same absent resource produce one node, not two: they are
+// describing the same missing thing, and duplicating it would double the drift.
+func TestOverlayDeduplicatesAbsentNodesAcrossModels(t *testing.T) {
+	g := DeriveGraph(overlayLandscape(), Options{Overlays: []Overlay{
+		{ModelID: "m1", Elements: []ModelElement{elem("app-a", "ApplicationComponent", "Ghost", KeyApplicationID, "a-gone")}},
+		{ModelID: "m2", Elements: []ModelElement{elem("app-b", "ApplicationComponent", "Ghost", KeyApplicationID, "a-gone")}},
+	}})
+
+	if g.Modeled != 1 {
+		t.Errorf("Modeled = %d, want one node for one missing resource", g.Modeled)
+	}
+}

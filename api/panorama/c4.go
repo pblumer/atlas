@@ -5,8 +5,11 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // The C4 projection (ADR-0211 §8).
@@ -270,4 +273,21 @@ func readConcepts(data []byte) ([]archiConcept, []archiConcept, error) {
 		}
 	}
 	return elements, relationships, nil
+}
+
+// HandleC4 serves the C4 projection of one model.
+//
+// Read-only by construction: there is no write counterpart and there never will be
+// one under this record. ArchiMate stays the only authored notation (ADR-0189 §7).
+func (s *Service) HandleC4(w http.ResponseWriter, r *http.Request) {
+	model, refusal, err := s.readModel(r, r.PathValue("id"))
+	if writeReadOutcome(w, refusal, err) {
+		return
+	}
+	projection, err := ProjectToC4([]byte(model.XML), model.ID, model.Revision)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "project to C4: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, projection)
 }

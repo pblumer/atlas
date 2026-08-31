@@ -3268,3 +3268,26 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
 .panorama-unresolved { font-size: 12px; }
 .panorama-pick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .panorama-pick label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; font-size: 13px; }
+
+/* Provenance on the landscape mesh (ADR-0211 §2): derived, modeled, or both. Shape
+   carries it as well as colour — a picture that mixed what Atlas found with what
+   somebody declared, without saying which is which, is the conflation the record
+   exists to prevent. */
+.mesh-prov-modeled .mesh-label { font-style: italic; }
+.mesh-prov-modeled circle { opacity: 0.9; }
+
+/* The C4 projection (ADR-0211 §8). Structure, relationships, and — never optional —
+   what the mapping could not express. */
+.c4-panel { padding: 16px 20px; overflow: auto; height: 100%; background: var(--card); }
+.c4-head h2 { margin: 0 0 4px; font-size: 16px; }
+.c4-head p { margin: 0 0 12px; font-size: 13px; }
+.c4-tree, .c4-list { list-style: none; margin: 0; padding-left: 0; font-size: 13px; }
+.c4-tree .c4-tree { padding-left: 18px; border-left: 1px solid var(--border); margin-top: 6px; }
+.c4-tree > li, .c4-list > li { padding: 5px 0; }
+.c4-tree p { margin: 2px 0 0; font-size: 12px; }
+.c4-type {
+  display: inline-block; padding: 1px 6px; margin-right: 6px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent); font-size: 11px;
+}
+.c4-reason { color: var(--warn); font-size: 12px; }
+.c4-loss h3 { color: var(--warn); }
