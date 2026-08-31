@@ -929,11 +929,17 @@ for the derived whole-instance mesh above them.
   **c)** severity on the mesh, aggregating P4's seven observation states into three
   classes for zoom-out without replacing them, keeping unreachable and stale out of
   critical and always attributing a worst-of parent to the descendant that caused it.
-- 🔲 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
+- 🚧 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
   the distinction between an ArchiMate Application Component and an Atlas process
-  application, including many-to-many mappings.
+  application, including many-to-many mappings. The `atlas.*` key contract,
+  extraction, validation, a writer that edits the document in place rather than
+  reserialising it, per-principal resolution, the three HTTP routes and the binding
+  panel in the model viewer are complete. Two kinds resolve as **unsupported**
+  rather than missing until their catalogs exist: a job type is authored in a model
+  rather than registered as a resource, and a stable runtime id is the node
+  descriptor P4 delivers.
 - 🔲 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
   a separate observation projection for readiness, health, version, deployments,
   instances, jobs, and incidents. Resolve remote target status server-side with

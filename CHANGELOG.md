@@ -473,6 +473,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Panorama models can say which Atlas resource an element means.** An ArchiMate
+  element in a Panorama model now carries **Atlas bindings**
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
+  an Application Component names a process application, a Business Process names a
+  BPMN process id, an Application Service names a worker or job type, a Node names a
+  deployment target, an Artifact names a release. Select an element in the model
+  viewer to see what it is bound to, and bind it from a picker of the resources you
+  may see.
+
+  Bindings are ordinary ArchiMate properties in an `atlas.` namespace, so a bound
+  model stays a standard model: it exports as Open Exchange XML like any other and
+  its bindings travel into Archi or any conformant tool. The keys are an allowlist,
+  which is what keeps credentials out — `atlas.credentialRef` is refused because it
+  was never permitted, and a rejected value is never echoed back.
+
+  **The document stores an opaque id and nothing else.** Names come from the server
+  at read time, filtered by what you may see, so a model can never hold a stale copy
+  of one. A binding that no longer resolves stays visible and says which of three
+  things it is: outside your access, no longer on this server, or a kind this Atlas
+  version cannot resolve yet. Removing it would make a broken binding look like an
+  absent one, and the model would then look correct.
+
+  **Editing a binding does not reformat your document.** The writer splices the
+  bytes it needs to change and leaves everything else exactly as it was — comments,
+  indentation, attribute order, and any standard content Atlas does not model.
+
 - **Panorama shows the landscape you already have.** Panorama's landing view is now
   a derived mesh of the whole instance
   ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
