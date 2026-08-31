@@ -2,8 +2,11 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
+	"github.com/pblumer/atlas/compiler"
 )
 
 // meshMaxNodes is the landscape mesh's size budget (ADR-0211 §7). Over it the
@@ -50,7 +53,32 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 		ovByPID[rec.CalledProcessID] = rec
 	}
 
+	conns, err := s.connectors.LoadAll()
+	if err != nil {
+		return panorama.Landscape{}, err
+	}
+	principal := httpapi.PrincipalFrom(r.Context())
+	connByName := make(map[string]connector, len(conns))
 	land := panorama.Landscape{}
+	for _, c := range conns {
+		connByName[c.Name] = c
+		land.Connectors = append(land.Connectors, panorama.Connector{
+			ID: c.ID, Name: c.Name, Kind: c.Kind,
+			CanView: scopeRank(connectorRole(c, principal, s.authEnabled)) >= scopeRank(ScopeRoleViewer),
+			// Carried so the derivation can be tested for never emitting them.
+			Endpoint: c.Endpoint, CredentialsRef: c.CredentialsRef,
+		})
+	}
+
+	// Deployed decisions are engine-wide rather than owned by any application
+	// (ADR-0034), so there is no scope to apply and CanView is simply true. Saying
+	// that here is better than leaving a reader to wonder which filter was forgotten.
+	for _, d := range s.dmnRegistry.DeployedDecisions() {
+		land.Decisions = append(land.Decisions, panorama.Decision{
+			ID: d.ID, Name: d.Name, CanView: true,
+		})
+	}
+
 	for _, p := range projs {
 		land.Applications = append(land.Applications, panorama.Application{
 			ID: p.ID, Name: p.Name,
@@ -83,7 +111,39 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, error) {
 			}
 			proc.Calls = append(proc.Calls, call)
 		}
+		proc.Connectors = connectorUses(d.cp, connByName)
+		proc.Decisions = d.cp.BusinessRuleDecisions()
 		land.Processes = append(land.Processes, proc)
 	}
 	return land, nil
+}
+
+// connectorUses resolves a process's connector references against the configured
+// connectors, mirroring the deploy-time check in connectorWarnings — including the
+// two references that are deliberately *not* findings there, because treating them
+// as findings here would put false "not configured" nodes on the landscape:
+//
+//   - a reference whose job type no managed kind claims is not a connector
+//     reference at all (a local decision names its connector field the same way); and
+//   - a name authored as a FEEL expression (entra, ADR-0172) names no fixed
+//     connector — which one it reaches is known only at call time, so there is
+//     nothing on this server to resolve it against.
+//
+// Run-loop goroutine only, via its caller.
+func connectorUses(cp *compiler.CompiledProcess, byName map[string]connector) []panorama.ConnectorUse {
+	var out []panorama.ConnectorUse
+	for _, ref := range cp.ConnectorRefs() {
+		if connectorKindOfJobType(ref.JobType) == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
+			continue
+		}
+		use := panorama.ConnectorUse{ElementID: ref.ElementId, Name: ref.Connector}
+		if rec, ok := byName[ref.Connector]; ok {
+			use.TargetID = rec.ID
+		}
+		out = append(out, use)
+	}
+	return out
 }

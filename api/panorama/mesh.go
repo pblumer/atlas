@@ -22,13 +22,15 @@ import (
 const (
 	KindApplication = "application"
 	KindProcess     = "process"
+	KindConnector   = "connector"
+	KindDecision    = "decision"
 	// KindRestricted is a resource that exists but which this caller may not see.
 	// It stands in for a real node so the edge to it survives (ADR-0211 §3).
 	KindRestricted = "restricted"
-	// KindUnresolved is a call target that no deployment on this server provides.
-	// Distinct from restricted on purpose: "not here" and "not yours to see" are
-	// different findings, and an operator chasing a broken call needs to tell them
-	// apart.
+	// KindUnresolved is a dependency nothing on this server provides: a call target
+	// with no deployment, or a connector name nobody configured. Distinct from
+	// restricted on purpose — "not here" and "not yours to see" are different
+	// findings, and an operator chasing a broken dependency needs to tell them apart.
 	KindUnresolved = "unresolved"
 )
 
@@ -36,6 +38,9 @@ const (
 const (
 	EdgeContains = "contains"
 	EdgeCalls    = "calls"
+	// EdgeUses is a process depending on something that is not a process: a
+	// configured connector, or a decision it delegates to.
+	EdgeUses = "uses"
 )
 
 // Provenance values. Everything this slice derives is [ProvenanceDerived]; modeled
@@ -64,6 +69,41 @@ type Call struct {
 	TargetKey       uint64
 }
 
+// ConnectorUse is one model reference to a server-registered connector, already
+// resolved by the server. A model names a connector by name and never carries an
+// endpoint or a secret (ADR-0036/0041), so nothing inside it can tell whether that
+// name is configured anywhere — which is exactly why the references are enumerable
+// from outside (ADR-0158), and why the mesh can answer it. TargetID is empty when
+// no connector by that name is configured.
+type ConnectorUse struct {
+	ElementID string
+	Name      string
+	TargetID  string
+}
+
+// Connector is one configured connector as the mesh sees it. Endpoint and
+// CredentialsRef are carried so the derivation can be tested for *not* emitting
+// them: a landscape picture is opened by anyone with modeler access, and an
+// internal hostname is precisely what ADR-0211 §10 keeps out of what leaves the
+// server. Neither field ever reaches a [Node].
+type Connector struct {
+	ID             string
+	Name           string
+	Kind           string
+	CanView        bool
+	Endpoint       string
+	CredentialsRef string
+}
+
+// Decision is one local DMN decision a business-rule task delegates to. A remote
+// (connector-mode) decision is deliberately not one of these: it arrives as a
+// ConnectorUse instead, which is where its dependency actually points.
+type Decision struct {
+	ID      string
+	Name    string
+	CanView bool
+}
+
 // Process is one deployed process, with the call activities it makes.
 type Process struct {
 	Key           uint64
@@ -73,12 +113,16 @@ type Process struct {
 	ApplicationID string
 	CanView       bool
 	Calls         []Call
+	Connectors    []ConnectorUse
+	Decisions     []string
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
 	Applications []Application
 	Processes    []Process
+	Connectors   []Connector
+	Decisions    []Decision
 }
 
 // Options tunes one derivation.
@@ -103,6 +147,9 @@ type Node struct {
 	// Operations view (L2) without a second lookup.
 	ProcessID string `json:"processId,omitempty"`
 	Version   int32  `json:"version,omitempty"`
+	// ConnectorKind is a connector's kind ("rest", "mail", …). Never its endpoint
+	// and never its credential reference — see [Connector].
+	ConnectorKind string `json:"connectorKind,omitempty"`
 	// Children is how many nodes a collapsed application stands for. Set only when
 	// the graph is clustered.
 	Children int `json:"children,omitempty"`
@@ -130,8 +177,26 @@ type Graph struct {
 
 func applicationNodeID(id string) string  { return KindApplication + ":" + id }
 func processNodeID(key uint64) string     { return fmt.Sprintf("%s:%d", KindProcess, key) }
-func unresolvedNodeID(pid string) string  { return KindUnresolved + ":" + pid }
+func connectorNodeID(id string) string    { return KindConnector + ":" + id }
+func decisionNodeID(id string) string     { return KindDecision + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
+
+// unresolvedNodeID names what is missing *and* what kind of thing it is. A BPMN
+// process id and a connector name can be the same string while being two entirely
+// different findings, so the kind is part of the identity rather than a label on it.
+func unresolvedNodeID(kind, name string) string { return KindUnresolved + ":" + kind + ":" + name }
+
+// sortedKeys returns a map's keys in a stable order. Every collection the graph
+// emits goes through it: map iteration order is random in Go, and a mesh that
+// reorders between two identical requests cannot be diffed and redraws on noise.
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // DeriveGraph computes the mesh for one caller's landscape.
 func DeriveGraph(land Landscape, opts Options) Graph {
@@ -169,12 +234,13 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
-	// Restricted placeholders are keyed internally by the hidden target so two calls
-	// to one target share a placeholder and two targets never merge into one — either
-	// mistake invents or erases a dependency. The key never leaves this function; the
-	// response carries an opaque per-response ordinal instead.
-	restricted := map[uint64]string{}
-	restrictedOrdinal := func(key uint64) string {
+	// Restricted placeholders are keyed internally by the hidden resource — kind and
+	// id together — so repeated references to one resource share a placeholder, two
+	// resources never merge into one, and a hidden process is never confused with a
+	// hidden connector. Any of those mistakes invents or erases a dependency. The key
+	// never leaves this function; the response carries an opaque per-response ordinal.
+	restricted := map[string]string{}
+	restrictedOrdinal := func(key string) string {
 		if id, ok := restricted[key]; ok {
 			return id
 		}
@@ -182,7 +248,8 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		restricted[key] = id
 		return id
 	}
-	unresolved := map[string]bool{}
+	// unresolved is keyed by its node id, which already carries the kind.
+	unresolved := map[string]string{}
 	// Edges are deduplicated: three call activities to one target are one dependency.
 	seenEdge := map[Edge]bool{}
 	addEdge := func(e Edge) {
@@ -204,47 +271,108 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		g.Nodes = append(g.Nodes, node)
 	}
 
-	// Calls are walked in a second pass so every visible process node already exists;
-	// a placeholder is minted only for a target that is genuinely not among them.
+	// Dependencies are walked in a second pass so every visible process node already
+	// exists; a placeholder is minted only for a target genuinely not among them.
+	//
+	// Connectors and decisions become nodes only where a process references them.
+	// The mesh is the dependency picture, not an inventory: a configured connector
+	// nothing uses is not a landscape edge, and putting it on screen would bury the
+	// ones that are.
+	connectors := map[string]Connector{}
+	for _, c := range land.Connectors {
+		connectors[c.ID] = c
+	}
+	decisions := map[string]Decision{}
+	for _, d := range land.Decisions {
+		decisions[d.ID] = d
+	}
+	usedConnectors := map[string]bool{}
+	usedDecisions := map[string]bool{}
+
 	for _, p := range visible {
+		from := processNodeID(p.Key)
 		for _, c := range p.Calls {
 			target, ok := byKey[c.TargetKey]
 			switch {
 			case c.TargetKey != 0 && ok && target.CanView:
-				addEdge(Edge{From: processNodeID(p.Key), To: processNodeID(target.Key), Kind: EdgeCalls})
+				addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls})
 			case c.TargetKey != 0 && ok:
-				addEdge(Edge{From: processNodeID(p.Key), To: restrictedOrdinal(target.Key), Kind: EdgeCalls})
+				addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls})
 			default:
 				// No deployment provides the called process — or the resolved key is
 				// not in the landscape at all, which is the same finding from the
 				// caller's side. The called process id is safe to name: it is in this
 				// caller's own model, which they can already read.
-				unresolved[c.CalledProcessID] = true
-				addEdge(Edge{From: processNodeID(p.Key), To: unresolvedNodeID(c.CalledProcessID), Kind: EdgeCalls})
+				id := unresolvedNodeID(KindProcess, c.CalledProcessID)
+				unresolved[id] = c.CalledProcessID
+				addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
+			}
+		}
+		for _, u := range p.Connectors {
+			target, ok := connectors[u.TargetID]
+			switch {
+			case u.TargetID != "" && ok && target.CanView:
+				usedConnectors[target.ID] = true
+				addEdge(Edge{From: from, To: connectorNodeID(target.ID), Kind: EdgeUses})
+			case u.TargetID != "" && ok:
+				addEdge(Edge{From: from, To: restrictedOrdinal(connectorNodeID(target.ID)), Kind: EdgeUses})
+			default:
+				// The model asks for a connector nobody configured, so the task would
+				// fail at run time. This is the question a model cannot answer about
+				// itself, and the name is safe: it is in this caller's own model.
+				id := unresolvedNodeID(KindConnector, u.Name)
+				unresolved[id] = u.Name
+				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
+			}
+		}
+		for _, ref := range p.Decisions {
+			target, ok := decisions[ref]
+			switch {
+			case ok && target.CanView:
+				usedDecisions[target.ID] = true
+				addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses})
+			case ok:
+				addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses})
+			default:
+				id := unresolvedNodeID(KindDecision, ref)
+				unresolved[id] = ref
+				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
 			}
 		}
 	}
 
-	ordinals := make([]uint64, 0, len(restricted))
-	for key := range restricted {
-		ordinals = append(ordinals, key)
+	for _, id := range sortedKeys(usedConnectors) {
+		c := connectors[id]
+		// Name and kind only. The record also holds an endpoint and a credential
+		// reference; a landscape picture is opened by anyone with modeler access, and
+		// neither belongs in one (ADR-0211 §10, I6).
+		g.Nodes = append(g.Nodes, Node{
+			ID: connectorNodeID(c.ID), Kind: KindConnector, Name: c.Name,
+			Provenance: ProvenanceDerived, ConnectorKind: c.Kind,
+		})
 	}
-	sort.Slice(ordinals, func(i, j int) bool { return restricted[ordinals[i]] < restricted[ordinals[j]] })
-	for _, key := range ordinals {
+	for _, id := range sortedKeys(usedDecisions) {
+		d := decisions[id]
+		g.Nodes = append(g.Nodes, Node{
+			ID: decisionNodeID(d.ID), Kind: KindDecision, Name: d.Name,
+			Provenance: ProvenanceDerived,
+		})
+	}
+
+	placeholders := sortedKeys(restricted)
+	sort.Slice(placeholders, func(i, j int) bool {
+		return restricted[placeholders[i]] < restricted[placeholders[j]]
+	})
+	for _, key := range placeholders {
 		g.Nodes = append(g.Nodes, Node{
 			ID: restricted[key], Kind: KindRestricted, Provenance: ProvenanceDerived,
 		})
 	}
 	g.Restricted = len(restricted)
 
-	pids := make([]string, 0, len(unresolved))
-	for pid := range unresolved {
-		pids = append(pids, pid)
-	}
-	sort.Strings(pids)
-	for _, pid := range pids {
+	for _, id := range sortedKeys(unresolved) {
 		g.Nodes = append(g.Nodes, Node{
-			ID: unresolvedNodeID(pid), Kind: KindUnresolved, Name: pid,
+			ID: id, Kind: KindUnresolved, Name: unresolved[id],
 			Provenance: ProvenanceDerived,
 		})
 	}

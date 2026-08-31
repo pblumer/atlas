@@ -21,8 +21,13 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 const KIND = {
   application: { r: 26, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
   process: { r: 18, fill: "var(--card)", stroke: "var(--border-strong)", label: "Process" },
+  // --ok is a fixed green rather than a shade of the configurable accent, so its
+  // soft companion is a literal here too. There is no --ok-soft at :root, and
+  // defining one would change the one other rule that already asks for it.
+  connector: { r: 15, fill: "#e8f5ec", stroke: "var(--ok)", label: "Connector" },
+  decision: { r: 15, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
   restricted: { r: 14, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
-  unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — no deployment provides it", dashed: true },
+  unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
 
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
@@ -118,12 +123,42 @@ function nodeTitle(node) {
     return "A resource outside your access. The dependency is real; its identity is not shown.";
   }
   if (node.kind === "unresolved") {
-    return `No deployment on this server provides "${node.name}". The call would park.`;
+    // The id carries what kind of thing is missing, which is what makes the
+    // sentence actionable: a missing deployment and a missing connector are
+    // fixed in different places.
+    const of = node.id.split(":")[1] || "dependency";
+    return `Nothing on this server provides the ${of} "${node.name}". Work reaching it would park.`;
   }
   const parts = [node.name || node.id];
   if (node.processId) parts.push(`${node.processId} v${node.version}`);
+  if (node.connectorKind) parts.push(`${node.connectorKind} connector`);
   if (node.children) parts.push(`${node.children} process(es) collapsed`);
   return parts.join(" · ");
+}
+
+// matches decides what a search term keeps. It reads the name, the kind, and a
+// process's BPMN id — the three things somebody actually types — and never the
+// node id, whose prefixes would make every term match its own kind by accident.
+function matches(node, term) {
+  if (!term) return true;
+  const hay = [node.name, node.kind, node.processId, node.connectorKind]
+    .filter(Boolean).join(" ").toLowerCase();
+  return hay.includes(term);
+}
+
+// filterGraph keeps the matching nodes and the edges whose both ends survived.
+// A search is the viewer's own choice, unlike a sharing scope, so a dropped edge
+// here is not a lie — but the header still reports how much is hidden, because a
+// filtered mesh looks exactly like a small one.
+function filterGraph(graph, term) {
+  if (!term) return graph;
+  const nodes = graph.nodes.filter((n) => matches(n, term));
+  const keep = new Set(nodes.map((n) => n.id));
+  return {
+    ...graph,
+    nodes,
+    edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+  };
 }
 
 function legendHTML(graph, layoutMs) {
@@ -209,14 +244,44 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     return;
   }
 
-  const { ms, svg } = renderGraph(graph, 0);
   view.innerHTML = `<div id="mesh-root" class="card mesh-card">
     <div class="mesh-head">
       <h1>Landscape</h1>
-      <span class="muted">${graph.nodes.length} node(s), ${graph.edges.length} edge(s)</span>
+      <input id="mesh-search" type="search" class="mesh-search" autocomplete="off"
+        placeholder="Filter by name, kind or process id…" aria-label="Filter the landscape"/>
+      <span id="mesh-count" class="muted"></span>
     </div>
-    ${legendHTML(graph, ms)}
-    <div class="mesh-surface">${svg}</div>
+    <div id="mesh-legend-slot"></div>
+    <div id="mesh-surface" class="mesh-surface"></div>
   </div>`;
+
+  const search = document.getElementById("mesh-search");
+  const surface = document.getElementById("mesh-surface");
+  const legendSlot = document.getElementById("mesh-legend-slot");
+  const count = document.getElementById("mesh-count");
+
+  function paint() {
+    const term = search.value.trim().toLowerCase();
+    const shown = filterGraph(graph, term);
+    const { ms, svg } = renderGraph(shown, 0);
+    surface.innerHTML = shown.nodes.length
+      ? svg
+      : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
+    legendSlot.innerHTML = legendHTML(shown, ms);
+    count.textContent = term
+      ? `${shown.nodes.length} of ${graph.nodes.length} node(s)`
+      : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+  }
+
+  // Re-laying out on every keystroke is the wrong trade at 400 nodes, where the
+  // simulation costs a few hundred milliseconds. A short debounce keeps typing
+  // responsive and still feels immediate.
+  let pending;
+  search.addEventListener("input", () => {
+    clearTimeout(pending);
+    pending = setTimeout(paint, 120);
+  });
+  paint();
+
   if (fetchMs > 2000) toast(`The landscape took ${Math.round(fetchMs)} ms to derive.`);
 }
