@@ -55,6 +55,37 @@ jobs:
       # itself with a generated password instead. This step used to assert that the
       # chart refused to render at all, which was right while auth was opt-in and
       # would now fail the default path.
+      # TLS in the pod is off by default, so nothing above renders it. Two things
+      # are worth pinning: the flags and the mount point the server is actually
+      # given, and that the probes switch to HTTPS with it — a kubelet speaking
+      # plaintext to a TLS listener is a pod that never becomes ready, and it
+      # would look like a broken image rather than a probe scheme.
+      - name: TLS in the pod renders flags, mount and HTTPS probes
+        run: |
+          helm template ci deploy/helm/atlas \
+            --set atlas.tls.enabled=true \
+            --set atlas.tls.existingSecret=atlas-tls > /tmp/tls.yaml
+          grep -q -- '--tls-cert=/etc/atlas/tls/tls.crt' /tmp/tls.yaml
+          grep -q -- '--tls-key=/etc/atlas/tls/tls.key' /tmp/tls.yaml
+          grep -q 'secretName: atlas-tls' /tmp/tls.yaml
+          test "$(grep -c 'scheme: HTTPS' /tmp/tls.yaml)" = 3
+          # And --tls-ca only when a key for it was named.
+          if grep -q -- '--tls-ca' /tmp/tls.yaml; then
+            echo "rendered --tls-ca without atlas.tls.caKey"; exit 1
+          fi
+          helm template ci deploy/helm/atlas \
+            --set atlas.tls.enabled=true \
+            --set atlas.tls.existingSecret=atlas-tls \
+            --set atlas.tls.caKey=ca.crt | grep -q -- '--tls-ca=/etc/atlas/tls/ca.crt'
+
+      # Enabling TLS with no Secret to read the pair from must not render a server
+      # that quietly listens in plaintext on the port it was meant to secure.
+      - name: TLS without a certificate Secret refuses to render
+        run: |
+          if helm template ci deploy/helm/atlas --set atlas.tls.enabled=true > /dev/null 2>&1; then
+            echo "the chart rendered a TLS server with no certificate Secret"; exit 1
+          fi
+
       - name: Admin credentials come from a source, or not at all
         run: |
           helm template ci deploy/helm/atlas > /tmp/no-source.yaml

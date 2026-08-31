@@ -65,6 +65,16 @@ spec:
             - --javascript={{ .Values.atlas.script.javascript }}
             - --script-timeout={{ .Values.atlas.script.timeout }}
             - --shutdown-timeout={{ .Values.atlas.shutdownTimeout }}
+            {{- if .Values.atlas.tls.enabled }}
+            {{- if not .Values.atlas.tls.existingSecret }}
+            {{- fail "atlas.tls.enabled is true but atlas.tls.existingSecret is empty: set the Secret holding the certificate and key, or the server would serve plaintext on a port you believed you had just secured" }}
+            {{- end }}
+            - --tls-cert={{ .Values.atlas.tls.mountPath }}/{{ .Values.atlas.tls.certKey }}
+            - --tls-key={{ .Values.atlas.tls.mountPath }}/{{ .Values.atlas.tls.keyKey }}
+            {{- if .Values.atlas.tls.caKey }}
+            - --tls-ca={{ .Values.atlas.tls.mountPath }}/{{ .Values.atlas.tls.caKey }}
+            {{- end }}
+            {{- end }}
             {{- range .Values.atlas.extraArgs }}
             - {{ . | quote }}
             {{- end }}
@@ -103,15 +113,15 @@ spec:
               protocol: TCP
           {{- with .Values.startupProbe }}
           startupProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- include "atlas.probe" (dict "probe" . "tls" $.Values.atlas.tls.enabled) | nindent 12 }}
           {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- include "atlas.probe" (dict "probe" . "tls" $.Values.atlas.tls.enabled) | nindent 12 }}
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- include "atlas.probe" (dict "probe" . "tls" $.Values.atlas.tls.enabled) | nindent 12 }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
@@ -122,12 +132,29 @@ spec:
             # image), so the root filesystem can stay read-only.
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.atlas.tls.enabled }}
+            - name: tls
+              mountPath: {{ .Values.atlas.tls.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.atlas.tls.enabled }}
+        # The kubelet updates the projected files in place when the Secret
+        # changes, and the server re-reads the pair when it does — so a
+        # cert-manager renewal reaches a running pod without a restart.
+        - name: tls
+          secret:
+            secretName: {{ .Values.atlas.tls.existingSecret }}
+            # Group-readable, not owner-only: a Secret volume is owned by root
+            # with the pod's fsGroup, and the server runs as 65532 — 0400 would
+            # leave it unable to read its own certificate.
+            defaultMode: 0440
+        {{- end }}
         {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
         - name: data
           persistentVolumeClaim:

@@ -236,10 +236,11 @@ func TestOAuthClientAuthentication(t *testing.T) {
 // TestExternalBaseDerivesTheOrigin covers what the discovery documents and the
 // challenge are built from when no origin was configured.
 //
-// The scheme matters more than it looks: Atlas terminates no TLS, so a deployment
-// with a certificate always has a proxy in front and every request arrives as
-// plain http. Without X-Forwarded-Proto the documents would name http:// URLs that
-// no client can use.
+// The scheme matters more than it looks. Behind a proxy — which is still where
+// most certificates live, and was the only place before ADR-0191 — every request
+// arrives as plain http, so without X-Forwarded-Proto the documents would name
+// http:// URLs that no client can use. Where the server holds the certificate
+// itself, r.TLS answers the same question directly.
 func TestExternalBaseDerivesTheOrigin(t *testing.T) {
 	s := &Server{}
 

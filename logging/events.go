@@ -80,7 +80,15 @@ var (
 	ServerShuttingDown = newEvent("server.shutting_down")
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
-	DataDirOpened      = newEvent("server.data_dir_opened")
+	// The operator-supplied certificate, where this server terminates TLS itself
+	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
+	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
+	// be loaded, which leaves the previous certificate in service rather than
+	// refusing handshakes — so it is a WARN an operator must act on before the
+	// certificate that is still being served expires.
+	ServerTLSReloaded     = newEvent("server.tls_reloaded")
+	ServerTLSReloadFailed = newEvent("server.tls_reload_failed")
+	DataDirOpened         = newEvent("server.data_dir_opened")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is
