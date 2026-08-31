@@ -31,6 +31,35 @@
       }
     },
     {
+      "id": "let-the-provider-s-groups-decide-roles",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Let the provider's groups decide roles",
+        "de": "Die Gruppen des Anbieters entscheiden über die Rollen"
+      },
+      "summary": {
+        "en": "Signing in with your identity provider granted nothing until now: a first sign-in produced an account with the user role, and an administrator granted the rest by hand. Under Organization → Single sign-on you can now name one claim in the provider's token and a list of exact values it may carry, and say what each value grants — Atlas roles, and membership of Atlas groups. Onboarding and offboarding then become a group membership somebody already maintains: the role and the shared projects arrive at the next sign-in and go away at the sign-in after the membership does. It is off until you turn it on, and worth one decision before you do: while it is on, whoever administers those groups administers this instance's roles, and a role you grant by hand is replaced at that person's next sign-in. Group membership follows only for the groups your rules name, so a group you manage yourself is left alone. Nothing is granted by absence — somebody the provider says nothing about matches no rule and simply holds user — and a rule that could never work, naming a role Atlas does not enforce or a group you have deleted, is refused when you save it rather than ignored on every login.",
+        "de": "Die Anmeldung über Ihren Identitätsanbieter vergab bisher nichts: Die erste Anmeldung legte ein Konto mit der Rolle «user» an, den Rest vergab eine Administratorin von Hand. Unter «Organization → Single sign-on» benennen Sie jetzt einen Claim im Token des Anbieters und eine Liste genauer Werte, die er tragen darf — und zu jedem Wert, was er vergibt: Atlas-Rollen und die Mitgliedschaft in Atlas-Gruppen. Ein- und Austritt sind damit eine Gruppenmitgliedschaft, die ohnehin jemand pflegt: Rolle und geteilte Projekte kommen mit der nächsten Anmeldung und verschwinden mit der übernächsten, wenn die Mitgliedschaft weg ist. Es ist ausgeschaltet, bis Sie es einschalten — und diese eine Entscheidung ist es wert: Solange es an ist, verwaltet die Rollen dieser Installation, wer jene Gruppen verwaltet, und eine von Hand vergebene Rolle wird bei der nächsten Anmeldung dieser Person ersetzt. Die Gruppenmitgliedschaft folgt nur für die Gruppen, die Ihre Regeln nennen; eine Gruppe, die Sie selbst pflegen, bleibt unberührt. Abwesenheit vergibt nichts — wer beim Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und behält schlicht «user» — und eine Regel, die nie funktionieren könnte, weil sie eine Rolle nennt, die Atlas nicht durchsetzt, oder eine gelöschte Gruppe, wird beim Speichern abgewiesen statt bei jeder Anmeldung still übergangen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Organization",
+          "de": "Organization öffnen"
+        },
+        "route": "#/console/org"
+      }
+    },
+    {
       "id": "not-every-account-may-deploy-any-more",
       "version": "Unreleased",
       "date": null,
@@ -284,28 +313,6 @@
         },
         "route": "#/console/org"
       }
-    },
-    {
-      "id": "atlas-serve-requires-a-login-by-default",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Atlas asks for a login out of the box",
-        "de": "Atlas verlangt von Haus aus eine Anmeldung"
-      },
-      "summary": {
-        "en": "Starting the server left it open unless you passed `--auth`, and every document about Atlas — the install guide, the Helm chart, the compliance concept — opened by telling you to pass it. A default that everything tells you to change is not a default. The login is now on. A first start with an empty user store seeds one administrator from `ATLAS_ADMIN_USERNAME` and `ATLAS_ADMIN_PASSWORD`, or generates a password and writes it to the log once; that path was always there, it is simply no longer step six of the install guide. `--auth=false` still runs the server wide open and now says so in a warning line at startup, naming what it means: the API, the UI and the MCP connection, which can deploy and run processes. Breaking: `atlas serve` with no flags now requires a login — pass `--auth=false` for the old behaviour.",
-        "de": "Der Server lief offen, solange man nicht `--auth` mitgab — und jedes Dokument über Atlas, ob Installationsanleitung, Helm-Chart oder Compliance-Konzept, begann damit, genau das zu verlangen. Ein Standard, den einem alle Unterlagen auszureden versuchen, ist kein Standard. Die Anmeldung ist jetzt an. Beim ersten Start mit leerem Benutzerbestand wird ein Administrator aus `ATLAS_ADMIN_USERNAME` und `ATLAS_ADMIN_PASSWORD` angelegt, oder ein Passwort erzeugt und einmalig ins Log geschrieben; diesen Weg gab es immer, er ist nur nicht mehr Schritt sechs der Anleitung. `--auth=false` lässt den Server weiterhin vollständig offen laufen und sagt das jetzt beim Start in einer Warnzeile — samt dem, was es bedeutet: die API, die Oberfläche und der MCP-Zugang, über den sich deployen und Prozesse starten lassen. Brechend: `atlas serve` ohne Optionen verlangt jetzt eine Anmeldung; `--auth=false` stellt das alte Verhalten her."
-      },
-      "link": {
-        "label": "ADR-0044",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0044-user-management-and-authentication-boundary.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
     }
   ]
 }
