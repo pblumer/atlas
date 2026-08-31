@@ -214,22 +214,26 @@ type Server struct {
 	superviseURL     string
 	// offloadedKinds are the managed connector kinds this server does not serve
 	// itself; their jobs park for an external worker. See [WithOffloadedConnectorKinds].
-	offloadedKinds   []string
-	drafts           *draftStore       // durable sidecar for saved-but-not-deployed diagrams
-	forms            *formStore        // durable sidecar for form definitions (ADR-0028)
-	publicLinks      *publicLinkStore  // durable sidecar for public start links (ADR-0029)
-	publicRate       *rateLimiter      // throttles the unauthenticated public endpoints
-	registerRate     *rateLimiter      // throttles OAuth self-registration, on its own budget
-	logins           *loginGuard       // throttles authentication attempts (see loginguard.go)
-	projects         *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
-	releases         *releaseStore     // durable sidecar for application releases (ADR-0128)
-	grantAudit       *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
-	deployTokenStore *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
-	deployTokens     *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
-	apiTokenStore    *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
-	apiTokens        *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
-	targets          *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions      map[string]int32  // applicationId → highest release version published (ADR-0128)
+	offloadedKinds []string
+	drafts         *draftStore // durable sidecar for saved-but-not-deployed diagrams
+	forms          *formStore  // durable sidecar for form definitions (ADR-0028)
+	// playgroundScenarios holds saved Playground runs: the requests that make one,
+	// what it must show, and the last report it produced
+	// (ADR-draft-modeler-playground).
+	playgroundScenarios *playgroundScenarioStore
+	publicLinks         *publicLinkStore  // durable sidecar for public start links (ADR-0029)
+	publicRate          *rateLimiter      // throttles the unauthenticated public endpoints
+	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
+	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
+	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
+	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
+	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
+	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
+	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
+	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
+	apiTokens           *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
+	targets             *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions         map[string]int32  // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -925,6 +929,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	playgroundScenarios, err := newPlaygroundScenarioStore(filepath.Join(dataDir, "playground-scenarios"))
+	if err != nil {
+		return nil, err
+	}
 	forms, err := newFormStore(filepath.Join(dataDir, "forms"))
 	if err != nil {
 		return nil, err
@@ -1024,21 +1032,22 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// built from it rather than owning it.
 	quit := make(chan struct{})
 	s := &Server{
-		proc:        proc,
-		store:       store,
-		dataDir:     dataDir,
-		quit:        quit,
-		runLoop:     runloop.New(quit),
-		deployments: map[uint64]*deployment{},
-		nextKey:     1,
-		versions:    map[string]int32{},
-		deploys:     ds,
-		jobTypes:    jobTypes,
-		workers:     newWorkerRegistry(nil),
-		jobWaiters:  newJobWaiters(),
-		drafts:      drafts,
-		forms:       forms,
-		publicLinks: publicLinks,
+		proc:                proc,
+		store:               store,
+		dataDir:             dataDir,
+		quit:                quit,
+		runLoop:             runloop.New(quit),
+		deployments:         map[uint64]*deployment{},
+		nextKey:             1,
+		versions:            map[string]int32{},
+		deploys:             ds,
+		jobTypes:            jobTypes,
+		workers:             newWorkerRegistry(nil),
+		jobWaiters:          newJobWaiters(),
+		drafts:              drafts,
+		forms:               forms,
+		playgroundScenarios: playgroundScenarios,
+		publicLinks:         publicLinks,
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate: newRateLimiter(20, 1),

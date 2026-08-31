@@ -702,6 +702,28 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/playground/sessions/{id}/results.csv", s.playground.HandleResultsCSV, apiOp{
 			summary: "Download a Playground run's per-case results as CSV", tag: "Playground", role: RoleModeler,
 			resp: csvBody("Results as CSV")}},
+		{"POST", "/api/v1/playground/sessions/{id}/verdict", s.playground.HandleVerdict, apiOp{
+			summary: "Judge a Playground run against a set of expectations", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Expectations", tObject()), resp: jsonBody("Verdict", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/compare", s.playground.HandleCompare, apiOp{
+			summary: "Set a Playground run beside an earlier run's report", tag: "Playground", role: RoleModeler,
+			req: jsonBody("A baseline report", tObject()), resp: jsonBody("Comparison", tObject())}},
+
+		{"POST", "/api/v1/playground/scenarios", s.handleSaveScenario, apiOp{
+			summary: "Save a Playground scenario: the requests that make a run, and what it must show", tag: "Playground",
+			role: RoleModeler, req: jsonBody("Scenario", tObject()), resp: jsonBody("Saved scenario", tObject())}},
+		{"GET", "/api/v1/playground/scenarios", s.handleListScenarios, apiOp{
+			summary: "List saved Playground scenarios", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Scenarios", tArray())}},
+		{"GET", "/api/v1/playground/scenarios/{id}", s.handleGetScenario, apiOp{
+			summary: "Read one Playground scenario with its spec and baseline", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Scenario", tObject())}},
+		{"PUT", "/api/v1/playground/scenarios/{id}/baseline", s.handleSaveScenarioBaseline, apiOp{
+			summary: "Keep a run's report as the scenario's baseline", tag: "Playground", role: RoleModeler,
+			req: jsonBody("A run report", tObject()), resp: jsonBody("Saved scenario", tObject())}},
+		{"DELETE", "/api/v1/playground/scenarios/{id}", s.handleDeleteScenario, apiOp{
+			summary: "Delete a saved Playground scenario", tag: "Playground", role: RoleModeler,
+			resp: jsonBody("Deleted", tObject())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
 			summary: "Create a DMN reference artifact", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},

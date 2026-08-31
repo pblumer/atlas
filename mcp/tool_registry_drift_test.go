@@ -147,13 +147,27 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/playground/sessions/{id}/tasks/{jobKey}/complete": "answers a task in an author's sandbox",
 	"GET /api/v1/playground/sessions/{id}/overlay":                  "per-element counts of an author's sandbox run",
 	"GET /api/v1/playground/sessions/{id}/heatmap":                  "element and flow counts of an author's sandbox run",
-	"POST /api/v1/playground/sessions/{id}/runs":                    "starts a batch in an author's sandbox",
-	"POST /api/v1/playground/sessions/{id}/runs/csv":                "starts a batch from an uploaded dataset in an author's sandbox",
-	"GET /api/v1/playground/sessions/{id}/runs":                     "progress of a batch in an author's sandbox",
-	"POST /api/v1/playground/sessions/{id}/runs/cancel":             "stops a batch in an author's sandbox",
-	"GET /api/v1/playground/sessions/{id}/report":                   "summary of an author's sandbox run",
-	"GET /api/v1/playground/sessions/{id}/results":                  "per-case results of an author's sandbox run",
-	"GET /api/v1/playground/sessions/{id}/results.csv":              "the same results as a download",
+	"POST /api/v1/playground/sessions/{id}/verdict":                 "judges an author's sandbox run against their expectations",
+	"POST /api/v1/playground/sessions/{id}/compare":                 "sets an author's sandbox run beside an earlier one",
+
+	// Saved Playground scenarios are design-time records an author keeps beside a
+	// draft. The automation path for them is `atlas playground` — a CLI that replays
+	// the scenario's own requests and exits on the verdict, which is what a CI job
+	// wants. Exposing them as tools as well is a deliberate later choice, not an
+	// oversight: it would let an agent author and run regression scenarios, which is
+	// a capability worth deciding on its own merits.
+	"POST /api/v1/playground/scenarios":                 "author's saved sandbox scenario; automated via the atlas playground CLI",
+	"GET /api/v1/playground/scenarios":                  "author's saved sandbox scenarios; automated via the atlas playground CLI",
+	"GET /api/v1/playground/scenarios/{id}":             "author's saved sandbox scenario; automated via the atlas playground CLI",
+	"PUT /api/v1/playground/scenarios/{id}/baseline":    "keeps a sandbox run as an author's baseline",
+	"DELETE /api/v1/playground/scenarios/{id}":          "deletes an author's saved sandbox scenario",
+	"POST /api/v1/playground/sessions/{id}/runs":        "starts a batch in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/runs/csv":    "starts a batch from an uploaded dataset in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/runs":         "progress of a batch in an author's sandbox",
+	"POST /api/v1/playground/sessions/{id}/runs/cancel": "stops a batch in an author's sandbox",
+	"GET /api/v1/playground/sessions/{id}/report":       "summary of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/results":      "per-case results of an author's sandbox run",
+	"GET /api/v1/playground/sessions/{id}/results.csv":  "the same results as a download",
 
 	// Leasing is the external worker protocol's own surface (ADR-0007), not an agent
 	// action: an MCP agent that completes a job does so as an operator, on a job it was
