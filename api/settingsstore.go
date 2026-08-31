@@ -91,6 +91,7 @@ type settingsStore struct {
 	file     string // theme.json
 	regFile  string // registration.json
 	adFile   string // admock.json
+	oidcFile string // oidcmapping.json
 	nodeFile string // node.json
 }
 
@@ -104,6 +105,7 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 		file:     filepath.Join(dir, "theme.json"),
 		regFile:  filepath.Join(dir, "registration.json"),
 		adFile:   filepath.Join(dir, "admock.json"),
+		oidcFile: filepath.Join(dir, "oidcmapping.json"),
 		nodeFile: filepath.Join(dir, "node.json"),
 	}, nil
 }
@@ -163,6 +165,32 @@ func (s *settingsStore) getRegistration() (registrationSetting, bool, error) {
 // previous value. An empty ProcessID is a valid stored value meaning "disabled".
 func (s *settingsStore) saveRegistration(r registrationSetting) error {
 	return sidecar.WriteJSON(s.dir, s.regFile, r)
+}
+
+// ---------- Claim mapping for a federated login (ADR-0210) ----------
+
+// getOIDCMapping returns the stored claim mapping, or the zero value when nobody
+// has written one. A missing file is not an error: it is the ordinary state of an
+// installation that has not turned the mapping on, and the zero value is exactly
+// what that means — disabled, no claim, no rules.
+func (s *settingsStore) getOIDCMapping() (oidcMapping, error) {
+	data, err := os.ReadFile(s.oidcFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return oidcMapping{}, nil
+		}
+		return oidcMapping{}, fmt.Errorf("settingsstore: read oidc mapping: %w", err)
+	}
+	var m oidcMapping
+	if err := json.Unmarshal(data, &m); err != nil {
+		return oidcMapping{}, fmt.Errorf("settingsstore: decode oidc mapping: %w", err)
+	}
+	return m, nil
+}
+
+// saveOIDCMapping writes the claim mapping durably, overwriting any previous one.
+func (s *settingsStore) saveOIDCMapping(m oidcMapping) error {
+	return sidecar.WriteJSON(s.dir, s.oidcFile, m)
 }
 
 // ---------- Org brand logo (ADR-0148) ----------

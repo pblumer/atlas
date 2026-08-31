@@ -84,6 +84,46 @@ kubectl exec statefulset/atlas -- \
   /atlas reset-password --data-dir /data --create-admin admin
 ```
 
+### Single sign-on with an identity provider
+
+The chart has no dedicated values for it, because the server takes it as a handful
+of environment variables and `extraEnv` carries them without a new schema. Point
+Atlas at an OpenID Connect provider by putting the issuer and client id there and
+the secret in a Secret you manage:
+
+```yaml
+# values.yaml — four settings, one of them from a Secret you manage.
+atlas:
+  extraEnv:
+    - name: ATLAS_EXTERNAL_URL
+      value: https://atlas.example.com
+    - name: ATLAS_OIDC_ISSUER
+      value: https://login.example.com/realms/atlas
+    - name: ATLAS_OIDC_CLIENT_ID
+      value: atlas
+    - name: ATLAS_OIDC_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: atlas-oidc
+          key: client-secret
+```
+
+```bash
+kubectl create secret generic atlas-oidc \
+  --from-literal=client-secret='the-secret-the-provider-issued'
+helm upgrade --install atlas ./deploy/helm/atlas -f values.yaml
+```
+
+`ATLAS_EXTERNAL_URL` matters here: the redirect URI is built from it, and
+`<external-url>/auth/oidc/callback` is the exact string to register at the
+provider. Set it to the origin your Ingress serves, not the Service name.
+
+Keep the bootstrap administrator above — it is the way back in when the
+provider is unreachable. Which Atlas roles the provider's groups grant is
+configured in the running instance, under Console → Organization → Single
+sign-on, and is off until somebody turns it on. See
+[`docs/install.md`](../../../docs/install.md#single-sign-on-with-an-identity-provider).
+
 ## Secret vault
 
 The encrypted vault is on by default. Without an explicit key the server

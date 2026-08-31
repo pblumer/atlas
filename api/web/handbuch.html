@@ -215,6 +215,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
+    <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
     <h4 data-l="de">Prozess-Developer</h4><h4 data-l="en">Process developer</h4>
     <a href="#rolle"><span data-l="de">Die Rolle</span><span data-l="en">The role</span></a>
     <a href="#werkstatt"><span data-l="de">Werkstatt: eine Applikation</span><span data-l="en">Workshop: an application</span></a>
@@ -2415,6 +2416,154 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.
         For containers and Kubernetes:
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener"><code>deploy/</code>&nbsp;↗</a>.</p>
+    </section>
+
+
+    <!-- ==================== ACCOUNTS, ROLES & SIGN-IN ==================== -->
+    <section id="konten">
+      <h2 data-l="de">Konten, Rollen &amp; Anmeldung</h2><h2 data-l="en">Accounts, roles &amp; sign-in</h2>
+      <p class="lead" data-l="de">Wer sich anmelden kann – und was er danach darf. Beides wird unter
+        <a href="/#/console/org">Console&nbsp;→&nbsp;Organization</a> verwaltet.</p>
+      <p class="lead" data-l="en">Who can sign in – and what they may do afterwards. Both are managed under
+        <a href="/#/console/org">Console&nbsp;→&nbsp;Organization</a>.</p>
+
+      <h3 data-l="de">Die vier Rollen</h3><h3 data-l="en">The four roles</h3>
+      <p data-l="de">Jeder Endpunkt nennt die Rolle, die ihn erreicht, und der Server prüft sie, bevor die Anfrage
+        irgendetwas anderes berührt – gleich, ob sie aus dem Browser kommt, mit einem API-Token oder über MCP von
+        einem KI-Assistenten.</p>
+      <p data-l="en">Every endpoint names the role that reaches it, and the server checks it before the request
+        touches anything else – whether it arrives from a browser, with an API token, or over MCP from an AI
+        assistant.</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+          <th data-l="de">Was sie öffnet</th><th data-l="en">What it opens</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b><code>admin</code></b></td>
+            <td data-l="de">Konten, Gruppen, Zugangsdaten, Secrets, Einstellungen, Backup und Restore – alles, was
+              die Installation selbst betrifft.</td>
+            <td data-l="en">Accounts, groups, credentials, secrets, settings, backup and restore – everything about
+              the instance itself.</td></tr>
+          <tr><td><b><code>modeler</code></b></td>
+            <td data-l="de">Entwürfe, Formulare, Entscheidungen und Worker bearbeiten – <b>und deployen</b>.
+              Deployen ist Codeausführung, deshalb ist es genau diese Rolle und nicht «angemeldet».</td>
+            <td data-l="en">Editing drafts, forms, decisions and workers – <b>and deploying</b>. Deploying is code
+              execution, which is why it takes this role rather than merely being signed in.</td></tr>
+          <tr><td><b><code>operator</code></b></td>
+            <td data-l="de">Instanzen starten, abbrechen und reparieren, Incidents auflösen, Workers und Outbox –
+              der Betrieb dessen, was deployt ist.</td>
+            <td data-l="en">Starting, cancelling and repairing instances, resolving incidents, workers and the
+              outbox – running what is deployed.</td></tr>
+          <tr><td><b><code>user</code></b></td>
+            <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen.</td>
+            <td data-l="en">Their own task list: seeing, claiming and completing tasks.</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li data-l="de"><b>Eine Liste, keine Rangfolge.</b> Ein Konto trägt mehrere Rollen; <code>modeler</code>
+          enthält <code>operator</code> nicht. Nur <code>admin</code> ist eine Obermenge und erreicht alles.</li>
+        <li data-l="en"><b>A list, not a ladder.</b> An account carries several roles; <code>modeler</code> does not
+          contain <code>operator</code>. Only <code>admin</code> is a superset and reaches everything.</li>
+        <li data-l="de"><b>Neue Konten bekommen <code>user</code></b> – und sonst nichts. Den Rest vergibt eine
+          Administratorin bewusst.</li>
+        <li data-l="en"><b>New accounts get <code>user</code></b> – and nothing else. An administrator grants the
+          rest deliberately.</li>
+        <li data-l="de">Die Rollenprüfung gilt auch für Token und KI-Assistenten: Ein MCP-Werkzeug läuft mit den
+          Rollen dessen, der es ruft, und kann nichts, was diese Person nicht auch von Hand könnte.</li>
+        <li data-l="en">The check applies to tokens and AI assistants too: an MCP tool runs as its caller and can do
+          nothing that person could not do by hand.</li>
+      </ul>
+
+      <h3 data-l="de">Gruppen</h3><h3 data-l="en">Groups</h3>
+      <p data-l="de">Eine <b>Gruppe</b> ist eine benannte Menge von Konten. Sie ist die zweite Achse neben den
+        Rollen: Rollen sagen, <i>welche Art</i> von Endpunkt jemand erreicht, eine Freigabe an eine Gruppe sagt,
+        <i>welches Objekt</i> – ein Projekt oder ein Worker wird einmal mit dem Team geteilt statt Person für
+        Person. Eine Änderung an der Mitgliedschaft wirkt bei der nächsten Anmeldung des Mitglieds.</p>
+      <p data-l="en">A <b>group</b> is a named set of accounts. It is the second axis beside roles: a role says
+        <i>which kind</i> of endpoint somebody reaches, sharing with a group says <i>which object</i> – a project or
+        a worker is shared with the team once instead of person by person. A membership change takes effect at
+        the member's next sign-in.</p>
+
+      <h3 data-l="de">Anmelden mit einem Identitätsanbieter</h3><h3 data-l="en">Signing in with an identity provider</h3>
+      <p data-l="de">Optional, und aus, solange niemand einen Anbieter konfiguriert. Ist einer eingerichtet, trägt
+        die Anmeldemaske zusätzlich eine Schaltfläche <b>«Sign in with …»</b>: Die Person authentisiert sich dort,
+        wo sie es ohnehin tut, und kommt angemeldet zurück. Zweitfaktor und Passwortregeln werden damit zur Sache
+        des Anbieters, und ein dort geschlossenes Konto kommt hier nicht mehr hinein. Die erste Anmeldung legt ein
+        Konto an, verknüpft mit dem <b>Subjekt</b> des Anbieters – nicht mit der E-Mail-Adresse, die neu vergeben
+        werden kann.</p>
+      <p data-l="en">Optional, and off until somebody configures a provider. With one set up, the login screen gains
+        a <b>“Sign in with …”</b> button: people authenticate where they already do and come back signed in.
+        Multi-factor and password rules become the provider's job, and an account closed there stops working here.
+        A first sign-in creates an account linked to the provider's <b>subject</b> – not to the email address, which
+        can be reassigned.</p>
+      <div class="note warn">
+        <span class="lbl" data-l="de">Notfallzugang</span><span class="lbl" data-l="en">Break glass</span>
+        <p data-l="de" style="margin:.3em 0 0">Das lokale Passwort bleibt – mit Absicht. Ein Anbieter, der nicht
+          erreichbar ist (abgelaufenes Zertifikat, verschobenes Discovery-Dokument, geschlossener Netzwerkpfad),
+          nimmt die föderierte Anmeldung mit sich. <b>Behalte ein lokales Administratorkonto</b>, und bewahre dessen
+          Passwort auf.</p>
+        <p data-l="en" style="margin:.3em 0 0">The local password stays – on purpose. A provider that is unreachable
+          (an expired certificate, a moved discovery document, a closed network path) takes federated sign-in with
+          it. <b>Keep one local administrator account</b>, and keep that password somewhere.</p>
+      </div>
+
+      <h3 data-l="de">Die Gruppen des Anbieters über die Rollen entscheiden lassen</h3>
+      <h3 data-l="en">Letting the provider's groups decide roles</h3>
+      <p data-l="de">Ebenfalls optional, und aus, bis jemand es einschaltet. Unter
+        <a href="/#/console/org">Organization&nbsp;→&nbsp;Single sign-on</a> benennst du <b>einen</b> Claim im Token
+        des Anbieters – <code>groups</code>, <code>roles</code> oder ein Pfad wie
+        <code>realm_access.roles</code> – und eine Liste <b>genauer Werte</b>, die er tragen darf. Zu jedem Wert
+        steht, was er vergibt: Atlas-Rollen und die Mitgliedschaft in Atlas-Gruppen. Damit sind Ein- und Austritt
+        eine Gruppenmitgliedschaft, die ohnehin jemand pflegt: Rolle und geteilte Projekte kommen mit der nächsten
+        Anmeldung – und verschwinden mit der übernächsten, sobald die Mitgliedschaft weg ist.</p>
+      <p data-l="en">Also optional, and off until somebody turns it on. Under
+        <a href="/#/console/org">Organization&nbsp;→&nbsp;Single sign-on</a> you name <b>one</b> claim in the
+        provider's token – <code>groups</code>, <code>roles</code>, or a path like
+        <code>realm_access.roles</code> – and a list of <b>exact values</b> it may carry. Each value says what it
+        grants: Atlas roles, and membership of Atlas groups. Onboarding and offboarding then become a group
+        membership somebody already maintains: the role and the shared projects arrive at the next sign-in – and go
+        away at the sign-in after the membership does.</p>
+      <ul>
+        <li data-l="de"><b>Abwesenheit vergibt nichts.</b> Jede Regel ist ein exakter Wertevergleich. Wer beim
+          Anbieter in keiner genannten Gruppe ist, trifft auf keine Regel und bekommt nichts.</li>
+        <li data-l="en"><b>Nothing is granted by absence.</b> Every rule is an exact value match. Somebody the
+          provider says nothing about matches no rule and is granted nothing.</li>
+        <li data-l="de"><b><code>user</code> ist ein Boden, keine Vergabe.</b> Entschieden werden
+          <code>admin</code>, <code>modeler</code> und <code>operator</code>; wer sich anmelden kann, behält
+          <code>user</code> – eine verschwundene Gruppe nimmt niemandem die eigene Aufgabenliste.</li>
+        <li data-l="en"><b><code>user</code> is a floor, not a grant.</b> What is decided is <code>admin</code>,
+          <code>modeler</code> and <code>operator</code>; anybody who can sign in keeps <code>user</code> – a group
+          that goes away does not cost somebody their own task list.</li>
+        <li data-l="de"><b>Nur die genannten Gruppen gehören der Abbildung.</b> Rollen sind ein geschlossener Satz
+          von vier Namen, die Atlas selbst vergibt – die Abbildung entscheidet sie deshalb vollständig, und eine von
+          Hand vergebene Rolle überlebt die nächste Anmeldung nicht. Gruppen legst du selbst an; über eine Gruppe,
+          die in keiner Regel vorkommt, hat die Abbildung nichts gesagt, und eine dort von Hand gesetzte
+          Mitgliedschaft bleibt.</li>
+        <li data-l="en"><b>Only the groups it names belong to the mapping.</b> Roles are a closed set of four names
+          Atlas defines, so the mapping decides them completely and a role granted by hand does not survive the next
+          sign-in. Groups you create yourself; about a group no rule mentions the mapping has said nothing, and a
+          membership set by hand there stays.</li>
+        <li data-l="de"><b>Eine Regel, die nie funktionieren könnte, wird beim Speichern abgewiesen</b> – eine
+          Rolle, die Atlas nicht durchsetzt, oder eine gelöschte Gruppe. Sonst vergäbe sie still bei jeder
+          Anmeldung nichts, bis jemand herausfindet, warum die neue Kollegin nicht deployen kann.</li>
+        <li data-l="en"><b>A rule that could never work is refused when you save it</b> – a role Atlas does not
+          enforce, or a group you have deleted. Otherwise it would silently grant nothing on every login until
+          somebody worked out why the new colleague cannot deploy.</li>
+      </ul>
+      <div class="note warn">
+        <span class="lbl" data-l="de">Eine echte Entscheidung</span><span class="lbl" data-l="en">A real decision</span>
+        <p data-l="de" style="margin:.3em 0 0">Solange die Abbildung an ist, verwaltet die Rollen dieser Installation,
+          <b>wer jene Gruppen verwaltet</b>. Das ist der Sinn der Föderation und zugleich ihre schärfste Kante. Wenn
+          du Rollen weiterhin hier vergeben willst, lass sie aus.</p>
+        <p data-l="en" style="margin:.3em 0 0">While the mapping is on, this instance's roles are administered by
+          <b>whoever administers those groups</b>. That is the point of federation and also its sharpest edge. If you
+          want to keep granting roles here, leave it off.</p>
+      </div>
+      <p data-l="de">Anbieter einrichten, Redirect-URI registrieren und die vollständige Liste der Optionen:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#single-sign-on-with-an-identity-provider" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
+      <p data-l="en">Setting up a provider, registering the redirect URI and the full list of options:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#single-sign-on-with-an-identity-provider" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.</p>
     </section>
 
     <!-- ==================== ROLE: PROCESS DEVELOPER ==================== -->

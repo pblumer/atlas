@@ -322,6 +322,38 @@ certificate, a moved discovery document, a closed network path — takes federat
 sign-in with it. The local password remains the way back in, and Atlas refuses to
 leave an instance without an enabled administrator.
 
+#### Letting the provider's groups decide roles
+
+Optional, and off until you turn it on. Under **Organization → Single sign-on** you
+name one claim in the provider's token and a list of exact values it may carry, and
+each value names the Atlas roles it grants and the groups it puts a person in. From
+that moment, onboarding and offboarding are a group membership somebody already
+maintains: the role and the shared projects arrive at the next sign-in, and go away
+at the sign-in after the membership does.
+
+The claim is whatever your provider emits — `groups` for many, `roles`, or a dotted
+path like `realm_access.roles` for Keycloak. Values are compared exactly; Atlas does
+not interpret them, so a group name, an object id and a role name all work as long
+as the token carries that string.
+
+Four things worth knowing before switching it on:
+
+- **Roles become the provider's to decide.** While the mapping is on, a role granted
+  by hand under **Organization → Users** is replaced at that person's next sign-in.
+  If you want to grant roles here, leave the mapping off.
+- **Group membership follows only for the groups your rules name.** A group no rule
+  mentions is left alone, so a membership you added by hand there survives.
+- **Nothing is granted by absence.** Somebody the provider says nothing about
+  matches no rule and gets `user` — which everybody who can sign in holds, mapping
+  or not.
+- **A rule that cannot work is refused when you save it**, not silently ignored at
+  every login: a role Atlas does not enforce, or a group that no longer exists.
+
+The mapping cannot lock you out of the local administrator account, which is not
+federated. If a mapping does leave the instance without a federated administrator,
+sign in locally — or reset that password on the host with
+`atlas reset-password --data-dir <dir> <username>` — and fix the rules.
+
 ### 7. Back up the vault key
 
 With the vault enabled (the default), the first start generates a master key at
@@ -646,6 +678,11 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
 | `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` takes the same flag. Also `ATLAS_TLS_CA` |
+| `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes Atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
+| `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
+| `--oidc-client-secret` | *(none)* | Client secret, if the provider issued one; omit it for a public client (the flow uses PKCE either way). Prefer `ATLAS_OIDC_CLIENT_SECRET`, so it stays out of `ps` |
+| `--oidc-scopes` | `openid profile email` | Scopes requested at the provider. Also `ATLAS_OIDC_SCOPES` |
+| `--oidc-name` | *(the issuer host)* | What the button on the login screen says. Also `ATLAS_OIDC_NAME` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
 | `--vault` | `true` | Encrypted secret vault for worker credentials |
@@ -692,6 +729,8 @@ history.
 | `ATLAS_ADMIN_PASSWORD` | Bootstrap admin password; if unset, one is generated and logged once |
 | `ATLAS_VAULT_KEY` | Vault master key, 64 hex chars or base64; never written to disk |
 | `ATLAS_VAULT_KEY_FILE` | Path to a file holding that key |
+| `ATLAS_OIDC_ISSUER`, `ATLAS_OIDC_CLIENT_ID`, `ATLAS_OIDC_CLIENT_SECRET` | Defaults for the three `--oidc-*` flags above — the way to configure single sign-on without putting the secret on the command line ([Single sign-on](#single-sign-on-with-an-identity-provider)) |
+| `ATLAS_OIDC_SCOPES`, `ATLAS_OIDC_NAME` | Defaults for `--oidc-scopes` and `--oidc-name` |
 | `ATLAS_OPENSEARCH_URL` | Default for `--opensearch-url` |
 | `ATLAS_OPENSEARCH_INDEX` | Default for `--opensearch-index` |
 | `ATLAS_OPENSEARCH_USERNAME`, `ATLAS_OPENSEARCH_PASSWORD` | Exporter credentials (env-only) |

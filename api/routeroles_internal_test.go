@@ -86,6 +86,12 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
 
+	// The claim mapping is admin-only in both directions, unlike the three above:
+	// its rules name the provider's group identifiers, and nothing on the login
+	// screen needs them.
+	"GET /api/v1/settings/oidc-mapping",
+	"PUT /api/v1/settings/oidc-mapping",
+
 	// Who exists, what they may do, and the record of what they did.
 	"GET /api/v1/users",
 	"POST /api/v1/users",

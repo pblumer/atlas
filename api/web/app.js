@@ -1814,7 +1814,10 @@ async function viewConsoleOrg() {
         <p class="muted" style="padding:0 18px; margin:6px 0 12px">${AUTH.enabled
           ? "Login is enforced for this instance."
           : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
-          Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
+          Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
+          rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
+          <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
+          person's own task list.</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
@@ -1869,6 +1872,18 @@ async function viewConsoleOrg() {
       </table>
     </div>`;
 
+  // Single sign-on: which provider (if any) this instance offers, and what its
+  // claims are allowed to decide here. Admin-gated like the roster, so it is only
+  // loaded when the roster was not denied.
+  let provider = null;
+  let mapping = null;
+  if (!denied) {
+    try { provider = ((await api("GET", "/api/v1/auth/providers")) || [])[0] || null; } catch { /* none */ }
+    if (provider) {
+      try { mapping = await api("GET", "/api/v1/settings/oidc-mapping"); } catch { mapping = null; }
+    }
+  }
+
   if (superseded(gen)) return; // navigated away while the roster loaded
   view.innerHTML = `
     <div class="card">
@@ -1879,11 +1894,13 @@ async function viewConsoleOrg() {
     </div>
     ${usersCard}
     ${groupsCard}
+    ${denied ? "" : ssoCard(provider, mapping, groups)}
     ${appearanceCard()}`;
 
   // Appearance is wired before the (admin-gated) user handlers so it works even when
   // the user roster is denied to a non-admin.
   wireAppearance();
+  wireSSO(groups);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -1933,6 +1950,121 @@ async function viewConsoleOrg() {
         break;
       }
       case "rmmember": removeGroupMember(btn.dataset.gid, btn.dataset.uid, reload); break;
+    }
+  });
+}
+
+// ---------- Single sign-on (ADR-0210) ----------
+//
+// Two questions are answered here, and only these two: which claim in the
+// provider's token to read, and what its values grant. Where the provider is —
+// issuer, client id, secret — is start-up configuration and deliberately not
+// editable from a browser.
+//
+// The switch is worth the sentence it carries: from the moment it is on, whoever
+// administers the provider's groups administers this instance's roles, and a role
+// granted by hand here is replaced at that person's next sign-in.
+
+// SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
+// can sign in at all holds it, so offering it as a grant would suggest it could be
+// withheld.
+const SSO_ROLES = ["admin", "modeler", "operator"];
+
+function ssoRuleRow(rule, groups) {
+  const roles = new Set(rule.roles || []);
+  const inGroups = new Set(rule.groups || []);
+  const box = (kind, value, label, on) => `<label class="field inline" style="margin:0 12px 4px 0">
+      <input type="checkbox" data-sso="${kind}" value="${esc(value)}"${on ? " checked" : ""} />
+      <span>${esc(label)}</span></label>`;
+  return `<tr class="sso-rule">
+      <td style="vertical-align:top"><input class="field" data-sso="value" style="margin:0"
+        value="${esc(rule.value || "")}" placeholder="atlas-modeller" spellcheck="false"
+        aria-label="Claim value" /></td>
+      <td style="vertical-align:top">${SSO_ROLES.map((r) => box("role", r, r, roles.has(r))).join("")}</td>
+      <td style="vertical-align:top">${groups.length
+        ? groups.map((g) => box("group", g.id, g.name, inGroups.has(g.id))).join("")
+        : `<span class="muted" style="font-size:12px">No groups yet.</span>`}</td>
+      <td style="text-align:right; vertical-align:top">
+        <button type="button" class="btn ghost danger" data-sso-act="remove"
+          title="Delete this rule">Remove</button></td>
+    </tr>`;
+}
+
+function ssoCard(provider, mapping, groups) {
+  if (!provider) {
+    return `
+      <div class="card" style="margin-top:18px">
+        <h2>Single sign-on</h2>
+        <p class="muted" style="margin:6px 0 0">No identity provider is configured, so everybody signs in
+        with a username and password. Start the server with <code>--oidc-issuer</code>,
+        <code>--oidc-client-id</code> and <code>--oidc-client-secret</code> to offer one.</p>
+      </div>`;
+  }
+  const m = mapping || { enabled: false, claim: "", rules: [] };
+  const rules = m.rules || [];
+  return `
+    <div class="card" id="sso-card" style="margin-top:18px">
+      <div class="between"><h2>Single sign-on</h2>
+        <button type="button" class="btn" id="sso-save" title="Store this mapping">Save mapping</button></div>
+      <p class="muted" style="margin:6px 0 14px">People can sign in with
+      <b>${esc(provider.name || provider.id)}</b>. Below is what that provider's claims decide here.
+      A rule matches one claim value exactly and grants what it names; somebody the provider says
+      nothing about matches nothing and is granted nothing. Everybody who can sign in holds
+      <span class="chip">user</span> either way.</p>
+      <label class="field inline" style="margin:0 0 10px">
+        <input type="checkbox" id="sso-enabled"${m.enabled ? " checked" : ""} />
+        <span>Let the provider's claims decide roles and group membership</span>
+      </label>
+      <p class="muted" style="margin:0 0 14px; font-size:12px">While this is on, whoever administers the
+      provider's groups administers this instance's roles: a role granted by hand is replaced at that
+      person's next sign-in, and so is their membership of the groups named below. Groups no rule names
+      are left alone.</p>
+      <label class="field" style="max-width:420px">
+        <span>Claim to read</span>
+        <input type="text" id="sso-claim" value="${esc(m.claim || "")}" spellcheck="false"
+          placeholder="groups" aria-label="Claim to read" />
+      </label>
+      <p class="muted" style="margin:6px 0 14px; font-size:12px">A claim name, or a dotted path for the
+      providers that nest it — <code>groups</code>, <code>roles</code>,
+      <code>realm_access.roles</code>.</p>
+      <table>
+        <thead><tr><th style="width:26%">Claim value</th><th style="width:28%">Grants roles</th>
+          <th>Adds to groups</th><th></th></tr></thead>
+        <tbody id="sso-rules">${rules.map((r) => ssoRuleRow(r, groups)).join("")}</tbody>
+      </table>
+      <button type="button" class="btn ghost" id="sso-add" style="margin-top:12px"
+        title="Add a rule">Add rule</button>
+    </div>`;
+}
+
+function wireSSO(groups) {
+  const card = document.getElementById("sso-card");
+  if (!card) return;
+  const rows = document.getElementById("sso-rules");
+  card.addEventListener("click", async (e) => {
+    if (e.target.closest("#sso-add")) {
+      rows.insertAdjacentHTML("beforeend", ssoRuleRow({}, groups));
+      return;
+    }
+    const rm = e.target.closest("button[data-sso-act='remove']");
+    if (rm) { rm.closest("tr").remove(); return; }
+    if (!e.target.closest("#sso-save")) return;
+    const body = {
+      enabled: document.getElementById("sso-enabled").checked,
+      claim: document.getElementById("sso-claim").value.trim(),
+      rules: [...rows.querySelectorAll("tr.sso-rule")].map((tr) => ({
+        value: tr.querySelector("[data-sso='value']").value.trim(),
+        roles: [...tr.querySelectorAll("[data-sso='role']:checked")].map((c) => c.value),
+        groups: [...tr.querySelectorAll("[data-sso='group']:checked")].map((c) => c.value),
+      })),
+    };
+    try {
+      await api("PUT", "/api/v1/settings/oidc-mapping", body);
+      toast(body.enabled ? "Sign-on mapping saved and in effect" : "Sign-on mapping saved (switched off)", "ok");
+    } catch (err) {
+      // The server refuses a mapping that could not do what it says, and its reason
+      // names the rule — so show it rather than a generic failure.
+      toast(err.message || "Couldn't save the mapping", "err");
     }
   });
 }
