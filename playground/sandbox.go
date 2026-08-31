@@ -182,9 +182,13 @@ type PoolStat struct {
 	Served   int
 	BusyTime time.Duration
 	MaxQueue int
-	// Capacity is the pool's size, so a reader of the report can turn BusyTime into
-	// a utilisation without holding the configuration beside it.
-	Capacity int
+	// Capacity is the pool's size, and Available the seat time its calendar offered
+	// over the run — capacity times the working time, not times the wall clock.
+	// Utilisation is BusyTime over Available, and the distinction is the whole
+	// point: counting the nights and the weekend as idle capacity reads as "we have
+	// room" on a pool with three hundred cases queued.
+	Capacity  int
+	Available time.Duration
 }
 
 // poolState is a pool's live queue and seat count during a run.
@@ -805,11 +809,14 @@ func (s *Sandbox) ElementStats() map[string]ElementStat {
 	return out
 }
 
-// PoolStats reports what the run measured at each pool.
+// PoolStats reports what the run measured at each pool, including the seat time
+// its calendar offered over the run so far.
 func (s *Sandbox) PoolStats() map[string]PoolStat {
 	out := make(map[string]PoolStat, len(s.pools))
 	for name, ps := range s.pools {
-		out[name] = ps.stat
+		st := ps.stat
+		st.Available = time.Duration(ps.cfg.Capacity) * ps.cfg.workingTimeBetween(s.startedAt, s.clock.Now())
+		out[name] = st
 	}
 	return out
 }

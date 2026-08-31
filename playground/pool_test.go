@@ -214,3 +214,38 @@ func TestAPoolWindowMustHaveLength(t *testing.T) {
 		})
 	}
 }
+
+// Utilisation is a fraction of the seat time the calendar actually offered, not
+// of the wall clock. A pool that works nine hours a day and is saturated through
+// all of them is fully used, however many nights the run spans — reporting it as
+// a quarter busy would read as "we have room" to somebody staring at a queue.
+func TestUtilisationCountsCalendarTimeNotWallClock(t *testing.T) {
+	sb := openSandbox(t, "user-task.bpmn", playground.StubSet{
+		Human: &playground.Stub{Min: 3 * time.Hour, Max: 3 * time.Hour},
+		Pools: map[string]playground.Pool{"clerks": {
+			Capacity: 1,
+			Calendar: playground.Calendar{Open: []playground.Window{{From: 8 * time.Hour, To: 17 * time.Hour}}},
+		}},
+		PoolOf: map[string]string{"approve": "clerks"},
+	})
+	// Six three-hour cases on one seat: eighteen hours of work over a nine-hour
+	// day, so two days of it, and the seat is busy every open minute.
+	runPlan(t, sb, playground.Plan{Cases: rows(6)})
+
+	rep, err := sb.Report()
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	p := rep.Pools["clerks"]
+	if p.BusyTime != 18*time.Hour {
+		t.Errorf("busy = %s, want 18h", p.BusyTime)
+	}
+	// The run spans two working days; the wall clock spans more than a day of
+	// night on top of that, and none of it is capacity.
+	if p.Available != p.BusyTime {
+		t.Errorf("available = %s, busy = %s: a saturated pool offered exactly the time it used", p.Available, p.BusyTime)
+	}
+	if span := rep.SimEnd.Sub(rep.SimStart); span <= p.Available {
+		t.Errorf("the run spans %s, which should be longer than the %s of seat time it offered", span, p.Available)
+	}
+}

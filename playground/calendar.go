@@ -150,6 +150,38 @@ func (c Calendar) finishAt(t int64, d time.Duration) (int64, bool) {
 	return 0, false
 }
 
+// workingTimeBetween is how much working time the calendar offers between two
+// instants. It is what a utilisation is a fraction *of*: dividing seat time by
+// the wall-clock span instead counts the nights and the weekend as idle capacity,
+// which reads as "we have room" on a pool with three hundred cases queued.
+func (c Calendar) workingTimeBetween(from, to int64) time.Duration {
+	if to <= from {
+		return 0
+	}
+	if c.alwaysOpen() {
+		return time.Duration(to - from)
+	}
+	var total time.Duration
+	at := from
+	for guard := 0; at < to && guard <= calendarSearchDays*(len(c.Open)+1)+1; guard++ {
+		open, ok := c.opensAfter(at)
+		if !ok || open >= to {
+			break
+		}
+		closes, ok := c.closesAfter(open)
+		if !ok {
+			break
+		}
+		end := closes
+		if end > to {
+			end = to
+		}
+		total += time.Duration(end - open)
+		at = closes
+	}
+	return total
+}
+
 // closesAfter is the end of the working stretch that contains t.
 func (c Calendar) closesAfter(t int64) (int64, bool) {
 	ts := time.Unix(0, t).UTC()

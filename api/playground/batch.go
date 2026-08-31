@@ -132,9 +132,12 @@ type elementResp struct {
 }
 
 type poolResp struct {
-	Capacity           int   `json:"capacity"`
-	Served             int   `json:"served"`
-	BusyMillis         int64 `json:"busyMillis"`
+	Capacity   int   `json:"capacity"`
+	Served     int   `json:"served"`
+	BusyMillis int64 `json:"busyMillis"`
+	// AvailableMillis is the seat time the pool's calendar offered over the run —
+	// what BusyMillis is a fraction of.
+	AvailableMillis    int64 `json:"availableMillis"`
 	MaxQueue           int   `json:"maxQueue"`
 	UtilisationPercent int   `json:"utilisationPercent"`
 }
@@ -466,18 +469,18 @@ func renderReport(rep playground.Report) reportResp {
 			WaitMillis: el.Wait.Milliseconds(), MaxWaitMillis: el.MaxWait.Milliseconds(),
 		}
 	}
-	span := rep.SimEnd.Sub(rep.SimStart)
 	for name, p := range rep.Pools {
 		pr := poolResp{
 			Capacity: p.Capacity, Served: p.Served,
 			BusyMillis: p.BusyTime.Milliseconds(), MaxQueue: p.MaxQueue,
+			AvailableMillis: p.Available.Milliseconds(),
 		}
-		// Utilisation is seat time over seat time available. It is computed here
-		// rather than left to the reader because getting it wrong — dividing by the
-		// span instead of by the seats — is the easy mistake, and the report is read
-		// by people who will quote it.
-		if span > 0 && p.Capacity > 0 {
-			pr.UtilisationPercent = int(100 * p.BusyTime / (span * time.Duration(p.Capacity)))
+		// Utilisation is seat time over the seat time the pool's calendar actually
+		// offered. Dividing by the run's span instead would count every night and
+		// weekend as idle capacity, and report a pool with three hundred cases
+		// queued as a quarter busy.
+		if p.Available > 0 {
+			pr.UtilisationPercent = int(100 * p.BusyTime / p.Available)
 		}
 		out.Pools[name] = pr
 	}
