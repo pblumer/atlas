@@ -249,6 +249,12 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
+	// The kind tiebreak keeps the comparator total. With today's two kinds it is
+	// unreachable — a contains edge always leaves an application and a calls edge
+	// always leaves a process, so no two edges share both endpoints — and it is
+	// deliberately not covered by a contrived test. It is here because the next edge
+	// kinds (releases, connectors, targets) will make it reachable, and a comparator
+	// that is only total by accident sorts unstably the day that happens.
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
 			return g.Edges[i].From < g.Edges[j].From
