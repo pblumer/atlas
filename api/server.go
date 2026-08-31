@@ -224,7 +224,12 @@ type Server struct {
 	processDocs *processdoc.Service
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
-	panorama         *panorama.Service
+	panorama *panorama.Service
+	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
+	// computed from this server's own resources, never stored. Separate from the
+	// model library above because declared intent and derived fact must not share
+	// a surface.
+	panoramaMesh     *panorama.Mesh
 	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -1130,6 +1135,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		token.New,
 		time.Now,
 	)
+	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)
 	}
