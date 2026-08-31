@@ -124,9 +124,15 @@ helm install atlas ./deploy/helm/atlas \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-Put a TLS-terminating proxy (Ingress) in front before exposing Atlas publicly.
-Atlas speaks plain HTTP, so the proxy is what terminates TLS; `/mcp` itself is
-gated by `--auth` like every other route and no longer depends on a proxy rule.
+Terminate TLS before exposing Atlas publicly. In a cluster the Ingress usually
+does it and Atlas serves plain HTTP behind it, which is what the chart defaults
+to. Where that last hop must be encrypted as well — an Ingress on another node, or
+another Atlas publishing an application to this one, which requires `https` of its
+target — set `atlas.tls.enabled` with a `kubernetes.io/tls` Secret and the pod
+terminates TLS itself; the probes then switch to the HTTPS scheme automatically.
+Either way `/mcp` is gated by `--auth` like every other route and no longer depends
+on a proxy rule, while `/metrics`, `/healthz` and `/readyz` stay unauthenticated by
+design — encryption is not authorization.
 
 ## Values
 
@@ -143,6 +149,9 @@ common knobs:
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |
+| `atlas.tls.enabled` | `false` | Terminate TLS in the pod. Needs `atlas.tls.existingSecret`; the probes switch to HTTPS with it |
+| `atlas.tls.existingSecret` | `""` | `kubernetes.io/tls` Secret with the certificate and key (what cert-manager writes) |
+| `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another Atlas (`--tls-ca`) |
 | `service.type` / `service.port` | `ClusterIP` / `8080` | Service exposure |
 | `ingress.enabled` | `false` | Create an Ingress |
 

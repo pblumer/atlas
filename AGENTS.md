@@ -40,10 +40,10 @@ go build ./...
 go test ./...
 
 # Run tests with the race detector — MANDATORY before considering work done.
-# The timeout is not optional: the api package needs more than Go's 10m
-# per-package default under the race detector, and blowing it reports as
-# "FAIL ... 600.079s", which reads like a broken test rather than a timeout.
-# This is the same flag ci.yml passes.
+# -timeout raises Go's default 10-minute *per-package* limit: the api package
+# alone takes 8-11 minutes under -race, so on a slower machine the default fails
+# on elapsed time rather than on a defect, and the panic names whichever test
+# happened to be running. This is what CI runs, and what `make race` runs.
 go test -race -timeout=25m ./...
 
 # Vet and format checks (formatting must produce no output)
@@ -65,7 +65,7 @@ They are JS, not Go, so they are a separate CI job and are not part of the Go co
 cd e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=25m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty — or, equivalently, `make check`. Do not report a task complete until these are green.
+**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=25m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause.
 
 ## Repository layout
 
