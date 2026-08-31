@@ -33,6 +33,23 @@ one answer removes both. The full argument is in
 A number, once assigned, is never reassigned — that is what makes `(ADR-0168)` in a
 comment safe to write.
 
+## Reading the older records: "connector"
+
+Records written before [ADR-0203](0203-worker-execution-model.md) say *connector*
+where the rest of the documentation now says **Worker Type** (an execution
+capability), **Worker** (one configured target and identity of that type) or
+**Worker Instance** (a process leasing its jobs) — the word meant all three
+depending on where it stood, which is why it was replaced.
+
+Those records are **not rewritten**: an ADR is immutable once accepted, and
+ADR-0203 says so explicitly — older connector wording is reconciled through links,
+not by editing history. So read ADR-0036, [ADR-0041](0041-connector-management-and-secret-store.md),
+[ADR-0067](0067-service-task-connector-catalog.md), ADR-0154/0166/0172/0173/0201 and
+their neighbours in their own vocabulary; ADR-0203 carries the mapping. The
+persisted contracts kept the old spelling too, on purpose: the `connector/` package
+paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
+`ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes.
+
 ## Index
 
 | ADR | Title | Status |

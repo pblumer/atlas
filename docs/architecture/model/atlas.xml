@@ -191,7 +191,7 @@
     </element>
     <element identifier="role-integrator" xsi:type="BusinessRole">
       <name xml:lang="en">Integration Developer</name>
-      <documentation xml:lang="en">Authors job workers / connectors.</documentation>
+      <documentation xml:lang="en">Authors Worker Types and the workers that run them.</documentation>
     </element>
     <element identifier="role-admin" xsi:type="BusinessRole">
       <name xml:lang="en">Administrator</name>
@@ -376,16 +376,16 @@
       </properties>
     </element>
     <element identifier="conn-rest" xsi:type="ApplicationComponent">
-      <name xml:lang="en">REST connector</name>
+      <name xml:lang="en">REST worker type</name>
       <documentation xml:lang="en">Service task calls an external HTTP API.</documentation>
     </element>
     <element identifier="conn-mail" xsi:type="ApplicationComponent">
-      <name xml:lang="en">Mail connector</name>
+      <name xml:lang="en">Mail worker type</name>
       <documentation xml:lang="en">Email via Gmail / Microsoft Graph (OAuth).</documentation>
     </element>
     <element identifier="conn-script" xsi:type="ApplicationComponent">
-      <name xml:lang="en">Script-task worker</name>
-      <documentation xml:lang="en">Polyglot scripts (e.g. PowerShell) as workers.</documentation>
+      <name xml:lang="en">Script worker type</name>
+      <documentation xml:lang="en">Polyglot scripts (e.g. PowerShell) run outside the engine.</documentation>
       <properties>
         <property propertyDefinitionRef="propid-adr">
           <value xml:lang="en">ADR-0047</value>
@@ -393,7 +393,7 @@
       </properties>
     </element>
     <element identifier="conn-dmn" xsi:type="ApplicationComponent">
-      <name xml:lang="en">DMN / temis connector</name>
+      <name xml:lang="en">DMN / temis worker type</name>
       <documentation xml:lang="en">Business-rule tasks against the temis engine.</documentation>
       <properties>
         <property propertyDefinitionRef="propid-adr">
@@ -645,7 +645,7 @@
     </element>
     <element identifier="plat-m6" xsi:type="Plateau">
       <name xml:lang="en">M6 Ecosystem</name>
-      <documentation xml:lang="en">A broader connector / integration surface.</documentation>
+      <documentation xml:lang="en">A broader Worker Type / integration surface.</documentation>
       <properties>
         <property propertyDefinitionRef="propid-status">
           <value xml:lang="en">planned</value>

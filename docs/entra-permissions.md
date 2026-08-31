@@ -1,6 +1,6 @@
-# Entra ID connector — least-privilege Graph permissions
+# Entra ID worker — least-privilege Graph permissions
 
-The `entra` connector ([ADR-0172](adr/0172-entra-id-connector.md)) is worker-only:
+The `entra` Worker Type ([ADR-0172](adr/0172-entra-id-connector.md)) is worker-only:
 the tenant id, client id and client secret live in the worker's environment or the
 Console vault, never in the engine. That app registration is the most valuable secret
 any Atlas worker holds — an application permission such as `User.ReadWrite.All` can
@@ -13,12 +13,12 @@ grants what their processes use and nothing more.
 - **Application permissions are tenant-wide.** Unlike a delegated permission or an
   administrative-unit-scoped directory role, an app permission cannot be narrowed to a
   subset of the directory. The only real levers are therefore: grant **as few scopes as
-  possible**, use a **dedicated app registration** for this connector alone, and let the
+  possible**, use a **dedicated app registration** for this worker alone, and let the
   **process-side gate** (a fail-closed check on a test-object naming convention, as in
   [`examples/account-bestellung`](../examples/account-bestellung/)) be the runtime
   boundary.
 - **`Directory.ReadWrite.All` is the wrong grant.** Many walkthroughs reach for it; it is
-  the read/write-everything permission over the directory and the connector never needs
+  the read/write-everything permission over the directory and the worker never needs
   it. If it is present on the app, remove it — the narrow per-object permissions below are
   sufficient.
 
@@ -31,7 +31,7 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 |---|---|---|
 | `create-user`, `update-user`, `delete-user`, `enable`, `disable`, `reset-password` | `POST` / `PATCH` / `DELETE /users/{id}` | **`User.ReadWrite.All`** |
 | `get-user`, `list-users`, `delta-users` | `GET /users[/delta]` | `User.Read.All` (subset of `User.ReadWrite.All`) |
-| `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the connector sends explicit `skuId`s rather than enumerating SKUs |
+| `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the worker sends explicit `skuId`s rather than enumerating SKUs |
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |
 | `get-group`, `list-groups`, `delta-groups` | `GET /groups[/delta]` | `Group.Read.All` (subset of `Group.ReadWrite.All`) |
@@ -61,7 +61,7 @@ when a process actually uses those operations, and drop them otherwise.
 
 ## Applying it in the Entra admin center
 
-1. **App registrations →** your connector app **→ API permissions**.
+1. **App registrations →** your worker's app **→ API permissions**.
 2. Remove every permission except the ones your processes use (see the table). In
    particular remove `Directory.ReadWrite.All` / `Directory.Read.All` if present.
 3. **Add a permission → Microsoft Graph → Application permissions**, select the minimal
@@ -84,9 +84,10 @@ when a process actually uses those operations, and drop them otherwise.
 
 ## See also
 
-- [ADR-0172 — Entra ID connector](adr/0172-entra-id-connector.md) — why the connector is
-  worker-only and the credential never enters the engine.
+- [ADR-0172 — Entra ID connector](adr/0172-entra-id-connector.md) — why the Worker Type
+  is worker-only and the credential never enters the engine. It predates
+  [ADR-0203](adr/0203-worker-execution-model.md) and says *connector* throughout.
 - [`examples/account-bestellung`](../examples/account-bestellung/) — a fail-closed,
   test-object-gated provisioning flow, the process-side boundary this page refers to.
-- [MIM comparison](comparisons/mim.md) — where this connector sits against the MIM
+- [MIM comparison](comparisons/mim.md) — where this Worker Type sits against the MIM
   management-agent surface.
