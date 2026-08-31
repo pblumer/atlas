@@ -424,9 +424,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: xmlBody("ArchiMate Open Exchange XML"), resp: jsonBody("Validation result", tObject())}},
 		// The derived landscape mesh (ADR-0211): computed from this server's own
 		// resources per requesting principal, never stored, and never mixed into the
-		// ArchiMate documents above.
+		// ArchiMate documents above. Its status block declares which of ADR-0189 §6's
+		// observation states this build cannot produce, so a consumer knows what the
+		// absence of a finding is worth.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		{"GET", "/api/v1/panorama/models", s.panorama.HandleList, apiOp{
 			summary: "List application-owned Panorama model metadata visible to the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
