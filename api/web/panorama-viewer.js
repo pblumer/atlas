@@ -153,6 +153,66 @@ function pickBinding(list, current, key) {
   });
 }
 
+// The C4 projection (ADR-0211 §8). It is shown as a structure with its loss report,
+// not as a second canvas: what makes a projection trustworthy is that it says what
+// it could not express, and a picture that merely omitted those would look complete
+// and be wrong. ArchiMate stays the only thing anybody authors here — there is no
+// write counterpart to this view and there is not meant to be one.
+function c4PanelHTML(projection) {
+  const byParent = new Map();
+  for (const element of projection.elements) {
+    const key = element.parent || "";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(element);
+  }
+  const render = (element) => {
+    const children = byParent.get(element.id) || [];
+    return `<li>
+      <span class="c4-type">${esc(element.type)}</span>
+      <b>${esc(element.name || element.id)}</b>
+      <code class="muted">${esc(element.sourceType)}</code>
+      ${element.description ? `<p class="muted">${esc(element.description)}</p>` : ""}
+      ${children.length ? `<ul class="c4-tree">${children.map(render).join("")}</ul>` : ""}
+    </li>`;
+  };
+  const roots = (byParent.get("") || []).map(render).join("");
+
+  const relationships = projection.relationships.map((rel) => `<li>
+    <b>${esc(rel.source)}</b> → <b>${esc(rel.target)}</b>
+    ${rel.name ? `<span>${esc(rel.name)}</span>` : ""}
+    <code class="muted">${esc(rel.sourceType)}</code></li>`).join("");
+
+  // The loss report is the contractual half of this view, so it is never collapsed
+  // away and never rendered as a footnote.
+  const dropped = projection.dropped.map((loss) => `<li>
+    <b>${esc(loss.name || loss.id)}</b>
+    <code class="muted">${esc(loss.sourceType)}</code>
+    <span class="c4-reason">${esc(loss.reason)}</span></li>`).join("");
+
+  return `<div class="c4-panel">
+    <div class="c4-head">
+      <h2>C4 projection</h2>
+      <p class="muted">A read-only projection of this ArchiMate model at revision
+        ${esc(projection.sourceRevision)}, using mapping version
+        ${esc(projection.mappingVersion)}. Nothing here is authored: edit the ArchiMate
+        model and project again.</p>
+    </div>
+    <section class="psec"><h3>Structure</h3>
+      ${roots ? `<ul class="c4-tree">${roots}</ul>` : `<p class="muted">Nothing in this model projects into C4.</p>`}
+    </section>
+    <section class="psec"><h3>Relationships</h3>
+      ${relationships ? `<ul class="c4-list">${relationships}</ul>` : `<p class="muted">None.</p>`}
+    </section>
+    <section class="psec c4-loss"><h3>Not projected (${projection.dropped.length})</h3>
+      ${dropped
+        ? `<p class="muted">C4 cannot express these. They are listed rather than
+             dropped quietly — a projection that hid them would look complete and be
+             wrong.</p><ul class="c4-list">${dropped}</ul>`
+        : `<p class="muted">Everything in this model projects into C4.</p>`}
+    </section>
+  </div>`;
+}
+
 export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.innerHTML = `<div class="card empty"><p class="muted">Loading architecture view…</p></div>`;
   const [vendor, model, xml, applications, bindings] = await Promise.all([
@@ -178,6 +238,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       </div>
       <span class="spacer"></span>
       <span class="panorama-status"><span class="panorama-lock" aria-hidden="true">▣</span> Read only</span>
+      <button class="btn ghost small" data-tool="c4" aria-pressed="false">C4 projection</button>
       <a class="btn ghost small" href="/api/v1/panorama/models/${encodeURIComponent(id)}/xml">Export XML</a>
     </div>
     <div class="panorama-tools" aria-label="Canvas controls">
@@ -270,6 +331,31 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     } catch (e) {
       toast(e.message);
     }
+  });
+
+  const c4Button = container.querySelector('[data-tool="c4"]');
+  let c4Open = false;
+  c4Button.addEventListener("click", async () => {
+    if (c4Open) {
+      c4Open = false;
+      c4Button.setAttribute("aria-pressed", "false");
+      canvas.querySelector(".c4-panel")?.remove();
+      select(parsed.views.find((v) => v.id === container.querySelector(".panorama-view-tab.active")?.dataset.view)
+        || parsed.views[0]);
+      return;
+    }
+    let projection;
+    try {
+      projection = await api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/c4`);
+    } catch (e) {
+      toast(e.message);
+      return;
+    }
+    viewer?.destroy();
+    viewer = null;
+    c4Open = true;
+    c4Button.setAttribute("aria-pressed", "true");
+    canvas.innerHTML = c4PanelHTML(projection);
   });
 
   container.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => viewer?.zoom(1.2));

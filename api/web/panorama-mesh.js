@@ -30,6 +30,17 @@ const KIND = {
   unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
 
+// PROVENANCE describes how a node is known (ADR-0211 §2). It is rendered on every
+// node, always: a picture that mixed what Atlas found with what somebody declared,
+// without saying which is which, is exactly the conflation the record exists to
+// prevent. Shape carries it as well as colour — a dashed ring for something only
+// declared, a second ring for something known from both sides.
+const PROVENANCE = {
+  derived: { label: "Derived — Atlas has it, nothing models it" },
+  both: { label: "Both — Atlas has it and a model binds to it", ring: true },
+  modeled: { label: "Modeled — a model declares it, Atlas does not have it", ghost: true },
+};
+
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
 // and therefore the settled layout — is identical on every load of the same graph.
 function mulberry32(seed) {
@@ -206,6 +217,7 @@ function nodeTitle(node) {
     return `Nothing on this server provides the ${of} "${node.name}". Work reaching it would park.`;
   }
   const parts = [node.name || node.id];
+  if (node.modelName && node.modelName !== node.name) parts.push(`modeled as “${node.modelName}”`);
   if (node.processId) parts.push(`${node.processId} v${node.version}`);
   if (node.workerType) parts.push(`${node.workerType} worker`);
   if (node.children) parts.push(`${node.children} process(es) collapsed`);
@@ -257,10 +269,42 @@ function legendHTML(graph, layoutMs) {
     notes.push(`<p class="mesh-note">This landscape exceeded the size budget, so it is
       collapsed to applications. Each one states how many nodes it stands for.</p>`);
   }
+  // The comparison counts only mean something once a model has been overlaid; with
+  // none, saying "0 unmodeled" would imply the landscape had been checked.
+  const compared = graph.modeled > 0 || graph.unmodeled > 0 || graph.outOfScope > 0;
+  if (compared) {
+    if (graph.modeled > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.modeled}</b> node(s) are declared by a
+        model and not present here. That is drift the drawing alone could not show.</p>`);
+    }
+    if (graph.unmodeled > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.unmodeled}</b> node(s) exist here and no
+        model mentions them.</p>`);
+    }
+    if (graph.outOfScope > 0) {
+      notes.push(`<p class="mesh-note"><b>${graph.outOfScope}</b> binding(s) point at
+        releases, deployment targets or runtimes. This view does not draw those, so they
+        are neither matched nor missing — counted here so they are not simply dropped.</p>`);
+    }
+  }
+
+  const provenanceKeys = compared ? ["derived", "both", "modeled"] : [];
+  const provenance = provenanceKeys.map((key) => `<span class="mesh-swatch">
+    <svg width="16" height="16" aria-hidden="true">
+      ${PROVENANCE[key].ring ? `<circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.55"/>` : ""}
+      <circle cx="8" cy="8" r="5" fill="${PROVENANCE[key].ghost ? "none" : "var(--card)"}"
+        stroke="var(--muted)" stroke-width="2"
+        ${PROVENANCE[key].ghost ? 'stroke-dasharray="3 2"' : ""}/>
+    </svg>${esc(PROVENANCE[key].label)}</span>`).join("");
+
   return `<div class="mesh-legend">
     <div class="mesh-swatches">${swatches}</div>
-    <div class="mesh-meta">Everything here is <b>derived</b> from this server's
-      resources — nothing on this view was drawn.
+    ${provenance ? `<div class="mesh-swatches">${provenance}</div>` : ""}
+    <div class="mesh-meta">${compared
+      ? `Compared against the architecture models you can see. Everything unmarked is
+         <b>derived</b> from this server's resources.`
+      : `Everything here is <b>derived</b> from this server's resources — nothing on this
+         view was drawn.`}
       <span class="muted">Laid out in ${Math.round(layoutMs)} ms.</span></div>
     ${notes.join("")}
   </div>`;
@@ -293,11 +337,14 @@ function renderGraph(graph, layoutMs, highlight) {
     const state = highlight
       ? (highlight.has(n.id) ? " mesh-in-impact" : " mesh-dimmed")
       : "";
+    const prov = PROVENANCE[n.provenance] || PROVENANCE.derived;
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind}${state}" data-node-id="${esc(n.id)}"
+      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")}${state}"
+      data-node-id="${esc(n.id)}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
-      <circle r="${style.r}" fill="${style.fill}" stroke="${style.stroke}"
-        stroke-width="2" ${style.dashed ? 'stroke-dasharray="4 3"' : ""}/>
+      ${prov.ring ? `<circle r="${style.r + 4}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
+      <circle r="${style.r}" fill="${prov.ghost ? "none" : style.fill}" stroke="${style.stroke}"
+        stroke-width="2" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}">${label}</text>
       <title>${esc(nodeTitle(n))}</title></g>`;

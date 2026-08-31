@@ -23,22 +23,32 @@ type LandscapeCollector func(r *http.Request) (Landscape, error)
 // service from [Service] deliberately: Service owns stored ArchiMate documents,
 // Mesh owns a projection that is never stored, and conflating declared intent with
 // derived fact is the thing both records exist to prevent.
+// OverlayCollector supplies the Panorama models compared against the landscape,
+// already filtered for this caller. Like LandscapeCollector it runs on the API run
+// loop and must not call Loop.Do recursively. Optional: a nil collector leaves the
+// mesh exactly as the derivation alone makes it.
+type OverlayCollector func(r *http.Request) ([]Overlay, error)
+
 type Mesh struct {
 	loop     *runloop.Loop
 	collect  LandscapeCollector
+	overlays OverlayCollector
 	maxNodes int
 }
 
 // NewMesh builds the mesh service. maxNodes is the size budget; zero is unlimited.
-func NewMesh(loop *runloop.Loop, collect LandscapeCollector, maxNodes int) *Mesh {
-	return &Mesh{loop: loop, collect: collect, maxNodes: maxNodes}
+// overlays may be nil, in which case no desired-versus-observed comparison is made.
+func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCollector,
+	maxNodes int) *Mesh {
+	return &Mesh{loop: loop, collect: collect, overlays: overlays, maxNodes: maxNodes}
 }
 
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	var (
-		land Landscape
-		err  error
+		land     Landscape
+		overlays []Overlay
+		err      error
 		// ran distinguishes "the collector reported nothing" from "the collector
 		// never got to run". runloop.Do returns without executing anything once the
 		// loop is closing, which would otherwise leave land empty and err nil — a
@@ -48,7 +58,15 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	)
 	m.loop.Do(func() {
 		ran = true
-		land, err = m.collect(r)
+		if land, err = m.collect(r); err != nil {
+			return
+		}
+		// The comparison is additive: a landscape is worth showing even when the
+		// models it would be compared against cannot be read, so a failure here
+		// degrades the overlay rather than the mesh.
+		if m.overlays != nil {
+			overlays, _ = m.overlays(r)
+		}
 	})
 	if !ran {
 		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
@@ -61,5 +79,5 @@ func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every
 	// other design-time request wait on one caller's graph.
-	httpapi.JSON(w, http.StatusOK, DeriveGraph(land, Options{MaxNodes: m.maxNodes}))
+	httpapi.JSON(w, http.StatusOK, DeriveGraph(land, Options{MaxNodes: m.maxNodes, Overlays: overlays}))
 }

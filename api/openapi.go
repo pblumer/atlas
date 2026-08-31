@@ -450,6 +450,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		// Atlas bindings (ADR-0189 §4): which Atlas resource an ArchiMate element
 		// refers to. Read resolves ids to names for this caller; write sets one key
 		// on one element and leaves the rest of the document byte-for-byte alone.
+		// The C4 projection (ADR-0211 §8). Read-only by construction: ArchiMate stays
+		// the only authored notation, and there is deliberately no write counterpart.
+		{"GET", "/api/v1/panorama/models/{id}/c4", s.panorama.HandleC4, apiOp{
+			summary: "Project a Panorama model into C4, reporting what the mapping cannot express (ADR-0211)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("C4 projection", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},
