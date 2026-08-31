@@ -1,0 +1,50 @@
+{
+  "id": "atlas.jira-issues",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Jira Issues",
+  "author": "Atlas core",
+  "description": "Create, read, update, transition, comment on, assign or search Atlassian Jira issues through a server-registered instance. The operation and its values are authored in the model; the site URL and the credential live on the server, resolved from the vault (ADR-0201). A transition may be named by the button Jira shows — its id is resolved first — and a search follows Jira's paging to the authored maximum.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Jira Issues",
+    "id": "atlas.jira-issues",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Connector", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the server-registered Jira instance (Console → Connectors), never a URL." },
+      { "label": "Operation", "type": "Dropdown", "value": "create-issue", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Create issue", "value": "create-issue" },
+          { "name": "Read issue", "value": "get-issue" },
+          { "name": "Update issue", "value": "update-issue" },
+          { "name": "Transition issue", "value": "transition-issue" },
+          { "name": "Add comment", "value": "add-comment" },
+          { "name": "Assign issue", "value": "assign-issue" },
+          { "name": "Search (JQL)", "value": "search" }
+        ] },
+      { "label": "Issue (read/update/transition/comment/assign)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:issueKey" },
+        "description": "Issue key (OPS-42) or numeric id. Usually a FEEL expression naming what an earlier Create issue wrote, e.g. =ticket.key." },
+      { "label": "Project (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:project" },
+        "description": "Project key. A value that is all digits is read as a project id instead." },
+      { "label": "Issue type (create)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:issueType" },
+        "description": "Issue type by the name Jira shows (Task, Bug, Story) — or, if all digits, by its id." },
+      { "label": "Summary (create/update)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:summary" } },
+      { "label": "Description (create/update)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:description" },
+        "description": "Plain text or Jira wiki markup. This connector speaks Jira's v2 API, so a description is a string rather than a document tree." },
+      { "label": "Transition (transition)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:transition" },
+        "description": "The workflow step by the name Jira shows on the button; its id is resolved first, so the model is not tied to one workflow configuration." },
+      { "label": "Comment (comment/transition)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:comment" },
+        "description": "Required for Add comment; on a Transition it is optional and is posted in the same call as the move." },
+      { "label": "Assignee (assign)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:assignee" },
+        "description": "An accountId on Jira Cloud, a username on Data Center. Which one is decided by the connector's credential, not by this value." },
+      { "label": "JQL (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:jql" },
+        "description": "The query, written exactly as in Jira's own search box." },
+      { "label": "Maximum issues (search)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
+        "description": "Caps what may reach the result variable; the connector pages up to it. Empty uses 50, 0 reads every match." },
+      { "label": "Result variable (create/read/comment/search)", "type": "String", "value": "ticket", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives what Jira returned. Update, transition and assign answer with no content, and the compiler refuses a result variable on them." }
+    ]
+  }
+}
