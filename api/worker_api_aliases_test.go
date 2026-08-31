@@ -37,8 +37,8 @@ func TestConfiguredWorkerDTOProjectsTheConnectorStore(t *testing.T) {
 	if !ok || config["endpoint"] != "https://temis.example.test" {
 		t.Fatalf("configured worker does not separate configuration: %v", created)
 	}
-	if created["credentialsRef"] != "temis-token" || strings.Contains(string(body), "secret") {
-		t.Fatalf("configured worker credential contract is unsafe: %s", body)
+	if created["credentialsRef"] != "temis-token" {
+		t.Fatalf("configured worker did not carry the credential reference: %v", created)
 	}
 
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/connectors", "", "")
@@ -111,8 +111,11 @@ func TestLegacyConnectorIsProjectedAsConfiguredWorker(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(string(body), `"workerTypeId":"atlas.mail"`) || !strings.Contains(string(body), `"workerTypeVersion":"1.0.0"`) {
 		t.Fatalf("legacy connector not projected as configured worker status=%d body=%s", code, body)
 	}
-	if strings.Contains(string(body), `"kind":"mail"`) || strings.Contains(string(body), `"endpoint":"smtp.example.test:587"`) && !strings.Contains(string(body), `"config"`) {
-		t.Fatalf("configured worker list leaked the legacy representation: %s", body)
+	if strings.Contains(string(body), `"kind":"mail"`) {
+		t.Fatalf("configured worker list leaked the legacy kind field: %s", body)
+	}
+	if !strings.Contains(string(body), `"config":{"endpoint":"smtp.example.test:587"`) {
+		t.Fatalf("configured worker list does not carry the endpoint inside config: %s", body)
 	}
 }
 
@@ -285,5 +288,103 @@ func TestOpenAPIAdvertisesWorkerAliasesAndDeprecatesConnectorCore(t *testing.T) 
 
 	if _, ok := doc.Paths["/api/v1/workers"]; !ok {
 		t.Error("runtime /api/v1/workers route disappeared during configured-worker migration")
+	}
+}
+
+// TestConfiguredWorkerPatchChangesOnlyTheKeysItNames pins the difference between an
+// absent configuration key and an empty one. Translating a partial canonical patch
+// into a full connector patch would move a Gmail Worker onto SMTP whenever somebody
+// edited its endpoint — with the OAuth bundle reference still attached, and a 200 on
+// the way out.
+func TestConfiguredWorkerPatchChangesOnlyTheKeysItNames(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers",
+		`{"name":"mail-gmail","workerTypeId":"atlas.mail","workerTypeVersion":"1.0.0","config":{"provider":"gmail","sender":"bot@example.test"},"credentialsRef":"gmail-bundle"}`,
+		"application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create mail worker status=%d body=%s", code, body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("decode configured worker: %v (%s)", err, body)
+	}
+
+	config := func(t *testing.T, raw []byte) map[string]any {
+		t.Helper()
+		var worker struct {
+			Config map[string]any `json:"config"`
+		}
+		if err := json.Unmarshal(raw, &worker); err != nil {
+			t.Fatalf("decode configured worker: %v (%s)", err, raw)
+		}
+		return worker.Config
+	}
+
+	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/configured-workers/"+created.ID,
+		`{"config":{"endpoint":"https://graph.example.test"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("endpoint-only patch status=%d body=%s", code, body)
+	}
+	if got := config(t, body); got["provider"] != "gmail" || got["sender"] != "bot@example.test" || got["endpoint"] != "https://graph.example.test" {
+		t.Fatalf("endpoint-only patch changed keys it did not name: %v", got)
+	}
+
+	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/configured-workers/"+created.ID,
+		`{"config":{"sender":"ops@example.test"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("sender-only patch status=%d body=%s", code, body)
+	}
+	if got := config(t, body); got["provider"] != "gmail" || got["endpoint"] != "https://graph.example.test" || got["sender"] != "ops@example.test" {
+		t.Fatalf("sender-only patch changed keys it did not name: %v", got)
+	}
+
+	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/configured-workers/"+created.ID,
+		`{"enabled":false}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("enabled-only patch status=%d body=%s", code, body)
+	}
+	if got := config(t, body); got["provider"] != "gmail" || got["endpoint"] != "https://graph.example.test" || got["sender"] != "ops@example.test" {
+		t.Fatalf("a patch carrying no config changed the configuration: %v", got)
+	}
+	if !strings.Contains(string(body), `"credentialsRef":"gmail-bundle"`) {
+		t.Fatalf("patch dropped the credential reference: %s", body)
+	}
+}
+
+// TestConfiguredWorkerSealsASQLConnectionString pins that the canonical API can
+// configure a SQL Worker Type at all. For those types the credential *is* the
+// configuration, so a DTO with no connectionString could only name a vault key
+// somebody had already written by other means.
+func TestConfiguredWorkerSealsASQLConnectionString(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers",
+		`{"name":"pg-prod","workerTypeId":"atlas.postgres","workerTypeVersion":"1.0.0","config":{"connectionString":"postgres://atlas:s3cr3t@db.example.test:5432/atlas"}}`,
+		"application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create SQL worker status=%d body=%s", code, body)
+	}
+	if strings.Contains(string(body), "s3cr3t") || strings.Contains(string(body), "connectionString") {
+		t.Fatalf("the response echoed the connection string: %s", body)
+	}
+	var created struct {
+		CredentialsRef string `json:"credentialsRef"`
+		Config         struct {
+			Endpoint string `json:"endpoint"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("decode configured worker: %v (%s)", err, body)
+	}
+	if created.CredentialsRef == "" {
+		t.Fatalf("sealed connection string left no credential reference: %s", body)
+	}
+	if created.Config.Endpoint != "atlas@db.example.test:5432/atlas" {
+		t.Fatalf("SQL worker endpoint is not the redacted target: %s", body)
+	}
+
+	if _, body = doReq(t, ts, http.MethodGet, "/api/v1/configured-workers", "", ""); strings.Contains(string(body), "s3cr3t") {
+		t.Fatalf("the configured Worker listing echoed the connection string: %s", body)
 	}
 }

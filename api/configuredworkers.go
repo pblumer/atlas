@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,8 +9,11 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// ConfiguredWorkerConfig contains non-secret configuration for a configured
-// Worker. Credential material is represented separately by CredentialsRef.
+// ConfiguredWorkerConfig is the non-secret configuration of a configured Worker as
+// the API returns it. Credential material travels as a reference beside it, never as
+// a value (I6), and a SQL Worker's connection string is deliberately absent from this
+// type rather than merely omitted: a response with no field for it cannot echo it
+// back by accident.
 type ConfiguredWorkerConfig struct {
 	Endpoint string `json:"endpoint,omitempty"`
 	Provider string `json:"provider,omitempty"`
@@ -40,56 +42,51 @@ type ConfiguredWorker struct {
 	CompatibilityError string                  `json:"compatibilityError,omitempty"`
 }
 
+// configuredWorkerConfigRequest is the configuration a create request carries. It is
+// a separate type from the one responses use because the two are not the same set of
+// fields: this one takes a connection string, and no response type has anywhere to
+// put one.
+type configuredWorkerConfigRequest struct {
+	Endpoint string `json:"endpoint"`
+	Provider string `json:"provider"`
+	Sender   string `json:"sender"`
+	// ConnectionString is a SQL Worker's whole configuration, sealed into the vault by
+	// the create path which then stores only the reference (I6). It is here because
+	// for those Worker Types the credential *is* the configuration: without it the
+	// canonical API could name an existing vault key and nothing else, which would
+	// leave three of the built-in Worker Types configurable only through the
+	// deprecated connector API. Never echoed back.
+	ConnectionString string `json:"connectionString"`
+}
+
 type configuredWorkerRequest struct {
-	Name              string                 `json:"name"`
-	WorkerTypeID      string                 `json:"workerTypeId"`
-	WorkerTypeVersion string                 `json:"workerTypeVersion"`
-	Config            ConfiguredWorkerConfig `json:"config"`
-	CredentialsRef    string                 `json:"credentialsRef"`
-	Enabled           *bool                  `json:"enabled"`
+	Name              string                        `json:"name"`
+	WorkerTypeID      string                        `json:"workerTypeId"`
+	WorkerTypeVersion string                        `json:"workerTypeVersion"`
+	Config            configuredWorkerConfigRequest `json:"config"`
+	CredentialsRef    string                        `json:"credentialsRef"`
+	Enabled           *bool                         `json:"enabled"`
+}
+
+// configuredWorkerConfigPatch changes only the configuration keys a request body
+// actually names. Pointers, like the connector patch it translates into, because
+// absent and empty are two different acts: a body naming only an endpoint has to
+// leave the provider alone. Sending all three regardless would move a Gmail Worker
+// onto SMTP whenever somebody edited its sender, and answer 200.
+type configuredWorkerConfigPatch struct {
+	Endpoint *string `json:"endpoint"`
+	Provider *string `json:"provider"`
+	Sender   *string `json:"sender"`
 }
 
 type configuredWorkerPatch struct {
-	Config         *ConfiguredWorkerConfig `json:"config"`
-	CredentialsRef *string                 `json:"credentialsRef"`
-	Enabled        *bool                   `json:"enabled"`
+	Config         *configuredWorkerConfigPatch `json:"config"`
+	CredentialsRef *string                      `json:"credentialsRef"`
+	Enabled        *bool                        `json:"enabled"`
 }
 
-type bufferedResponse struct {
-	header http.Header
-	status int
-	body   bytes.Buffer
-}
-
-func newBufferedResponse() *bufferedResponse {
-	return &bufferedResponse{header: make(http.Header)}
-}
-
-func (w *bufferedResponse) Header() http.Header { return w.header }
-
-func (w *bufferedResponse) WriteHeader(status int) { w.status = status }
-
-func (w *bufferedResponse) Write(p []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	return w.body.Write(p)
-}
-
-func flushBufferedResponse(w http.ResponseWriter, captured *bufferedResponse) {
-	for key, values := range captured.header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	status := captured.status
-	if status == 0 {
-		status = http.StatusOK
-	}
-	w.WriteHeader(status)
-	_, _ = w.Write(captured.body.Bytes())
-}
-
+// builtInWorkerTypeForID resolves a canonical Worker Type id to the built-in package
+// metadata, the reverse of lookupBuiltInManagedWorkerType's kind lookup.
 func builtInWorkerTypeForID(id string) (builtInWorkerTypeMetadata, bool) {
 	for _, meta := range builtInManagedWorkerTypes {
 		if meta.ID == id {
@@ -99,95 +96,63 @@ func builtInWorkerTypeForID(id string) (builtInWorkerTypeMetadata, bool) {
 	return builtInWorkerTypeMetadata{}, false
 }
 
-func configuredWorkerFromConnectorJSON(raw []byte) (ConfiguredWorker, error) {
-	var legacy struct {
-		connector
-		Role    string         `json:"role,omitempty"`
-		Problem string         `json:"problem,omitempty"`
-		UsedBy  []connectorUse `json:"usedBy,omitempty"`
-	}
-	if err := json.Unmarshal(raw, &legacy); err != nil {
-		return ConfiguredWorker{}, err
-	}
-
+// configuredWorkerFrom projects one listing into the canonical representation. It
+// takes the listing rather than a record because whether this caller may see the
+// Worker's configuration is a fact the role check established (ADR-0205), not
+// something a projection should try to infer.
+func configuredWorkerFrom(listing connectorListing) ConfiguredWorker {
+	rec := listing.record
 	worker := ConfiguredWorker{
-		ID: legacy.ID, Name: legacy.Name, Enabled: legacy.Enabled,
-		CreatedAt: legacy.CreatedAt, UpdatedAt: legacy.UpdatedAt,
-		OwnerID: legacy.OwnerID, Visibility: legacy.Visibility, Members: legacy.Members,
-		Role: legacy.Role, Problem: legacy.Problem, UsedBy: legacy.UsedBy,
+		ID:      rec.ID,
+		Name:    rec.Name,
+		Enabled: rec.Enabled,
+		Problem: listing.problem,
 	}
-	if meta, ok := lookupBuiltInManagedWorkerType(legacy.Kind); ok {
-		worker.WorkerTypeID = meta.ID
-		worker.WorkerTypeVersion = meta.Version
+	if meta, ok := lookupBuiltInManagedWorkerType(rec.Kind); ok {
+		worker.WorkerTypeID, worker.WorkerTypeVersion = meta.ID, meta.Version
 	} else {
-		worker.CompatibilityError = "connector kind " + legacy.Kind + " has no canonical Worker Type mapping"
+		// A stored kind this release ships no Worker Type for is reported as exactly
+		// that. Inventing an identity would put a workerTypeId into the API that no
+		// installed Worker Type answers to, and the record would look migrated when it
+		// is not.
+		worker.CompatibilityError = "connector kind " + rec.Kind + " has no canonical Worker Type mapping"
 	}
-
-	// A catalog-only view intentionally contains no configuration fields. Preserve
-	// that access boundary instead of manufacturing empty configuration values.
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return ConfiguredWorker{}, err
+	if listing.catalogOnly {
+		// Below viewer, existence is visible and configuration is not. The projection
+		// stops here instead of emitting empty configuration values, which would say
+		// something false about the Worker rather than something true about this
+		// caller's access.
+		return worker
 	}
-	if _, visible := fields["endpoint"]; visible {
-		worker.Config = &ConfiguredWorkerConfig{
-			Endpoint: legacy.Endpoint,
-			Provider: legacy.Provider,
-			Sender:   legacy.Sender,
-		}
-		worker.CredentialsRef = legacy.CredentialsRef
+	worker.Config = &ConfiguredWorkerConfig{
+		Endpoint: rec.Endpoint,
+		Provider: rec.Provider,
+		Sender:   rec.Sender,
 	}
-	return worker, nil
+	worker.CredentialsRef = rec.CredentialsRef
+	worker.CreatedAt, worker.UpdatedAt = rec.CreatedAt, rec.UpdatedAt
+	worker.OwnerID, worker.Visibility, worker.Members = rec.OwnerID, rec.Visibility, rec.Members
+	worker.Role, worker.UsedBy = listing.role, listing.usedBy
+	return worker
 }
 
-func rewriteRequestBody(r *http.Request, value any) error {
-	body, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	r.ContentLength = int64(len(body))
-	return nil
-}
-
-func writeConfiguredWorkerResponse(w http.ResponseWriter, captured *bufferedResponse) {
-	if captured.status != http.StatusOK {
-		flushBufferedResponse(w, captured)
-		return
-	}
-	worker, err := configuredWorkerFromConnectorJSON(captured.body.Bytes())
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "project configured Worker response: "+err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(worker)
+// configuredWorkerFromRecord projects a record the caller has just created or
+// changed, and may therefore see in full.
+func configuredWorkerFromRecord(rec connector) ConfiguredWorker {
+	return configuredWorkerFrom(connectorListing{record: rec})
 }
 
 func (s *Server) handleListConfiguredWorkers(w http.ResponseWriter, r *http.Request) {
-	captured := newBufferedResponse()
-	s.handleListConnectors(captured, r)
-	if captured.status != http.StatusOK {
-		flushBufferedResponse(w, captured)
+	listings, err := s.connectorListings(r)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list configured Workers: "+err.Error())
 		return
 	}
-	var records []json.RawMessage
-	if err := json.Unmarshal(captured.body.Bytes(), &records); err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "project configured Workers: "+err.Error())
-		return
+	workers := make([]ConfiguredWorker, 0, len(listings))
+	for _, listing := range listings {
+		workers = append(workers, configuredWorkerFrom(listing))
 	}
-	workers := make([]ConfiguredWorker, 0, len(records))
-	for _, record := range records {
-		worker, err := configuredWorkerFromConnectorJSON(record)
-		if err != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "project configured Workers: "+err.Error())
-			return
-		}
-		workers = append(workers, worker)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(workers)
+	httpapi.JSON(w, http.StatusOK, workers)
 }
 
 func (s *Server) handleCreateConfiguredWorker(w http.ResponseWriter, r *http.Request) {
@@ -196,29 +161,30 @@ func (s *Server) handleCreateConfiguredWorker(w http.ResponseWriter, r *http.Req
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	request.WorkerTypeID = strings.TrimSpace(request.WorkerTypeID)
-	meta, ok := builtInWorkerTypeForID(request.WorkerTypeID)
+	meta, ok := builtInWorkerTypeForID(strings.TrimSpace(request.WorkerTypeID))
 	if !ok {
 		httpapi.Error(w, http.StatusBadRequest, "unknown workerTypeId")
 		return
 	}
-	if request.WorkerTypeVersion != meta.Version {
+	if strings.TrimSpace(request.WorkerTypeVersion) != meta.Version {
 		httpapi.Error(w, http.StatusBadRequest, "workerTypeVersion does not match the installed Worker Type")
 		return
 	}
-	legacy := createConnectorParams{
-		Name: request.Name, Kind: meta.ConnectorKind,
-		Endpoint: request.Config.Endpoint, Provider: request.Config.Provider,
-		Sender: request.Config.Sender, CredentialsRef: request.CredentialsRef,
-		Enabled: request.Enabled,
-	}
-	if err := rewriteRequestBody(r, legacy); err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "encode connector compatibility request: "+err.Error())
+	rec, code, msg := s.createConnector(r, createConnectorParams{
+		Name:             request.Name,
+		Kind:             meta.ConnectorKind,
+		Endpoint:         request.Config.Endpoint,
+		Provider:         request.Config.Provider,
+		Sender:           request.Config.Sender,
+		ConnectionString: request.Config.ConnectionString,
+		CredentialsRef:   request.CredentialsRef,
+		Enabled:          request.Enabled,
+	})
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
-	captured := newBufferedResponse()
-	s.handleCreateConnector(captured, r)
-	writeConfiguredWorkerResponse(w, captured)
+	httpapi.JSON(w, http.StatusOK, configuredWorkerFromRecord(rec))
 }
 
 func (s *Server) handleUpdateConfiguredWorker(w http.ResponseWriter, r *http.Request) {
@@ -227,23 +193,16 @@ func (s *Server) handleUpdateConfiguredWorker(w http.ResponseWriter, r *http.Req
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	legacy := struct {
-		Endpoint       *string `json:"endpoint,omitempty"`
-		Provider       *string `json:"provider,omitempty"`
-		Sender         *string `json:"sender,omitempty"`
-		CredentialsRef *string `json:"credentialsRef,omitempty"`
-		Enabled        *bool   `json:"enabled,omitempty"`
-	}{CredentialsRef: request.CredentialsRef, Enabled: request.Enabled}
+	patch := connectorPatch{CredentialsRef: request.CredentialsRef, Enabled: request.Enabled}
 	if request.Config != nil {
-		legacy.Endpoint = &request.Config.Endpoint
-		legacy.Provider = &request.Config.Provider
-		legacy.Sender = &request.Config.Sender
+		patch.Endpoint = request.Config.Endpoint
+		patch.Provider = request.Config.Provider
+		patch.Sender = request.Config.Sender
 	}
-	if err := rewriteRequestBody(r, legacy); err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "encode connector compatibility request: "+err.Error())
+	rec, code, msg := s.updateConnector(r, r.PathValue("id"), patch)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
-	captured := newBufferedResponse()
-	s.handleUpdateConnector(captured, r)
-	writeConfiguredWorkerResponse(w, captured)
+	httpapi.JSON(w, http.StatusOK, configuredWorkerFromRecord(rec))
 }
