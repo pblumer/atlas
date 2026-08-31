@@ -425,3 +425,19 @@ func (s *Sandbox) caseRow(index int, key uint64, incidents map[uint64]int) (Case
 	}
 	return row, true, nil
 }
+
+// Counts is how many cases have been created and how many have finished, read
+// from the engine's maintained per-definition counters (ADR-0080). It is O(1),
+// which is what makes it safe to ask on every progress poll of a batch of fifty
+// thousand.
+func (s *Sandbox) Counts() (cases, completed int, err error) {
+	active, err := s.store.DefInstanceCount(s.root.Key)
+	if err != nil {
+		return 0, 0, fmt.Errorf("playground: count active cases: %w", err)
+	}
+	completed, err = s.store.DefCompletedCount(s.root.Key)
+	if err != nil {
+		return 0, 0, fmt.Errorf("playground: count finished cases: %w", err)
+	}
+	return active + completed, completed, nil
+}

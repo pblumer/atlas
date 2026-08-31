@@ -48,6 +48,13 @@ type Session struct {
 	touched atomic.Int64
 
 	createdAt time.Time
+
+	// runMu guards the batch's status and its cancel flag. It is a mutex rather
+	// than the loop because a status poll must not queue behind the slice of work
+	// the batch is currently handing to that loop.
+	runMu     sync.Mutex
+	run       RunStatus
+	cancelRun bool
 }
 
 // NewID mints a session id.
@@ -72,6 +79,10 @@ func newSession(id, owner string, opts Options) (*Session, error) {
 		createdAt: time.Now(),
 	}
 	s.touched.Store(s.createdAt.UnixNano())
+	// A session with no batch is idle, not the empty string: a caller switching on
+	// the state should never have to know that RunState's zero value is not one of
+	// its constants.
+	s.run.State = RunIdle
 	go func() {
 		defer close(s.done)
 		s.loop.Run()
@@ -149,6 +160,10 @@ func (s *Session) Close() error {
 	if s.closed.Swap(true) {
 		return errClosedSession
 	}
+	// The batch driver, if any, learns the session is gone the next time it hands
+	// work over: With refuses, and the driver returns rather than driving an engine
+	// nobody can read.
+	s.Cancel()
 	close(s.quit)
 	<-s.done // the loop has stopped, so nothing else is touching the sandbox
 	return s.sb.Close()
@@ -274,5 +289,164 @@ func (r *Registry) CloseAll() {
 
 	for _, s := range all {
 		_ = s.Close()
+	}
+}
+
+// RunState is what a session's batch is doing.
+type RunState string
+
+const (
+	// RunIdle: no batch has been started, or the last one was read and forgotten.
+	RunIdle RunState = "idle"
+	// RunRunning: a batch is being driven behind the request that started it.
+	RunRunning RunState = "running"
+	// RunFinished: the batch came to rest — every case ran to wherever it got to.
+	RunFinished RunState = "finished"
+	// RunCancelled: somebody stopped it. What it did up to that point is still
+	// readable, which is usually why they stopped it.
+	RunCancelled RunState = "cancelled"
+	// RunFailed: the sandbox could not carry on. Err says what happened.
+	RunFailed RunState = "failed"
+)
+
+// RunStatus is a batch's progress, readable while it runs.
+type RunStatus struct {
+	State RunState
+	// Occurrences is how many scheduled things the run has carried out, Cases how
+	// many have been created and Completed how many have finished. The last two
+	// come from the engine's maintained counters, so asking is O(1) however large
+	// the batch is.
+	Occurrences      int
+	Cases, Completed int
+	// SimTime is where simulated time stands.
+	SimTime time.Time
+	// Err is why a failed run stopped.
+	Err string
+}
+
+// runSliceOccurrences is how much a batch does between two visits to the loop.
+// Small enough that a status poll or a pause never waits long behind it, large
+// enough that the hand-off is not what the run spends its time on.
+const runSliceOccurrences = 2000
+
+// StartRun seeds a plan and drives it behind the caller, reporting progress
+// through [Session.RunStatus].
+//
+// A batch is not a request: fifty thousand cases take longer than anyone will
+// hold a connection open, and the point of watching one is to watch it. The
+// driver goroutine hands work to the session's own loop in slices, so a status
+// poll, a pause or a cancel gets in between them rather than behind the whole
+// batch.
+func (s *Session) StartRun(p Plan) error {
+	if s.closed.Load() {
+		return errClosedSession
+	}
+	s.runMu.Lock()
+	if s.run.State == RunRunning {
+		s.runMu.Unlock()
+		// Two batches in one sandbox would interleave two datasets into one report.
+		return errors.New("playground: a run is already in flight in this session")
+	}
+	s.runMu.Unlock()
+
+	// Seed the plan on the loop, so a refusal (an empty plan, a bad arrival
+	// configuration) is reported to the caller rather than into a status nobody is
+	// watching yet.
+	var seedErr error
+	if err := s.With(func(sb *Sandbox) error {
+		seedErr = sb.StartPlan(p)
+		return nil
+	}); err != nil {
+		return err
+	}
+	if seedErr != nil {
+		return seedErr
+	}
+
+	s.runMu.Lock()
+	s.run = RunStatus{State: RunRunning}
+	s.cancelRun = false
+	s.runMu.Unlock()
+	go s.driveRun()
+	return nil
+}
+
+// Cancel stops a batch in flight at the end of its current slice. What it did
+// stays in the sandbox and stays readable.
+func (s *Session) Cancel() {
+	s.runMu.Lock()
+	s.cancelRun = true
+	s.runMu.Unlock()
+}
+
+// RunStatus is the batch's progress.
+func (s *Session) RunStatus() RunStatus {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	return s.run
+}
+
+// driveRun carries the batch out, one slice at a time.
+func (s *Session) driveRun() {
+	for {
+		s.runMu.Lock()
+		cancelled := s.cancelRun
+		s.runMu.Unlock()
+		if cancelled {
+			s.finishRun(RunCancelled, nil)
+			return
+		}
+
+		var (
+			prog    Progress
+			counts  [2]int
+			runErr  error
+			slice   = Budget{MaxOccurrences: runSliceOccurrences}
+			stopped bool
+		)
+		if err := s.With(func(sb *Sandbox) error {
+			slice.Stop = s.paused.Load
+			prog, runErr = sb.Run(slice)
+			if runErr != nil {
+				return nil
+			}
+			counts[0], counts[1], runErr = sb.Counts()
+			stopped = prog.Quiescent
+			return nil
+		}); err != nil {
+			// The session closed underneath the batch: there is nobody to report to
+			// and nothing left to drive.
+			return
+		}
+		if runErr != nil {
+			s.finishRun(RunFailed, runErr)
+			return
+		}
+
+		s.runMu.Lock()
+		s.run.Occurrences += prog.Occurrences
+		s.run.Cases, s.run.Completed = counts[0], counts[1]
+		s.run.SimTime = prog.SimTime
+		s.runMu.Unlock()
+
+		if stopped {
+			s.finishRun(RunFinished, nil)
+			return
+		}
+		if prog.Occurrences == 0 && s.paused.Load() {
+			// Paused with work still to do: hold rather than spin, and let a resume
+			// or a cancel be what moves it.
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+// finishRun records how the batch ended.
+func (s *Session) finishRun(state RunState, err error) {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	s.run.State = state
+	if err != nil {
+		s.run.Err = err.Error()
 	}
 }
