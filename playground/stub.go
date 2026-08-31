@@ -1,6 +1,7 @@
 package playground
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pblumer/atlas/model"
@@ -70,6 +71,35 @@ type StubSet struct {
 	Human *Stub
 	// ByElement answers one BPMN element by id, ahead of Default and Human alike.
 	ByElement map[string]Stub
+	// Pools are the sets of workers elements compete for, by name. An element with
+	// no pool is worked on the instant it arrives, however many cases are already
+	// in flight — which is the right model for a machine and the wrong one for a
+	// person.
+	Pools map[string]Pool
+	// PoolOf assigns a BPMN element to a pool by name. Naming a pool that does not
+	// exist is refused at [Open]: a silently ignored assignment would show up only
+	// as a waiting time that never appears.
+	PoolOf map[string]string
+}
+
+// validate reports what is wrong with the policy before a run starts on it.
+func (ss StubSet) validate() error {
+	for name, p := range ss.Pools {
+		if p.Capacity < 1 {
+			return fmt.Errorf("playground: pool %q has no capacity; a pool with no seats never works", name)
+		}
+		for _, w := range p.Open {
+			if w.To <= w.From {
+				return fmt.Errorf("playground: pool %q has a window that ends before it starts (%s–%s)", name, w.From, w.To)
+			}
+		}
+	}
+	for element, name := range ss.PoolOf {
+		if _, ok := ss.Pools[name]; !ok {
+			return fmt.Errorf("playground: element %q is assigned to pool %q, which is not configured", element, name)
+		}
+	}
+	return nil
 }
 
 // DefaultStubs is the policy a Playground session starts with: machine work is
@@ -129,4 +159,158 @@ func (d draw) below(n uint64) uint64 {
 		return 0
 	}
 	return d.state % n
+}
+
+// Window is a stretch of a day a pool works in, as offsets from midnight UTC.
+// 08:00–17:00 is {From: 8 * time.Hour, To: 17 * time.Hour}.
+type Window struct{ From, To time.Duration }
+
+// Pool is a set of interchangeable workers — three clerks, two reviewers, one
+// approver — that the elements assigned to it compete for.
+//
+// A pool is what turns a stub duration into a waiting time. Without one, every
+// case is worked on the instant it arrives and the report's "waiting" column is
+// zero by construction, which makes a bottleneck ranking a restatement of the
+// durations somebody typed in. With one, "do three clerks suffice for 200
+// applications a day" becomes a question the run answers.
+type Pool struct {
+	// Capacity is how many cases the pool works on at once. It must be at least 1.
+	Capacity int
+	// Open are the windows in a day the pool works. Empty means always: a queue in
+	// a pool with no calendar never waits for an opening.
+	Open []Window
+	// Days selects the weekdays the pool works, indexed by time.Weekday. The zero
+	// value — no day selected — means every day, so a caller that does not care
+	// about weekends does not have to say so.
+	Days [7]bool
+}
+
+// alwaysOpen reports whether the pool has no calendar at all.
+func (p Pool) alwaysOpen() bool { return len(p.Open) == 0 && p.Days == [7]bool{} }
+
+// worksOn reports whether the pool works on a weekday.
+func (p Pool) worksOn(d time.Weekday) bool {
+	if p.Days == [7]bool{} {
+		return true
+	}
+	return p.Days[int(d)]
+}
+
+// openAt reports whether the pool is working at instant t (unix nanoseconds).
+func (p Pool) openAt(t int64) bool {
+	if p.alwaysOpen() {
+		return true
+	}
+	ts := time.Unix(0, t).UTC()
+	if !p.worksOn(ts.Weekday()) {
+		return false
+	}
+	if len(p.Open) == 0 {
+		return true // a day filter with no hours: the whole of a working day
+	}
+	off := time.Duration(ts.Hour())*time.Hour + time.Duration(ts.Minute())*time.Minute +
+		time.Duration(ts.Second())*time.Second + time.Duration(ts.Nanosecond())
+	for _, w := range p.Open {
+		if off >= w.From && off < w.To {
+			return true
+		}
+	}
+	return false
+}
+
+// opensAfter is the next instant at or after t the pool is working, and false if
+// it never works again within the search horizon.
+//
+// It steps day by day rather than solving for the answer: a calendar is at most a
+// handful of windows, the horizon is bounded, and a loop that anyone can read is
+// worth more here than arithmetic nobody will check.
+func (p Pool) opensAfter(t int64) (int64, bool) {
+	if p.alwaysOpen() {
+		return t, true
+	}
+	ts := time.Unix(0, t).UTC()
+	for day := 0; day <= calendarSearchDays; day++ {
+		d := ts.AddDate(0, 0, day)
+		if !p.worksOn(d.Weekday()) {
+			continue
+		}
+		midnight := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+		if len(p.Open) == 0 {
+			if start := midnight.UnixNano(); start >= t {
+				return start, true
+			}
+			return t, true // already inside a working day with no hour windows
+		}
+		best, found := int64(0), false
+		for _, w := range p.Open {
+			start := midnight.Add(w.From).UnixNano()
+			end := midnight.Add(w.To).UnixNano()
+			if end <= t {
+				continue // this window is behind us
+			}
+			if start < t {
+				start = t // we are inside it already
+			}
+			if !found || start < best {
+				best, found = start, true
+			}
+		}
+		if found {
+			return best, true
+		}
+	}
+	return 0, false
+}
+
+// calendarSearchDays bounds how far opensAfter looks for the next working moment.
+// A pool that does not work within a fortnight is a mistake in the policy, not a
+// schedule, and the run says so rather than searching for ever.
+const calendarSearchDays = 14
+
+// finishAt is when work of length d, started at t, is done — counting only the
+// time the pool is actually working, so a case started before closing time carries
+// on where it left off when the pool opens again.
+func (p Pool) finishAt(t int64, d time.Duration) (int64, bool) {
+	if p.alwaysOpen() {
+		return t + int64(d), true
+	}
+	remaining := int64(d)
+	at := t
+	for guard := 0; guard <= calendarSearchDays*len(p.Open)+calendarSearchDays+1; guard++ {
+		if remaining <= 0 {
+			return at, true
+		}
+		open, ok := p.opensAfter(at)
+		if !ok {
+			return 0, false
+		}
+		at = open
+		closes, ok := p.closesAfter(at)
+		if !ok {
+			return 0, false
+		}
+		if avail := closes - at; avail >= remaining {
+			return at + remaining, true
+		} else {
+			remaining -= avail
+			at = closes
+		}
+	}
+	return 0, false
+}
+
+// closesAfter is the end of the working stretch that contains t.
+func (p Pool) closesAfter(t int64) (int64, bool) {
+	ts := time.Unix(0, t).UTC()
+	midnight := time.Date(ts.Year(), ts.Month(), ts.Day(), 0, 0, 0, 0, time.UTC)
+	if len(p.Open) == 0 {
+		return midnight.AddDate(0, 0, 1).UnixNano(), true // the whole working day
+	}
+	off := time.Duration(ts.Sub(midnight))
+	for _, w := range p.Open {
+		if off >= w.From && off < w.To {
+			return midnight.Add(w.To).UnixNano(), true
+		}
+	}
+	return 0, false
 }

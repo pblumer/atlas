@@ -144,6 +144,54 @@ type pending struct {
 	outputs []model.VariableValue
 	message string
 	code    string
+	// work is how long the answer takes once somebody is working on it. It is what
+	// dueAt is derived from — directly for unpooled work, and across the pool's
+	// calendar for pooled work.
+	work time.Duration
+	// pool names the pool this answer waits for a seat in, empty when the element
+	// has none. enqueuedAt and startedAt are when it joined the queue and when a
+	// seat took it: their difference is the waiting time the report shows beside
+	// the work.
+	pool                  string
+	enqueuedAt, startedAt int64
+	// queued says the answer is still waiting for a seat and dueAt means nothing
+	// yet. It is a field rather than a zero dueAt because zero is a perfectly good
+	// instant: a run that starts at the epoch and stubs a task at no duration
+	// produces exactly that, and the two must not be confused.
+	queued bool
+}
+
+// ElementStat is what a run measured at one element: how often the sandbox
+// answered a job there, how long that work took, and how long it waited for a
+// seat first. The split is the point — elapsed time that is all queue is a
+// capacity problem, and elapsed time that is all work is a different one.
+type ElementStat struct {
+	Runs    int
+	Work    time.Duration
+	Wait    time.Duration
+	MaxWait time.Duration
+}
+
+// PoolStat is what a run measured at one pool.
+type PoolStat struct {
+	// Served is how many jobs the pool worked on, BusyTime the seat time they took
+	// together (nine one-hour cases are nine hours of seat time however many seats
+	// shared them), and MaxQueue the longest the queue in front of it ever got.
+	Served   int
+	BusyTime time.Duration
+	MaxQueue int
+	// Capacity is the pool's size, so a reader of the report can turn BusyTime into
+	// a utilisation without holding the configuration beside it.
+	Capacity int
+}
+
+// poolState is a pool's live queue and seat count during a run.
+type poolState struct {
+	cfg      Pool
+	queue    []uint64 // job keys waiting for a seat, in arrival order
+	busy     int
+	stat     PoolStat
+	maxQueue int
 }
 
 // Sandbox is a complete, throwaway engine: its own partition, log, store and
@@ -174,6 +222,14 @@ type Sandbox struct {
 	// handedOut is the highest case key StartCase has returned, so the next case
 	// can be identified as the newest instance above it.
 	handedOut uint64
+
+	// pools is the live state of each configured pool, and elementStats what the
+	// run has measured so far. Both are the run's own accounting: the sandbox is
+	// the thing that decides when a job is served, so it is the thing that knows
+	// how long the job waited first — nothing in the event log records a queue that
+	// exists only in the policy.
+	pools        map[string]*poolState
+	elementStats map[string]*ElementStat
 }
 
 // Open compiles the model and brings up a sandbox for it. The caller must Close
@@ -184,6 +240,9 @@ func Open(opts Options) (*Sandbox, error) {
 	}
 	partition := PartitionBase + uint16(nextPartition.Add(1)%uint32(0xFFFF-uint32(PartitionBase)))
 
+	if err := opts.Stubs.validate(); err != nil {
+		return nil, err
+	}
 	deployables, err := compiler.ParseAll(model.NewKey(partition, 1), 1, bytes.NewReader(opts.ModelXML))
 	if err != nil {
 		return nil, fmt.Errorf("playground: compile: %w", err)
@@ -216,11 +275,16 @@ func Open(opts Options) (*Sandbox, error) {
 	s := &Sandbox{
 		dir: dir, partition: partition, seed: opts.Seed,
 		log: log, store: store, clock: clock,
-		root:      root,
-		byKey:     make(map[uint64]*compiler.CompiledProcess, len(deployables)),
-		stubs:     opts.Stubs,
-		scheduled: map[uint64]pending{},
-		liveJobs:  map[uint64]struct{}{},
+		root:         root,
+		byKey:        make(map[uint64]*compiler.CompiledProcess, len(deployables)),
+		stubs:        opts.Stubs,
+		scheduled:    map[uint64]pending{},
+		liveJobs:     map[uint64]struct{}{},
+		pools:        map[string]*poolState{},
+		elementStats: map[string]*ElementStat{},
+	}
+	for name, cfg := range opts.Stubs.Pools {
+		s.pools[name] = &poolState{cfg: cfg, stat: PoolStat{Capacity: cfg.Capacity}}
 	}
 	// No connector registry, no vault, no job runner, no HTTP client: a service
 	// task in here has nothing that could reach the outside, which is how the
@@ -383,12 +447,17 @@ func (s *Sandbox) reconcileJobs() error {
 		// durations in two sandboxes, which is exactly the reproducibility the seed
 		// exists to provide.
 		seq := model.CounterOf(jobKey)
+		work := stub.duration(newDraw(s.seed, seq, 1))
 		p := pending{
-			dueAt:   now + int64(stub.duration(newDraw(s.seed, seq, 1))),
-			jobKey:  jobKey,
-			element: element,
-			kind:    OccJobCompleted,
-			outputs: stub.Outputs,
+			dueAt:      now + int64(work),
+			jobKey:     jobKey,
+			element:    element,
+			kind:       OccJobCompleted,
+			outputs:    stub.Outputs,
+			work:       work,
+			pool:       s.stubs.PoolOf[element],
+			enqueuedAt: now,
+			startedAt:  now,
 		}
 		if stub.fails(newDraw(s.seed, seq, 2)) {
 			switch {
@@ -401,6 +470,15 @@ func (s *Sandbox) reconcileJobs() error {
 				}
 			}
 		}
+		if ps := s.pools[p.pool]; ps != nil {
+			// Pooled work waits for a seat: it has no due date until one takes it, so
+			// it goes on the queue rather than into the schedule.
+			p.queued = true
+			ps.queue = append(ps.queue, jobKey)
+			if n := len(ps.queue); n > ps.stat.MaxQueue {
+				ps.stat.MaxQueue = n
+			}
+		}
 		s.scheduled[jobKey] = p
 		return nil
 	})
@@ -409,7 +487,62 @@ func (s *Sandbox) reconcileJobs() error {
 	}
 	for jobKey := range s.scheduled {
 		if _, live := s.liveJobs[jobKey]; !live {
+			s.abandon(jobKey)
 			delete(s.scheduled, jobKey)
+		}
+	}
+	return s.serveQueues(now)
+}
+
+// abandon drops a job that went away before it was answered out of whatever pool
+// it was waiting in or occupying, so an interrupted case does not hold a seat for
+// the rest of the run.
+func (s *Sandbox) abandon(jobKey uint64) {
+	p, ok := s.scheduled[jobKey]
+	if !ok || p.pool == "" {
+		return
+	}
+	ps := s.pools[p.pool]
+	if ps == nil {
+		return
+	}
+	if !p.queued { // it held a seat
+		ps.busy--
+		return
+	}
+	for i, k := range ps.queue {
+		if k == jobKey {
+			ps.queue = append(ps.queue[:i], ps.queue[i+1:]...)
+			return
+		}
+	}
+}
+
+// serveQueues hands waiting work to the free seats of every pool that is open at
+// now, in arrival order. A job that starts here is given the due date its work
+// reaches across the pool's calendar, so a case begun before closing time carries
+// on where it left off when the pool opens again — and keeps its seat overnight,
+// as the person working it would.
+func (s *Sandbox) serveQueues(now int64) error {
+	for name, ps := range s.pools {
+		if !ps.cfg.openAt(now) {
+			continue
+		}
+		for ps.busy < ps.cfg.Capacity && len(ps.queue) > 0 {
+			jobKey := ps.queue[0]
+			ps.queue = ps.queue[1:]
+			p, ok := s.scheduled[jobKey]
+			if !ok {
+				continue // it went away while queued; nothing to serve
+			}
+			due, ok := ps.cfg.finishAt(now, p.work)
+			if !ok {
+				return fmt.Errorf("playground: pool %q does not work often enough to finish %s of work within %d days",
+					name, p.work, calendarSearchDays)
+			}
+			p.startedAt, p.dueAt, p.queued = now, due, false
+			s.scheduled[jobKey] = p
+			ps.busy++
 		}
 	}
 	return nil
@@ -440,9 +573,18 @@ func (s *Sandbox) elementOf(jv *model.JobValue) (string, error) {
 func (s *Sandbox) nextDue() (int64, bool, error) {
 	due, found := int64(0), false
 	for _, p := range s.scheduled {
+		if p.queued {
+			continue // still waiting for a seat; it has no due date yet
+		}
 		if !found || p.dueAt < due {
 			due, found = p.dueAt, true
 		}
+	}
+	// Work waiting on a closed pool has no due date either, but the pool's next
+	// opening is an instant the run must travel to — otherwise a queue in front of
+	// a closed pool reads as quiescence and the run reports itself finished.
+	if open, ok := s.nextPoolOpening(); ok && (!found || open < due) {
+		due, found = open, true
 	}
 	t, ok, err := s.nextTimer()
 	if err != nil {
@@ -452,6 +594,26 @@ func (s *Sandbox) nextDue() (int64, bool, error) {
 		due, found = t, true
 	}
 	return due, found, nil
+}
+
+// nextPoolOpening is the earliest instant a pool with work waiting and a seat to
+// spare starts working again.
+func (s *Sandbox) nextPoolOpening() (int64, bool) {
+	now := s.clock.Now()
+	best, found := int64(0), false
+	for _, ps := range s.pools {
+		if len(ps.queue) == 0 || ps.busy >= ps.cfg.Capacity {
+			continue
+		}
+		at, ok := ps.cfg.opensAfter(now)
+		if !ok || at <= now {
+			continue // open already: serveQueues will have taken it
+		}
+		if !found || at < best {
+			best, found = at, true
+		}
+	}
+	return best, found
 }
 
 // errStopScan ends a store scan early; the timer family is ordered by due date,
@@ -490,6 +652,11 @@ func (s *Sandbox) stepSettled() (Occurrence, bool, error) {
 		return Occurrence{}, false, err
 	}
 	s.clock.advanceTo(due)
+	// The clock may have reached a pool's opening, in which case the work waiting
+	// in front of it starts now and is what this step carries out.
+	if err := s.serveQueues(s.clock.Now()); err != nil {
+		return Occurrence{}, false, err
+	}
 
 	// A committed answer that came due wins over a timer at the same instant: it
 	// was scheduled first, and the engine will see the timer on the next pass
@@ -508,6 +675,7 @@ func (s *Sandbox) stepSettled() (Occurrence, bool, error) {
 	// The schedule was reconciled against the live jobs by the settle that got us
 	// here, so this answer still has a job to give.
 	delete(s.scheduled, p.jobKey)
+	s.record(p)
 	s.answer(p)
 	if err := s.settle(); err != nil {
 		return Occurrence{}, false, err
@@ -522,14 +690,57 @@ func (s *Sandbox) dueJob(t int64) (pending, bool) {
 	var best pending
 	found := false
 	for _, p := range s.scheduled {
-		if p.dueAt > t {
-			continue
+		if p.queued || p.dueAt > t {
+			continue // waiting for a seat, or not due yet
 		}
 		if !found || p.dueAt < best.dueAt || (p.dueAt == best.dueAt && p.jobKey < best.jobKey) {
 			best, found = p, true
 		}
 	}
 	return best, found
+}
+
+// record folds a carried-out answer into the run's measurements and frees the
+// seat it held, if any.
+func (s *Sandbox) record(p pending) {
+	st := s.elementStats[p.element]
+	if st == nil {
+		st = &ElementStat{}
+		s.elementStats[p.element] = st
+	}
+	wait := time.Duration(p.startedAt - p.enqueuedAt)
+	st.Runs++
+	st.Work += p.work
+	st.Wait += wait
+	if wait > st.MaxWait {
+		st.MaxWait = wait
+	}
+	if ps := s.pools[p.pool]; ps != nil {
+		ps.busy--
+		ps.stat.Served++
+		ps.stat.BusyTime += p.work
+	}
+}
+
+// ElementStats reports what the run measured at each element that ran a job.
+// It is the bottleneck ranking's raw material; [Sandbox.ElementVisits] is the
+// heat map's, and the two count different things — every token that passed
+// through, against every job the sandbox answered.
+func (s *Sandbox) ElementStats() map[string]ElementStat {
+	out := make(map[string]ElementStat, len(s.elementStats))
+	for id, st := range s.elementStats {
+		out[id] = *st
+	}
+	return out
+}
+
+// PoolStats reports what the run measured at each pool.
+func (s *Sandbox) PoolStats() map[string]PoolStat {
+	out := make(map[string]PoolStat, len(s.pools))
+	for name, ps := range s.pools {
+		out[name] = ps.stat
+	}
+	return out
 }
 
 // answer enqueues the committed outcome for a job.
