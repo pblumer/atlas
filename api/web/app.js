@@ -466,7 +466,7 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama", on: true, role: "modeler" },
+  { id: "panorama", name: "Panorama", route: "#/panorama/landscape", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -497,7 +497,10 @@ const TOPNAV = {
     { name: "Inbox", route: "#/tasks", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
-  panorama: [{ name: "Models", route: "#/panorama", role: "modeler" }],
+  panorama: [
+    { name: "Landscape", route: "#/panorama/landscape", role: "modeler" },
+    { name: "Models", route: "#/panorama", role: "modeler" },
+  ],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -6416,6 +6419,16 @@ async function viewPanoramaModels() {
   });
 }
 
+// The derived landscape mesh (ADR-0211). Panorama's landing view: it is computed
+// from what this server already holds, so it has something to show before anybody
+// has modeled anything.
+async function viewPanoramaLandscape() {
+  const gen = navGen;
+  const mod = await import("./panorama-mesh.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaMesh(view, { api, toast });
+}
+
 async function viewPanoramaModel(id) {
   const gen = navGen;
   const mod = await import("./panorama-viewer.js");
@@ -6800,6 +6813,7 @@ function routeTitle(path) {
     [/^#\/operations\/c\//, "Collaboration · Operations"],
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
+    [/^#\/panorama\/landscape$/, "Landscape · Panorama"],
     [/^#\/panorama\/models\//, "Architecture view · Panorama"],
     [/^#\/panorama$/, "Models · Panorama"],
   ];
@@ -6881,6 +6895,7 @@ async function route() {
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
+    if (path === "#/panorama/landscape") return await viewPanoramaLandscape();
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));

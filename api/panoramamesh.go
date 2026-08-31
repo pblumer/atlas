@@ -8,9 +8,19 @@ import (
 
 // meshMaxNodes is the landscape mesh's size budget (ADR-0211 §7). Over it the
 // graph collapses to applications and says so, rather than handing the browser a
-// graph it cannot lay out. The number is a starting point to be replaced by a
-// measured one; it is deliberately a single constant so the measurement has one
-// place to land.
+// graph it cannot lay out.
+//
+// The number is measured, not guessed. The browser-side layout is an all-pairs
+// force simulation, so its cost is quadratic in node count; timed in Chromium
+// (e2e/panorama-mesh.spec.mjs, "stays inside its size budget"):
+//
+//	200 nodes / 370 edges   148 ms layout,  486 ms to first paint
+//	400 nodes / 740 edges   438 ms layout, 1036 ms to first paint
+//	800 nodes / 1480 edges 1385 ms layout, 2203 ms to first paint
+//
+// 400 is the last size that still paints in about a second on a warm machine.
+// Raising it is a decision about the layout algorithm — Barnes-Hut, or the
+// server-side pipeline in api/layout (ADR-0124/0127) — not about this constant.
 const meshMaxNodes = 400
 
 // collectLandscape reads this server's resources and returns them filtered for the
