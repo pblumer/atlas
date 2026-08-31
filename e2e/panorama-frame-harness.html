@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Panorama mesh framing e2e harness</title>
+    <!-- Drives the *real* fitToFrame and zoomView from api/web/panorama-mesh.js.
+         Both are pure functions over numbers — the DOM only ever carries their
+         result into a viewBox attribute — so they are testable as functions, and
+         the properties that matter (the fit leaves no empty band, the zoom keeps
+         the point under the cursor) are stated as arithmetic rather than as
+         screenshots. -->
+  </head>
+  <body>
+    <div id="ready">loading</div>
+    <script type="module">
+      import { fitToFrame, zoomView } from "/panorama-mesh.js";
+      window.fitToFrame = (nodes, w, h, pad) => fitToFrame(nodes, w, h, pad);
+      window.zoomView = (view, factor, focus, base) => zoomView(view, factor, focus, base);
+      document.getElementById("ready").textContent = "ready";
+    </script>
+  </body>
+</html>
