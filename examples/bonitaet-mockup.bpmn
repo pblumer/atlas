@@ -6,7 +6,8 @@
   Umsystem (hier eine Bonitäts-Auskunft, real per REST angebunden) noch gar nicht
   existiert: Der Service-Task ist im Mockup-Modus, also simuliert ihn die Engine
   selbst — mit zufälliger Antwortzeit, einer geskripteten Antwort und einer
-  simulierten Ausfallquote. Kein externer Worker, kein Connector nötig.
+  simulierten Ausfallquote. Kein Job, keine Worker-Instanz, kein konfigurierter
+  Worker nötig.
 
     Start "Antrag eingegangen"
      → Mockup-Service-Task "Bonität im Umsystem prüfen"

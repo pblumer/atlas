@@ -32,6 +32,27 @@ _Changed_ / _Removed_ for each version.
   instance. Mapping the provider's groups onto Atlas roles is the next step and not
   in this one.
 
+### Changed
+
+- **The handbook and the examples teach Workers, not connectors.** The Console
+  renamed *Connectors* to *Workers* with the first slice of
+  [ADR-0203](docs/adr/0203-worker-execution-model.md); the documentation still
+  called the same thing three different things. It now uses one vocabulary
+  throughout: a **Worker Type** is a capability Atlas has (Jira, Mail, Active
+  Directory), a **Worker** is one configured target and identity of that type —
+  the name a task states — and a **Worker Instance** is a running process that
+  leases jobs. *Forms & connectors* is now *Forms & workers* and explains the
+  three levels and the `Task → Job → Worker` chain they sit on; the Active
+  Directory chapter uses two forests to show where they come apart (a second
+  directory is a second Worker, more throughput is more Worker Instances); the
+  glossary gained all three terms and keeps *Connector* as a legacy entry.
+
+  **No model changes.** A task still names its worker with `connector="…"`, the
+  extension elements are still `<atlas:mailConnector>` and friends, and
+  `atlas worker --connector mail` still names the worker type — the handbook now
+  says so explicitly, in a note that explains why. Every example's prose moved to
+  the new vocabulary; not one line of BPMN did.
+
 ### Security
 
 - **Not every account may deploy any more.** Each of the 199 `/api/v1` routes now

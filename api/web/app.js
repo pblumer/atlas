@@ -736,7 +736,7 @@ function initShell() {
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
-  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
@@ -746,10 +746,12 @@ function handbookHelp(path) {
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
-  // Organization pointed at the connector chapter only because the connector cards
-  // used to sit on it; with those on their own page it points there instead, and
-  // Organization falls through to the Console's own chapter.
-  if (path.startsWith("#/console/connectors")) return H("formulare", "Forms & connectors");
+  // Organization pointed at the worker chapter only because the worker cards used to
+  // sit on it; with those on their own page it points there instead, and Organization
+  // falls through to the Console's own chapter. Both spellings of the route resolve:
+  // #/console/workers is canonical, #/console/connectors the compatibility alias the
+  // legacy router still receives (ADR-0203).
+  if (path.startsWith("#/console/workers") || path.startsWith("#/console/connectors")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
   return H("willkommen", "Welcome to Atlas");
 }

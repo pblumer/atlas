@@ -14,7 +14,7 @@
      -> User-Task "Freigeben"     (Formular onb-freigabe; Admin setzt Initialpasswort)
      -> (X) "Freigegeben?"        Gate 2: nur die ausdrueckliche Entscheidung "anlegen"
                                   legt an. Default -> Ende "Abgelehnt".
-     -> Service "Benutzer anlegen"(entra create-user, connector="blumer_net" -> konto)
+     -> Service "Benutzer anlegen"(entra create-user, Worker "blumer_net" -> konto)
      -> (X) "Lizenz?"             optional: nur wenn lizenzSku gesetzt -> assign-license
      -> (X) "Gruppe?"             optional: nur wenn gruppeId gesetzt -> add-group-member
      -> Ende "Arbeitsplatz bereit"
@@ -31,10 +31,11 @@
   add-group-member adressieren es ueber `=konto.id`. Das Anfangspasswort ist ein
   Laufzeitwert (im Freigabe-Formular gesetzt, pro Feld als FEEL in den Body), nie Modelltext.
 
-  Laeuft nicht ohne Worker: Der Entra-Konnektor ist worker-only (ADR-0164/0172), das
-  Tenant-Credential liegt nie in der Engine. Die Service-Tasks parken, bis ein
-  Entra-Worker sie abholt; auf atlas.blumer.cloud beaufsichtigt die Engine den Worker
-  standardmaessig (ADR-0172), sobald der Connector "blumer_net" im Store steht.
+  Laeuft nicht ohne Worker-Instanz: Der Worker-Typ entra ist worker-only
+  (ADR-0164/0172), das Tenant-Credential liegt nie in der Engine. Die Service-Tasks
+  parken, bis eine Entra-Worker-Instanz sie abholt; auf atlas.blumer.cloud beaufsichtigt
+  die Engine diese Instanz standardmaessig (ADR-0172), sobald der Worker "blumer_net"
+  unter Console > Workers konfiguriert ist.
 
   Startvariablen (Formular onb-start): vorname, nachname, upn, abteilung, lizenzSku?, gruppeId?
 -->
@@ -50,7 +51,7 @@
   <bpmn:process id="proc_entra_onboarding_selfservice" name="Onboarding-Self-Service (Entra ID)" isExecutable="true">
     <bpmn:documentation>Self-Service-Onboarding fuer den Tenant blumer.net: ein Antragsteller erfasst das
 neue Mitglied, ein Administrator gibt frei und setzt das Initialpasswort, danach legt
-der Entra-Konnektor das Konto an (create-user) und richtet optional Lizenz und
+der Entra-Worker das Konto an (create-user) und richtet optional Lizenz und
 Gruppenmitgliedschaft ein.
 
 Scharf, aber nur gegen Test-Objekte: zwei fail-closed Schutz-Gateways sichern jeden
@@ -60,10 +61,11 @@ Test-Objekt". Gate 2 legt nur bei der ausdruecklichen Entscheidung "anlegen" an.
 und Gruppe sind zusaetzlich je ueber ein optionales Gateway abgesichert: fehlt die
 Angabe, wird der Schritt uebersprungen.
 
-Jeder Service-Task ist ein Entra-Konnektor-Task (ADR-0172): das Modell waehlt die
-benannte Operation statt eine Graph-URL zu schreiben. Sie parken, bis ein Entra-Worker
-sie abholt — der Konnektor ist worker-only, damit das Tenant-Credential nie in die
-Engine gelangt (ADR-0164/0172).
+Jeder Service-Task ist eine Aufgabe des Entra-Worker-Typs (ADR-0172): das Modell waehlt
+die benannte Operation statt eine Graph-URL zu schreiben, und den Worker "blumer_net"
+als Ziel — das Attribut heisst dabei weiterhin connector="…". Sie parken, bis eine
+Entra-Worker-Instanz sie abholt; der Worker-Typ ist worker-only, damit das
+Tenant-Credential nie in die Engine gelangt (ADR-0164/0172).
 
 Benoetigte Anwendungsberechtigungen (mit Administratorzustimmung): User.ReadWrite.All;
 fuer die optionalen Schritte zusaetzlich Organization.Read.All (SKUs) und
@@ -165,7 +167,7 @@ Gruppe aufgenommen. Ohne Angabe ueberspringt der Default-Pfad den Schritt.</bpmn
 
     <bpmn:serviceTask id="mitglied" name="In die Gruppe aufnehmen">
       <bpmn:documentation>add-group-member: ein POST auf die $ref-Sammlung der Gruppe. userId="=konto.id",
-groupId="=gruppeId" — der Konnektor baut die absolute @odata.id des Kontos selbst.</bpmn:documentation>
+groupId="=gruppeId" — der Worker baut die absolute @odata.id des Kontos selbst.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="blumer_net" operation="add-group-member"
                               userId="=konto.id" groupId="=gruppeId"/>
