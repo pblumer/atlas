@@ -1,8 +1,77 @@
 # ADR-0191: TLS 1.3 in the binary — an optional listener with operator-supplied certificates
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-08-31 — three questions an acceptance has to
+  settle first: the trust anchor on the client side, the bind order and what the
+  startup log prints, and the chart's probes; see the amendment note below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-08-31): three questions this record leaves open.** The decision below
+> stands as written and none of what follows reverses it. But an implementer reading it
+> hits three things it does not answer, and the first of them decides whether the feature
+> delivers what it exists for.
+>
+> - **The trust anchor on the client side is undecided — and that is the motivating
+>   case.** This record settles how Atlas *serves* TLS and says nothing about how Atlas
+>   *verifies* it. The promotion path it exists to unblock is a client: `pushBundle` and
+>   `fillRemoteStatus` call `http.DefaultClient.Do` in `api/promote.go`, and `atlas
+>   worker --server` builds a bare `http.Client` in `worker/worker.go`. Both verify
+>   against the host's system roots and nothing else. The on-prem pair this feature is
+>   aimed at usually gets its certificate from an internal CA, so with the listener
+>   turned on, `validateTargetURL` accepts the `https://` URL and the request then fails
+>   at verification instead — a worse experience than today's refusal, because it fails
+>   later and further from the cause. Skip-verify is refused twice over (ADR-0129, and
+>   the comment in `api/targetstore.go` this record quotes), so the anchor has to come
+>   from somewhere. Two defensible answers: a `--tls-ca` / `ATLAS_TLS_CA` PEM bundle
+>   that *adds* to the system pool for the Atlas-to-Atlas and worker-to-server clients —
+>   added, never replacing, and deliberately not a global trust override for the REST,
+>   mail or Graph connectors, which reach third-party endpoints and own their trust
+>   separately; or the explicit decision that this belongs to the host, which then has
+>   to be documented as such, container included (the runtime image is
+>   `debian:bookworm-slim` with `ca-certificates`, so it means a mount into
+>   `/usr/local/share/ca-certificates` and `update-ca-certificates`, not a flag). Either
+>   is fine. Neither being chosen leaves the ADR-0129 gap open in exactly the
+>   deployments this record names.
+>
+> - **The loopback listener has to be bound before the handler is built, and the startup
+>   log changes with it.** In `runServe`, `loopbackURL(addr)` is consumed by the MCP
+>   loopback client and `selfURL(addr)` by the supervised workers — both while the
+>   `api.New` options are being assembled, both before anything is bound and before the
+>   one `http.Server` is constructed. With the loopback port ephemeral, those two
+>   helpers stop being pure functions of `--addr`: the plaintext listener must be bound
+>   first (`net.Listen` on `127.0.0.1:0`, port read back off the listener), its address
+>   carried into both call sites, and only then the handler built and the TLS listener
+>   served on `--addr`. Two consequences belong in the decision rather than in whoever
+>   writes it: the two servers share one `--shutdown-timeout` and one error channel, and
+>   either listener failing to serve ends the process, because a server that reached
+>   half its interfaces is worse than one that stopped; and every URL in the
+>   `server.listening`, `server.docs_enabled` and `server.metrics_enabled` lines is
+>   derived from `loopbackURL(addr)` today, which after this change would print an
+>   ephemeral port nobody can use. Those lines should name the reachable origin —
+>   `https://` on `--addr`, or `--external-url` where it is set — and the loopback
+>   listener should appear as the internal detail it is, if at all.
+>
+> - **The chart's probes break, and the certificate still has to reach the pod.** The
+>   liveness, readiness and startup probes in `deploy/helm/atlas/values.yaml` are
+>   `httpGet` with no `scheme`, which means HTTP, against the service port. Turn TLS on
+>   for `--addr` and the kubelet speaks plaintext to a TLS listener; the loopback
+>   listener is on `127.0.0.1` by design and unreachable from outside the container, so
+>   there is nothing to fall back to. The chart needs `scheme: HTTPS` on all three
+>   probes when TLS is configured — the kubelet does not verify a probe's certificate,
+>   so a private CA is not a problem there — and a way to mount certificate and key from
+>   a Secret with the two flags pointing at them. `--addr` should keep defaulting to
+>   `:8080` either way: a port that moves when a certificate is configured is a surprise
+>   in a chart, a systemd unit and a firewall rule at once.
+>
+> One addition to the documentation obligation this record already calls load-bearing:
+> `docs/install.md` § 8 is not the only place that states the fact. The handbook the
+> binary serves (`api/web/handbuch.html`) says "Atlas spricht kein TLS" and "Atlas speaks
+> no TLS" in its Betrieb section, in both languages, and that is what an operator actually
+> reads. Whatever § 8 comes to say has to be said there too, in both — including that a
+> reverse proxy is still wanted for `/mcp` and `/metrics`.
+>
+> The status is unchanged: this is still Proposed. These three are what an acceptance has
+> to settle, not a decision taken.
 
 ## Context and problem statement
 
