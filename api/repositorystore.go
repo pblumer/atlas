@@ -11,10 +11,22 @@ import (
 
 // installedTemplate is a repository package a user has installed into this
 // server (ADR-0081): the element-template payload (ADR-0027) plus the manifest
-// fields the Modeler needs to render it in the palette. It is design-time data
-// only — installing writes a template the compiler already accepts, never engine
-// state — so, like every sidecar record, it holds no secret material (the "no
-// secret travels in a shared artifact" rule of ADR-0081/0041/0069).
+// fields describing it.
+//
+// What an install does *today* is narrower than the payload suggests, and it is
+// worth stating here rather than leaving to be discovered: the Modeler does not
+// read this store. Its service-task kind picker is SERVICE_TASK_KINDS in
+// editor.js, compiled into the binary, and the only reader of
+// /repository/installed is the Console gallery, which uses it to mark a package
+// "Installed" and to uninstall it. So an install records a choice; it does not
+// yet put anything in the palette. Connecting the two is unbuilt and unrecorded —
+// ADR-0081's own follow-ups name the remote registry, signing, script sandboxing
+// and version upgrades, not this — so it wants a decision before it wants code.
+//
+// The record is design-time data only — installing writes a template the compiler
+// already accepts, never engine state — so, like every sidecar record, it holds no
+// secret material (the "no secret travels in a shared artifact" rule of
+// ADR-0081/0041/0069).
 type installedTemplate struct {
 	ID          string          `json:"id"`        // the installed record id (== package id)
 	PackageID   string          `json:"packageId"` // the source repository package id
