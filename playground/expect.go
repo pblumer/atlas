@@ -91,7 +91,7 @@ func (e Expectations) Judge(rep Report) Verdict {
 		{"slowest case", e.MaxDuration, rep.Duration.Max},
 	} {
 		if d.bound > 0 {
-			add(d.name, "at most "+d.bound.String(), d.got.String(), d.got <= d.bound)
+			add(d.name, "at most "+readable(d.bound), readable(d.got), d.got <= d.bound)
 		}
 	}
 
@@ -124,6 +124,17 @@ func (e Expectations) Judge(rep Report) Verdict {
 			got, ok && p.MaxQueue <= e.MaxQueue[name])
 	}
 	return v
+}
+
+// readable trims a simulated duration to what somebody reads in a build log.
+// These come out of a virtual clock, so they carry nanoseconds nobody measured
+// and nobody can act on: "8h26m41.615411361s" is a p90 that says less than
+// "8h26m42s" does.
+func readable(d time.Duration) string {
+	if d >= time.Minute {
+		return d.Round(time.Second).String()
+	}
+	return d.Round(time.Millisecond).String()
 }
 
 // sortedKeys is the map order every check list is built in.

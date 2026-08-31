@@ -207,3 +207,26 @@ func TestChecksAreOrderedTheSameEveryTime(t *testing.T) {
 		}
 	}
 }
+
+// A simulated duration carries nanoseconds nobody measured, and a build log is
+// the wrong place to print them: a p90 of "8h26m41.615411361s" says less than
+// "8h26m42s" does.
+func TestDurationsAreReportedAtAReadablePrecision(t *testing.T) {
+	rep := passing()
+	rep.Duration.P90 = 8*time.Hour + 26*time.Minute + 41*time.Second + 615411361*time.Nanosecond
+
+	v := playground.Expectations{MaxP90: 72 * time.Hour}.Judge(rep)
+	c := checkFor(t, v, "p90")
+	if c.Got != "8h26m42s" {
+		t.Errorf("got = %q, want the same duration without the noise", c.Got)
+	}
+	if c.Want != "at most 72h0m0s" {
+		t.Errorf("want = %q, want the bound rendered the same way", c.Want)
+	}
+	// Under a minute the seconds are the signal, so they stay.
+	rep.Duration.P50 = 1500 * time.Millisecond
+	fast := checkFor(t, playground.Expectations{MaxP50: time.Minute}.Judge(rep), "median")
+	if fast.Got != "1.5s" {
+		t.Errorf("a short duration = %q, want its seconds kept", fast.Got)
+	}
+}
