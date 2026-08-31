@@ -214,6 +214,27 @@
       }
     },
     {
+      "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "RSS and Atom scraping works again outside the engine",
+        "de": "RSS- und Atom-Scraping funktioniert wieder ausserhalb der Engine"
+      },
+      "summary": {
+        "en": "A scrape task set to a feed format lost that setting on its way to the worker that runs it, so it fetched the feed as a web page and then failed on a CSS selector nobody had entered. Because scraping runs outside the engine by default, that was every feed task. The setting and the item limit now arrive, and the headlines come back as entries with title, link, description and date.",
+        "de": "Ein Scraping-Task mit Feed-Format hat diese Einstellung auf dem Weg zum ausführenden Worker verloren — er hat den Feed dann als Webseite geholt und ist an einem CSS-Selektor gescheitert, den niemand eingetragen hatte. Weil Scraping standardmässig ausserhalb der Engine läuft, betraf das jeden Feed-Task. Einstellung und Anzahlbegrenzung kommen jetzt an, und die Schlagzeilen landen als Einträge mit Titel, Link, Beschreibung und Datum."
+      },
+      "link": {
+        "label": "ADR-0190",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0190-webscrape-feed-extraction.md"
+      },
+      "tags": [
+        "Connectors"
+      ]
+    },
+    {
       "id": "an-ad-task-naming-a-console-configured-directory-reached-its",
       "version": "Unreleased",
       "date": null,
@@ -328,28 +349,6 @@
         },
         "route": "#/console/connectors"
       }
-    },
-    {
-      "id": "a-person-can-now-let-an-application-act-as-them",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "You can let an AI connector act as you — and take it back",
-        "de": "Sie können einem KI-Connector erlauben, in Ihrem Namen zu handeln — und es zurücknehmen"
-      },
-      "summary": {
-        "en": "A connector that runs on somebody else's infrastructure, like the one on claude.ai, had no way to reach an Atlas that requires a login: there is nowhere in it to paste a token, and handing one over would have left a long-lived key sitting in someone else's settings. Now nothing is handed over. The connector sends you to Atlas, you sign in and see who is asking and what they will be able to do, and you say yes or no. What the connector gets is a key that carries you: it can do what your account can do, everything it does is recorded under your name, and it can do nothing your account cannot. Approve a connector for the AI tools and it reaches those and nothing else. You can see your own approvals and withdraw any of them at any time; an administrator can withdraw anyone's, or remove the application entirely. Disabling someone's account withdraws theirs with it. An administrator registers the application once — see the install guide — and each person approves it for themselves.",
-        "de": "Ein Connector, der bei einem Dritten läuft — etwa der auf claude.ai —, kam an ein Atlas mit Anmeldung nicht heran: Es gibt darin keinen Ort für ein Token, und eines herauszugeben hätte einen langlebigen Schlüssel in fremden Einstellungen hinterlassen. Jetzt wird nichts herausgegeben. Der Connector schickt Sie zu Atlas, Sie melden sich an und sehen, wer fragt und was er können wird, und Sie sagen ja oder nein. Was der Connector bekommt, ist ein Schlüssel, der Sie trägt: Er kann, was Ihr Konto kann, alles erscheint unter Ihrem Namen, und er kann nichts, was Ihr Konto nicht kann. Erlauben Sie ihn für die KI-Werkzeuge, erreicht er genau diese und sonst nichts. Ihre eigenen Zustimmungen können Sie jederzeit einsehen und zurückziehen; eine Administratorin kann jede zurückziehen oder die Anwendung ganz entfernen. Wird ein Konto deaktiviert, verfallen seine Zustimmungen mit. Die Anwendung registriert eine Administratorin einmalig — siehe Installationsanleitung —, zustimmen tut danach jede Person für sich."
-      },
-      "link": {
-        "label": "ADR-0200",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0200-mcp-oauth-resource-server.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
     }
   ]
 }

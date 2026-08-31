@@ -4772,6 +4772,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}
 		return &connectorPayload{Kind: "webscrape", Fields: map[string]any{
 			"url": j.URL, "selector": j.Selector, "attribute": j.Attribute,
+			// format and maxItems are compile-time structural data (ADR-0190) and
+			// decide what the worker *does*: without the format it fetches a feed as
+			// HTML and compiles the (empty) selector, which fails the job with a
+			// complaint about a CSS selector the task never authored.
+			"format": j.Format, "maxItems": j.MaxItems,
 			"resultVariable": j.Result,
 		}}
 	case compiler.RestJobTypeIndex:

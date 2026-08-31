@@ -4,9 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/sqldb"
+	"github.com/pblumer/atlas/connector/webscrape"
 )
 
 // The engine→worker payload contract (ADR-0168): when a worker leases a connector
@@ -144,6 +155,16 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			jobType: compiler.WebScrapeJobType,
 			want:    "webscrape",
 			fields:  map[string]any{"url": "https://example.com", "selector": ".price"},
+		},
+		{
+			// A feed scrape. format and maxItems are compile-time structural data
+			// (ADR-0190) and decide what the worker *does*: without the format it
+			// fetches the feed as HTML and applies a CSS selector to XML.
+			name:    "webscrape-feed",
+			element: `<atlas:webscrapeConnector url="https://example.com/rss" format="rss" maxItems="15" resultVariable="schlagzeilen"/>`,
+			jobType: compiler.WebScrapeJobType,
+			want:    "webscrape",
+			fields:  map[string]any{"url": "https://example.com/rss", "format": "rss", "maxItems": float64(15)},
 		},
 		{
 			name:    "entra",
@@ -343,4 +364,107 @@ func leaseConnectorPayloadOrNil(t *testing.T, procID, element, jobType, variable
 		t.Fatalf("leased %d jobs of type %s, want 1; body=%s", len(out.Jobs), jobType, raw)
 	}
 	return out.Jobs[0].Connector
+}
+
+// The check the two bugs above needed, and neither had.
+//
+// Every arm of resolveConnectorTask writes a map literal by hand, and every kind
+// already has a struct that says exactly what a resolved job is — the `json` tags the
+// worker unmarshals into. The map and the struct are two spellings of one contract,
+// kept in step by nothing: a field added to the struct and to the in-process handler
+// but not to the map is invisible on both sides. It compiles, it deploys, it leases,
+// and the worker reads a zero value.
+//
+// It happened twice. `ad.Job.Connector` (ADR-0206) never reached the map, so a task
+// naming a Console-configured directory failed on the worker with "empty url".
+// `webscrape.Job.Format` and `MaxItems` (ADR-0190) never reached it either, so an
+// offloaded feed scrape was fetched as HTML and failed compiling a CSS selector the
+// task had not authored — and webscrape is offloaded by default, so that is the path
+// a shipped feed model actually took.
+//
+// The rule this pins: **the payload is exactly the resolved job.** Not a subset a
+// reviewer has to notice is short, and not a superset carrying keys nothing reads.
+func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
+	arms := payloadArms(t)
+	for _, tc := range []struct {
+		arm string // the job-type case the arm answers
+		job any    // the resolved-job struct a worker unmarshals into
+	}{
+		{"compiler.MailJobTypeIndex", mail.Job{}},
+		{"compiler.RemedyJobTypeIndex", remedy.Job{}},
+		{"compiler.MsSqlJobTypeIndex", sqldb.Job{}},
+		{"compiler.AdJobTypeIndex", ad.Job{}},
+		{"compiler.EntraJobTypeIndex", entra.Job{}},
+		{"compiler.WebScrapeJobTypeIndex", webscrape.Job{}},
+		{"compiler.RestJobTypeIndex", rest.Job{}},
+	} {
+		t.Run(tc.arm, func(t *testing.T) {
+			sent, ok := arms[tc.arm]
+			if !ok {
+				t.Fatalf("no payload arm for %s; the switch or the pattern must have changed", tc.arm)
+			}
+			carried := jsonFieldNames(t, tc.job)
+			for name := range carried {
+				if !sent[name] {
+					t.Errorf("the resolved job carries %q, but the payload arm does not send it — "+
+						"the worker unmarshals a zero value and acts on it", name)
+				}
+			}
+			for name := range sent {
+				if !carried[name] {
+					t.Errorf("the payload arm sends %q, which the resolved job has no field for — "+
+						"nothing on the far side reads it", name)
+				}
+			}
+		})
+	}
+}
+
+// payloadArmRe finds one arm of resolveConnectorTask: the job-type case it answers,
+// and the field map it puts on the wire. Source-read rather than exercised, because a
+// map literal is not something reflection can see — and reading it is the same move
+// the moddle drift tests make over compiler/parse.go.
+var payloadArmRe = regexp.MustCompile(`(?s)case (compiler\.[A-Za-z]+JobTypeIndex)[^\n]*:.*?connectorPayload\{Kind:[^,]+, Fields: map\[string\]any\{(.*?)\n\t\t\}\}`)
+
+// payloadKeyRe matches one key of such a map.
+var payloadKeyRe = regexp.MustCompile(`"([a-zA-Z0-9_]+)":`)
+
+// payloadArms reads the field set each arm sends, keyed by its job-type case.
+func payloadArms(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	src, err := os.ReadFile("handlers.go")
+	if err != nil {
+		t.Fatalf("read handlers.go: %v", err)
+	}
+	out := map[string]map[string]bool{}
+	for _, m := range payloadArmRe.FindAllStringSubmatch(string(src), -1) {
+		keys := map[string]bool{}
+		for _, k := range payloadKeyRe.FindAllStringSubmatch(m[2], -1) {
+			keys[k[1]] = true
+		}
+		out[m[1]] = keys
+	}
+	if len(out) == 0 {
+		t.Fatal("found no payload arms in handlers.go; the pattern must have changed")
+	}
+	return out
+}
+
+// jsonFieldNames is the wire contract a resolved-job struct declares: the names its
+// `json` tags give, which is what a worker unmarshals by.
+func jsonFieldNames(t *testing.T, v any) map[string]bool {
+	t.Helper()
+	rt := reflect.TypeOf(v)
+	out := map[string]bool{}
+	for i := 0; i < rt.NumField(); i++ {
+		name, _, _ := strings.Cut(rt.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		out[name] = true
+	}
+	if len(out) == 0 {
+		t.Fatalf("%s declares no json fields; it is not a resolved-job struct", rt)
+	}
+	return out
 }
