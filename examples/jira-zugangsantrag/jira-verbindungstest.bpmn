@@ -2,7 +2,7 @@
 <!--
   Jira-Verbindungstest
 
-  Der kuerzestmoegliche Prozess, der beweist, dass der Jira-Konnektor wirklich
+  Der kuerzestmoegliche Prozess, der beweist, dass der Jira-Worker wirklich
   an deiner Jira haengt: ein Vorgang wird angelegt, seine Antwort landet in einer
   Variablen, fertig. Drei Elemente, damit im Fehlerfall nichts anderes schuld
   sein kann als die Verbindung selbst.
@@ -12,7 +12,7 @@
    -> Ende "Vorgang angelegt"
 
   Diesen Prozess zuerst starten. Laeuft er durch, sind Endpoint, Credential und
-  Konnektorname richtig — und jeder spaetere Fehler im Zugangsantrag liegt am
+  Worker-Name richtig — und jeder spaetere Fehler im Zugangsantrag liegt am
   Modell, nicht an der Einrichtung.
 
   BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200.
@@ -25,7 +25,7 @@
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_jira_verbindungstest" targetNamespace="http://atlas/examples">
   <process id="proc_jira_verbindungstest" name="Jira-Verbindungstest" isExecutable="true">
-    <documentation>Legt einen einzelnen Vorgang in Jira an, um Endpoint, Credential und Konnektornamen zu pruefen. Startvariablen: jiraProjekt (Projektschluessel, z. B. OPS), vorgangstyp (z. B. Task).</documentation>
+    <documentation>Legt einen einzelnen Vorgang in Jira an, um Endpoint, Credential und Worker-Namen zu pruefen. Startvariablen: jiraProjekt (Projektschluessel, z. B. OPS), vorgangstyp (z. B. Task).</documentation>
 
     <startEvent id="start" name="Test starten">
       <extensionElements>
@@ -35,7 +35,7 @@
     </startEvent>
 
     <serviceTask id="anlegen" name="Testvorgang anlegen">
-      <documentation>Jira-Konnektor, Operation create-issue. Der Konnektorname "jira" verweist auf den Eintrag unter Console -> Connectors; Basis-URL und Credential liegen dort und im Vault, nie im Modell. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket" — im Operations-View sichtbar, und der Schluessel ist danach als =ticket.key referenzierbar.</documentation>
+      <documentation>Jira-Worker-Typ, Operation create-issue. Der Worker-Name "jira" verweist auf den konfigurierten Worker unter Console -> Workers (das Attribut heisst weiterhin connector); Basis-URL und Credential liegen dort und im Vault, nie im Modell. Projekt und Vorgangstyp kommen als FEEL aus dem Startformular, damit dasselbe Modell gegen jedes Projekt laeuft. resultVariable schreibt die Antwort ({id, key, self}) nach "ticket" — im Operations-View sichtbar, und der Schluessel ist danach als =ticket.key referenzierbar.</documentation>
       <extensionElements>
         <atlas:jiraConnector connector="jira" operation="create-issue"
           project="=jiraProjekt"

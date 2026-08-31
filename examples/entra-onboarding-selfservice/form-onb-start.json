@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🚀 Onboarding-Self-Service (Entra ID)\n\nBeantrage den Arbeitsplatz für ein neues Mitglied im Tenant **blumer.net**. Aus deinen Angaben wird ein Anzeigename und ein mailNickname vorgeschlagen; ein Administrator gibt den Antrag frei und setzt das Initialpasswort, danach legt der Entra-Konnektor das Konto an.\n\n> **Testbetrieb:** Diese App schreibt **scharf** gegen blumer.net, aber der Prozess akzeptiert ausschließlich klar benannte Test-Objekte. Der **User Principal Name muss mit `jml-test-` beginnen und auf `@blumer.net` enden** (z. B. `jml-test-anna@blumer.net`). Jeder andere UPN wird **vor** jedem Entra-Aufruf abgewiesen — es wird dann nichts angelegt."
+      "text": "# 🚀 Onboarding-Self-Service (Entra ID)\n\nBeantrage den Arbeitsplatz für ein neues Mitglied im Tenant **blumer.net**. Aus deinen Angaben wird ein Anzeigename und ein mailNickname vorgeschlagen; ein Administrator gibt den Antrag frei und setzt das Initialpasswort, danach legt der Entra-Worker das Konto an.\n\n> **Testbetrieb:** Diese App schreibt **scharf** gegen blumer.net, aber der Prozess akzeptiert ausschließlich klar benannte Test-Objekte. Der **User Principal Name muss mit `jml-test-` beginnen und auf `@blumer.net` enden** (z. B. `jml-test-anna@blumer.net`). Jeder andere UPN wird **vor** jedem Entra-Aufruf abgewiesen — es wird dann nichts angelegt."
     },
     {
       "key": "vorname",

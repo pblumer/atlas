@@ -2,7 +2,7 @@
 <!--
   Blick.ch-Schlagzeilen (ADR-0118 + ADR-0190) — ein RSS-Feed als Prozessdaten.
 
-  Das kleinste vollständige Beispiel für den Ausbau des Web-Scraping-Konnektors:
+  Das kleinste vollständige Beispiel für den Ausbau des Web-Scraping-Workers:
   derselbe Task, der bisher HTML per CSS-Selektor ausgelesen hat, liest mit
   format="rss" einen Feed und schreibt **strukturierte Einträge** statt Strings.
 
@@ -20,7 +20,7 @@
      ein Server, der seinen Feed als application/xml ausliefert, ändert damit nicht
      die Gestalt einer Prozessvariablen.
   2. **Ein Eintrag ist ein Objekt.** `=schlagzeilen[1].title` und `e.link` gibt es,
-     weil der Konnektor die vier Felder title/link/description/published immer
+     weil der Worker die vier Felder title/link/description/published immer
      schreibt (fehlt eines in der Quelle, ist es leer — erfunden wird nichts).
      Die HTML-Variante liefert weiterhin ein Array von Strings; welche der beiden
      Gestalten herauskommt, entscheidet das Modell, nicht die Antwort.
@@ -28,9 +28,9 @@
      Einträge in Dokumentreihenfolge. Ohne Angabe (oder 0) ist es unbegrenzt —
      so bleibt jedes vor ADR-0190 geschriebene HTML-Modell unverändert.
 
-  Läuft ohne Konfiguration: webscrape ist eine der standardmässig ausgelagerten
-  Konnektor-Arten (ADR-0164), Atlas startet den Worker also selbst. Kein
-  Credential, keine Registrierung im Konnektor-Store — die URL steht im Modell,
+  Läuft ohne Konfiguration: webscrape ist einer der standardmässig ausgelagerten
+  Worker-Typen (ADR-0164), Atlas startet die Worker-Instanz also selbst. Kein
+  Credential, kein konfigurierter Worker nötig — die URL steht im Modell,
   ein Scrape ist ein GET und ein Retry holt ihn schlicht neu.
 
   Zum FEEL im Skript-Task, weil die naheliegende Schreibweise hier eine Falle ist:
@@ -49,7 +49,7 @@
                   id="defs_blick_schlagzeilen"
                   targetNamespace="http://atlas/examples">
   <bpmn:process id="proc_blick_schlagzeilen" name="Blick.ch: Schlagzeilen im Blick" isExecutable="true">
-    <bpmn:documentation>Liest den RSS-Feed von Blick.ch über einen Web-Scraping-Konnektor im Format rss (ADR-0190) und schreibt die ersten 15 Einträge als strukturierte Objekte (title, link, description, published) nach schlagzeilen. Ein Inline-FEEL-Skript hält die Einträge fest, deren Titel das Suchwort enthält; gibt es welche, parkt der Prozess auf einem User-Task zur Sichtung, sonst endet er. Braucht kein Credential und keinen registrierten Konnektor: die URL steht im Modell, den Abruf erledigt der standardmässig mitlaufende webscrape-Worker.</bpmn:documentation>
+    <bpmn:documentation>Liest den RSS-Feed von Blick.ch über den Web-Scraping-Worker im Format rss (ADR-0190) und schreibt die ersten 15 Einträge als strukturierte Objekte (title, link, description, published) nach schlagzeilen. Ein Inline-FEEL-Skript hält die Einträge fest, deren Titel das Suchwort enthält; gibt es welche, parkt der Prozess auf einem User-Task zur Sichtung, sonst endet er. Braucht kein Credential und keinen konfigurierten Worker: die URL steht im Modell, den Abruf erledigt die standardmässig mitlaufende webscrape-Worker-Instanz.</bpmn:documentation>
     <bpmn:extensionElements>
       <atlas:startForm>
         <atlas:startVariable name="suchwort" type="string" default="&#34;&#34;" required="false" />

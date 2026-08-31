@@ -31,6 +31,49 @@
       }
     },
     {
+      "id": "the-handbook-and-the-examples-teach-workers-not-connectors",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The handbook now explains Workers — and what a Worker actually is",
+        "de": "Das Handbuch erklärt jetzt Worker — und was ein Worker eigentlich ist"
+      },
+      "summary": {
+        "en": "The Console calls them Workers now, but the handbook still said Connectors, and used the word for three different things: the capability Atlas has, the account and endpoint you configured, and the process that does the work. The chapter Forms & workers now separates them by name. A Worker Type is a capability — Jira, Mail, Active Directory. A Worker is one configured target of that type, with its endpoint and its credential reference, and it is the name a task states. A Worker Instance is a running process that picks jobs up; you scale by starting more of those, not by configuring the same worker twice. The Active Directory chapter shows where that matters: two forests are two Workers, and one Worker Instance serves both. Nothing in your models changes — a task still says connector=\"…\", and the handbook now has a note explaining why it stays that way.",
+        "de": "Die Konsole nennt sie inzwischen Worker, das Handbuch sagte weiter Connectors — und meinte damit drei verschiedene Dinge: die Fähigkeit, die Atlas mitbringt, das konfigurierte Zielsystem samt Zugang und den Prozess, der die Arbeit tut. Das Kapitel Formulare & Worker trennt sie jetzt beim Namen. Ein Worker-Typ ist eine Fähigkeit — Jira, Mail, Active Directory. Ein Worker ist ein konfiguriertes Ziel dieses Typs, mit Endpoint und Verweis auf das Geheimnis im Vault, und genau diesen Namen nennt eine Aufgabe. Eine Worker-Instanz ist ein laufender Prozess, der Jobs abholt; skaliert wird über mehr Instanzen, nicht über einen zweiten Worker. Das Active-Directory-Kapitel zeigt, wozu das gut ist: zwei Forests sind zwei Worker, und eine Worker-Instanz bedient beide. An Ihren Modellen ändert sich nichts — eine Aufgabe schreibt weiterhin connector=\"…\", und das Handbuch erklärt jetzt in einer eigenen Notiz, warum das so bleibt."
+      },
+      "link": {
+        "label": "ADR-0203",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0203-worker-execution-model.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the handbook and go to Forms & workers — the three levels are the table at the top of the chapter.",
+          "Under Console › Workers, the Worker catalog card is level one: everything this Atlas can do. Configured workers below it is level two: the targets you have set up.",
+          "Operations › Workers is level three: the processes actually leasing jobs right now.",
+          "The Test & simulate chapter walks the distinction through Active Directory, where two directories are two workers served by one instance."
+        ],
+        "de": [
+          "Öffnen Sie das Handbuch und gehen Sie zu Formulare & Worker — die drei Ebenen stehen als Tabelle am Anfang des Kapitels.",
+          "Unter Console › Workers ist die Karte Worker catalog die erste Ebene: alles, was dieses Atlas kann. Configured workers darunter ist die zweite: die Ziele, die Sie eingerichtet haben.",
+          "Operations › Workers ist die dritte Ebene: die Prozesse, die gerade wirklich Jobs abholen.",
+          "Das Kapitel Testen & Simulieren führt den Unterschied an Active Directory vor, wo zwei Verzeichnisse zwei Worker sind, die eine Instanz bedient."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "not-every-account-may-deploy-any-more",
       "version": "Unreleased",
       "date": null,
@@ -284,28 +327,6 @@
         },
         "route": "#/console/org"
       }
-    },
-    {
-      "id": "atlas-serve-requires-a-login-by-default",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Atlas asks for a login out of the box",
-        "de": "Atlas verlangt von Haus aus eine Anmeldung"
-      },
-      "summary": {
-        "en": "Starting the server left it open unless you passed `--auth`, and every document about Atlas — the install guide, the Helm chart, the compliance concept — opened by telling you to pass it. A default that everything tells you to change is not a default. The login is now on. A first start with an empty user store seeds one administrator from `ATLAS_ADMIN_USERNAME` and `ATLAS_ADMIN_PASSWORD`, or generates a password and writes it to the log once; that path was always there, it is simply no longer step six of the install guide. `--auth=false` still runs the server wide open and now says so in a warning line at startup, naming what it means: the API, the UI and the MCP connection, which can deploy and run processes. Breaking: `atlas serve` with no flags now requires a login — pass `--auth=false` for the old behaviour.",
-        "de": "Der Server lief offen, solange man nicht `--auth` mitgab — und jedes Dokument über Atlas, ob Installationsanleitung, Helm-Chart oder Compliance-Konzept, begann damit, genau das zu verlangen. Ein Standard, den einem alle Unterlagen auszureden versuchen, ist kein Standard. Die Anmeldung ist jetzt an. Beim ersten Start mit leerem Benutzerbestand wird ein Administrator aus `ATLAS_ADMIN_USERNAME` und `ATLAS_ADMIN_PASSWORD` angelegt, oder ein Passwort erzeugt und einmalig ins Log geschrieben; diesen Weg gab es immer, er ist nur nicht mehr Schritt sechs der Anleitung. `--auth=false` lässt den Server weiterhin vollständig offen laufen und sagt das jetzt beim Start in einer Warnzeile — samt dem, was es bedeutet: die API, die Oberfläche und der MCP-Zugang, über den sich deployen und Prozesse starten lassen. Brechend: `atlas serve` ohne Optionen verlangt jetzt eine Anmeldung; `--auth=false` stellt das alte Verhalten her."
-      },
-      "link": {
-        "label": "ADR-0044",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0044-user-management-and-authentication-boundary.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
     }
   ]
 }

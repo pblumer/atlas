@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Bestellung freigeben\n\nPrüfe die Account-Bestellung. Typ, Kategorie, Aktivierung und der vorgeschlagene UPN kommen aus der DMN-Regel `KontotypMapping`. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Konnektor legt das Konto in blumer.net an."
+      "text": "# 🔑 Bestellung freigeben\n\nPrüfe die Account-Bestellung. Typ, Kategorie, Aktivierung und der vorgeschlagene UPN kommen aus der DMN-Regel `KontotypMapping`. Bei **Freigabe** setzt du das Initialpasswort; der Entra-Worker legt das Konto in blumer.net an."
     },
     {
       "key": "kategorie",

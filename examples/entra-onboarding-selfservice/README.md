@@ -1,7 +1,7 @@
 # Onboarding-Self-Service (Entra ID) 🚀
 
 Eine Atlas-**Applikation mit Formularen**, die einen neuen Arbeitsplatz im Tenant
-**blumer.net** über den Entra-Konnektor (ADR-0172) anlegt — **scharf**, aber
+**blumer.net** über den Entra-Worker (ADR-0172) anlegt — **scharf**, aber
 ausschließlich gegen klar benannte **Test-Objekte**.
 
 ## Der Ablauf
@@ -14,7 +14,7 @@ Start (onb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
   → 🔑 User-Task "Onboarding freigeben" (onb-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?    ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
-  → [entra create-user] Benutzer anlegen (connector="blumer_net" → konto)
+  → [entra create-user] Benutzer anlegen (Worker "blumer_net" → konto)
   → (X) Lizenz?         ── ohne ──▶┐  (übersprungen, wenn keine lizenzSku)
         │ lizenzSku gesetzt        │
   → [entra assign-license]         │
@@ -49,11 +49,11 @@ eingesetzt — es steht nie im Modell.
 
 ## Worker & Berechtigung
 
-Der Entra-Konnektor ist **worker-only** (ADR-0164/0172): das Tenant-Credential liegt
-nie in der Engine. Die Service-Tasks parken, bis ein Entra-Worker sie abholt; auf
-`atlas.blumer.cloud` beaufsichtigt die Engine den Worker standardmäßig, sobald der
-Connector `blumer_net` im Store steht. Benötigte Anwendungsberechtigungen (mit
-Administratorzustimmung): **`User.ReadWrite.All`**; für die optionalen Schritte
+Der Worker-Typ `entra` ist **worker-only** (ADR-0164/0172): das Tenant-Credential
+liegt nie in der Engine. Die Service-Tasks parken, bis eine Entra-Worker-Instanz sie
+abholt; auf `atlas.blumer.cloud` beaufsichtigt die Engine diese Instanz standardmäßig,
+sobald der Worker `blumer_net` unter *Console → Workers* konfiguriert ist. Benötigte
+Anwendungsberechtigungen (mit Administratorzustimmung): **`User.ReadWrite.All`**; für die optionalen Schritte
 zusätzlich **`Organization.Read.All`** (SKUs) und **`Group.ReadWrite.All`**.
 
 ## Deployen (über die Atlas-MCP-Tools)

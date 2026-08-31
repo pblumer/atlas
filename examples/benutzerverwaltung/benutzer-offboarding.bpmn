@@ -6,11 +6,11 @@
   Gleiches Muster wie proc_benutzer_aufnahme - der Prozess koordiniert und
   dokumentiert; die privilegierte Sperrung bleibt eine Admin-Handlung
   (User-Task), weil die Benutzerverwaltung admin-gated ist (ADR-0044/0049).
-  Die Bestaetigungs-Mail laeuft automatisch ueber den Mail-Connector.
+  Die Bestaetigungs-Mail laeuft automatisch ueber den Mail-Worker.
 
   Start (Formular off-antrag: benutzername, letzter_tag, grund, email)
    -> User-Task "Konto sperren"        (Admin sperrt in der Konsole, bestaetigt; Formular off-sperren)
-   -> Service-Task "Bestaetigung senden" (Mail-Connector)
+   -> Service-Task "Bestaetigung senden" (Mail-Worker)
    -> Ende "Offboarding abgeschlossen"
 
   BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120.

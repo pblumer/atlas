@@ -4,7 +4,7 @@
 
   Ein Identity-Sync, der beim ersten Lauf das Verzeichnis einmal aufzählt und danach
   bei jedem Lauf nur die Änderungen liest. Der Cursor (@odata.deltaLink) lebt nicht im
-  Konnektor (der ist zustandslos, worker-only), sondern reist durch den Prozess:
+  Worker (der ist zustandslos, worker-only), sondern reist durch den Prozess:
 
     Start (letzterDeltaLink: leer beim ersten Lauf, sonst der Cursor vom letzten Lauf)
      -> [entra delta-users] liest Änderungen seit dem Cursor nach `aenderungen`

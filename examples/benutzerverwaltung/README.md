@@ -92,7 +92,8 @@ Start (off-antrag: Benutzername, Letzter Arbeitstag, Grund, Benachrichtigung an)
 ```
 
 Alle drei sind der Gruppe `benutzerverwaltung` zugewiesen; die Mails laufen über
-den Mail-Connector (`connector="Patrick Blumer"`, wie in `proc_cis_onboarding`).
+den Mail-Worker `Patrick Blumer` — das Attribut heisst weiterhin `connector="…"`
+(ADR-0203 benennt die Begriffe um, nicht die Modelle), wie in `proc_cis_onboarding`.
 
 ## Artefakte
 
