@@ -988,14 +988,16 @@ dataset of up to 50 000 cases":
   virtual clock — driven as a session (free-run, pause, step, resume, TTL, owned by
   the principal that opened it) rather than inside one request.
   [`playground/`](playground/), [`api/playground/`](api/playground/).
-- ✅ **Interactive play**: a third Modeler tab beside Design and Implement. Start a
-  sandbox on the diagram on screen, start a case with start variables, step one
+- ✅ **Interactive play**: a third Modeler tab beside Design and Implement, with two
+  ways of driving one sandbox. **Step**: start a case with start variables, step one
   occurrence at a time or run it to rest, jump the clock, and answer the jobs waiting
-  for a person yourself — with the run drawn onto the canvas in the runtime view's own
-  markers. [`api/web/playground.js`](api/web/playground.js).
-- 🚧 **Data in**: a case list sent inline, or uploaded as a CSV parsed by the
-  ADR-0084/0139 row parsing against the file's own header. A form-based list editor
-  and a per-field generator are not there yet.
+  for a person yourself — the run drawn onto the canvas in the runtime view's own
+  markers. **Batch**: a dataset, an arrival profile, a live progress bar, and the
+  report. Pools are configured against the tasks the author drew, read off the canvas
+  rather than retyped. [`api/web/playground.js`](api/web/playground.js).
+- ✅ **Data in**: a case list typed into the panel, or a CSV uploaded and parsed by
+  the ADR-0084/0139 row parsing against the file's own header. A per-field
+  generator ("300 cases with a random amount") is not there yet.
 - ✅ **Timing profile**: all at once, sequential, a fixed takt or a Poisson stream,
   each confined to business hours — realized as an arrival plan over the sandbox's
   **virtual clock**, computed up front from the seed so the stream is reproducible
@@ -1007,14 +1009,25 @@ dataset of up to 50 000 cases":
   before closing time carries on when the pool opens again, and elapsed time splits
   into queue time and work time, which is what makes a bottleneck ranking more than
   a restatement of the durations somebody typed in.
-- 🚧 **Analysis aggregated in one pass** (the 50 000-case ceiling rules out one
+- ✅ **Analysis aggregated in one pass** (the 50 000-case ceiling rules out one
   object per case): outcome counts, the duration distribution, per-element run/wait/
-  work times, per-pool seat time and longest queue, and the per-element visit counts
-  the heat map draws. Path coverage and the arrival/WIP time series are not there yet.
-- 🚧 **Results as data**: the per-case rows are read a page at a time out of the
-  sandbox's own store (inputs, end event, outputs, duration, incidents) and streamed
-  whole as CSV. The expectation verdict and the click from a case into the replay view
-  are not there yet.
+  work times, per-pool seat time, longest queue and calendar utilisation, and the
+  **timeline** — sixty slices of simulated time with arrivals, completions and work
+  in flight, folded out of the cases' own instants in the pass the report already
+  makes.
+- ✅ **Heat map and coverage**: per-element *and* per-sequence-flow token counts,
+  shaded onto the diagram, with the parts the data never reached drawn cold and
+  listed by name. Element counts come from the ADR-0080 visit counters; flows have
+  no counter of their own, so they are folded out of the ADR-0136 causal token
+  history in a single scan (24 ms over ten thousand cases).
+  [`playground/heatmap.go`](playground/heatmap.go).
+- ✅ **Bottleneck ranking**: elements ordered by the time cases spent *queueing* at
+  them, with work time beside it — the split is what makes it more than a
+  restatement of the durations somebody typed in.
+- ✅ **Results as data**: the per-case rows are read a page at a time out of the
+  sandbox's own store (inputs, end event, outputs, duration, incidents) and
+  downloaded whole as streamed CSV. The expectation verdict and the click from a
+  case into the replay view are not there yet.
 - 🔲 **Saved scenarios**: (dataset, config, seed) stored against the draft so a run
   is reproducible, comparable against the previous run, and later runnable from CI.
 

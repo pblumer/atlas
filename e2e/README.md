@@ -38,8 +38,18 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   for a person becomes a Complete button, and completing it repaints the run onto the canvas
   with the runtime view's own markers; malformed start variables are reported instead of
   posted; editing the diagram says the run no longer matches it; and leaving the editor
-  releases the server-side sandbox rather than leaving it to its TTL. Drives the real
-  `mountEditor` and `playground.js` against a mock Playground API.
+  releases the server-side sandbox rather than leaving it to its TTL.
+
+  And the **batch half**: the pool setup is read off the diagram (a row per task the
+  author drew) and travels with the sandbox as a stub policy; a run is started, polled
+  until it stops, and *stops being polled* once it has; the report ranks bottlenecks by
+  queueing time and draws the run over simulated time; the heat map shades both shapes
+  and sequence flows and names the paths the data never reached — resolving a flow the
+  server named by its two ends against the client's own registry; a CSV dataset is
+  uploaded as a file rather than parsed in the browser (the one call that cannot go
+  through the `api()` helper, so the harness intercepts `fetch` to see it); and stopping
+  a batch leaves what it did readable. Drives the real `mountEditor` and `playground.js`
+  against a mock Playground API.
 - **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
   down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway
   forks both branches and the join merges to one completion; the **inclusive** gateway

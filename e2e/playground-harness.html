@@ -57,6 +57,50 @@
       let phase = "idle";
       window.__calls = [];
 
+      // The batch half of the mock. A run is "running" for one poll and then
+      // finished, which is enough to prove the panel polls, stops polling, and
+      // then reads the report and the heat map exactly once each.
+      let batch = null;   // null | {polls, cancelled}
+      const runStatus = () => {
+        if (!batch) return { state: "idle", occurrences: 0, cases: 0, completed: 0 };
+        if (batch.cancelled) return { state: "cancelled", occurrences: 4, cases: 3, completed: 1,
+          simTime: "2026-03-05T09:00:00Z" };
+        const running = batch.polls++ < 1;
+        return running
+          ? { state: "running", occurrences: 2, cases: 3, completed: 1, simTime: "2026-03-05T08:30:00Z" }
+          : { state: "finished", occurrences: 9, cases: 3, completed: 3, simTime: "2026-03-05T11:00:00Z" };
+      };
+      const REPORT = {
+        cases: 3, completed: 3, incidents: 0, maxInFlight: 3,
+        simStart: "2026-03-05T08:00:00Z", simEnd: "2026-03-05T11:00:00Z",
+        duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
+                    maxMillis: 10800000, meanMillis: 7200000 },
+        elements: {
+          review: { runs: 3, workMillis: 10800000, waitMillis: 10800000, maxWaitMillis: 7200000 },
+          score: { runs: 3, workMillis: 180000, waitMillis: 0, maxWaitMillis: 0 },
+        },
+        pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
+                           availableMillis: 10800000, maxQueue: 2, utilisationPercent: 100 } },
+        visits: { start: 3, review: 3, score: 3, done: 3 },
+        timeline: {
+          widthMillis: 3600000,
+          buckets: [
+            { at: "2026-03-05T08:00:00Z", started: 3, completed: 0, inFlight: 3 },
+            { at: "2026-03-05T09:00:00Z", started: 0, completed: 1, inFlight: 2 },
+            { at: "2026-03-05T10:00:00Z", started: 0, completed: 2, inFlight: 0 },
+          ],
+        },
+      };
+      // One flow the data never took, so the coverage list has something to say.
+      const HEATMAP = {
+        maxCount: 3,
+        elements: [{ id: "start", count: 3 }, { id: "review", count: 3 },
+                   { id: "score", count: 3 }, { id: "done", count: 3 }],
+        flows: [{ from: "start", to: "review", count: 3 },
+                { from: "review", to: "score", count: 3 },
+                { from: "score", to: "done", count: 0 }],
+      };
+
       const tasks = () => (phase === "parked"
         ? [{ jobKey: "77", instanceKey: "5", element: "review", human: true }]
         : []);
@@ -100,8 +144,33 @@
                    createdAt: "2026-03-05T08:00:00Z", lastUsed: "2026-03-05T08:00:00Z",
                    paused: false, openTasks: tasks().length };
         }
+        if (method === "POST" && /\/runs\/cancel$/.test(url)) { batch.cancelled = true; return runStatus(); }
+        if (method === "POST" && /\/runs$/.test(url)) { batch = { polls: 0, cancelled: false }; return runStatus(); }
+        if (method === "GET" && /\/runs$/.test(url)) return runStatus();
+        if (method === "GET" && /\/report$/.test(url)) return REPORT;
+        if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
         if (method === "DELETE" && /\/playground\/sessions\//.test(url)) return { closed: true };
         return {};
+      };
+
+      // The CSV upload is the one call that cannot go through the api() helper: it
+      // is multipart, and the helper JSON-encodes its body. Intercepting fetch is
+      // how the harness sees it at all — and the shape of that request (a "file"
+      // part and an "arrival" field) is exactly what is worth pinning.
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (init && init.method === "POST" && /\/runs\/csv$/.test(url)) {
+          const form = init.body;
+          window.__calls.push({ method: "POST", url, body: {
+            file: form.get("file") && form.get("file").name,
+            arrival: JSON.parse(form.get("arrival")),
+          } });
+          batch = { polls: 0, cancelled: false };
+          return new Response(JSON.stringify(runStatus()), { status: 202,
+            headers: { "Content-Type": "application/json" } });
+        }
+        return realFetch(input, init);
       };
 
       window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });

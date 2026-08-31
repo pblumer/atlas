@@ -247,3 +247,48 @@ func TestAnUnreadableElementInstanceReachesTheResultsPage(t *testing.T) {
 		t.Errorf("the counters are maintained and should still read: %v", err)
 	}
 }
+
+// The heat map reads two things: the visit counters and the token history. A
+// case *record* it cannot decode does not damage either, so it still answers
+// (which heatmap_test.go asserts from outside). What it cannot answer over is a
+// case *index* it cannot walk — the list that says which instances are the root's
+// — because a flow count folded over an unknown set of cases is a number with no
+// meaning attached.
+func TestTheHeatMapReportsACaseIndexItCannotWalk(t *testing.T) {
+	sb := openInternal(t, "user-task.bpmn")
+	key, err := sb.StartCase()
+	if err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	if err := sb.store.InjectCorruptProcessInstance(key); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	if _, err := sb.HeatMap(); err == nil {
+		t.Error("a heat map folded over a case list it could not read reported success")
+	}
+}
+
+// An incident record that cannot be decoded is reported by the results page
+// rather than counted as zero. "No incidents" and "the incidents could not be
+// read" are the two answers a reader must never see confused: one says the run
+// went well.
+func TestAnUnreadableIncidentIsReportedByTheResults(t *testing.T) {
+	sb := openInternal(t, "service-task.bpmn")
+	if _, err := sb.StartCase(); err != nil {
+		t.Fatalf("start case: %v", err)
+	}
+	if _, err := sb.Run(DefaultBudget()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// Any key will do: the scan decodes every record under the incident prefix,
+	// and one it cannot read is one it cannot read.
+	if err := sb.store.InjectCorruptIncident(model.NewKey(sb.partition, 9999)); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	if _, _, err := sb.Cases(0, 10); err == nil {
+		t.Error("a results page over undecodable incidents reported success")
+	}
+	if _, err := sb.Report(); err == nil {
+		t.Error("a report over undecodable incidents reported success")
+	}
+}

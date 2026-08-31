@@ -167,6 +167,26 @@ per-sequence-flow visit counts (the heat map, the same `visits` shape the runtim
 overlay already draws), per-element activate→complete durations, per-instance path
 and outcome, incidents, and the timeline of everything that happened.
 
+Two details of that turned out to matter enough to write down.
+
+**A heat map has to list what it did not see.** Element counts come from the
+maintained visit counters (ADR-0080), which exist only for elements a token has
+been to — so a map drawn from them alone cannot say "this branch never ran with
+your data", which is the coverage question an author is usually asking. The map is
+therefore built from the *model's* shape, every element and every sequence flow,
+with the counts filled in and the rest left at zero. Zero is its own shade on the
+canvas: "never reached" is a different statement from "reached least", and
+rendering them alike would answer neither question.
+
+**Sequence flows have no counter, and no id.** The engine aggregates elements, not
+edges, so flow counts are folded out of the causal token history (ADR-0136), whose
+activation records carry the flow each token arrived on. That is one scan of the
+run's activations — 24 ms over ten thousand cases, and cheaper than the report's
+own per-case reads. A compiled flow carries no BPMN id either, and adding one for
+this would put a field on a structure every deployment builds; a flow travels named
+by the two elements it joins instead, which the only client there is — one holding
+the diagram — resolves against its own registry.
+
 ### Scope decided
 
 Four questions were open when this record was first drafted; all four are decided

@@ -27,6 +27,12 @@ func openSession(t *testing.T, r *playground.Registry, fixtureName string) *play
 	if err != nil {
 		t.Fatalf("open session: %v", err)
 	}
+	// Closed here rather than left to the registry's CloseAll: t.Cleanup is LIFO, so
+	// a cleanup registered *after* t.TempDir's runs *before* it. Without this the
+	// directory goes first, and a session whose batch is still running finds its
+	// store deleted underneath it — which pebble reports by taking the test binary
+	// down, from whichever test happened to still be driving one.
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 

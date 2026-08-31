@@ -126,3 +126,126 @@ test("leaving the editor releases the sandbox", async ({ page }) => {
     .toBe(true);
   expect(page.__errors).toEqual([]);
 });
+
+// switchToBatch opens the sandbox and moves to the batch half of the panel.
+async function switchToBatch(page) {
+  await startSandbox(page);
+  await page.locator('#pg-panel button[data-mode="batch"]').click();
+  await expect(page.locator("#pg-batch")).toBeVisible();
+}
+
+test("the pool setup is read off the diagram, and travels with the sandbox", async ({ page }) => {
+  await page.locator('.etabs button[data-tab="playground"]').click();
+  // A row per task the author drew, named as they named it — not a list to retype.
+  await expect(page.locator(".pg-pool")).toHaveCount(2);
+  await expect(page.locator(".pg-pool").first()).toContainText("Antrag prüfen");
+
+  await page.locator('.pg-pool input[data-pool="review"]').fill("clerks");
+  await page.locator('.pg-pool input[data-seats="review"]').fill("3");
+  await page.locator("#pg-hours").check();
+  // A batch needs its user tasks answered by something; "leave for me" is Step's.
+  await page.locator("#pg-human").selectOption("3600000");
+  await page.locator("#pg-start").click();
+  await expect(page.locator("#pg-case")).toBeVisible();
+
+  const open = (await calls(page)).find((c) => /\/playground\/sessions$/.test(c.url));
+  expect(open.body.stubs.pools).toEqual({
+    clerks: { capacity: 3, calendar: { open: [{ fromMinutes: 480, toMinutes: 1020 }], days: [1, 2, 3, 4, 5] } },
+  });
+  expect(open.body.stubs.poolOf).toEqual({ review: "clerks" });
+  expect(open.body.stubs.human).toEqual({ minMillis: 3600000, maxMillis: 3600000 });
+  expect(page.__errors).toEqual([]);
+});
+
+test("a batch runs, is polled to a stop, and reports what it did", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-cases").fill('[{"amount":10},{"amount":20},{"amount":5000}]');
+  await page.locator("#pg-arrival").selectOption("every");
+  await page.locator("#pg-arrival-n").fill("15");
+  await page.locator("#pg-batch").click();
+
+  // The dataset and the timing reached the server as data, not as text.
+  const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
+  expect(started.body.cases).toHaveLength(3);
+  expect(started.body.arrival).toEqual({ mode: "every", intervalMillis: 900000 });
+
+  // The report arrives on its own, because the panel polled until the run stopped.
+  await expect(page.locator(".pg-facts").first()).toContainText("of 3 finished");
+  await expect(page.locator("#pg-hint")).toContainText("report is in the panel");
+
+  // The bottleneck ranking puts the queue first: review waited, score did not.
+  const rows = page.locator(".pg-table").first().locator("tbody tr");
+  await expect(rows.first()).toContainText("review");
+  await expect(rows.first()).toContainText("3h");
+  await expect(page.locator(".pg-table").nth(1)).toContainText("clerks");
+
+  // And the run over time is drawn rather than described.
+  await expect(page.locator(".pg-chart")).toBeVisible();
+  await expect(page.locator(".pg-chart .pg-line")).toHaveCount(1);
+  await expect(page.locator(".pg-legend")).toContainText("peak 3");
+
+  // Polling stops when the run does: no further status calls after the report.
+  const before = (await calls(page)).filter((c) => c.method === "GET" && /\/runs$/.test(c.url)).length;
+  await page.waitForTimeout(1600);
+  const after = (await calls(page)).filter((c) => c.method === "GET" && /\/runs$/.test(c.url)).length;
+  expect(after).toBe(before);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the heat map shades elements and flows, and names what was never reached", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-facts").first()).toBeVisible();
+
+  // The busiest parts take the top of the scale, and the flow nobody took is
+  // marked as never reached rather than merely left plain.
+  await expect(page.locator('.djs-element[data-element-id="review"].pg-heat-5')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="f1"].pg-heat-5')).toHaveCount(1);
+  await expect(page.locator('.djs-element[data-element-id="f3"].pg-heat-0')).toHaveCount(1);
+  // A sequence flow is named by its ends on the wire; the client resolved f3 from
+  // score → done against its own diagram.
+  await expect(page.locator(".pg-cold")).toContainText("score → done");
+
+  // The toggle takes the shading off again, leaving the diagram as it was.
+  await page.locator("#pg-heat").click();
+  await expect(page.locator(".pg-heat-5")).toHaveCount(0);
+  await page.locator("#pg-heat").click();
+  await expect(page.locator('.djs-element[data-element-id="review"].pg-heat-5')).toHaveCount(1);
+
+  // Stepping is a different question, so it is not answered on a shaded diagram.
+  await page.locator('#pg-panel button[data-mode="step"]').click();
+  await expect(page.locator(".pg-heat-5")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a CSV dataset is uploaded as a file, not parsed in the browser", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-csv").setInputFiles({
+    name: "antraege.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("kunde,amount\nA,10\nB,5000\n"),
+  });
+  await expect(page.locator(".pg-file")).toContainText("antraege.csv");
+  await page.locator("#pg-batch").click();
+
+  const up = (await calls(page)).find((c) => /\/runs\/csv$/.test(c.url));
+  expect(up.body.file).toBe("antraege.csv");
+  expect(up.body.arrival.mode).toBe("allAtOnce");
+  // The rows were never parsed here: the server reads them with the same code a
+  // real CSV import uses, so the Playground and production read a file alike.
+  const inline = (await calls(page)).filter((c) => c.method === "POST" && /\/runs$/.test(c.url));
+  expect(inline).toHaveLength(0);
+  await expect(page.locator(".pg-facts").first()).toContainText("of 3 finished");
+  expect(page.__errors).toEqual([]);
+});
+
+test("stopping a batch leaves what it did readable", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-batch").click();
+  await expect(page.locator("#pg-cancel")).toBeVisible();
+  await page.locator("#pg-cancel").click();
+
+  await expect(page.locator(".pg-run-line")).toContainText("of 3 finished");
+  await expect(page.locator(".pg-facts").first()).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});

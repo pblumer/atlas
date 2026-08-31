@@ -149,3 +149,92 @@ func TestHeatMapKnowsTheModelBeforeTheRun(t *testing.T) {
 		}
 	}
 }
+
+// Every read path reports a record it cannot decode rather than answering
+// without it. A report that quietly drops the rows it could not read still looks
+// complete, and that is the failure worth ruling out: the numbers would be wrong
+// and nothing on the screen would say so.
+func TestEveryReadPathReportsAnUnreadableCase(t *testing.T) {
+	sb := openSandbox(t, "exclusive-gateway.bpmn", playground.StubSet{
+		Human: &playground.Stub{Min: time.Minute, Max: time.Minute},
+	})
+	runPlan(t, sb, playground.Plan{Cases: amounts(10, 5000, 20)})
+
+	page, total, err := sb.Cases(0, 10)
+	if err != nil || total != 3 {
+		t.Fatalf("cases = %d/%v, want three readable rows before anything is broken", total, err)
+	}
+	broken := page[1].InstanceKey
+	if err := sb.InjectUnreadableCase(broken); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		read func() error
+	}{
+		{"the report", func() error { _, err := sb.Report(); return err }},
+		{"the results page", func() error { _, _, err := sb.Cases(0, 10); return err }},
+		{"one case", func() error { _, err := sb.Case(broken); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.read(); err == nil {
+				t.Error("read a sandbox with an undecodable record and reported success")
+			}
+		})
+	}
+
+	// The heat map is deliberately *not* in that list. It is folded from the visit
+	// counters and the token history, neither of which a case record damages, so it
+	// still answers — and answers correctly, because the tokens this case moved are
+	// recorded where the map reads them. A map that refused here would be refusing
+	// over data it does not use.
+	h, err := sb.HeatMap()
+	if err != nil {
+		t.Fatalf("heat map: %v", err)
+	}
+	if got := elementCount(t, h, "decide"); got != 3 {
+		t.Errorf("the gateway ran %d times, want all three — including the case whose record broke", got)
+	}
+}
+
+// The heat map is the *root's*. A call activity's child runs on its own compiled
+// graph, whose element and flow indices mean nothing against this one — folding
+// its token history in would attribute the child's work to whatever the parent
+// happens to have at the same index, which is worse than leaving it out.
+//
+// The diagram on screen is the parent's, and that is what the map is drawn onto.
+func TestHeatMapCoversTheRootNotTheProcessesItCalls(t *testing.T) {
+	// Two executable processes in one file, so the root is named rather than
+	// guessed — which is the same thing the Modeler does for a collaboration.
+	sb, err := playground.Open(playground.Options{
+		ModelXML: fixture(t, "call-activity.bpmn"), BaseDir: t.TempDir(),
+		StartTime: simStart, Seed: 1, Root: "parent",
+		Stubs: playground.StubSet{Human: &playground.Stub{Min: time.Minute, Max: time.Minute}},
+	})
+	if err != nil {
+		t.Fatalf("open sandbox: %v", err)
+	}
+	t.Cleanup(func() { _ = sb.Close() })
+	runPlan(t, sb, playground.Plan{Cases: rows(2)})
+
+	h, err := sb.HeatMap()
+	if err != nil {
+		t.Fatalf("heat map: %v", err)
+	}
+	if got := elementCount(t, h, "p_call"); got != 2 {
+		t.Errorf("the call activity ran %d times, want 2", got)
+	}
+	if got := flowCount(t, h, "p_call", "p_end"); got != 2 {
+		t.Errorf("the flow out of the call was taken %d times, want 2", got)
+	}
+	// Nothing of the child leaks in: not its elements, and not its flows.
+	for _, e := range h.Elements {
+		if e.Id == "c_work" || e.Id == "c_start" || e.Id == "c_end" {
+			t.Errorf("the child's element %q is on the parent's heat map", e.Id)
+		}
+	}
+	if len(h.Elements) != 3 || len(h.Flows) != 2 {
+		t.Errorf("map = %d elements / %d flows, want the parent's three and two", len(h.Elements), len(h.Flows))
+	}
+}
