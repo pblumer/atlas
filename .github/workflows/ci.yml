@@ -71,6 +71,9 @@ jobs:
       # single line in an unrelated test file. Nothing is skipped or quarantined by
       # raising it — every test still runs, and a real hang still ends the job well
       # inside the job's 30-minute cap above.
+      #
+      # `make race` and the documented command in AGENTS.md carry the same flag, so
+      # a contributor's local run matches this one. Change one and change the rest.
       - name: Test (race detector)
         run: go test -race -timeout=25m ./...
 
