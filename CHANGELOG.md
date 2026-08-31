@@ -86,6 +86,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A feed scrape reached its worker without knowing it was a feed.** The resolved
+  job carried `format` and `maxItems`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)), but the engine's payload
+  dropped both — so an offloaded `format="rss"` task fetched the feed as HTML and
+  failed compiling a CSS selector it had never authored, parking the instance on an
+  incident that named a selector nobody wrote. `webscrape` is offloaded by default,
+  so that was the path [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn)
+  actually took; only `--in-process-connectors webscrape` worked. Both fields travel
+  now, and the entries come back as the `{title, link, description, published}`
+  objects the in-process path writes — the two paths share one definition of what a
+  scrape's result *is* (`webscrape.Items`) instead of building it twice.
+
+  The same class of gap in two connectors in one week is a missing check, not two
+  slips: every payload arm is now pinned against the resolved-job struct a worker
+  unmarshals into, in both directions. A field the job carries and the payload omits
+  fails the build, as does a key nothing on the far side reads.
+
 - **An AD task naming a Console-configured directory reached its worker without the
   name.** The resolved job dropped `connector`, so a task authored the
   [ADR-0206](docs/adr/0206-ad-as-a-console-connector.md) way — a directory an operator
