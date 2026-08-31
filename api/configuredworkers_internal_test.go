@@ -1,43 +1,19 @@
 package api
 
 import (
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestRewriteRequestBodyEncodesJSONAndRejectsUnsupportedValues(t *testing.T) {
-	request := httptest.NewRequest(http.MethodPost, "/", nil)
-	if err := rewriteRequestBody(request, map[string]string{"workerTypeId": "atlas.mail"}); err != nil {
-		t.Fatalf("rewrite JSON request: %v", err)
-	}
-	body, err := io.ReadAll(request.Body)
-	if err != nil {
-		t.Fatalf("read rewritten request: %v", err)
-	}
-	if string(body) != `{"workerTypeId":"atlas.mail"}` || request.ContentLength != int64(len(body)) {
-		t.Fatalf("rewritten request body=%q contentLength=%d", body, request.ContentLength)
-	}
-
-	if err := rewriteRequestBody(request, make(chan int)); err == nil {
-		t.Fatal("rewrite unsupported JSON value: want an error")
-	}
-}
-
 func TestConfiguredWorkerProjectionMakesUnknownLegacyKindExplicit(t *testing.T) {
-	worker, err := configuredWorkerFromConnectorJSON([]byte(`{
-		"id":"legacy-1",
-		"name":"legacy",
-		"kind":"vendor-old",
-		"endpoint":"https://legacy.example.test",
-		"credentialsRef":"legacy-token",
-		"enabled":true
-	}`))
-	if err != nil {
-		t.Fatalf("project legacy connector: %v", err)
-	}
+	worker := configuredWorkerFromRecord(connector{
+		ID:             "legacy-1",
+		Name:           "legacy",
+		Kind:           "vendor-old",
+		Endpoint:       "https://legacy.example.test",
+		CredentialsRef: "legacy-token",
+		Enabled:        true,
+	})
 	if worker.WorkerTypeID != "" || worker.WorkerTypeVersion != "" {
 		t.Fatalf("unknown connector kind received an invented Worker Type identity: %+v", worker)
 	}
@@ -49,62 +25,72 @@ func TestConfiguredWorkerProjectionMakesUnknownLegacyKindExplicit(t *testing.T) 
 	}
 }
 
+// A caller below viewer may know a Worker exists and nothing about how it is
+// configured (ADR-0205). The projection must carry that boundary from the role check
+// rather than blanking fields, which would report an unconfigured Worker.
 func TestConfiguredWorkerProjectionPreservesCatalogAccessBoundary(t *testing.T) {
-	worker, err := configuredWorkerFromConnectorJSON([]byte(`{
-		"id":"catalog-1",
-		"name":"mail-prod",
-		"kind":"mail",
-		"enabled":true
-	}`))
-	if err != nil {
-		t.Fatalf("project catalog entry: %v", err)
-	}
+	worker := configuredWorkerFrom(connectorListing{
+		record: connector{
+			ID: "catalog-1", Name: "mail-prod", Kind: connectorKindMail,
+			Endpoint: "smtp.example.test:587", CredentialsRef: "smtp-token",
+			Provider: "smtp", Sender: "bot@example.test", Enabled: true,
+			CreatedAt: 1700000000, OwnerID: "someone-else", Visibility: VisibilityPrivate,
+		},
+		problem:     "no credential",
+		catalogOnly: true,
+	})
 	if worker.WorkerTypeID != "atlas.mail" || worker.WorkerTypeVersion != initialBuiltInWorkerTypeVersion {
 		t.Fatalf("catalog entry has wrong Worker Type identity: %+v", worker)
+	}
+	if worker.Name != "mail-prod" || !worker.Enabled || worker.Problem != "no credential" {
+		t.Fatalf("catalog entry lost the facts a modeller may see: %+v", worker)
 	}
 	if worker.Config != nil || worker.CredentialsRef != "" {
 		t.Fatalf("catalog-only projection exposed configuration: %+v", worker)
 	}
-}
-
-func TestBufferedResponsePreservesStatusHeadersAndBody(t *testing.T) {
-	implicitOK := newBufferedResponse()
-	if _, err := implicitOK.Write([]byte("ok")); err != nil {
-		t.Fatalf("capture implicit OK response: %v", err)
-	}
-	if implicitOK.status != http.StatusOK || implicitOK.body.String() != "ok" {
-		t.Fatalf("implicit response status=%d body=%q", implicitOK.status, implicitOK.body.String())
-	}
-
-	captured := newBufferedResponse()
-	captured.Header().Set("X-Test", "preserved")
-	captured.WriteHeader(http.StatusTeapot)
-	if _, err := captured.Write([]byte("legacy error")); err != nil {
-		t.Fatalf("capture response body: %v", err)
-	}
-
-	recorder := httptest.NewRecorder()
-	flushBufferedResponse(recorder, captured)
-	if recorder.Code != http.StatusTeapot || recorder.Header().Get("X-Test") != "preserved" || recorder.Body.String() != "legacy error" {
-		t.Fatalf("flushed response changed: status=%d headers=%v body=%q", recorder.Code, recorder.Header(), recorder.Body.String())
-	}
-
-	empty := newBufferedResponse()
-	recorder = httptest.NewRecorder()
-	flushBufferedResponse(recorder, empty)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("empty captured response status=%d, want 200", recorder.Code)
+	if worker.OwnerID != "" || worker.Visibility != "" || worker.CreatedAt != 0 {
+		t.Fatalf("catalog-only projection exposed ownership: %+v", worker)
 	}
 }
 
-func TestConfiguredWorkerResponseRejectsInvalidLegacyJSON(t *testing.T) {
-	captured := newBufferedResponse()
-	captured.status = http.StatusOK
-	_, _ = captured.body.WriteString("{")
+func TestConfiguredWorkerProjectionCarriesRuntimeAndSharingFacts(t *testing.T) {
+	uses := []connectorUse{{ProcessID: "order", Name: "Order", Version: 3}}
+	worker := configuredWorkerFrom(connectorListing{
+		record: connector{
+			ID: "temis-1", Name: "temis-prod", Kind: connectorKindTemis,
+			Endpoint: "https://temis.example.test", Enabled: true,
+			CreatedAt: 1700000000, UpdatedAt: 1700000001,
+			OwnerID: "alice", Visibility: VisibilityPrivate,
+			Members: []projectMember{{Role: ScopeRoleEditor}},
+		},
+		role:    ScopeRoleOwner,
+		problem: "endpoint refused the connection",
+		usedBy:  uses,
+	})
+	if worker.Role != ScopeRoleOwner || worker.Problem != "endpoint refused the connection" {
+		t.Fatalf("projection dropped what the runtime and the role check decided: %+v", worker)
+	}
+	if len(worker.UsedBy) != 1 || worker.UsedBy[0].ProcessID != "order" {
+		t.Fatalf("projection dropped the blast radius of a delete: %+v", worker)
+	}
+	if worker.CreatedAt != 1700000000 || worker.UpdatedAt != 1700000001 {
+		t.Fatalf("projection dropped the record's timestamps: %+v", worker)
+	}
+	if worker.OwnerID != "alice" || worker.Visibility != VisibilityPrivate || len(worker.Members) != 1 {
+		t.Fatalf("projection dropped the sharing state: %+v", worker)
+	}
+}
 
-	recorder := httptest.NewRecorder()
-	writeConfiguredWorkerResponse(recorder, captured)
-	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "project configured Worker response") {
-		t.Fatalf("invalid legacy response status=%d body=%q", recorder.Code, recorder.Body.String())
+// Every built-in Worker Type must be reachable by its canonical id, or the canonical
+// API can configure fewer Worker Types than the catalog advertises.
+func TestBuiltInWorkerTypeForIDResolvesEveryBuiltInType(t *testing.T) {
+	for _, meta := range builtInManagedWorkerTypes {
+		got, ok := builtInWorkerTypeForID(meta.ID)
+		if !ok || got.ConnectorKind != meta.ConnectorKind {
+			t.Fatalf("worker type %q resolved to %+v (ok=%v)", meta.ID, got, ok)
+		}
+	}
+	if _, ok := builtInWorkerTypeForID("example.unknown"); ok {
+		t.Fatal("an unknown Worker Type id resolved to a built-in package")
 	}
 }
