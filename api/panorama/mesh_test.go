@@ -234,11 +234,11 @@ func TestDeriveGraphMarksAnUndeployedCallTargetUnresolved(t *testing.T) {
 	if got := kindsOf(g); got[KindUnresolved] != 1 {
 		t.Fatalf("node kinds = %v, want one unresolved node", got)
 	}
-	n := nodeByID(t, g, "unresolved:nowhere")
+	n := nodeByID(t, g, "unresolved:process:nowhere")
 	if n.Name != "nowhere" {
 		t.Errorf("unresolved node name = %q, want the called process id", n.Name)
 	}
-	if !hasEdge(g, "process:1", "unresolved:nowhere", EdgeCalls) {
+	if !hasEdge(g, "process:1", "unresolved:process:nowhere", EdgeCalls) {
 		t.Errorf("edge to the unresolved target missing from %#v", g.Edges)
 	}
 }
@@ -332,5 +332,246 @@ func TestDeriveGraphOmitsAnApplicationTheCallerCannotView(t *testing.T) {
 	// Nothing references the hidden pair, so no placeholder is warranted either.
 	if g.Restricted != 0 {
 		t.Errorf("Restricted = %d, want 0 — an unreferenced hidden resource is simply absent", g.Restricted)
+	}
+}
+
+// --- Part 2: connectors and decisions as dependency nodes ---
+
+// TestDeriveGraphDrawsConnectorDependencies: a model names a connector by name
+// only and cannot tell whether that name is configured anywhere (ADR-0036/0041).
+// The mesh is on the outside, where the connector store is, so it can answer —
+// which is the whole reason the references are enumerable (ADR-0158).
+func TestDeriveGraphDrawsConnectorDependencies(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "billing-rest", TargetID: "c1"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+		Connectors:   []Connector{{ID: "c1", Name: "billing-rest", Kind: "rest", CanView: true}},
+	}, Options{})
+
+	if n := nodeByID(t, g, "connector:c1"); n.Kind != KindConnector || n.Name != "billing-rest" {
+		t.Errorf("connector node = %+v", n)
+	}
+	if !hasEdge(g, "process:1", "connector:c1", EdgeUses) {
+		t.Errorf("connector edge missing from %#v", g.Edges)
+	}
+}
+
+// TestConnectorNodeCarriesNoEndpointOrCredential is the disclosure bound. A
+// connector record holds an endpoint and a credential reference; neither belongs
+// in a landscape picture that anyone with modeler access can open, and an internal
+// hostname is exactly what ADR-0211 §10 keeps out of an export. The assertion is on
+// the marshalled payload, not on the rendering.
+func TestConnectorNodeCarriesNoEndpointOrCredential(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "billing-rest", TargetID: "c1"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+		Connectors: []Connector{{
+			ID: "c1", Name: "billing-rest", Kind: "rest", CanView: true,
+			Endpoint: "https://internal-billing.corp.example/api", CredentialsRef: "vault://billing",
+		}},
+	}, Options{})
+
+	body, err := json.Marshal(g)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, leak := range []string{"internal-billing", "corp.example", "vault://billing", "CredentialsRef", "endpoint"} {
+		if strings.Contains(string(body), leak) {
+			t.Errorf("connector node leaks %q in %s", leak, body)
+		}
+	}
+}
+
+// TestDeriveGraphMarksAnUnconfiguredConnectorUnresolved is the operational answer
+// the model cannot give: this process asks for a connector nobody configured, so it
+// would fail at run time. The name is safe to show — it is in the caller's own model.
+func TestDeriveGraphMarksAnUnconfiguredConnectorUnresolved(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "nowhere-rest"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+	}, Options{})
+
+	n := nodeByID(t, g, "unresolved:connector:nowhere-rest")
+	if n.Kind != KindUnresolved || n.Name != "nowhere-rest" {
+		t.Errorf("unresolved connector node = %+v", n)
+	}
+	if !hasEdge(g, "process:1", n.ID, EdgeUses) {
+		t.Errorf("edge to the unconfigured connector missing from %#v", g.Edges)
+	}
+}
+
+// TestDeriveGraphKeepsTheEdgeToARestrictedConnector applies §3's rule to the second
+// resource kind that has a sharing scope of its own (ADR-0205). Same rule, same
+// placeholder, and a connector must not merge with a hidden process.
+func TestDeriveGraphKeepsTheEdgeToARestrictedConnector(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "secret-rest", TargetID: "c1"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+		Connectors:   []Connector{{ID: "c1", Name: "secret-rest", Kind: "rest"}},
+	}, Options{})
+
+	if got := kindsOf(g); got[KindConnector] != 0 || got[KindRestricted] != 1 {
+		t.Fatalf("node kinds = %v, want the connector replaced by a placeholder", got)
+	}
+	if g.Restricted != 1 {
+		t.Errorf("Restricted = %d, want 1", g.Restricted)
+	}
+	body, err := json.Marshal(g)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(body), "secret-rest") {
+		t.Errorf("restricted connector leaks its name in %s", body)
+	}
+}
+
+// TestRestrictedProcessesAndConnectorsDoNotShareAPlaceholder: placeholders are
+// keyed per resource, and a hidden process is not a hidden connector. Merging them
+// would draw one dependency where there are two, on different things.
+func TestRestrictedProcessesAndConnectorsDoNotShareAPlaceholder(t *testing.T) {
+	hidden := proc(2, "dunning", "Dunning", "a2")
+	hidden.CanView = false
+	p := proc(1, "invoice", "Invoice", "a1", Call{ElementID: "Call_1", CalledProcessID: "dunning", TargetKey: 2})
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "secret-rest", TargetID: "c1"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing"), {ID: "a2", Name: "Hidden"}},
+		Processes:    []Process{p, hidden},
+		Connectors:   []Connector{{ID: "c1", Name: "secret-rest", Kind: "rest"}},
+	}, Options{})
+
+	if got := kindsOf(g)[KindRestricted]; got != 2 {
+		t.Errorf("restricted placeholders = %d, want one per hidden resource", got)
+	}
+	if g.Restricted != 2 {
+		t.Errorf("Restricted = %d, want 2", g.Restricted)
+	}
+}
+
+// TestDeriveGraphDrawsDecisionDependencies covers the third edge the compiler
+// already enumerates. A remote (connector-mode) decision is deliberately not here:
+// it arrives as a connector reference instead, which is where its dependency
+// actually points.
+func TestDeriveGraphDrawsDecisionDependencies(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Decisions = []string{"credit-score"}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+		Decisions:    []Decision{{ID: "credit-score", Name: "Credit score", CanView: true}},
+	}, Options{})
+
+	if n := nodeByID(t, g, "decision:credit-score"); n.Kind != KindDecision || n.Name != "Credit score" {
+		t.Errorf("decision node = %+v", n)
+	}
+	if !hasEdge(g, "process:1", "decision:credit-score", EdgeUses) {
+		t.Errorf("decision edge missing from %#v", g.Edges)
+	}
+}
+
+// TestDeriveGraphDeduplicatesRepeatedDependencies: three service tasks on one
+// connector are one dependency, not three. The mesh answers "what does this depend
+// on", and repeating an edge would make a busy process look more coupled than it is.
+func TestDeriveGraphDeduplicatesRepeatedDependencies(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1")
+	p.Connectors = []ConnectorUse{
+		{ElementID: "Task_1", Name: "billing-rest", TargetID: "c1"},
+		{ElementID: "Task_2", Name: "billing-rest", TargetID: "c1"},
+		{ElementID: "Task_3", Name: "billing-rest", TargetID: "c1"},
+	}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+		Connectors:   []Connector{{ID: "c1", Name: "billing-rest", Kind: "rest", CanView: true}},
+	}, Options{})
+
+	uses := 0
+	for _, e := range g.Edges {
+		if e.Kind == EdgeUses {
+			uses++
+		}
+	}
+	if uses != 1 {
+		t.Errorf("uses edges = %d, want 1", uses)
+	}
+}
+
+// TestUnreferencedResourcesStayOutOfTheGraph: the mesh is the dependency picture,
+// not an inventory. A configured connector nothing uses is not a landscape edge, and
+// putting it on screen would bury the ones that are.
+func TestUnreferencedResourcesStayOutOfTheGraph(t *testing.T) {
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Connectors:   []Connector{{ID: "c1", Name: "unused-rest", Kind: "rest", CanView: true}},
+		Decisions:    []Decision{{ID: "unused", Name: "Unused", CanView: true}},
+	}, Options{})
+
+	if got := kindsOf(g); got[KindConnector] != 0 || got[KindDecision] != 0 {
+		t.Errorf("node kinds = %v, want no unreferenced connector or decision", got)
+	}
+}
+
+// TestUnresolvedProcessAndConnectorIdsDoNotCollide pins the namespaced id scheme: a
+// process id and a connector name can be the same string, and they are different
+// findings about different things.
+func TestUnresolvedProcessAndConnectorIdsDoNotCollide(t *testing.T) {
+	p := proc(1, "invoice", "Invoice", "a1", Call{ElementID: "Call_1", CalledProcessID: "billing"})
+	p.Connectors = []ConnectorUse{{ElementID: "Task_1", Name: "billing"}}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{p},
+	}, Options{})
+
+	if got := kindsOf(g)[KindUnresolved]; got != 2 {
+		t.Fatalf("unresolved nodes = %d, want 2 — one process target and one connector", got)
+	}
+	nodeByID(t, g, "unresolved:process:billing")
+	nodeByID(t, g, "unresolved:connector:billing")
+}
+
+// TestDeriveGraphHandlesHiddenAndMissingDecisions completes the decision edge for
+// the same two cases the connector edge already covers. A decision reached through
+// a business-rule task is a dependency like any other: it can sit behind a scope,
+// and it can simply not be registered — and those stay two findings here too.
+func TestDeriveGraphHandlesHiddenAndMissingDecisions(t *testing.T) {
+	hidden := proc(1, "invoice", "Invoice", "a1")
+	hidden.Decisions = []string{"payroll-band"}
+	missing := proc(2, "dunning", "Dunning", "a1")
+	missing.Decisions = []string{"never-registered"}
+
+	g := DeriveGraph(Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{hidden, missing},
+		Decisions:    []Decision{{ID: "payroll-band", Name: "Payroll band"}},
+	}, Options{})
+
+	if got := kindsOf(g); got[KindDecision] != 0 || got[KindRestricted] != 1 || got[KindUnresolved] != 1 {
+		t.Fatalf("node kinds = %v, want one placeholder and one unresolved decision", got)
+	}
+	if n := nodeByID(t, g, "unresolved:decision:never-registered"); n.Name != "never-registered" {
+		t.Errorf("unresolved decision node = %+v", n)
+	}
+	body, err := json.Marshal(g)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(body), "Payroll band") {
+		t.Errorf("restricted decision leaks its name in %s", body)
 	}
 }
