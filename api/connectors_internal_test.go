@@ -713,6 +713,9 @@ func TestConnectorHandlerStoreErrors(t *testing.T) {
 	if do(http.MethodGet, "/api/v1/connectors", "") != http.StatusInternalServerError {
 		t.Error("list with a broken store: want 500")
 	}
+	if do(http.MethodGet, "/api/v1/configured-workers", "") != http.StatusInternalServerError {
+		t.Error("configured Worker list with a broken compatibility store: want 500")
+	}
 	if do(http.MethodPost, "/api/v1/connectors", `{"name":"n","endpoint":"http://x"}`) != http.StatusInternalServerError {
 		t.Error("create with a broken store: want 500")
 	}
