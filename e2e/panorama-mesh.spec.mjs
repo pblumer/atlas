@@ -11,14 +11,18 @@ const graph = {
     { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 2 },
     { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1 },
     { id: "restricted:1", kind: "restricted", provenance: "derived" },
-    { id: "unresolved:archive", kind: "unresolved", name: "archive", provenance: "derived" },
+    { id: "unresolved:process:archive", kind: "unresolved", name: "archive", provenance: "derived" },
+    { id: "connector:c1", kind: "connector", name: "ops-mail", provenance: "derived", connectorKind: "mail" },
+    { id: "decision:credit", kind: "decision", name: "Credit score", provenance: "derived" },
   ],
   edges: [
     { from: "application:a1", to: "process:1", kind: "contains" },
     { from: "application:a1", to: "process:2", kind: "contains" },
     { from: "process:1", to: "process:2", kind: "calls" },
     { from: "process:1", to: "restricted:1", kind: "calls" },
-    { from: "process:2", to: "unresolved:archive", kind: "calls" },
+    { from: "process:2", to: "unresolved:process:archive", kind: "calls" },
+    { from: "process:1", to: "connector:c1", kind: "uses" },
+    { from: "process:2", to: "decision:credit", kind: "uses" },
   ],
   restricted: 1,
   clustered: false,
@@ -43,10 +47,10 @@ test("renders the derived landscape and drills into a process", async ({ page })
   // Every node is drawn, and the two placeholder kinds are visually distinct from
   // real ones rather than merged into them.
   await expect(page.locator(".mesh-canvas")).toBeVisible();
-  await expect(page.locator(".mesh-node")).toHaveCount(5);
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
   await expect(page.locator(".mesh-restricted")).toHaveCount(1);
   await expect(page.locator(".mesh-unresolved")).toHaveCount(1);
-  await expect(page.locator(".mesh-edges line")).toHaveCount(5);
+  await expect(page.locator(".mesh-edges line")).toHaveCount(7);
   await expect(page.locator(".mesh-canvas")).toContainText("Billing");
   await expect(page.locator(".mesh-canvas")).toContainText("Invoice");
 
@@ -123,4 +127,48 @@ test("stays inside its size budget", async ({ page }) => {
   await expect(page.locator(".mesh-canvas")).toBeVisible({ timeout: 30000 });
   await expect(page.locator(".mesh-node")).toHaveCount(400);
   expect(Date.now() - started).toBeLessThan(15000);
+});
+
+// Search is what makes a few hundred nodes navigable at all — without it the view
+// is a picture rather than a tool. It matches on name, kind and BPMN process id,
+// and it reports how much it hid: a filtered mesh looks exactly like a small one.
+test("filters the landscape and says how much it is hiding", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+
+  await page.getByLabel("Filter the landscape").fill("invoice");
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator("#mesh-count")).toContainText("1 of 7");
+  await expect(page.locator(".mesh-canvas")).toContainText("Invoice");
+
+  // Filtering by kind is the other half: "what does this instance talk to".
+  await page.getByLabel("Filter the landscape").fill("connector");
+  await expect(page.locator(".mesh-connector")).toHaveCount(1);
+  await expect(page.locator(".mesh-canvas")).toContainText("ops-mail");
+
+  await page.getByLabel("Filter the landscape").fill("nothing-matches-this");
+  await expect(page.locator(".mesh-empty-filter")).toContainText("Nothing matches");
+
+  await page.getByLabel("Filter the landscape").fill("");
+  await expect(page.locator(".mesh-node")).toHaveCount(7);
+  await expect(page.locator("#mesh-count")).toContainText("7 node(s)");
+});
+
+// An unresolved node must say what kind of thing is missing: a missing deployment
+// and a missing connector are fixed in different places.
+test("an unresolved dependency names what kind of thing is missing", async ({ page }) => {
+  installMock(page, {
+    nodes: [
+      { id: "process:1", kind: "process", name: "Notifier", provenance: "derived", processId: "notifier", version: 1 },
+      { id: "unresolved:connector:ops-mail", kind: "unresolved", name: "ops-mail", provenance: "derived" },
+    ],
+    edges: [{ from: "process:1", to: "unresolved:connector:ops-mail", kind: "uses" }],
+    restricted: 0,
+    clustered: false,
+  });
+  await page.goto("/index.html#/panorama/landscape");
+
+  await expect(page.locator(".mesh-unresolved title")).toContainText("connector");
+  await expect(page.locator(".mesh-unresolved title")).toContainText("park");
 });
