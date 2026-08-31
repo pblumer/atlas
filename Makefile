@@ -20,9 +20,11 @@ run:
 test:
 	go test ./...
 
-# Mandatory before considering any change done.
+# Mandatory before considering any change done. The timeout matches ci.yml: the
+# api package needs more than Go's 10m per-package default under the race
+# detector, and hitting it reads as a package failure rather than a timeout.
 race:
-	go test -race ./...
+	go test -race -timeout=25m ./...
 
 vet:
 	go vet ./...
