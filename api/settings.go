@@ -222,7 +222,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleDeleteLogo clears the org-wide logo, restoring the built-in letter mark.
+// handleDeleteLogo clears the org-wide logo, restoring the built-in Atlas mark.
 // Admin-gated.
 func (s *Server) handleDeleteLogo(w http.ResponseWriter, r *http.Request) {
 	var clearErr error

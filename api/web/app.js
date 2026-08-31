@@ -6,7 +6,7 @@ import {
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
 import {
-  LOGO_URL, hasLogoCached, applyLogo, syncLogoFromServer,
+  LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
@@ -2041,7 +2041,7 @@ function appearanceCard() {
         a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
-            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : "A"
+            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
           }</span>
           <label class="btn sm" style="cursor:pointer">
             Upload logo…
@@ -2129,7 +2129,7 @@ function wireAppearance() {
 // wireLogo connects the Appearance panel's logo upload and remove controls to
 // logo.js. Uploading previews the new mark instantly (applyLogo runs against the
 // whole shell) and persists it org-wide; a failed write (e.g. a non-admin) is
-// surfaced. Remove clears it back to the built-in letter mark.
+// surfaced. Remove clears it back to the built-in Atlas mark.
 function wireLogo() {
   const file = document.getElementById("logo-file");
   const remove = document.getElementById("logo-remove");

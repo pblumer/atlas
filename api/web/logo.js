@@ -1,6 +1,6 @@
 // Atlas UI branding — org-wide brand logo (buildless, ADR-0148).
 //
-// A customer can replace the built-in "A" letter mark with their own logo. The
+// A customer can replace the built-in Atlas mark with their own logo. The
 // logo is **org-wide**: it is stored on the server (GET/PUT/DELETE
 // /api/v1/settings/logo) so every user of the instance — and every visitor to the
 // login screen — sees it. This mirrors the org-wide brand colour (theme.js): the
@@ -37,10 +37,19 @@ function cacheLogoPresent(present) {
   } catch { /* quota/denied — the server still holds the source of truth */ }
 }
 
+// The built-in Atlas mark, restored whenever no org logo applies. It is the same
+// glyph the pages ship inline (docs/brand/atlas-glyph.svg — keep the three in step):
+// a fixed literal, never anything derived from the server, so assigning it as markup
+// introduces no injection surface.
+export const BUILTIN_MARK =
+  '<svg viewBox="0 0 256 256"><path fill="currentColor" fill-rule="evenodd" ' +
+  'd="M128 34 236 206 20 206ZM128 166 174 206 82 206Z' +
+  'M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/></svg>';
+
 // applyLogo swaps every brand mark (the ".mark" boxes in the top bar and drawer)
-// between the uploaded logo and the built-in "A". When a logo is present each mark
+// between the uploaded logo and the built-in glyph. When a logo is present each mark
 // renders an <img> pointing at LOGO_URL; a load failure (e.g. the logo was cleared
-// on another device) reverts that mark to the letter, so the UI degrades cleanly.
+// on another device) reverts that mark to the glyph, so the UI degrades cleanly.
 // `refresh` forces a cache-busted reload of an already-shown logo — passed after
 // an admin replaces the image, where the URL is unchanged but the bytes are not.
 // Boot and the server sync leave it false, so a normal load stays cacheable.
@@ -58,7 +67,7 @@ export function applyLogo(present, refresh = false) {
         img.alt = "";
         img.setAttribute("aria-hidden", "true");
         // A load failure (e.g. the logo was cleared on another device) reverts this
-        // mark to the letter, so a stale "present" cache never leaves an empty box.
+        // mark to the glyph, so a stale "present" cache never leaves an empty box.
         img.onerror = () => { cacheLogoPresent(false); applyLogo(false); };
         img.src = LOGO_URL; // first paint: plain URL so the browser may cache it
         mark.textContent = "";
@@ -67,7 +76,7 @@ export function applyLogo(present, refresh = false) {
       }
     } else if (mark.classList.contains("has-logo")) {
       mark.classList.remove("has-logo");
-      mark.textContent = "A";
+      mark.innerHTML = BUILTIN_MARK;
     }
   }
 }

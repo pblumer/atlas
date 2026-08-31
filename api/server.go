@@ -1136,7 +1136,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		time.Now,
 		s.collectBindingCatalog,
 	)
-	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, meshMaxNodes)
+	s.panoramaMesh = panorama.NewMesh(s.runLoop, s.collectLandscape, s.panorama.OverlaysOnLoop, meshMaxNodes)
 	for _, opt := range opts {
 		opt(s)
 	}

@@ -60,6 +60,28 @@
       }
     },
     {
+      "id": "new-atlas-mark",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Atlas has a new mark",
+        "de": "Atlas hat eine neue Marke"
+      },
+      "summary": {
+        "en": "The little square beside the Atlas name — in the top bar, the app drawer, on the sign-in screen, in the handbook and on public forms — is now a white peak carrying a cross on black, and the browser tab icon changes with it. Nothing you have set is affected: if your organisation uploaded its own logo under Organization → Appearance, that is still what everyone sees, and removing it now brings back the new mark instead of the old A.",
+        "de": "Das kleine Quadrat neben dem Atlas-Namen — in der Topbar, in der App-Schublade, auf dem Anmeldebildschirm, im Handbuch und auf öffentlichen Formularen — zeigt jetzt einen weissen Berg mit Kreuz auf Schwarz, und das Symbol im Browser-Tab wechselt mit. An Ihren Einstellungen ändert das nichts: Hat Ihre Organisation unter „Organization → Appearance“ ein eigenes Logo hochgeladen, sehen weiterhin alle dieses; wird es entfernt, erscheint neu die neue Marke statt des alten A."
+      },
+      "link": {
+        "label": "ADR-0148",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0148-org-wide-brand-logo.md"
+      },
+      "tags": [
+        "Console",
+        "Organization"
+      ]
+    },
+    {
       "id": "the-handbook-and-the-examples-teach-workers-not-connectors",
       "version": "Unreleased",
       "date": null,
@@ -300,28 +322,6 @@
       "link": {
         "label": "ADR-0142",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "api-tokens-a-credential-a-machine-can-actually-be-given",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "API tokens: a credential you can hand to a machine",
-        "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
-      },
-      "summary": {
-        "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
-        "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
         "Security",

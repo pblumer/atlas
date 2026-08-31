@@ -177,6 +177,9 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"PUT /api/v1/panorama/models/{id}/bindings":            "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"GET /api/v1/panorama/models/{id}/bindings/candidates": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	// The C4 projection is read-only and would make a fine agent tool, but its
+	// mapping is version 1 and still settling; an MCP tool is a public contract.
+	"GET /api/v1/panorama/models/{id}/c4": "C4 mapping is at version 1 and still settling; exposing it now would freeze a contract that is about to change",
 
 	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
