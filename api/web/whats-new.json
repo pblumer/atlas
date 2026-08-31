@@ -2,6 +2,50 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "atlas-can-terminate-tls-itself",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can serve HTTPS on its own now",
+        "de": "Atlas kann jetzt selbst HTTPS sprechen"
+      },
+      "summary": {
+        "en": "Until now the binary spoke plain HTTP and nothing else, so anything reachable beyond its own host needed a reverse proxy in front of it to hold the certificate. That proxy is now a choice rather than a requirement: give the server a certificate and a key and it terminates TLS itself. Both files or neither — naming one without the other stops the server instead of quietly listening in the clear on the port you believed you had just secured. It re-reads the pair whenever either file changes, so a renewal reaches a running server without a restart, and a renewal caught half-written keeps the certificate that still works rather than refusing connections until somebody notices. Only TLS 1.3 is offered, which is the point: its ciphers are fixed by the protocol, so there is no cipher list to configure, nothing to weaken by accident, and nothing to explain to an auditor. Worth knowing before you switch: a client too old to speak TLS 1.3 is refused rather than quietly downgraded, and encryption is not authorization — the health and metrics endpoints answer whoever can reach the port, so a port open to the world still wants something in front of those paths.",
+        "de": "Bisher sprach das Binary ausschliesslich unverschlüsseltes HTTP; wer den Server über den eigenen Host hinaus erreichbar machen wollte, brauchte davor einen Reverse Proxy, der das Zertifikat hält. Dieser Proxy ist jetzt eine Wahl und keine Voraussetzung mehr: Gib dem Server ein Zertifikat und einen Schlüssel, und er terminiert TLS selbst. Beide Dateien oder keine — wer nur eine angibt, bekommt keinen Serverstart statt eines Servers, der still im Klartext auf dem Port lauscht, den man gerade abgesichert glaubte. Das Paar wird neu gelesen, sobald sich eine der beiden Dateien ändert; eine Erneuerung erreicht damit einen laufenden Server ohne Neustart, und eine halb geschriebene Erneuerung behält das noch gültige Zertifikat, statt Verbindungen abzulehnen, bis es jemand merkt. Angeboten wird nur TLS 1.3, und genau das ist der Punkt: Die Cipher sind im Protokoll festgelegt, es gibt also keine Cipher-Liste zu konfigurieren, nichts versehentlich zu schwächen und nichts einem Audit zu erklären. Vor dem Umschalten wissenswert: Ein Client, der kein TLS 1.3 kann, wird abgewiesen und nicht still heruntergestuft — und Verschlüsselung ist keine Autorisierung: Die Health- und Metrics-Endpunkte antworten jedem, der den Port erreicht, ein öffentlich offener Port will davor also weiterhin etwas stehen haben."
+      },
+      "link": {
+        "label": "ADR-0191",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
+      "id": "tls-ca-so-two-atlas-servers-with-an-internal-ca-can-talk",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Publishing to another Atlas works with your own certificate authority",
+        "de": "Publizieren auf einen anderen Atlas klappt jetzt auch mit eigener CA"
+      },
+      "summary": {
+        "en": "Publishing an application to another Atlas has always required that server to be reachable over https, and rightly so: the token that authorises the push would otherwise cross the network in the clear. On-prem, that certificate is usually issued by your own certificate authority, which the sending machine has never heard of — so the push failed at verification, and the only fixes were touching the host's trust store or building your own container image. You can now point the sending server, and any worker on another host, at your CA's bundle. It is added to the certificates the host already trusts rather than replacing them, so a target with a publicly issued certificate keeps working, and it applies only to Atlas talking to Atlas — a worker calling Jira, a mail server or Microsoft Graph keeps the machine's own trust store, because those endpoints are somebody else's. What it is deliberately not is a way to skip verification: there is no such switch anywhere in Atlas, because it would be the first thing reached for at exactly the moment a certificate must not be ignored.",
+        "de": "Eine Applikation auf einen anderen Atlas zu publizieren verlangt seit jeher, dass dieser Server über https erreichbar ist — zu Recht, denn sonst liefe das Token, das den Push autorisiert, im Klartext über das Netz. On-Prem stammt dieses Zertifikat meist von der eigenen Zertifizierungsstelle, die der sendende Rechner nicht kennt: Der Push scheiterte an der Prüfung, und helfen konnte nur, den Trust-Store des Hosts anzufassen oder ein eigenes Container-Image zu bauen. Jetzt lässt sich dem sendenden Server — und einem Worker auf einem anderen Host — das Bundle der eigenen CA nennen. Es kommt zu den Zertifikaten hinzu, denen der Host ohnehin traut, statt sie zu ersetzen; ein Ziel mit öffentlich ausgestelltem Zertifikat funktioniert also unverändert weiter. Und es gilt nur für Atlas-zu-Atlas: Ein Worker, der Jira, einen Mailserver oder Microsoft Graph aufruft, behält den Trust-Store der Maschine, denn diese Endpunkte gehören jemand anderem. Was es bewusst nicht ist: ein Weg, die Prüfung zu überspringen. Einen solchen Schalter gibt es in Atlas nirgends — er wäre das Erste, wonach man griffe, genau in dem Moment, in dem ein Zertifikat nicht ignoriert werden darf."
+      },
+      "link": {
+        "label": "ADR-0129",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0129-remote-deployment-targets.md"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ]
+    },
+    {
       "id": "sign-in-with-your-identity-provider",
       "version": "Unreleased",
       "date": null,
@@ -276,57 +320,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "api-tokens-a-credential-a-machine-can-actually-be-given",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "API tokens: a credential you can hand to a machine",
-        "de": "API-Tokens: ein Zugang, den man einer Maschine geben kann"
-      },
-      "summary": {
-        "en": "A worker on another host, an AI assistant's bridge, a CI job — once a login is required, none of them had anything to present, and the `--token` flags they already carried had no value you could put in them. An administrator can now mint a token over `POST /api/v1/api-tokens`. The secret comes back exactly once and only its fingerprint is stored, so a lost token is reissued rather than looked up. Each one carries an expiry date and a scope: `worker` reaches the four calls a worker actually makes and nothing else, `metrics` reaches only the monitoring endpoint, and `full` reaches what a signed-in ordinary user reaches — never an administrator. Deleting a token revokes it from the next request onwards; an expired one is refused like an unknown one while its record stays in the list, so you can see what needs reissuing.",
-        "de": "Ein Worker auf einem anderen Host, die Brücke eines KI-Assistenten, ein CI-Job — sobald eine Anmeldung verlangt wird, hatte keiner von ihnen etwas vorzuweisen, und in den `--token`-Optionen, die es längst gab, stand kein Wert, den man hätte eintragen können. Ein Administrator kann jetzt über `POST /api/v1/api-tokens` ein Token ausstellen. Das Geheimnis kommt genau einmal zurück, gespeichert wird nur sein Fingerabdruck — ein verlorenes Token wird also neu ausgestellt und nicht nachgeschlagen. Jedes trägt ein Ablaufdatum und einen Scope: `worker` erreicht die vier Aufrufe, die ein Worker tatsächlich macht, und sonst nichts; `metrics` erreicht nur den Monitoring-Endpunkt; `full` erreicht, was ein angemeldeter gewöhnlicher Benutzer erreicht — nie ein Administrator. Löschen widerruft ein Token ab der nächsten Anfrage; ein abgelaufenes wird wie ein unbekanntes abgewiesen, bleibt aber in der Liste stehen, damit sichtbar ist, was neu ausgestellt gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-login-is-throttled-and-there-is-a-security-audit-trail",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Password guessing is slowed down, and sign-ins are recorded",
-        "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
-      },
-      "summary": {
-        "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
-        "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Organization"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }

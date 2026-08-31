@@ -1,8 +1,8 @@
 # ADR-0191: TLS 1.3 in the binary — an optional listener with operator-supplied certificates
 
-- **Status:** Proposed (amended 2026-08-31 — three questions an acceptance has to
-  settle first: the trust anchor on the client side, the bind order and what the
-  startup log prints, and the chart's probes; see the amendment note below)
+- **Status:** Accepted (2026-08-31: implemented — the optional TLS 1.3 listener, the
+  plaintext loopback hop, and `--tls-ca` for the client side, which is how the first
+  of the three questions below was answered; see the acceptance note)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -70,8 +70,62 @@
 > reads. Whatever § 8 comes to say has to be said there too, in both — including that a
 > reverse proxy is still wanted for `/mcp` and `/metrics`.
 >
-> The status is unchanged: this is still Proposed. These three are what an acceptance has
-> to settle, not a decision taken.
+> These three are what an acceptance has to settle. What it settled them as is in the
+> note below.
+
+> **Accepted and implemented (2026-08-31).** Option 2 is built as described, and the
+> three questions above are answered here rather than left to whoever reads the code.
+>
+> - **The trust anchor: `--tls-ca`, scoped to a peer Atlas.** A PEM bundle added to
+>   the host's roots — never replacing them — used by `WithTargetTLSRoots` for the
+>   deployment-target client in `api/promote.go`, and by `atlas worker --tls-ca` for
+>   a worker on another host. The alternative, leaving it to the host's trust store,
+>   was rejected for the container: there it is an image change or an init container,
+>   for a deployment shape (on-prem, internal CA) this record is aimed at. It reaches
+>   no further than Atlas talking to Atlas — a Worker Type calling Jira, a mail server
+>   or Graph keeps the machine's roots, because that endpoint is somebody else's — and
+>   there is still no way to skip verification anywhere.
+>
+> - **The bind order, and what the log prints.** The loopback listener is bound
+>   before `api.New`, and `internalURL` in `cmd/atlas/listeners.go` is what the MCP
+>   client and the supervised workers are handed; `selfURL` is gone, having been
+>   `loopbackURL` under a second name. `serveUntil` runs both servers, gives them one
+>   `--shutdown-timeout` between them, and ends the process if either stops serving.
+>   The startup lines print `reachableOrigin` — `--external-url` where it is set,
+>   otherwise `https://` on `--addr` — and carry `tls=true/false`.
+>
+> - **The chart.** `atlas.tls` mounts a `kubernetes.io/tls` Secret and passes the
+>   pair; the `atlas.probe` helper renders all three probes with `scheme: HTTPS`
+>   where TLS is on. The Secret is mounted `0440` rather than `0400`, because a
+>   Secret volume is owned by root with the pod's `fsGroup` and the server runs as
+>   65532 — owner-only would leave it unable to read its own certificate. Enabling
+>   TLS without naming a Secret fails the render. `--addr` still defaults to `:8080`.
+>
+> Two details the record left open and the implementation had to decide. **A failed
+> reload keeps the certificate already loaded and warns** (`server.tls_reload_failed`)
+> rather than refusing handshakes: the ordinary cause is a renewal caught half-written,
+> and the loaded certificate is still valid. It does not latch — the failing pair's
+> modification times are remembered, so the retry happens when the files change again,
+> without re-reading and re-logging on every handshake. And **HTTP/2 was tested rather
+> than assumed**, as the trade-off above insists: `TestServeStreamsOverHTTP2` runs the
+> collaboration session stream (ADR-0140) over a negotiated h2 connection. `TLSNextProto`
+> stays nil; the escape hatch is unused and that test is what would say to reach for it.
+>
+> **One correction to the text below.** It says `/mcp` is unauthenticated for external
+> callers by construction. That stopped being true with
+> [ADR-0196](0196-authenticated-mcp-transport.md): `/mcp` now passes the same boundary
+> as the rest of the API, so under `--auth` a request without a credential is refused
+> before the adapter sees it. The reverse proxy therefore survives this record for
+> `/metrics`, `/healthz` and `/readyz` — unauthenticated by design, because a kubelet
+> has no credential to offer (ADR-0142) — and not for `/mcp`. The conclusion is
+> unchanged: this record removes the cryptographic reason to run a proxy, not the
+> authorization one, and `docs/install.md` § 8 says so in those words.
+>
+> **Still not covered**, beyond what the record already excludes: `atlas mcp --server
+> https://…`, the stdio adapter, takes no `--tls-ca`. It is a client of a remote Atlas
+> like the others, but it runs on a person's own machine, where the host trust store is
+> the ordinary answer and usually already carries the company CA. If that turns out to
+> be wrong, it is the same flag in a third place.
 
 ## Context and problem statement
 

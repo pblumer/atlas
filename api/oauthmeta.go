@@ -34,11 +34,12 @@ const protectedResourceMetadataPath = "/.well-known/oauth-protected-resource"
 // outside — "https://atlas.example.com" — for the absolute URLs the discovery
 // documents and the WWW-Authenticate challenge have to carry.
 //
-// It exists because Atlas terminates no TLS. Every deployment with a certificate
-// has a proxy in front, so the scheme a request arrives with is http and the
-// origin derived from it would name a URL no client can use. Setting this once is
-// the reliable answer; leaving it unset falls back to what the request says, which
-// is right for direct access and for tests.
+// It exists for the deployment behind a proxy, which was every deployment with a
+// certificate until Atlas could terminate TLS itself (ADR-0191): the scheme such a
+// request arrives with is http, and the origin derived from it would name a URL no
+// client can use. Setting this once is the reliable answer. Leaving it unset falls
+// back to what the request says — which is right for direct access, for a server
+// serving its own certificate (externalBase reads r.TLS), and for tests.
 func WithExternalURL(origin string) Option {
 	return func(s *Server) { s.externalURL = strings.TrimRight(strings.TrimSpace(origin), "/") }
 }

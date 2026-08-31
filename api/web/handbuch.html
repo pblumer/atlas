@@ -2387,10 +2387,16 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           Server auf demselben Verzeichnis beschädigen es.</li>
         <li data-l="en"><b>Exactly one process per data directory.</b> Atlas is a single-writer engine – two servers
           on the same directory will corrupt it.</li>
-        <li data-l="de"><b>Atlas spricht kein TLS.</b> Vor dem Server gehört ein Reverse Proxy, der TLS
-          terminiert, bevor jemand von aussen darauf zugreifen kann.</li>
-        <li data-l="en"><b>Atlas speaks no TLS.</b> Put a TLS-terminating reverse proxy in front of it before anyone
-          outside the host can reach it.</li>
+        <li data-l="de"><b>Nichts erreicht Atlas im Klartext.</b> Entweder terminiert Atlas TLS selbst –
+          <code>--tls-cert</code> und <code>--tls-key</code> machen aus dem Port einen TLS-1.3-Listener, beide
+          Dateien oder keine – oder ein Reverse Proxy davor tut es. Eins von beidem, bevor jemand von aussen
+          darauf zugreifen kann. Verschlüsselung ist keine Autorisierung: <code>/metrics</code>,
+          <code>/healthz</code> und <code>/readyz</code> antworten jedem, der den Port erreicht.</li>
+        <li data-l="en"><b>Nothing should reach Atlas in the clear.</b> Either Atlas terminates TLS itself –
+          <code>--tls-cert</code> and <code>--tls-key</code> turn the port into a TLS 1.3 listener, both files or
+          neither – or a reverse proxy in front of it does. One of the two, before anyone outside the host can
+          reach it. Encryption is not authorization: <code>/metrics</code>, <code>/healthz</code> and
+          <code>/readyz</code> answer whoever can reach the port.</li>
         <li data-l="de"><b>Sichere den Vault-Key.</b> Ein Datenverzeichnis ohne seinen <code>vault.key</code> ist
           nicht wiederherstellbar – die darin gespeicherten Worker-Secrets sind dann nicht mehr lesbar.</li>
         <li data-l="en"><b>Back up the vault key.</b> A data directory without its <code>vault.key</code> is not
