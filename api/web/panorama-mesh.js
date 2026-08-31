@@ -311,7 +311,7 @@ function renderGraph(graph, layoutMs, highlight) {
 
 // impactPanelHTML states the answer in words beside the picture. The counts are the
 // point — a highlighted subgraph tells you *which*, a count tells you *how many*,
-// and "17 things depend on this connector" is the sentence somebody repeats in a
+// and "17 things depend on this worker" is the sentence somebody repeats in a
 // change-approval meeting.
 function impactPanelHTML(node, result, direction, depth) {
   if (!node) {

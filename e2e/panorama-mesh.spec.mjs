@@ -227,7 +227,7 @@ test("filtering away the selection clears it", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/landscape");
 
-  await page.locator('[data-node-id="connector:c1"]').click();
+  await page.locator('[data-node-id="worker:c1"]').click();
   await expect(page.locator(".mesh-impact-count")).toBeVisible();
 
   await page.getByLabel("Filter the landscape").fill("invoice");
