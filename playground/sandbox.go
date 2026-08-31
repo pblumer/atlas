@@ -526,9 +526,6 @@ func (s *Sandbox) reconcileJobs() error {
 			// it goes on the queue rather than into the schedule.
 			p.queued = true
 			ps.queue = append(ps.queue, jobKey)
-			if n := len(ps.queue); n > ps.stat.MaxQueue {
-				ps.stat.MaxQueue = n
-			}
 		}
 		s.scheduled[jobKey] = p
 		return nil
@@ -594,6 +591,12 @@ func (s *Sandbox) serveQueues(now int64) error {
 			p.startedAt, p.dueAt, p.queued = now, due, false
 			s.scheduled[jobKey] = p
 			ps.busy++
+		}
+		// The high-water mark is taken after serving, so it counts the work that is
+		// actually waiting rather than the work that arrived: a single case at an
+		// idle pool is not "a queue of one".
+		if n := len(ps.queue); n > ps.stat.MaxQueue {
+			ps.stat.MaxQueue = n
 		}
 	}
 	return nil

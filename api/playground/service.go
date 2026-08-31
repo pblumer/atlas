@@ -94,12 +94,25 @@ type openReq struct {
 	// Seed makes the run reproducible. Zero seeds it from the clock, and the
 	// response says which seed was used so the run can be repeated.
 	Seed int64 `json:"seed,omitempty"`
-	// Stubs is the answering policy; omitted fields park the jobs they cover.
+	// Stubs is the answering policy; omitted fields park the jobs they cover. It is
+	// fixed for the sandbox's life: a run is only comparable with another run if
+	// the policy behind them is the same, so changing it means a new session.
 	Stubs struct {
 		Default   *stubReq           `json:"default,omitempty"`
 		Human     *stubReq           `json:"human,omitempty"`
 		ByElement map[string]stubReq `json:"byElement,omitempty"`
+		// Pools are the sets of workers elements compete for, and PoolOf assigns an
+		// element to one by name. Without them every case is worked the instant it
+		// arrives and the report's waiting column is zero by construction.
+		Pools  map[string]poolReq `json:"pools,omitempty"`
+		PoolOf map[string]string  `json:"poolOf,omitempty"`
 	} `json:"stubs"`
+}
+
+// poolReq is a pool on the wire.
+type poolReq struct {
+	Capacity int         `json:"capacity"`
+	Calendar calendarReq `json:"calendar,omitempty"`
 }
 
 // sessionResp is a session's state.
@@ -224,6 +237,18 @@ func (s *Service) stubSet(req openReq) (playground.StubSet, error) {
 	if req.Stubs.Human != nil {
 		if out.Human, err = s.stub(*req.Stubs.Human); err != nil {
 			return out, fmt.Errorf("stubs.human: %w", err)
+		}
+	}
+	if len(req.Stubs.Pools) > 0 {
+		out.Pools = make(map[string]playground.Pool, len(req.Stubs.Pools))
+		for name, p := range req.Stubs.Pools {
+			out.Pools[name] = playground.Pool{Capacity: p.Capacity, Calendar: p.Calendar.toCalendar()}
+		}
+	}
+	if len(req.Stubs.PoolOf) > 0 {
+		out.PoolOf = make(map[string]string, len(req.Stubs.PoolOf))
+		for element, name := range req.Stubs.PoolOf {
+			out.PoolOf[element] = name
 		}
 	}
 	if len(req.Stubs.ByElement) > 0 {
