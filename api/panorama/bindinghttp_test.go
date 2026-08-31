@@ -148,3 +148,114 @@ func TestHandleSetBindingRefusesAKeyOnTheWrongElement(t *testing.T) {
 		t.Errorf("refusal = %s, want it to name the element type", body)
 	}
 }
+
+// Every way a caller can get the request wrong has its own refusal, and each names
+// what is wrong. A single generic 400 would leave a client guessing which field it
+// got wrong, and a 500 would blame the server for the caller's mistake.
+func TestHandleSetBindingRefusesBadRequests(t *testing.T) {
+	tests := []struct {
+		name string
+		body map[string]any
+		want string
+	}{
+		{"missing revision", map[string]any{
+			"elementId": "bp-1", "key": KeyProcessID, "values": []string{"x"}}, "expectedRevision"},
+		{"missing element", map[string]any{
+			"expectedRevision": 1, "key": KeyProcessID, "values": []string{"x"}}, "elementId"},
+		{"unknown key", map[string]any{
+			"expectedRevision": 1, "elementId": "bp-1", "key": "atlas.credentialRef",
+			"values": []string{"vault://x"}}, "atlas.credentialRef"},
+		{"unknown element", map[string]any{
+			"expectedRevision": 1, "elementId": "nope", "key": KeyProcessID,
+			"values": []string{"x"}}, "nope"},
+		{"blank value", map[string]any{
+			"expectedRevision": 1, "elementId": "bp-1", "key": KeyProcessID,
+			"values": []string{"  "}}, "empty"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newServiceFixture(t)
+			seedBound(t, fx, "app-1")
+			rec := bindingRequest(t, fx.service.HandleSetBinding, http.MethodPut, tc.body, http.StatusBadRequest)
+			if body := rec.Body.String(); !strings.Contains(body, tc.want) {
+				t.Errorf("refusal = %s, want it to name %q", body, tc.want)
+			}
+		})
+	}
+}
+
+// The refusal for an unknown key must not echo the value: it is shaped like a
+// credential precisely because somebody tried to use it as one.
+func TestHandleSetBindingDoesNotEchoARejectedSecret(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+
+	rec := bindingRequest(t, fx.service.HandleSetBinding, http.MethodPut, map[string]any{
+		"expectedRevision": 1, "elementId": "app-c", "key": "atlas.credentialRef",
+		"values": []string{"vault://prod/super-secret"},
+	}, http.StatusBadRequest)
+
+	if strings.Contains(rec.Body.String(), "super-secret") {
+		t.Errorf("refusal echoes the rejected value: %s", rec.Body)
+	}
+}
+
+// A catalog the server cannot build is a server fault, and must not be answered
+// with an empty catalog: every binding would then resolve as missing, which reads
+// as a broken model rather than as a failed read.
+func TestHandleBindingsReportsACatalogFailure(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	fx.catalogErr = errStub
+
+	rec := bindingRequest(t, fx.service.HandleBindings, http.MethodGet, nil, http.StatusInternalServerError)
+	if !strings.Contains(rec.Body.String(), "catalog is on fire") {
+		t.Errorf("body = %s, want the underlying cause", rec.Body)
+	}
+}
+
+// A stored document that no longer parses is a server-side fault too, not an empty
+// binding list: "this model declares nothing" is a different answer from "this
+// model could not be read".
+func TestHandleBindingsReportsAnUnreadableDocument(t *testing.T) {
+	fx := newServiceFixture(t)
+	if err := fx.store.Save(Model{
+		ID: testModelID, ApplicationID: "app-1", Name: "Broken",
+		Notation: NotationArchiMate32, Revision: 1, XML: "<model><elements>",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	bindingRequest(t, fx.service.HandleBindings, http.MethodGet, nil, http.StatusInternalServerError)
+}
+
+// The same runloop.Do guard the landscape mesh carries: on a closing loop the
+// closure never runs, and resolving against the resulting empty catalog would
+// report every binding as missing.
+func TestHandleBindingsRefusesWhenTheLoopIsClosing(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	fx.service.loop = stoppedLoop()
+
+	bindingRequest(t, fx.service.HandleBindings, http.MethodGet, nil, http.StatusServiceUnavailable)
+}
+
+// forKey must answer for every key the contract defines, including the two whose
+// catalogs nothing supplies yet — those return nil, which is what the resolver
+// reads as unsupported.
+func TestCatalogForKeyCoversTheWholeContract(t *testing.T) {
+	full := Catalog{
+		Applications: map[string]ResourceRef{}, Processes: map[string]ResourceRef{},
+		Connectors: map[string]ResourceRef{}, JobTypes: map[string]ResourceRef{},
+		Runtimes: map[string]ResourceRef{}, Targets: map[string]ResourceRef{},
+		Releases: map[string]ResourceRef{},
+	}
+	for _, key := range BindingKeys() {
+		if full.forKey(key) == nil {
+			t.Errorf("forKey(%q) = nil for a fully supplied catalog", key)
+		}
+	}
+	var empty Catalog
+	if empty.forKey("atlas.nonsense") != nil {
+		t.Error("forKey answered for a key outside the contract")
+	}
+}

@@ -3,6 +3,7 @@ package panorama
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,9 +22,13 @@ type serviceFixture struct {
 	store   *Store
 	access  map[string]ApplicationAccess
 	// catalog is what binding resolution resolves against; a test sets it before
-	// calling a binding handler.
-	catalog Catalog
+	// calling a binding handler. catalogErr makes the resolver fail instead.
+	catalog    Catalog
+	catalogErr error
 }
+
+// errStub is the failure a test injects when it needs the catalog to fail.
+var errStub = errors.New("catalog is on fire")
 
 func newServiceFixture(t *testing.T) *serviceFixture {
 	t.Helper()
@@ -50,7 +55,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		},
 		func() (string, error) { return testModelID, nil },
 		func() time.Time { return time.Unix(1_700_000_000, 0) },
-		func(*http.Request) (Catalog, error) { return fx.catalog, nil },
+		func(*http.Request) (Catalog, error) { return fx.catalog, fx.catalogErr },
 	)
 	return fx
 }
