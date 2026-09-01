@@ -2947,6 +2947,16 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    entry opening to its attributes. Containers the mock never got an entry for are
    rendered muted, because they exist only because something below them does. */
 .admock-worker { margin-top: 14px; }
+/* The card is one collapsible section: its summary is the worker line, so collapsing
+   leaves the identity and the freshness stamp on screen and puts the forests away. */
+.admock-card > summary {
+  cursor: pointer; display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.admock-card > summary::marker { color: var(--muted); }
+.admock-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.admock-card-head h2 { margin: 0; }
+.admock-card-state { white-space: nowrap; }
 .admock-forest { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
 .admock-forest:first-of-type { border-top: 0; }
 .admock-forest h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
