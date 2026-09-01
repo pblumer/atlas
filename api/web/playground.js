@@ -55,6 +55,8 @@ const TASK_TYPES = new Set([
 // HEAT_LEVELS is how many shades the heat map has above "never reached". Five is
 // enough to read a ranking off the diagram and few enough that each step is a
 // visible difference.
+const HEAT_LEVELS = 5;
+
 // FIELD_KINDS is what a generated field can be. The labels say what the field
 // produces rather than naming a type: somebody describing a dataset is thinking
 // about orders and amounts, not about int64.
@@ -69,8 +71,6 @@ const FIELD_KINDS = [
 ];
 
 const DAY_MS = 86_400_000;
-
-const HEAT_LEVELS = 5;
 
 // BUSINESS_HOURS is one working day, applied to every pool and to the arrival
 // stream alike. One calendar rather than one per pool: an author asking "do three
