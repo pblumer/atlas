@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; see the amendment note below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -30,6 +30,33 @@
 >   derived graph produces the edges both need, so they arrive with it rather than three
 >   slices later. P5 keeps desired-versus-observed drift over time and the optional
 >   Prometheus/OpenSearch adapters.
+
+> **Amendment (2026-09-01): P5's "over time" is a journal of transitions.** This record
+> allows Panorama to correlate and forbids it to become "a monitoring or time-series
+> database" (see the non-goals below). P5's *desired-versus-observed drift over time*
+> has to be delivered inside that, and a store of samples is exactly the thing the
+> non-goal names. So none is kept. What is kept is a **transition**: when a bound
+> value's observation state changes between two reads, that change is recorded once —
+> both states, the reason, and the moment it was noticed. A hundred identical readings
+> produce nothing; one release going stale produces one entry.
+>
+> Three properties follow, and all three are *published with every answer* rather than
+> only recorded here — a history that hides what it cannot see is worse than no history,
+> because without them "nothing changed" and "nobody looked" read alike:
+>
+> - **It sees only what was looked at.** Observations are computed when somebody asks
+>   for them; nothing polls, and §6 is why. A state that changed and changed back
+>   between two views leaves no trace. Continuous history is what the optional
+>   Prometheus/OpenSearch adapters are for, and they remain optional.
+> - **It does not survive a restart.** This is runtime state, like the worker registry
+>   and the peer descriptor cache: never written to the log, never rebuilt by
+>   `applyToState` (I4/I6). *When* a transient fact was noticed is not an architecture
+>   fact, and the declarative model stays untouched by observation exactly as §6 says.
+> - **It is bounded**, per model and across models, and each answer says from which
+>   moment it can still speak.
+>
+> §6's seven states and its rule that layer fills are never recolored are unaffected: a
+> transition is a pair of those states, and it is rendered as text beside a finding.
 
 ## Context
 
@@ -378,10 +405,11 @@ diagnostics, and retention of the original source model.
    deployment targets; no secret material.
 5. **P4 — Live Panorama:** stable node descriptor, local and remote observation
    projection, freshness/partial-failure semantics, and accessible overlays.
-6. **P5 — Landscape intelligence:** desired-versus-observed drift over time and
-   optional Prometheus/OpenSearch adapters for historical context. Dependency/impact
-   analysis and discovery of unmodeled resources moved to P2.5 in the 2026-08-31
-   amendment.
+6. **P5 — Landscape intelligence:** desired-versus-observed drift over time — a
+   journal of transitions rather than a store of samples, per the 2026-09-01
+   amendment — and optional Prometheus/OpenSearch adapters for historical context.
+   Dependency/impact analysis and discovery of unmodeled resources moved to P2.5 in
+   the 2026-08-31 amendment.
 
 Each slice ships end to end: API, persistence where applicable, embedded UI,
 authorization, tests, documentation, and OpenAPI contract. A slice is not complete

@@ -119,6 +119,14 @@ type Observation struct {
 	// them from remote nodes and those will not share one instant.
 	ObservedAt int64             `json:"observedAt"`
 	Detail     map[string]string `json:"detail,omitempty"`
+	// ChangedAt and PreviousState are what the drift journal knows about this
+	// value's last transition (ADR-0189 P5). They are on the observation rather
+	// than only in the journal because "degraded" and "degraded since nine this
+	// morning" are different findings, and the second is the one somebody acts on.
+	// Both are absent when nothing has been seen to change — which is not the same
+	// as nothing having changed, and is why the journal publishes its limits.
+	ChangedAt     int64  `json:"changedAt,omitempty"`
+	PreviousState string `json:"previousState,omitempty"`
 }
 
 // ObservationSummary counts the document by severity class, so a listing can say

@@ -134,6 +134,7 @@ function liveHTML(item, observations) {
       </div>
       <code>${esc(o.key)} = ${esc(o.value)}</code>
       ${o.reason ? `<p>${esc(o.reason)}</p>` : ""}
+      ${sinceHTML(o)}
       ${detailHTML(o.detail)}
     </div>`).join("");
   // What the view cannot see, stated beside what it can. Without it a model
@@ -186,6 +187,77 @@ export function worstByElement(observations) {
   return worst;
 }
 
+// sinceHTML says when this value last changed, if anything has been seen to change
+// it (ADR-0189 P5).
+//
+// "Degraded" and "degraded since nine this morning" are different findings, and the
+// second is the one somebody acts on: a state that has held for a week is a
+// standing condition, one that turned over five minutes ago is an incident. It
+// comes on the observation itself rather than from a second request.
+//
+// Absent when nothing has been *seen* to change — which is not the same as nothing
+// having changed, and is why the journal publishes its limits beside this.
+function sinceHTML(o) {
+  if (!o.changedAt) return "";
+  const when = new Date(o.changedAt * 1000);
+  const was = o.previousState ? ` (was ${esc(STATE_TEXT[o.previousState] || o.previousState)})` : "";
+  return `<p class="panorama-obs-since muted">Changed ${esc(when.toLocaleString())}${was}</p>`;
+}
+
+// maxDriftRows bounds what one panel renders. The journal is already bounded on the
+// server; this is the second, smaller bound of what a person reads in a side panel
+// without scrolling past the element they selected it for.
+const maxDriftRows = 25;
+
+// driftHTML is what has been seen to change about the selected element, newest
+// first (ADR-0189 P5).
+//
+// It is scoped to the selection rather than to the model, because the panel it sits
+// in is: a reader who selected one component and got the whole landscape's history
+// has to work out which lines are about the thing in front of them. The rest of the
+// model is not hidden — the count says how many other changes the journal holds, so
+// the narrowing is visible rather than silent.
+//
+// It is a section rather than a chart, because this is not a time series and must
+// not look like one — ADR-0189 is explicit that Panorama stays a correlation
+// surface. What it holds is transitions: a hundred identical readings produce
+// nothing, one release going stale produces one line.
+//
+// The limits are rendered with it, never under a fold. A history that hides what it
+// cannot see is worse than no history: without them a reader cannot tell "nothing
+// happened" from "nobody looked", and this journal only ever sees what was looked at.
+function driftHTML(drift, item) {
+  if (!item || item.kind === "relationship") return "";
+  // A body that is not a journal is treated as one that never arrived. Rendering
+  // "nothing has been seen to change" from something this code cannot read would
+  // turn a transport or contract fault into a finding about the architecture,
+  // which is the one mistake this whole section exists to avoid.
+  if (!drift || !Array.isArray(drift.entries)) return "";
+  const all = drift.entries;
+  const mine = all.filter((e) => e.elementId === item.id);
+  const elsewhere = all.length - mine.length;
+  const limits = (Array.isArray(drift.limits) ? drift.limits : []).map((l) =>
+    `<li><b>${esc(l.limit)}</b> — ${esc(l.reason)}</li>`).join("");
+  const entries = mine.slice(0, maxDriftRows).map((e) => `
+    <li class="panorama-drift-entry">
+      <span class="muted">${esc(new Date(e.at * 1000).toLocaleString())}</span>
+      <code>${esc(e.value)}</code>
+      <span>${esc(STATE_TEXT[e.from] || e.from)} → <b>${esc(STATE_TEXT[e.to] || e.to)}</b></span>
+      ${e.reason ? `<p class="muted">${esc(e.reason)}</p>` : ""}
+    </li>`).join("");
+  return `<section class="psec"><h3>What changed</h3>
+    ${entries
+      ? `<ul class="panorama-drift">${entries}</ul>
+         ${mine.length > maxDriftRows ? `<p class="muted">${mine.length - maxDriftRows} older change(s) for this element are not shown.</p>` : ""}`
+      : `<p class="muted">Nothing has been seen to change about this element.</p>`}
+    ${elsewhere ? `<p class="muted">${elsewhere} other recorded change(s) in this model.</p>` : ""}
+    ${drift.since ? `<p class="muted">Recorded since ${esc(new Date(drift.since * 1000).toLocaleString())}.</p>` : ""}
+    ${drift.truncated ? `<p class="muted">Older changes were dropped to stay inside the journal's bound.</p>` : ""}
+    <details class="panorama-drift-limits"><summary>What this history cannot see</summary>
+      <ul>${limits}</ul></details>
+  </section>`;
+}
+
 // detailHTML renders the numbers behind the sentence — a version, a count — for a
 // reader who wants them. Sorted, because this is something people compare between
 // two servers.
@@ -196,7 +268,7 @@ function detailHTML(detail) {
     .map(([k, v]) => `<span><span class="muted">${esc(k)}</span> ${esc(v)}</span>`).join("")}</div>`;
 }
 
-function propertiesHTML(item, resolution, canEdit, observations) {
+function propertiesHTML(item, resolution, canEdit, observations, drift) {
   if (!item) return `<div class="panorama-props-empty">
     <div class="panorama-selection-icon">◇</div>
     <b>Nothing selected</b>
@@ -215,7 +287,8 @@ function propertiesHTML(item, resolution, canEdit, observations) {
     </section>
     ${item.documentation ? `<section class="psec"><h3>Documentation</h3><p>${esc(item.documentation)}</p></section>` : ""}
     ${bindingsHTML(item, resolution, canEdit)}
-    ${liveHTML(item, observations)}`;
+    ${liveHTML(item, observations)}
+    ${driftHTML(drift, item)}`;
 }
 
 // pickBinding is the picker ADR-0189 §4 asks for: a user selects from resources
@@ -474,11 +547,17 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   const canEdit = ["owner", "editor"].includes(application?.myRole);
   let resolution = bindings;
   let live = observations;
+  // The journal is read after the observations, not alongside them: reading the
+  // observations is what records a transition, so a history fetched in the same
+  // batch would always be one read behind what the panel is about to show.
+  // Additive like the rest — a model is worth opening without it.
+  const drift = await api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/drift`)
+    .catch(() => null);
   let revision = model.revision;
   let selected = null;
 
   const paintProperties = () => {
-    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live);
+    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live, drift);
   };
 
   let viewer = null;

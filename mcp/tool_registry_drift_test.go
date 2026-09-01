@@ -120,7 +120,13 @@ var mcpOmittedRoutes = map[string]string{
 	// Its shape is also at contract version 1 and still settling, and an MCP tool is
 	// a public contract.
 	"GET /api/v1/panorama/models/{id}/observations": "an architecture reading surface over facts an agent already reaches directly; contract still settling",
-	"PUT /api/v1/node": "an operator naming this instance, not an agent action",
+	// The drift journal (ADR-0189 P5) is the same reading surface over time, and it
+	// is explicitly not durable: an agent handed it as a tool would read a
+	// restart-emptied journal as an absence of change, which is the one reading it
+	// must not produce. What an agent needs is the current answer, which the routes
+	// it already has give it.
+	"GET /api/v1/panorama/models/{id}/drift": "a non-durable reading surface; an agent must not read an emptied journal as an absence of change",
+	"PUT /api/v1/node":                       "an operator naming this instance, not an agent action",
 	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
 	// a memory tail rather than a record. An agent debugging a run asks from the
 	// instance side, where atlas_instance_jobs and the timeline answer the same

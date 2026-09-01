@@ -666,6 +666,24 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-sev-attention { border-left-color: var(--warn); }
 .panorama-sev-ok { border-left-color: var(--ok); }
 .panorama-unwatched { font-style: italic; }
+/* The drift journal in the properties panel (ADR-0189 P5). A list of transitions,
+   deliberately not a chart: this is a correlation surface, and a sparkline would
+   promise a continuity the journal does not have. Its limits sit with it, closed
+   but never hidden, because "nothing changed" and "nobody looked" read the same
+   without them. */
+.panorama-drift { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.panorama-drift-entry {
+  border-left: 3px solid var(--border-strong); padding: 6px 0 6px 9px;
+  margin: 0 0 8px; display: flex; flex-direction: column; gap: 3px;
+}
+.panorama-drift-entry:last-child { margin-bottom: 0; }
+.panorama-drift-entry code { font-size: 11px; overflow-wrap: anywhere; }
+.panorama-drift-entry p { margin: 0; }
+.panorama-drift-limits { margin-top: 10px; font-size: 11px; color: var(--muted); }
+.panorama-drift-limits summary { cursor: pointer; }
+.panorama-drift-limits ul { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
+.panorama-drift-limits b { color: var(--text); }
+.panorama-obs-since { font-size: 11px; }
 .panorama-kv { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: start; margin: 8px 0; font-size: 12px; }
 .panorama-kv span { color: var(--muted); }
 .panorama-kv b, .panorama-kv code { min-width: 0; overflow-wrap: anywhere; }

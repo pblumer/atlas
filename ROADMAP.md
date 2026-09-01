@@ -991,7 +991,22 @@ for the derived whole-instance mesh above them.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
   into P2.5, which derives the edges they need. P4 also unblocks the two observation
   states P2.5c declares unavailable (unreachable, stale). Panorama remains a
-  correlation surface, not a time-series or log database.
+  correlation surface, not a time-series or log database. Ships in stages:
+  **a)** the drift journal — what has been seen to change, and when. Complete. The
+  constraint above is the whole design: a store of samples is exactly what "not a
+  time-series database" forbids, so none is kept. What is kept are **transitions**.
+  A hundred identical readings produce nothing; one release going stale produces
+  one entry, with both states, the reason, and the moment it was noticed. A
+  finding therefore carries its own age — "degraded" and "degraded since nine this
+  morning" are different findings, and the second is the one somebody acts on. It
+  is recorded when somebody reads the observations rather than by a sweeper,
+  because nothing polls; it is runtime state that a restart empties, never written
+  to the log (I4/I6); and it is bounded per model and across models. All three of
+  those are *published* with every answer rather than documented here, because
+  without them "nothing changed" and "nobody looked" read alike; and
+  **b)** the optional Prometheus/OpenSearch adapters for historical context. Open,
+  and deliberately last: they are where continuous history belongs, which is why
+  (a) does not pretend to it.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

@@ -485,6 +485,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Observe what a Panorama model's bound Atlas resources are currently doing (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Observation document", tObject())}},
+		// What has been seen to change (ADR-0189 P5). A separate route from the
+		// observations because the two cost different things: "what is happening"
+		// reads the engine, "what changed" reads what previous answers established.
+		{"GET", "/api/v1/panorama/models/{id}/drift", s.panorama.HandleDrift, apiOp{
+			summary: "What has been seen to change about a Panorama model's bound resources, newest first (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Drift journal", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},

@@ -60,6 +60,11 @@ type Service struct {
 	// that wires none serves the model and its bindings and refuses the
 	// observation route, rather than answering it with an empty landscape.
 	facts FactsResolver
+	// journal records what changed between one observation read and the next
+	// (ADR-0189 P5). It is runtime state the service owns rather than a store: a
+	// transition noticed is not an architecture fact, so nothing about it is
+	// durable and a restart empties it.
+	journal *Journal
 }
 
 // CountForApplicationOnLoop counts models owned by one application. It is a
@@ -94,7 +99,7 @@ func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenera
 	catalog CatalogResolver, facts FactsResolver) *Service {
 	return &Service{
 		loop: loop, store: store, access: access, newID: newID, now: now,
-		catalog: catalog, facts: facts,
+		catalog: catalog, facts: facts, journal: NewJournal(),
 	}
 }
 

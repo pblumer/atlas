@@ -153,3 +153,92 @@ func TestObservationsReportADocumentTheyCannotRead(t *testing.T) {
 		t.Errorf("body = %s, want it to name what could not be read", body)
 	}
 }
+
+// TestDriftRouteAnswersWhatChangedBetweenTwoReads is P5 end to end: two
+// observation reads with a different answer between them, and a journal that says
+// what moved and when. Nothing polled; the history is exactly what somebody looked
+// at, which is the limit the document publishes rather than hides.
+func TestDriftRouteAnswersWhatChangedBetweenTwoReads(t *testing.T) {
+	fx := newServiceFixture(t)
+	// A model that actually binds something: the minimal fixture binds nothing, and
+	// a journal of a model with no bindings could only ever be empty.
+	seedBound(t, fx, "app-1")
+	id := testModelID
+
+	drift := func(status int) DriftDocument {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+id+"/drift", nil)
+		req.SetPathValue("id", id)
+		var doc DriftDocument
+		decodeResponse(t, invoke(t, fx.service.HandleDrift, req, status), &doc)
+		return doc
+	}
+
+	// Nothing has been read yet, so there is nothing to say — and the document says
+	// what it cannot see rather than presenting an empty list as a quiet landscape.
+	empty := drift(http.StatusOK)
+	if len(empty.Entries) != 0 || len(empty.Limits) != 3 || empty.Since != 0 {
+		t.Fatalf("a journal nobody has fed = %+v", empty)
+	}
+
+	fx.facts = Facts{Applications: map[string]Fact{"proj-abc": {
+		Source: SourceDeployments, State: StateHealthy, Reason: "Nothing is parked.",
+	}}}
+	observe(t, fx, id, http.StatusOK)
+	first := drift(http.StatusOK)
+	if len(first.Entries) != 0 {
+		t.Fatalf("the first read journalled %+v", first.Entries)
+	}
+	// Somebody has now looked and nothing has changed, which is a different answer
+	// from nobody having looked — `since` is the only field that tells them apart.
+	if first.Since == 0 {
+		t.Error("a model that has been read still speaks from nowhere")
+	}
+
+	fx.facts = Facts{Applications: map[string]Fact{"proj-abc": {
+		Source: SourceInstances, State: StateDegraded, Reason: "4 token(s) are parked.",
+	}}}
+	var enriched ObservationDocument
+	decodeResponse(t, observe(t, fx, id, http.StatusOK), &enriched)
+
+	// The observation carries the change, so a panel can say "degraded since" in
+	// one request rather than two.
+	if enriched.Observations[0].PreviousState != StateHealthy ||
+		enriched.Observations[0].ChangedAt == 0 {
+		t.Errorf("the observation does not carry its own change: %+v", enriched.Observations[0])
+	}
+
+	journal := drift(http.StatusOK)
+	if len(journal.Entries) != 1 {
+		t.Fatalf("journal = %+v, want the one change", journal.Entries)
+	}
+	entry := journal.Entries[0]
+	if entry.From != StateHealthy || entry.To != StateDegraded || entry.Value != "proj-abc" {
+		t.Errorf("entry = %+v", entry)
+	}
+	if !strings.Contains(entry.Reason, "4 token(s)") {
+		t.Errorf("reason = %q, want the new state's own sentence", entry.Reason)
+	}
+	if journal.Since == 0 {
+		t.Error("the journal does not say from when it can speak")
+	}
+}
+
+// TestDriftHonoursTheModelsAccess. A history of what changed is a history of the
+// model's own bindings, so it must not outlive the permission to read them —
+// otherwise a closed sharing scope leaves a readable record of what was behind it.
+func TestDriftHonoursTheModelsAccess(t *testing.T) {
+	fx := newServiceFixture(t)
+	seedBound(t, fx, "app-1")
+	id := testModelID
+	fx.facts = Facts{Applications: map[string]Fact{"proj-abc": {
+		Source: SourceDeployments, State: StateHealthy,
+	}}}
+	observe(t, fx, id, http.StatusOK)
+
+	// The application's scope closes underneath the model.
+	fx.access["app-1"] = ApplicationAccess{Exists: true}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+id+"/drift", nil)
+	req.SetPathValue("id", id)
+	invoke(t, fx.service.HandleDrift, req, http.StatusNotFound)
+}
