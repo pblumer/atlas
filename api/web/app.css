@@ -624,6 +624,36 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-canvas .djs-container { font-family: inherit; }
 .panorama-canvas .archimate-label { font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; fill: #20252a; pointer-events: none; }
 .panorama-canvas .djs-element.selected .djs-outline { stroke: var(--accent); stroke-width: 2px; }
+
+/* Runtime marks on the diagram (ADR-0189 §6, P4d). The record's constraint is the
+   whole design: layer colours remain intact, and runtime state is a border, a badge
+   and a text legend. A layer colour is semantics — it says whether an element is
+   business, application or technology — so nothing below sets `fill` on an element.
+   The border is a separate rect drawn around it and the badge sits beside it. */
+.panorama-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.panorama-stage .panorama-canvas { flex: 1; }
+.panorama-canvas-mark { pointer-events: none; }
+.panorama-mark-border { fill: none; stroke-width: 2px; stroke-dasharray: none; }
+.panorama-mark-dot { stroke-width: 1.5px; }
+.panorama-mark-glyph { font: 700 10px/1 ui-sans-serif, system-ui, sans-serif; }
+.panorama-mark-critical .panorama-mark-border { stroke: var(--danger); }
+.panorama-mark-critical .panorama-mark-dot { fill: var(--danger); stroke: var(--danger); }
+.panorama-mark-critical .panorama-mark-glyph { fill: #fff; }
+.panorama-mark-attention .panorama-mark-border { stroke: var(--warn); }
+.panorama-mark-attention .panorama-mark-dot { fill: var(--warn-soft); stroke: var(--warn); }
+.panorama-mark-attention .panorama-mark-glyph { fill: var(--warn); }
+/* OK is a small quiet dot rather than nothing: "observed and fine" and "not
+   observed at all" must not look the same, and it is not something to shout. */
+.panorama-mark-ok .panorama-mark-border { stroke: var(--ok); stroke-opacity: 0.45; }
+.panorama-mark-ok .panorama-mark-dot { fill: var(--ok); stroke: var(--ok); }
+/* The legend is not optional decoration: a mark nobody can decode is decoration,
+   and the record asks for the words in the same breath as the badges. */
+.panorama-live-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+  padding: 8px 12px; border-top: 1px solid var(--border); background: var(--surface);
+  font-size: 12px;
+}
+.panorama-live-swatch { display: inline-flex; align-items: center; gap: 6px; }
 .panorama-properties { width: 300px; }
 .panorama-props-empty { margin: auto; padding: 32px 24px; text-align: center; color: var(--muted); }
 .panorama-props-empty b { color: var(--text); }
@@ -2920,6 +2950,35 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 6px;
   background: #fff;
 }
+
+/* ---------- Mock Active Directory (ADR-0213) ---------- */
+/* A forest as a containment tree: the DN read right to left, one list per level, an
+   entry opening to its attributes. Containers the mock never got an entry for are
+   rendered muted, because they exist only because something below them does. */
+.admock-worker { margin-top: 14px; }
+.admock-forest { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.admock-forest:first-of-type { border-top: 0; }
+.admock-forest h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.admock-tree { list-style: none; margin: 4px 0 0; padding-left: 16px; }
+.admock-tree.admock-root { padding-left: 0; }
+.admock-tree li { position: relative; padding: 1px 0; }
+.admock-tree ul { border-left: 1px solid var(--border); }
+.admock-node { font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.admock-entry > summary { cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.admock-entry > summary::marker { color: var(--muted); }
+.admock-detail { padding: 4px 0 8px 14px; }
+.admock-dn { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; }
+/* width:auto against the global table{width:100%}: an attribute list is two narrow
+   columns beside a tree, not a data table spanning the card. */
+.admock-attrs { width: auto; border-collapse: collapse; font-size: 12.5px; }
+.admock-attrs th, .admock-attrs td { border: 0; }
+.admock-attrs th {
+  text-align: left; font-weight: 600; color: var(--muted); vertical-align: top;
+  padding: 2px 12px 2px 0; white-space: nowrap;
+}
+.admock-attrs td { padding: 2px 0; vertical-align: top; overflow-wrap: anywhere; }
+.admock-ops { margin-top: 12px; }
+.admock-ops > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the

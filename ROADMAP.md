@@ -947,7 +947,7 @@ for the derived whole-instance mesh above them.
   this server's own node descriptor (P4a). One kind still resolves as
   **unsupported** rather than missing, because there is nothing to look it up in:
   a job type is authored in a model rather than registered as a resource.
-- 🚧 **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
+- ✅ **P4 — Live Panorama:** add a stable, authenticated Atlas node descriptor and
   a separate observation projection for readiness, health, version, deployments,
   instances, jobs, and incidents. Resolve remote target status server-side with
   bounded concurrency/timeouts and honest healthy/degraded/not-ready/unreachable/
@@ -978,7 +978,14 @@ for the derived whole-instance mesh above them.
   answers also identifies its runtime, so a model binding another node's
   `atlas.runtimeId` observes it too; and
   **d)** observations on the ArchiMate canvas as borders and badges with a text
-  legend, layer colors intact.
+  legend, layer colors intact. Complete: an element's worst finding is drawn as a
+  border *around* it and a badge beside it, never as a fill — a layer colour says
+  what kind of element it is, and overwriting it with health would destroy one
+  meaning to show another. "Observed and fine" carries a quiet dot rather than
+  nothing, so it stays distinguishable from "not observed at all"; an element that
+  binds nothing carries no mark, because most elements of a young model are unbound
+  and a badge on each would make the diagram a wall of marks. The legend lists only
+  the classes on that diagram and states what an unmarked element means.
 - 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward

@@ -2041,14 +2041,18 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           weiterhin mit <code>connector="…"</code>, die Erweiterungselemente heissen weiterhin
           <code>&lt;atlas:mailConnector&gt;</code> und so fort, und <code>atlas worker --connector mail</code> nennt
           weiterhin den Worker-<i>Typ</i>. Das ist Absicht: Umbenennen würde jedes bestehende Modell brechen, ohne
-          dass etwas besser liefe. <b>Du musst also kein Modell anfassen.</b> Neu sind der Sprachgebrauch und die
-          Konsole – was dort „Connectors“ hiess, heisst jetzt Workers.</p>
+          dass etwas besser liefe. <b>Du musst also kein Modell anfassen.</b> Neu sind der Sprachgebrauch, die
+          Konsole und der Modeler: Was in der Konsole „Connectors“ hiess, heisst jetzt Workers, und das
+          Eigenschaften-Panel einer Aufgabe fragt nach einem <b>Worker-Typ</b> und darunter nach dem
+          <b>Worker</b> – dieselben drei Ebenen, unter denselben Namen.</p>
         <p data-l="en" style="margin:.3em 0 0">The words are new, the contracts are not. A task still names its worker
           with <code>connector="…"</code>, the extension elements are still called
           <code>&lt;atlas:mailConnector&gt;</code> and so on, and <code>atlas worker --connector mail</code> still
           names the worker <i>type</i>. That is deliberate: renaming them would break every existing model without
-          making anything run better. <b>So there is no model for you to touch.</b> What is new is the vocabulary and
-          the Console – what was called "Connectors" there is Workers now.</p>
+          making anything run better. <b>So there is no model for you to touch.</b> What is new is the vocabulary,
+          the Console and the Modeler: what was called "Connectors" in the Console is Workers now, and a task's
+          properties panel asks for a <b>Worker type</b> and, below it, for the <b>Worker</b> – the same three
+          levels, under the same names.</p>
       </div>
     </section>
 
@@ -2272,6 +2276,21 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
       <p data-l="en">You watch it under <a href="/#/operations/workers">Operations &rsaquo; Workers</a>: the worker
         called <code>ad</code> runs there. Its log warns at startup that no directory is being written, then lists
         every simulated operation with its DN – passwords redacted.</p>
+
+      <p data-l="de"><b>Das simulierte Verzeichnis selbst</b> steht unter
+        <a href="/#/operations/ad-mock">Betrieb &rsaquo; Mock directory</a>: pro Worker eine Karte, pro LDAP-URL ein
+        Baum, und zu jedem Eintrag seine Attribute. Der Worker meldet den Bestand nach jeder Operation an Atlas,
+        deshalb steht dort das Konto, das ein Joiner gerade angelegt hat. <b>Nicht</b> zu verwechseln mit dem
+        <i>Startbestand</i> auf der Karte unter Organisation &rsaquo; Workers: der ist die Vorlage, aus der jedes
+        Verzeichnis beginnt, und wird nie zurückgeschrieben – ein neu angelegtes Konto taucht dort also nicht auf.
+        Beides ist flüchtig: der Worker-Neustart leert seine Verzeichnisse, der Atlas-Neustart die Ansicht.</p>
+      <p data-l="en"><b>The simulated directory itself</b> is under
+        <a href="/#/operations/ad-mock">Operations &rsaquo; Mock directory</a>: one card per worker, one tree per
+        LDAP URL, and every entry's attributes. The worker reports what it holds after each operation, so the
+        account a joiner just created is there. Do <b>not</b> confuse it with the <i>starting entries</i> on the
+        card under Organization &rsaquo; Workers: those are the template every directory begins from and are never
+        written back, so a newly created account does not appear there. Both are ephemeral: restarting the worker
+        empties its directories, restarting Atlas empties the view.</p>
 
       <p data-l="de"><b>Mehrere Verzeichnisse bleiben auch im Mockup getrennt.</b> Jede LDAP-URL bekommt ihr
         eigenes Verzeichnis im Arbeitsspeicher, mit eigenem Bestand und eigener Änderungshistorie. Dasselbe Konto

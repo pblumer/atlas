@@ -266,6 +266,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted |
 | [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted |
 | [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed |
+| [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted |
 
 ## Status values
 
