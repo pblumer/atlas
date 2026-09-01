@@ -1,7 +1,9 @@
 # ADR-0211: Panorama's derived landscape mesh and notation projections
 
 - **Status:** Accepted (amended 2026-08-31 — §11 splits P2.5c's P4 dependency per
-  state instead of holding the whole stage behind it)
+  state instead of holding the whole stage behind it; amended 2026-09-01 — §7 lays
+  the graph out in a world of its own size rather than in the viewport, and names
+  by magnification rather than by node count)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -238,6 +240,43 @@ diagram does not, and the edges it needs are the ones §1 already derives — de
 it would ship the cost of the mesh without its distinctive payoff. The remainder of
 P5 (desired-versus-observed drift over time, Prometheus/OpenSearch history) is
 unaffected.
+
+> **Amendment (2026-09-01): the graph is laid out in a world, not in the window.**
+> §7 below asks the mesh not to render "an unusable hairball". It was producing one
+> well inside its own budget, and the cause was arithmetic rather than density: the
+> layout settled inside the viewport and was then scaled to fill it, and that scale
+> moves *positions* while radii stay fixed. Any graph whose settled extent exceeded
+> the frame was therefore compressed into it with its circles left at full size —
+> which guarantees overlap, and guarantees more of it with every node added.
+>
+> The graph is now laid out in a world sized from its own content, with each node
+> allocated personal space beyond its circle, and the viewport is a window onto that
+> world. How much of that world the nodes occupy was settled by measuring rather
+> than by taste, and the two goals turn out to be the same one: tightening it until
+> the space stops reading as empty is also what shrinks the world enough for the
+> names below to be legible at the opening view. The opening view still shows the whole landscape, as it must; reading it
+> closely is what the zoom and pan already built for §7 are for. The separation
+> guarantee is re-established *after* the fit, in the coordinates the circles are
+> actually drawn in, because that is the only place it means anything.
+>
+> Two consequences follow, and both replace a rule that was standing in for the
+> crowding rather than for a real constraint:
+>
+> - **Names are decided by magnification, not by node count.** The old rule painted
+>   every name below about twenty-five nodes and only the applications above it.
+>   Names collided because the graph was compressed, so the count was a proxy for
+>   the defect above. With room beside every node, the honest question is whether
+>   the text is large enough on screen to read — so a name appears when it is, and
+>   zooming is what brings the rest out. Applications cross the threshold first,
+>   because "where is Billing" has to be answerable before the detail is.
+> - **Adjacency is shown on hover.** §6's impact analysis answers what breaks if a
+>   node goes down, transitively, and needs a click. "What does this one touch" is
+>   asked far more often while reading, so pointing at a node lifts its immediate
+>   neighbours and the edges to them and lets the rest fall back. One hop
+>   deliberately: the transitive answer is what selecting is for, and a hover that
+>   lit half the landscape would be a worse version of it rather than a second tool.
+>   Nothing is re-laid-out and nothing is re-rendered, so the picture cannot move
+>   under the pointer while it is being read.
 
 ### 7. A stated size budget, and a server-side fallback
 

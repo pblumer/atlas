@@ -936,7 +936,7 @@ for the derived whole-instance mesh above them.
   networks; state the supported subset explicitly. The read-only, multi-view
   `diagram-js` canvas, ArchiMate renderer, selection properties, and zoom/pan
   controls are complete; authoring, semantic rules, undo/redo, and save remain.
-- 🚧 **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
+- ✅ **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
   Atlas already holds — process applications, deployed processes, call activities,
   workers, Worker Types, releases, deployment targets, DMN decisions — so
   Panorama is useful before anyone models anything, and treat the ArchiMate model as
@@ -955,13 +955,16 @@ for the derived whole-instance mesh above them.
   **c)** severity on the mesh, aggregating P4's seven observation states into three
   classes for zoom-out without replacing them, keeping unreachable and stale out of
   critical and always attributing a worst-of parent to the descendant that caused it.
-  Stages **a** and **b** are complete. Stage **c** ships the mapping, the worst-of
+  All three stages are complete. Stage **c** ships the mapping, the worst-of
   aggregation with attribution, and the two states this engine can already observe
   about itself without asking anything outside it — parked work on a process and a
-  worker that cannot serve work. **unreachable** and **stale** need a source outside
-  the process and a freshness contract to exceed, so they arrive with P4; until then
-  every mesh payload declares them unavailable with the reason, rather than letting
-  an unwatched instance render as uniformly healthy.
+  worker that cannot serve work. **unreachable** and **stale** stay unavailable on
+  the mesh, and that is now a standing property rather than a wait: P4c made both
+  producible, but only by asking a source outside this process, and the mesh draws
+  no deployment targets so it contacts nothing. Every mesh payload therefore
+  declares those two with the reason, rather than letting an unwatched instance
+  render as uniformly healthy — while the observation document, which does ask
+  peers, declares nothing unavailable.
 - 🚧 **P3 — Atlas bindings:** carry non-secret, namespaced binding properties from
   ArchiMate elements to Atlas process applications, BPMN process ids,
   workers and job types, releases, local runtimes, and deployment targets. Preserve
@@ -1012,7 +1015,7 @@ for the derived whole-instance mesh above them.
   binds nothing carries no mark, because most elements of a young model are unbound
   and a badge on each would make the diagram a wall of marks. The legend lists only
   the classes on that diagram and states what an unmarked element means.
-- 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments
+- ✅ **P5 — Landscape intelligence:** compare desired and observed deployments
   over time and optionally query Prometheus/OpenSearch for historical context.
   Dependency/impact analysis and discovered-but-unmodeled resources move forward
   into P2.5, which derives the edges they need. P4 also unblocks the two observation
