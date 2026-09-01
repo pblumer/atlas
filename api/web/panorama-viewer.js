@@ -145,6 +145,47 @@ function liveHTML(item, observations) {
     nothing here is stored on the model.</p></section>`;
 }
 
+// CANVAS_MARK is how a severity is drawn *on the diagram* (ADR-0189 §6, P4d).
+//
+// The record's constraint is the whole design here: "ArchiMate layer colors remain
+// intact. Runtime state is shown with borders, badges, icons, and an accessible
+// text legend rather than recoloring semantic element fills." A layer colour is
+// semantics — it says whether an element is business, application or technology —
+// and painting health over it would destroy one meaning to show another. So the
+// element's own fill is never touched; a mark sits *around* and *beside* it.
+//
+// Three classes are drawn and one is not:
+//
+//   - critical and attention carry a glyph, because they are what somebody is
+//     scanning the diagram for;
+//   - ok carries a small unobtrusive dot rather than nothing, because "observed and
+//     fine" and "not observed at all" must not look the same — that conflation is
+//     the one this whole projection exists to prevent;
+//   - unknown carries nothing. Most elements of a young model are unbound, and a
+//     badge on every one of them would make the diagram a wall of marks.
+const CANVAS_MARK = {
+  critical: { glyph: "!", label: "Critical — it cannot do work" },
+  attention: { glyph: "•", label: "Attention — something inside it went wrong" },
+  ok: { glyph: "", label: "OK — observed, nothing wrong" },
+};
+
+// SEVERITY_RANK orders the classes so an element bound to several resources shows
+// the worst of them. An element that is fine in one binding and broken in another
+// is not fine, and showing the first answer found would depend on document order.
+const SEVERITY_RANK = { unknown: 0, ok: 1, attention: 2, critical: 3 };
+
+// worstByElement reduces a document to one finding per ArchiMate element.
+export function worstByElement(observations) {
+  const worst = new Map();
+  for (const o of (observations && observations.observations) || []) {
+    const held = worst.get(o.elementId);
+    if (!held || (SEVERITY_RANK[o.severity] || 0) > (SEVERITY_RANK[held.severity] || 0)) {
+      worst.set(o.elementId, o);
+    }
+  }
+  return worst;
+}
+
 // detailHTML renders the numbers behind the sentence — a version, a count — for a
 // reader who wants them. Sorted, because this is something people compare between
 // two servers.
@@ -281,6 +322,98 @@ function c4PanelHTML(projection) {
   </div>`;
 }
 
+// markCanvas draws each element's worst finding onto the rendered diagram.
+//
+// It works on the DOM the renderer produced rather than inside the renderer,
+// which is a deliberate choice and not a shortcut. The ArchiMate canvas is a
+// pre-built bundle Atlas ships (ADR-0012: no build step, no CDN, no Node
+// toolchain at run time), so a change that needed a rebuild would put a
+// toolchain between an operator and a bug fix. Decorating afterwards keeps the
+// bundle byte-identical and its checksum meaningful.
+//
+// The mark is a border *around* the element and a badge beside it. Nothing here
+// writes fill: an ArchiMate layer colour says what kind of element it is, and
+// overwriting it with health would destroy one meaning to show another
+// (ADR-0189 §6).
+function markCanvas(canvas, view, observations) {
+  canvas.querySelectorAll(".panorama-canvas-mark").forEach((mark) => mark.remove());
+  canvas.querySelectorAll(".djs-element").forEach((group) => {
+    group.classList.remove("panorama-marked-ok", "panorama-marked-attention", "panorama-marked-critical");
+  });
+  if (!observations) return 0;
+
+  const worst = worstByElement(observations);
+  let marked = 0;
+  for (const shape of view.shapes || []) {
+    const finding = worst.get(shape.elementRef);
+    const mark = finding && CANVAS_MARK[finding.severity];
+    if (!mark) continue;
+    // CSS.escape: a view node id comes from somebody's exchange document, so it
+    // may hold anything a selector would otherwise read as syntax.
+    const group = canvas.querySelector(`.djs-element[data-element-id="${CSS.escape(shape.id)}"]`);
+    if (!group) continue;
+
+    group.classList.add(`panorama-marked-${finding.severity}`);
+    // The finding joins the element's accessible name rather than replacing it: a
+    // screen reader has to hear what the element *is* before what it is doing.
+    const spoken = group.getAttribute("aria-label") || shape.semantic?.name || shape.elementRef;
+    group.setAttribute("aria-label",
+      `${spoken} — ${mark.label.split(" — ")[0]}${finding.reason ? ": " + finding.reason : ""}`);
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    svg.setAttribute("class", `panorama-canvas-mark panorama-mark-${finding.severity}`);
+    svg.innerHTML = `<rect class="panorama-mark-border" x="-4" y="-4"
+        width="${shape.width + 8}" height="${shape.height + 8}" rx="4"/>
+      <circle class="panorama-mark-dot" cx="${shape.width - 6}" cy="6" r="${mark.glyph ? 8 : 4}"/>
+      ${mark.glyph ? `<text class="panorama-mark-glyph" x="${shape.width - 6}" y="6" dy="3.5"
+        text-anchor="middle">${esc(mark.glyph)}</text>` : ""}`;
+    group.appendChild(svg);
+    marked++;
+  }
+  return marked;
+}
+
+// canvasLegendHTML says what the marks mean, in words.
+//
+// ADR-0189 §6 asks for an accessible text legend in the same breath as the badges,
+// and the reason is that a mark nobody can decode is decoration. It lists only the
+// classes actually on the diagram — a legend describing findings the picture does
+// not contain is a legend nobody reads twice — and states what an *unmarked*
+// element means, which is the half a legend usually leaves out.
+function canvasLegendHTML(observations, marked) {
+  if (!observations) return "";
+  const present = new Set();
+  for (const finding of worstByElement(observations).values()) {
+    if (CANVAS_MARK[finding.severity]) present.add(finding.severity);
+  }
+  if (!present.size) {
+    return `<div class="panorama-live-legend"><span class="muted">Nothing on this view is
+      observed: no element here binds a resource this server can see.</span></div>`;
+  }
+  const swatches = ["critical", "attention", "ok"].filter((key) => present.has(key)).map((key) => `
+    <span class="panorama-live-swatch panorama-mark-${key}">
+      <svg width="16" height="16" aria-hidden="true">
+        <circle cx="8" cy="8" r="${CANVAS_MARK[key].glyph ? 7 : 4}" class="panorama-mark-dot"/>
+        ${CANVAS_MARK[key].glyph ? `<text x="8" y="8" dy="3.5" text-anchor="middle"
+          class="panorama-mark-glyph">${esc(CANVAS_MARK[key].glyph)}</text>` : ""}
+      </svg>${esc(CANVAS_MARK[key].label)}</span>`).join("");
+  const unwatched = (observations.unavailable || [])
+    .map((u) => esc(STATE_TEXT[u.state] || u.state));
+  return `<div class="panorama-live-legend">
+    ${swatches}
+    <span class="muted">${marked} of ${(view0Count(observations))} bound element(s) marked;
+    an unmarked element binds nothing this server observes.</span>
+    ${unwatched.length ? `<span class="muted">Not watched here: ${unwatched.join(", ")}.</span>` : ""}
+  </div>`;
+}
+
+// view0Count is how many distinct elements the document has an observation for. It
+// is the denominator the legend needs so "3 marked" is a proportion rather than a
+// number floating on its own.
+function view0Count(observations) {
+  return worstByElement(observations).size;
+}
+
 export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.innerHTML = `<div class="card empty"><p class="muted">Loading architecture view…</p></div>`;
   const [vendor, model, xml, applications, bindings, observations] = await Promise.all([
@@ -320,7 +453,10 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       <button class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
     </div>
     <div class="editor-body">
-      <div class="panorama-canvas" role="tabpanel" aria-label="ArchiMate diagram"></div>
+      <div class="panorama-stage">
+        <div class="panorama-canvas" role="tabpanel" aria-label="ArchiMate diagram"></div>
+        <div class="panorama-live-legend-slot" aria-label="What the runtime marks mean"></div>
+      </div>
       <aside class="props panorama-properties" aria-label="Properties">${propertiesHTML(null)}</aside>
     </div>
     <div class="problems panorama-problems" tabindex="0">
@@ -331,6 +467,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   </div>`;
 
   const canvas = container.querySelector(".panorama-canvas");
+  const legend = container.querySelector(".panorama-live-legend-slot");
   const properties = container.querySelector(".panorama-properties");
   // The application's role travels with the listing; editing a binding is authoring
   // the model, so it needs the same rights as any other write to it.
@@ -352,6 +489,12 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     }
     if (!viewer) viewer = new vendor.Viewer(canvas, (item) => { selected = item; paintProperties(); });
     viewer.render(diagramView);
+    // The renderer adds its shapes synchronously, so the DOM is there to decorate
+    // the moment render returns. Re-marking on every view switch is not an
+    // optimisation to skip: each render rebuilds the canvas, and a mark left over
+    // from the previous view would sit on whatever element inherited its id.
+    const marked = markCanvas(canvas, diagramView, live);
+    legend.innerHTML = canvasLegendHTML(live, marked);
   };
   select(parsed.views[0]);
 
