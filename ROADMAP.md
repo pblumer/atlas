@@ -935,7 +935,19 @@ for the derived whole-instance mesh above them.
   and the Technology elements needed to model artifacts, nodes, services, and
   networks; state the supported subset explicitly. The read-only, multi-view
   `diagram-js` canvas, ArchiMate renderer, selection properties, and zoom/pan
-  controls are complete; authoring, semantic rules, undo/redo, and save remain.
+  controls are complete. Authoring ships in stages:
+  **a)** arranging a view — moving and resizing the shapes already on it, undo and
+  redo over those edits, and a save that writes the new geometry back. Complete.
+  The document is *spliced*, never re-serialised: §2 requires that
+  unsupported-but-standard content round-trips without loss, so the server writes
+  four numbers per moved shape and reads nothing else. That is also why the browser
+  does not write it — `XMLSerializer` normalises, so serialising the parsed copy
+  would quietly rewrite somebody's model every time a box was nudged. The canvas
+  sends what it knows, which is a list of moved shapes. An explicit rules provider
+  permits exactly those two edits and refuses the rest, because a canvas offering an
+  operation that cannot yet be saved is worse than one that never offered it; and
+  **b)** creating elements and relationships from a stated subset, with ArchiMate's
+  semantic connection rules. Open.
 - ✅ **P2.5 — Landscape mesh:** derive a whole-instance graph from resources
   Atlas already holds — process applications, deployed processes, call activities,
   workers, Worker Types, releases, deployment targets, DMN decisions — so

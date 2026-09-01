@@ -1,9 +1,18 @@
-archimate-viewer.js is Atlas's pre-built read-only ArchiMate canvas bundle.
+archimate-viewer.js is Atlas's pre-built ArchiMate canvas bundle: a read-only
+viewer, and the authoring behaviour it loads on top when the caller may edit
+(ADR-0189 §2).
 
 It contains:
 
   - diagram-js@15.26.0
-  - the Atlas-owned Open Group ArchiMate Model Exchange parser and renderer in src/index.js
+  - the Atlas-owned Open Group ArchiMate Model Exchange parser, renderer, and
+    editing rules in src/index.js
+
+The editing modules (modeling, move, resize, outline, rules) are part of the
+bundle whether or not a given canvas loads them, which is what doubled its size
+when authoring arrived. They are instantiated only for an editable canvas, so a
+reader's diagram carries no modeling behaviour — but the code ships either way,
+because a single buildless bundle is the whole point of vendoring it (ADR-0012).
 
 diagram-js and its bundled dependencies are MIT licensed (see LICENSE). The
 Atlas parser and renderer remain part of Atlas. Only the output is loaded at
@@ -19,4 +28,4 @@ Do not edit archimate-viewer.js by hand. To rebuild:
     api/web/vendor/archimate/diagram-js.css
 
 SHA-256 archimate-viewer.js:
-445446178565df70b7b0a9d72e5efcc4828906bcf33daf090e5c10571b291917
+5942222cbbe0d52a8bf0124bc40826b1e4b76e2769d98661f2c97fcd94786c73

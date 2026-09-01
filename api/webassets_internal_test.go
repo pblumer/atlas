@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"io/fs"
 	"path"
 	"regexp"
@@ -78,5 +80,37 @@ func TestTheConsoleNavPointsAtRoutesTheRouterServes(t *testing.T) {
 		if !strings.Contains(src, `path === "`+route+`"`) && !strings.Contains(src, `path.startsWith("`+route+`")`) {
 			t.Errorf("the console nav offers %s, which the router does not handle", route)
 		}
+	}
+}
+
+// TestVendoredBundleMatchesItsRecordedChecksum.
+//
+// ATLAS-VENDORED.txt says "Do not edit archimate-viewer.js by hand" and records
+// the SHA-256 that the documented esbuild command produces. Until now that was a
+// claim nothing checked, so a hand-edit — or a rebuild somebody forgot to record —
+// would have been invisible, and the recipe in that file would slowly stop
+// describing the file beside it.
+//
+// This cannot rebuild the bundle: that needs npm, which a buildless binary
+// deliberately does not have at test time (ADR-0012). What it can do is hold the
+// file to the number its own documentation states, which catches every way the two
+// drift apart except a rebuild whose author also updated the record — and that one
+// is the case where they agree.
+func TestVendoredBundleMatchesItsRecordedChecksum(t *testing.T) {
+	bundle, err := fs.ReadFile(webFS, "web/vendor/archimate/archimate-viewer.js")
+	if err != nil {
+		t.Fatalf("read bundle: %v", err)
+	}
+	notes, err := fs.ReadFile(webFS, "web/vendor/archimate/ATLAS-VENDORED.txt")
+	if err != nil {
+		t.Fatalf("read vendoring notes: %v", err)
+	}
+
+	sum := fmt.Sprintf("%x", sha256.Sum256(bundle))
+	if !strings.Contains(string(notes), sum) {
+		t.Errorf("archimate-viewer.js hashes to %s, which ATLAS-VENDORED.txt does not record.\n"+
+			"Either the bundle was edited by hand — which that file forbids — or it was "+
+			"rebuilt without recording the new checksum. Rebuild with the command in "+
+			"ATLAS-VENDORED.txt and put this sum in it.", sum)
 	}
 }

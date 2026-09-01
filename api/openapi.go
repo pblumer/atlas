@@ -505,6 +505,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read historical context for one element from the stores outside Atlas (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Historical context document", tObject())}},
+		// Moving shapes on a view (ADR-0189 §2). Separate from the model update
+		// because it can do exactly one thing: the canvas sends what moved, never a
+		// document, so a browser's serialiser can never rewrite somebody's model.
+		{"PUT", "/api/v1/panorama/models/{id}/layout", s.panorama.HandleSetLayout, apiOp{
+			summary: "Write new positions for shapes on a Panorama view (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			req:  jsonBody("Moved shapes and the revision they were read at", tObject()),
+			resp: jsonBody("The updated model summary", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},
