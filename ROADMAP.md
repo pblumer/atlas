@@ -286,9 +286,22 @@ The control-flow basics most real models use.
   (registry/client/worker) is wired into the single-binary run loop under the
   reserved Jira job type and authored via a first-class **Jira Connector** service-task
   type in the modeler. A transition may be named by the button a person reads in Jira (its
-  id is resolved first), a search follows Jira's paging to the model's cap, and an extra
-  issue field keeps the JSON shape its FEEL value had. Attachments, an out-of-process
-  worker for the type, and inbound webhook events are follow-ups.
+  id is resolved first), and an extra issue field keeps the JSON shape its FEEL value had.
+  A search follows the paging of whichever endpoint the product serves: Jira Cloud removed
+  the offset-paged `/rest/api/{2,3}/search` over 2025, so a Cloud search uses
+  `/rest/api/3/search/jql` and its opaque `nextPageToken` — the one call that leaves v2,
+  affordable because a search reads and ADF only governs writing — while Data Center keeps
+  the offset-paged endpoint the deprecation does not touch.
+  Like Remedy, the work also **runs on a worker** (ADR-0164/0168): the engine resolves the
+  task into plain values and `atlas worker --connector jira` performs it, holding the site
+  URL and the Atlassian credential in its own environment (`ATLAS_JIRA_CONNECTORS` plus per
+  name `_URL` and either `_EMAIL`/`_API_TOKEN` or `_TOKEN`) — handed to a supervised worker
+  out of the connector store and the vault at spawn, in exactly the one shape the engine
+  itself would have used. A worker can therefore operate as an Atlassian account the engine
+  has never held. Atlas does not supervise it by default; `--offload-connectors jira` opts
+  in, and the in-process handler remains as the fallback `--in-process-connectors` returns
+  to. Attachments and inbound events are follow-ups — for the inbound half see
+  [the Jira issue-watch draft](docs/adr/draft-jira-inbound-issue-watch.md).
 
 ## Milestone 2 — Events and timers 🚧
 

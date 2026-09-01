@@ -25,6 +25,27 @@ const apiBase = "/rest/api/2"
 // wants in memory at once.
 const searchPageSize = 100
 
+// searchJQLPath is the endpoint a search uses on Jira Cloud, and the one place this
+// connector leaves apiBase behind. Atlassian removed the offset-paged
+// /rest/api/{2,3}/search from Cloud over 2025 — a site that has been switched over
+// answers 410 Gone, "The requested API has been removed" — and directs callers to
+// /search/jql, whose paging is an opaque nextPageToken. Its migration guidance names
+// the v3 path; v3 is the answer that is correct whether or not v2 also serves it,
+// which is why this is not a guess to be revisited.
+//
+// Search can afford v3 where the write operations cannot. ADF governs how a
+// description or a comment body is *written*, and a search only reads, so nothing here
+// asks a model author to build a document tree (the whole reason for apiBase = 2). The
+// cost lands on the read side instead: a description inside a returned issue arrives as
+// a document tree rather than a string.
+const searchJQLPath = "/rest/api/3/search/jql"
+
+// searchJQLFields is what /search/jql is asked to return. Unlike the endpoint it
+// replaces, it returns no fields at all unless asked — so naming Jira's own former
+// default here is what keeps a model that read issue.fields.summary working across the
+// migration rather than silently receiving issues with nothing in them.
+var searchJQLFields = []string{"*navigable"}
+
 // Connector is the server-side configuration of one Jira instance: the BaseURL (e.g.
 // "https://acme.atlassian.net") and exactly one credential shape.
 //
@@ -213,7 +234,74 @@ func (c *HTTPClient) transitionID(ctx context.Context, req Request) (string, err
 // until the model's cap is reached or the result set is exhausted. The paging
 // envelope stays here: a model that had to unwrap {startAt,total,issues} and loop
 // would be modelling the API rather than the work.
+// search runs the model's JQL and answers with the issues themselves. Which endpoint
+// serves it depends on the product, because the deprecation that moved Cloud to
+// /search/jql is a Cloud change: Data Center still serves the offset-paged
+// /rest/api/2/search and does not necessarily serve the other at all. The connector
+// already knows which product it is talking to from the credential shape (see cloud),
+// so it asks each the way that product answers rather than making an operator choose.
 func (c *HTTPClient) search(ctx context.Context, req Request) (any, error) {
+	if c.cloud() {
+		return c.searchJQL(ctx, req)
+	}
+	return c.searchOffset(ctx, req)
+}
+
+// searchJQL pages Jira Cloud's /search/jql by its opaque nextPageToken. The envelope
+// carries no total — the only thing that says another page exists is the token, and
+// its absence ends the read.
+func (c *HTTPClient) searchJQL(ctx context.Context, req Request) (any, error) {
+	issues := []any{}
+	token := ""
+	for {
+		page := searchPageSize
+		if req.MaxResults > 0 {
+			remaining := int(req.MaxResults) - len(issues)
+			if remaining <= 0 {
+				break
+			}
+			if remaining < page {
+				page = remaining
+			}
+		}
+		body := map[string]any{"jql": req.JQL, "maxResults": page, "fields": searchJQLFields}
+		if token != "" {
+			body["nextPageToken"] = token
+		}
+		raw, err := c.call(ctx, http.MethodPost, searchJQLPath, body, req)
+		if err != nil {
+			return nil, err
+		}
+		envelope, _ := raw.(map[string]any)
+		got, _ := envelope["issues"].([]any)
+		issues = append(issues, got...)
+		// The cap is the model's statement about what may reach its result variable, so
+		// it is applied to what arrived rather than trusted to the server.
+		if req.MaxResults > 0 && len(issues) >= int(req.MaxResults) {
+			return issues[:req.MaxResults], nil
+		}
+		// An empty page is the end of the result set whatever the envelope says, the
+		// same guard the offset path needs against a query whose matches shrink
+		// mid-read.
+		if len(got) == 0 {
+			break
+		}
+		next, _ := envelope["nextPageToken"].(string)
+		// A token that does not advance cannot describe a *next* page. Ending the read
+		// there is what keeps a server answering with the same token from looping
+		// forever, which is the failure the offset path used the total to avoid.
+		if next == "" || next == token {
+			break
+		}
+		token = next
+	}
+	return issues, nil
+}
+
+// searchOffset pages Jira Data Center's /rest/api/2/search by startAt. It is the
+// original implementation, unchanged: Data Center is not affected by the Cloud
+// deprecation, and moving it would be a regression rather than a migration.
+func (c *HTTPClient) searchOffset(ctx context.Context, req Request) (any, error) {
 	issues := []any{}
 	for {
 		page := searchPageSize

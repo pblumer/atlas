@@ -25,6 +25,14 @@
 // string, and making every model author ADF to write one sentence is the opposite of
 // what this connector is for.
 //
+// Search is the one exception, and only on Cloud. Atlassian removed the offset-paged
+// /rest/api/{2,3}/search from Jira Cloud over 2025 (a switched-over site answers 410
+// Gone) in favour of /rest/api/3/search/jql, which pages by an opaque token and returns
+// only the fields it is asked for. So a Cloud search goes to v3 while everything else
+// stays on v2 — affordable precisely because a search reads, so ADF never reaches the
+// write path. Data Center is not affected by that deprecation and keeps the offset-paged
+// v2 endpoint; the credential shape already tells the two products apart.
+//
 // Authentication follows the credential bundle an operator stored: an {email,
 // apiToken} bundle is Jira Cloud's HTTP Basic scheme, a {token} bundle a Data Center
 // personal access token sent as a bearer. The same choice decides how an account is

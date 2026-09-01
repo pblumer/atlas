@@ -474,6 +474,112 @@ func TestBuildRemedyClients(t *testing.T) {
 	}
 }
 
+// A Jira record is created with the site URL and a vault bundle naming the credential
+// (ADR-0201). Which of the two bundle shapes it is — {email, apiToken} for Cloud,
+// {token} for a Data Center personal access token — is deliberately NOT decided here:
+// the record holds only the reference, so being wrong about the bundle becomes a
+// problem reported on the connector rather than a refused form.
+func TestJiraConnectorNeedsASiteAndACredentialBundle(t *testing.T) {
+	k, ok := lookupManagedConnectorKind(connectorKindJira)
+	if !ok {
+		t.Fatal("jira is not a managed connector kind")
+	}
+
+	for _, tc := range []struct{ name, endpoint, ref, want string }{
+		{"no site at all", "", "jira-creds", "endpoint"},
+		{"a site but no credential bundle", "https://acme.atlassian.net", "", "credentialsRef"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := k.validateCreate(&createConnectorParams{
+				Name: "acme", Endpoint: tc.endpoint, CredentialsRef: tc.ref,
+			})
+			if msg == "" {
+				t.Fatal("an incomplete jira connector was accepted")
+			}
+			if !strings.Contains(msg, tc.want) {
+				t.Errorf("message = %q, want it to mention %q", msg, tc.want)
+			}
+		})
+	}
+
+	// With both it passes — and the mail-only fields are cleared rather than stored, so
+	// a record carried over from another kind cannot leave a provider or a sender
+	// behind on a Jira site.
+	p := &createConnectorParams{
+		Name: "acme", Endpoint: "https://acme.atlassian.net", CredentialsRef: "jira-creds",
+		Provider: "smtp", Sender: "bot@x",
+	}
+	if msg := k.validateCreate(p); msg != "" {
+		t.Errorf("a complete jira connector was refused: %s", msg)
+	}
+	if p.Provider != "" || p.Sender != "" {
+		t.Errorf("provider/sender = %q/%q, want both cleared for a jira record", p.Provider, p.Sender)
+	}
+}
+
+// buildJiraClients keeps a connector out of the registry unless it is enabled, has a
+// site, and its credentialsRef resolves to one of the two bundle shapes. Each
+// exclusion records *why* on the connector instead (ADR-0158), because "no connector
+// registered as X" reads as "you never configured it" when the truth is that the
+// bundle is malformed.
+func TestBuildJiraClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	// The bundle lives in the vault; here it resolves from the env fallback
+	// (ATLAS_CONNECTOR_<REF>_TOKEN), never from the record itself.
+	t.Setenv("ATLAS_CONNECTOR_CLOUD_CREDS_TOKEN", `{"email":"bot@acme.example","apiToken":"t0ken"}`)
+	t.Setenv("ATLAS_CONNECTOR_DC_CREDS_TOKEN", `{"token":"pat"}`)
+	t.Setenv("ATLAS_CONNECTOR_BAD_CREDS_TOKEN", `not valid json`)
+	t.Setenv("ATLAS_CONNECTOR_HALF_CREDS_TOKEN", `{"email":"bot@acme.example"}`)
+
+	_ = srv.connectors.Save(connector{ID: "1", Name: "cloud", Kind: connectorKindJira, Endpoint: "https://acme.atlassian.net", CredentialsRef: "cloud_creds", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.Save(connector{ID: "2", Name: "dc", Kind: connectorKindJira, Endpoint: "https://jira.internal", CredentialsRef: "dc_creds", Enabled: true, CreatedAt: 2})
+	_ = srv.connectors.Save(connector{ID: "3", Name: "off", Kind: connectorKindJira, Endpoint: "https://acme.atlassian.net", CredentialsRef: "cloud_creds", Enabled: false, CreatedAt: 3})
+	_ = srv.connectors.Save(connector{ID: "4", Name: "nosite", Kind: connectorKindJira, Endpoint: "", CredentialsRef: "cloud_creds", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.Save(connector{ID: "5", Name: "broken", Kind: connectorKindJira, Endpoint: "https://acme.atlassian.net", CredentialsRef: "bad_creds", Enabled: true, CreatedAt: 5})
+	_ = srv.connectors.Save(connector{ID: "6", Name: "halfbundle", Kind: connectorKindJira, Endpoint: "https://acme.atlassian.net", CredentialsRef: "half_creds", Enabled: true, CreatedAt: 6})
+	_ = srv.connectors.Save(connector{ID: "7", Name: "amail", Kind: connectorKindMail, Endpoint: "smtp:587", Sender: "a@x", Enabled: true, CreatedAt: 7})
+
+	clients, problems, err := srv.buildJiraClients()
+	if err != nil {
+		t.Fatalf("buildJiraClients: %v", err)
+	}
+	// Both credential shapes build a client; nothing else does.
+	if len(clients) != 2 {
+		t.Fatalf("clients = %v, want the two usable Jira records", clients)
+	}
+	for _, name := range []string{"cloud", "dc"} {
+		if _, ok := clients[name]; !ok {
+			t.Errorf("clients = %v, want %q among them", clients, name)
+		}
+	}
+	// And every exclusion says why, in words pointed at the fix.
+	for _, tc := range []struct{ name, want string }{
+		{"off", "disabled"},
+		{"nosite", "base URL"},
+		{"broken", "not valid JSON"},
+		{"halfbundle", "neither shape"},
+		{"amail", "not \"jira\""}, // a mail connector named by a Jira task
+	} {
+		got, ok := problems[tc.name]
+		if !ok {
+			t.Errorf("no problem recorded for %q; a parked task would say only that nothing is registered", tc.name)
+			continue
+		}
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("problem[%q] = %q, want it to mention %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestBuildJiraClientsLoadError covers buildJiraClients' store-read failure.
+func TestBuildJiraClientsLoadError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.connectors = brokenStore(newConnectorStore(filepath.Join(t.TempDir(), "gone")))
+	if _, _, err := srv.buildJiraClients(); err == nil {
+		t.Error("buildJiraClients with a broken store: want error")
+	}
+}
+
 // TestBuildRemedyClientsLoadError covers buildRemedyClients' store-read failure.
 func TestBuildRemedyClientsLoadError(t *testing.T) {
 	srv, _ := newValidateServer(t)

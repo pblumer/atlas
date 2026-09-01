@@ -132,6 +132,21 @@ _Changed_ / _Removed_ for each version.
   that could never work — a role Atlas does not enforce, a group that has been
   deleted — is refused when you save it rather than ignored on every login.
 
+- **The Jira Worker Type runs on a worker.** Jira was in `offloadableKinds` while
+  `worker/connectors.go` had no case for it, so `--offload-connectors jira` stripped
+  the in-process handler and left the job type served by nobody. Now the engine
+  resolves a Jira task into plain values and hands them over, and
+  `atlas worker --connector jira` performs it, holding the site URL and the Atlassian
+  credential in its own environment (`ATLAS_JIRA_CONNECTORS` plus per name `_URL` and
+  either `_EMAIL`/`_API_TOKEN` or `_TOKEN`) — so a worker can operate as an account the
+  engine has never held. A supervised worker is handed all of it at spawn out of the
+  connector store and the vault, in the one credential shape the engine itself would
+  have used. The in-process handler stays as the fallback and now shares `jira.Run`
+  with the worker, so the two cannot drift
+  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
+  [ADR-0201](docs/adr/0201-jira-connector.md)).
+
+
 ### Changed
 
 - **New Atlas mark.** The logo and the favicon are now a white peak carrying a
@@ -195,6 +210,20 @@ _Changed_ / _Removed_ for each version.
   extension elements are still `<atlas:jiraConnector>` and friends.
 
 ### Fixed
+
+- **A Jira search called an endpoint Jira Cloud has removed.** The `search`
+  operation posted to `/rest/api/2/search` with `startAt` paging; Atlassian
+  progressively shut that endpoint down across Cloud over 2025, and a switched-over
+  site answers `410 Gone`. A Cloud search now goes to `/rest/api/3/search/jql` and
+  pages by its opaque `nextPageToken`, asking explicitly for `*navigable` fields
+  because the replacement returns none unless told to — a model reading
+  `issue.fields.summary` would otherwise have started receiving issues with nothing
+  in them. It is the one call that leaves v2, which a search can afford because ADF
+  governs how a description or comment body is *written* and a search only reads.
+  Jira Data Center is not affected by the deprecation and keeps the offset-paged
+  endpoint; the credential shape already tells the two products apart. The other six
+  operations use `/rest/api/2/issue/…` and were never affected
+  ([ADR-0201](docs/adr/0201-jira-connector.md)).
 
 - **A feed scrape reached its worker without knowing it was a feed.** The resolved
   job carried `format` and `maxItems`

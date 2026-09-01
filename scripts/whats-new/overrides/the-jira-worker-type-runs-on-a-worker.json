@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Connectors",
+    "Workers"
+  ],
+  "title": {
+    "en": "Jira tasks can run outside the engine now",
+    "de": "Jira-Tasks laufen jetzt auch ausserhalb der Engine"
+  },
+  "summary": {
+    "en": "Jira was listed as a kind you could move onto a worker, but no worker could actually serve it — moving it left every Jira task waiting for nobody. There is a real Jira worker now. It holds the site address and the Atlassian login in its own configuration, so it can work as an account the engine has never seen, and reach a Jira the engine cannot. A worker Atlas starts for you is handed all of that from Connectors and the vault, with nothing to set by hand. Running Jira inside the engine still works and is still the default.",
+    "de": "Jira war als Typ aufgeführt, den man auf einen Worker auslagern kann — nur konnte ihn kein Worker tatsächlich bedienen, und ausgelagert wartete jeder Jira-Task auf niemanden. Jetzt gibt es einen echten Jira-Worker. Er hält die Adresse der Jira-Instanz und die Atlassian-Anmeldung in seiner eigenen Konfiguration, kann also als Konto arbeiten, das die Engine nie gesehen hat, und ein Jira erreichen, an das die Engine nicht herankommt. Einem Worker, den Atlas selbst startet, wird das alles aus den Konnektoren und dem Tresor mitgegeben — von Hand ist nichts zu setzen. Jira in der Engine läuft weiterhin und bleibt die Voreinstellung."
+  }
+}

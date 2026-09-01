@@ -325,6 +325,18 @@ func (s *Server) buildJiraClients() (map[string]jira.Client, map[string]string, 
 	return clients, problems, nil
 }
 
+// jiraCredentials is the shape of a Jira connector's credential bundle held in the
+// vault under its credentialsRef (ADR-0201): either a Jira Cloud {email, apiToken} pair
+// or a Data Center {token}. Only a *reference* to this bundle is stored in the
+// connector record; the values live in the vault, never in a model or the record (I6).
+// It mirrors the connector package's own unexported bundle type, which is what
+// TestJiraBundleShapeMatchesTheConnector holds it to.
+type jiraCredentials struct {
+	Email    string `json:"email,omitempty"`
+	APIToken string `json:"apiToken,omitempty"`
+	Token    string `json:"token,omitempty"`
+}
+
 // remedyCredentials is the shape of a Remedy connector's credential bundle held in
 // the vault under its credentialsRef (ADR-0106): the AR System username and password
 // used to obtain a JWT. Only a *reference* to this bundle is stored in the connector

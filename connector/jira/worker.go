@@ -47,49 +47,21 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 		if err != nil {
 			return nil, fmt.Errorf("jira: %w", err)
 		}
-		name := cp.Intern(detail.Connector)
-		client, ok := reg.Client(name)
-		if !ok {
-			return nil, reg.Unresolved("jira", name)
-		}
-		// The operation is not re-validated here: the compiler refused an unknown one at
-		// deploy, and the client refuses one it does not implement with the list of the
-		// ones it does — a third check would only be a third message for the same fault.
-		op := cp.Intern(detail.JiraOp)
-		piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
-		// Read the variables the task sees once — up its scope chain, so its own
-		// input-mapped locals shadow what it inherits (ADR-0068). Every authored value
-		// evaluates against them, off the hot path.
-		scopeVars, err := state.VisibleVariablesMap(store, j.ElementInstanceKey)
-		if err != nil {
-			return nil, fmt.Errorf("jira: read variables for element %d: %w", j.ElementInstanceKey, err)
-		}
-		result, err := client.Do(context.Background(), Request{
-			Operation:   op,
-			Issue:       resolveValue(detail.JiraIssue, piKey, scopeVars),
-			Project:     resolveValue(detail.JiraProject, piKey, scopeVars),
-			IssueType:   resolveValue(detail.JiraIssueType, piKey, scopeVars),
-			Summary:     resolveValue(detail.JiraSummary, piKey, scopeVars),
-			Description: resolveValue(detail.JiraDescription, piKey, scopeVars),
-			Transition:  resolveValue(detail.JiraTransition, piKey, scopeVars),
-			Comment:     resolveValue(detail.JiraComment, piKey, scopeVars),
-			Assignee:    resolveValue(detail.JiraAssignee, piKey, scopeVars),
-			JQL:         resolveValue(detail.JiraJQL, piKey, scopeVars),
-			MaxResults:  detail.JiraMaxResults,
-			Fields:      resolveFields(detail.JiraFields, piKey, scopeVars),
-			RequestID:   strconv.FormatUint(j.Key, 10),
-		})
+		task, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
 		if err != nil {
 			return nil, err
 		}
-		resultVar := cp.Intern(detail.ResultVar)
-		if resultVar == "" || result == nil {
+		result, err := Run(context.Background(), task, reg)
+		if err != nil {
+			return nil, err
+		}
+		if task.ResultVariable == "" || result == nil {
 			// Either the model discards the answer, or the operation is one Jira
 			// answers with no content. Writing a null variable for the second would
 			// make "assigned" indistinguishable from "read something that was empty".
 			return nil, nil
 		}
-		return []model.VariableValue{resultVariable(resultVar, result)}, nil
+		return []model.VariableValue{resultVariable(task.ResultVariable, result)}, nil
 	}
 }
 
