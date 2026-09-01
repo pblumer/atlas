@@ -181,6 +181,11 @@ var (
 	// mockup run leaves behind for the person who ran it, in the worker's log where
 	// the Workers console shows it.
 	ADMockPerformed = newEvent("ad_mock.performed")
+	// ADMockReportFailed is a mock worker that could not deliver its directory to the
+	// Atlas whose Console shows it (ADR-draft-ad-mock-directory-in-the-console). A
+	// warning, never a job failure: the operation it describes has already happened,
+	// so what is lost is one refresh of a view that the next operation sends again.
+	ADMockReportFailed = newEvent("ad_mock.report_failed")
 	// ADMockSeedUnusable is a mock directory that could not read the seed it was
 	// pointed at, and started empty instead. It is a warning and not a refusal
 	// because a mock touches nothing real: an empty directory costs a joiner nothing

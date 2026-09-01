@@ -134,7 +134,14 @@ var mcpOmittedRoutes = map[string]string{
 	// message back to this server's outbox (ADR-0168). An agent reads the outbox with
 	// atlas_mail_outbox; putting a message *into* it would be inventing a preview of
 	// something no process sent.
-	"POST /api/v1/mail/outbox":          "worker delivering a preview it framed, not an agent action",
+	"POST /api/v1/mail/outbox": "worker delivering a preview it framed, not an agent action",
+	// The same category twice over: a mock AD worker reporting the forest it holds, and
+	// the Console view that reads it back. An agent asking what a mockup did reads the
+	// job's own result and atlas_workers' log, both of which say it in the terms the
+	// model is written in; a forest dump is an operator's picture, and an admin-gated
+	// one (ADR-draft-ad-mock-directory-in-the-console).
+	"POST /api/v1/ad/mock-directory":    "worker reporting the mock forest it holds, not an agent action",
+	"GET /api/v1/ad/mock-directory":     "an operator's view of a mocked directory; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",

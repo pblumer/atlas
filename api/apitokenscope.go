@@ -70,7 +70,9 @@ const (
 //
 // The worker set is derived from what `atlas worker` actually calls: leasing a
 // batch by type, settling each job either way, and — for a mail connector running
-// in preview — posting the framed message back to this server's outbox (ADR-0150).
+// in preview — posting the framed message back to this server's outbox (ADR-0150),
+// and, for an AD connector in mockup mode, reporting the forest it holds so the
+// Console can show it (ADR-draft-ad-mock-directory-in-the-console).
 // Nothing else. Notably not `POST /api/v1/jobs/{key}/activate`, which is the
 // single-job form no worker uses.
 var apiScopeAllowed = map[string][]string{
@@ -85,6 +87,7 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/jobs/{key}/complete",
 		"POST /api/v1/jobs/{key}/fail",
 		"POST /api/v1/mail/outbox",
+		"POST /api/v1/ad/mock-directory",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the
 	// probes. A scope is a set of mounted patterns, not of API operations, which is

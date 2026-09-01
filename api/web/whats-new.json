@@ -2,6 +2,49 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "see-the-mock-active-directory",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the mock Active Directory",
+        "de": "Das simulierte Active Directory ansehen"
+      },
+      "summary": {
+        "en": "Mockup mode lets an Active Directory process run without a domain controller, but until now the directory it wrote to was invisible: the account a joiner created could only be found by reading the worker's log, and the starting entries on the Active Directory card — the template every forest begins from, never written back — were the natural place to look for it and never had it. Operations › Mock directory now shows the directory itself: one card per worker, one tree per LDAP URL, every entry with its attributes, and underneath it the list of operations the mockup performed. It refreshes while you click through a process. Nothing about it is permanent — restarting the worker empties its forests and they start from the seed again — and no password is ever shown, because the mockup stores none.",
+        "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Organization › Workers → the Active Directory card → switch on “Serve Active Directory tasks against a mockup” and save. The AD worker restarts.",
+          "Optionally paste or upload starting entries (LDIF or DSML) on the same card — a leaver needs an account to disable.",
+          "Run a process with an Active Directory task, or start one from Tasks › Start.",
+          "Open Operations › Mock directory: the worker's forests are there, with the entry the task just created."
+        ],
+        "de": [
+          "Organisation › Workers → Karte «Active Directory» → «Serve Active Directory tasks against a mockup» einschalten und speichern. Der AD-Worker startet neu.",
+          "Optional auf derselben Karte einen Startbestand einfügen oder hochladen (LDIF oder DSML) — ein Leaver braucht ein Konto, das er deaktivieren kann.",
+          "Einen Prozess mit einer Active-Directory-Aufgabe starten, etwa über Aufgaben › Start.",
+          "Betrieb › Mock directory öffnen: Dort stehen die Verzeichnisse des Workers, mit dem Eintrag, den die Aufgabe gerade angelegt hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Mock directory",
+          "de": "Mock directory öffnen"
+        },
+        "route": "#/operations/ad-mock"
+      }
+    },
+    {
       "id": "sign-in-with-your-identity-provider",
       "version": "Unreleased",
       "date": null,
@@ -298,35 +341,6 @@
         "Security",
         "Operations"
       ]
-    },
-    {
-      "id": "the-login-is-throttled-and-there-is-a-security-audit-trail",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Password guessing is slowed down, and sign-ins are recorded",
-        "de": "Passwort-Raten wird gebremst, und Anmeldungen werden protokolliert"
-      },
-      "summary": {
-        "en": "Nothing sat in front of the login, so guessing a password was bounded only by how fast the server could check one — roughly a tenth of a second of its CPU for one request of yours, which is the wrong way round. Attempts are now budgeted twice over: twenty in a row from one network address, refilling every two seconds so a whole office behind one address is unremarkable, and five per account, refilling over a quarter of an hour. Both are charged before the account is looked up and whether or not it exists, so the throttle gives away nothing the deliberately vague \"invalid credentials\" message keeps back. A successful sign-in clears that account's budget, so two mistyped passwords are not carried around for fifteen minutes and a lockout always heals by itself — nobody has to lift one. Alongside it, eleven `auth.*` log events record who signed in, who did not and why, who was throttled, and every change to an account. None of them carries a password, a hash or a token, and a test drives real secrets through the handlers to prove it. Minor change: a burst of failed logins now answers 429 rather than another 401.",
-        "de": "Vor der Anmeldung stand nichts, also war das Raten eines Passworts nur davon begrenzt, wie schnell der Server eines prüfen kann — rund eine Zehntelsekunde seiner Rechenzeit für eine Anfrage von Ihnen, was genau verkehrt herum ist. Versuche haben jetzt zwei Budgets: zwanzig am Stück je Netzwerkadresse, die sich alle zwei Sekunden wieder auffüllen (ein ganzes Büro hinter einer Adresse ist der Normalfall), und fünf je Konto, die sich über eine Viertelstunde auffüllen. Beide werden abgebucht, bevor das Konto nachgeschlagen wird, und unabhängig davon, ob es existiert — die Bremse verrät also nichts, was die bewusst vage Meldung „ungültige Zugangsdaten\" offenlässt. Eine erfolgreiche Anmeldung setzt das Budget des Kontos zurück: Zwei vertippte Passwörter schleppt man nicht eine Viertelstunde mit sich herum, und eine Sperre löst sich immer von selbst — niemand muss sie aufheben. Dazu kommen elf `auth.*`-Logereignisse: wer sich angemeldet hat, wer nicht und warum, wer gebremst wurde und jede Änderung an einem Konto. Keines enthält ein Passwort, einen Hash oder ein Token, und ein Test schickt echte Geheimnisse durch die Handler, um das nachzuweisen. Kleine Änderung: Eine Serie fehlgeschlagener Anmeldungen antwortet jetzt mit 429 statt mit einem weiteren 401."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Organization"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organisation öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }

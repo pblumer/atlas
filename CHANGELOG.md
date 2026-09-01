@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **See the mock Active Directory.** An AD worker running in mockup mode now reports
+  the forests it holds, and Operations › **Mock directory** shows them: one card
+  per worker, one tree per LDAP URL, every entry with its attributes, and the operation
+  journal underneath
+  ([ADR-draft-ad-mock-directory-in-the-console](docs/adr/draft-ad-mock-directory-in-the-console.md)).
+
+  It closes the gap that made the *starting entries* on the Active Directory card look
+  like the directory. They are not: the seed is where every forest begins and is never
+  written back, so an account a joiner created was nowhere on screen — it had to be read
+  out of the worker's log, one line per operation. Now the account is in the view, and
+  the page says which of the two is which.
+
+  Nothing else changes. The report is an observation of work that already happened: a
+  worker that cannot reach its Atlas logs `ad_mock.report_failed` and completes its job
+  exactly as before, and no password travels, because the mock stores none. Both halves
+  stay memory — restarting the worker empties its forests, restarting Atlas empties the
+  view. A worker Atlas supervises is pointed at the endpoint automatically while the
+  mockup is on; one you run yourself takes `ATLAS_AD_MOCK_VIEW_URL`.
+
 - **Sign in with your identity provider.** Atlas can now be an OpenID Connect
   relying party: people reach the login screen, press **Sign in with …**, and come
   back with a session ([ADR-0210](docs/adr/0210-federated-authentication.md)).
