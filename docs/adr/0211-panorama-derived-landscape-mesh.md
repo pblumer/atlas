@@ -251,7 +251,10 @@ unaffected.
 >
 > The graph is now laid out in a world sized from its own content, with each node
 > allocated personal space beyond its circle, and the viewport is a window onto that
-> world. The opening view still shows the whole landscape, as it must; reading it
+> world. How much of that world the nodes occupy was settled by measuring rather
+> than by taste, and the two goals turn out to be the same one: tightening it until
+> the space stops reading as empty is also what shrinks the world enough for the
+> names below to be legible at the opening view. The opening view still shows the whole landscape, as it must; reading it
 > closely is what the zoom and pan already built for §7 are for. The separation
 > guarantee is re-established *after* the fit, in the coordinates the circles are
 > actually drawn in, because that is the only place it means anything.

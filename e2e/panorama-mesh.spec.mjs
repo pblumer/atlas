@@ -479,7 +479,7 @@ function meshOf(processes) {
 // about the magnification, not about the node: the name is in the DOM, it is the
 // node's accessible label, and hovering or zooming brings it back.
 test("a crowded landscape holds its names until they can be read", async ({ page }) => {
-  installMock(page, meshOf(40));
+  installMock(page, meshOf(100));
   await page.goto("/index.html#/panorama/landscape");
 
   // Every node wants its name; the canvas decides which are legible right now.
@@ -503,7 +503,7 @@ test("a crowded landscape holds its names until they can be read", async ({ page
 // out in a world larger than the window. Nothing is re-rendered to do it: the
 // canvas is told what magnification it is at and the stylesheet does the rest.
 test("zooming in brings the names out", async ({ page }) => {
-  installMock(page, meshOf(40));
+  installMock(page, meshOf(100));
   await page.goto("/index.html#/panorama/landscape");
 
   const canvas = page.locator(".mesh-canvas");
@@ -516,7 +516,7 @@ test("zooming in brings the names out", async ({ page }) => {
   await expect(page.locator('[data-node-id="process:0"] .mesh-label-ink')).toHaveCSS("opacity", "1");
   // The graph did not move under the zoom: same nodes, same layout, new window.
   expect(await canvas.getAttribute("viewBox")).not.toBe(before);
-  await expect(page.locator(".mesh-node")).toHaveCount(41);
+  await expect(page.locator(".mesh-node")).toHaveCount(101);
 });
 
 // A small landscape needs no zoom: its world is the window, so every name is
@@ -532,11 +532,14 @@ test("a small landscape keeps every name on screen", async ({ page }) => {
   }
 });
 
-// Two things bring a name back in a crowded graph without hovering: selecting the
-// node, and filtering down to it. Both are how somebody actually looks for one.
+// Two things bring a name back in a crowded graph without hovering and without
+// zooming: selecting the node, and filtering down to it. Both are how somebody
+// actually looks for one. The graph has to be large enough that its names are
+// genuinely held back, or this asserts nothing.
 test("selecting or filtering brings a name back", async ({ page }) => {
-  installMock(page, meshOf(40));
+  installMock(page, meshOf(100));
   await page.goto("/index.html#/panorama/landscape");
+  await expect(page.locator(".mesh-canvas")).not.toHaveClass(/mesh-names-all/);
 
   await page.locator('[data-node-id="process:7"]').click();
   await expect(page.locator('[data-node-id="process:7"] .mesh-label-ink')).toHaveCSS("opacity", "1");

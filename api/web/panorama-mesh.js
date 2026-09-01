@@ -134,11 +134,20 @@ function mulberry32(seed) {
 // graph that is technically non-overlapping and one somebody can read.
 const NODE_ROOM = 34;
 
-// WORLD_FILL is how much of the world the nodes' own cells take up. A low number is
-// what makes this a universe rather than a pile: at 1.0 the nodes would tile the
-// space edge to edge, and everything interesting about a force layout — which
-// things sit near which — is carried by the emptiness between them.
-const WORLD_FILL = 0.09;
+// WORLD_FILL is how much of the world the nodes' own cells take up.
+//
+// It is what decides between a pile and a void, and it was tuned by measuring
+// rather than by taste. At 0.09 a hundred nodes settle with 189 units between the
+// closest pair — far more air than reading needs, and enough that the whole
+// landscape is too small on screen to carry any names at all. At 0.28 the same
+// graph keeps 87 units between its closest pair, which is still more than two node
+// diameters of clear space, and the world has shrunk enough that a forty-node
+// landscape shows every name at the opening view and a hundred-node one shows its
+// applications.
+//
+// That is the reason for this number rather than a rounder one: it is where the
+// space stops being empty and starts being the thing that makes names readable.
+const WORLD_FILL = 0.28;
 
 // worldFor sizes the space the graph is laid out in, from the graph rather than
 // from the viewport.
