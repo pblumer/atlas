@@ -17,7 +17,7 @@ import (
 )
 
 // A mock worker reports the forest it holds to the Atlas whose Console shows it
-// (ADR-draft-ad-mock-directory-in-the-console). These tests are about the reporting
+// (ADR-0213). These tests are about the reporting
 // only: that it says what the directory holds, that it does not repeat itself, and
 // above all that it can fail without costing the job anything — the report is an
 // observation of work that already succeeded.

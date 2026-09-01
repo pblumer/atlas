@@ -17,7 +17,7 @@ import (
 )
 
 // Reporting a mock forest to the Atlas that shows it
-// (ADR-draft-ad-mock-directory-in-the-console).
+// (ADR-0213).
 //
 // A mock directory lives in this worker's memory, which is the right place for it and
 // the wrong place to *look* at it. The operator trying a joiner out is in the Console,

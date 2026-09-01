@@ -1,4 +1,4 @@
-# ADR-DRAFT: The mock Active Directory is visible in the Console
+# ADR-0213: The mock Active Directory is visible in the Console
 
 - **Status:** Accepted
 - **Date:** 2026-08-31

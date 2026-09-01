@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   the forests it holds, and Operations › **Mock directory** shows them: one card
   per worker, one tree per LDAP URL, every entry with its attributes, and the operation
   journal underneath
-  ([ADR-draft-ad-mock-directory-in-the-console](docs/adr/draft-ad-mock-directory-in-the-console.md)).
+  ([ADR-0213](docs/adr/0213-ad-mock-directory-in-the-console.md)).
 
   It closes the gap that made the *starting entries* on the Active Directory card look
   like the directory. They are not: the seed is where every forest begins and is never

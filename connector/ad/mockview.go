@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Making a mock forest visible (ADR-draft-ad-mock-directory-in-the-console).
+// Making a mock forest visible (ADR-0213).
 //
 // [MockDirectory] is memory, and deliberately so: a restart is an empty forest, and
 // nothing it holds was ever real. That is the right lifetime and the wrong

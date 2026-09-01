@@ -12,7 +12,7 @@ import (
 // directory" and not "what is in the directory now" — and the second question is the
 // one somebody trying a joiner/leaver out actually has. These tests cover the
 // reporting half: the snapshot a worker sends, and the view a server keeps of it
-// (ADR-draft-ad-mock-directory-in-the-console).
+// (ADR-0213).
 
 // The snapshot holds every forest the mock has been asked to reach, each with its own
 // live entries — flattened would be the wrong shape for exactly the run a mockup is

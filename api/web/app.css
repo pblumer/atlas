@@ -2912,7 +2912,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   background: #fff;
 }
 
-/* ---------- Mock Active Directory (ADR-draft-ad-mock-directory-in-the-console) ---------- */
+/* ---------- Mock Active Directory (ADR-0213) ---------- */
 /* A forest as a containment tree: the DN read right to left, one list per level, an
    entry opening to its attributes. Containers the mock never got an entry for are
    rendered muted, because they exist only because something below them does. */

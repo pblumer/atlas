@@ -15,8 +15,8 @@
         "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0213",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0213-ad-mock-directory-in-the-console.md"
       },
       "tags": [
         "Operations",

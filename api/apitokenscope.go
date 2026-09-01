@@ -79,7 +79,7 @@ const (
 // batch by type, settling each job either way, and — for a mail connector running
 // in preview — posting the framed message back to this server's outbox (ADR-0150),
 // and, for an AD connector in mockup mode, reporting the forest it holds so the
-// Console can show it (ADR-draft-ad-mock-directory-in-the-console).
+// Console can show it (ADR-0213).
 // Nothing else. Notably not `POST /api/v1/jobs/{key}/activate`, which is the
 // single-job form no worker uses.
 var apiScopeAllowed = map[string][]string{

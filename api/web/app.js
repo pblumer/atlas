@@ -5445,7 +5445,7 @@ async function viewMailOutbox() {
 
 // viewADMockDirectory is the Operations "Mock directory" view: what the Active
 // Directory workers running in mockup mode actually hold
-// (ADR-draft-ad-mock-directory-in-the-console).
+// (ADR-0213).
 //
 // It is here because the Console used to show two things about a mocked directory and
 // neither of them was the directory. The seed card under Organization > Workers holds

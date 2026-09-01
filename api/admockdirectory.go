@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/ad"
 )
 
-// The mock directory, made visible (ADR-draft-ad-mock-directory-in-the-console).
+// The mock directory, made visible (ADR-0213).
 //
 // A mock forest lives in the AD worker's memory (ADR-0181), which is the right
 // lifetime and, until this, an invisible one. The Console showed two things about it

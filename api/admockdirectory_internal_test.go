@@ -12,7 +12,7 @@ import (
 )
 
 // What an Atlas keeps of the mock directories its workers hold, and shows in
-// Operations › Mock directory (ADR-draft-ad-mock-directory-in-the-console).
+// Operations › Mock directory (ADR-0213).
 //
 // The seed card in the Console answers "what does a forest start from"; nothing
 // answered "what is in it now", and the seed was routinely mistaken for it — reasonably,

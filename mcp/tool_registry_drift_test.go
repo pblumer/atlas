@@ -153,7 +153,7 @@ var mcpOmittedRoutes = map[string]string{
 	// the Console view that reads it back. An agent asking what a mockup did reads the
 	// job's own result and atlas_workers' log, both of which say it in the terms the
 	// model is written in; a forest dump is an operator's picture, and an admin-gated
-	// one (ADR-draft-ad-mock-directory-in-the-console).
+	// one (ADR-0213).
 	"POST /api/v1/ad/mock-directory":    "worker reporting the mock forest it holds, not an agent action",
 	"GET /api/v1/ad/mock-directory":     "an operator's view of a mocked directory; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",

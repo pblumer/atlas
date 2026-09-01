@@ -346,7 +346,7 @@ type Server struct {
 	mailOutbox *mail.Outbox
 
 	// adMockView is what this server knows about the mock Active Directories its
-	// workers hold (ADR-draft-ad-mock-directory-in-the-console). A mock forest lives in
+	// workers hold (ADR-0213). A mock forest lives in
 	// the worker's memory and is reported here, so Operations can show it; like the
 	// preview outbox it holds its own lock (a worker posts off the run loop while an
 	// HTTP read serves the view) and is deliberately not durable — nothing it describes

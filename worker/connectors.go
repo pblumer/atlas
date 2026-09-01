@@ -144,7 +144,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			// A mock forest is memory, and until now it was memory nobody could look
 			// at: the operator is in the Console and the directory is in here. The
 			// reporter closes that gap by posting what this worker holds to the Atlas
-			// that shows it (ADR-draft-ad-mock-directory-in-the-console). nil when
+			// that shows it (ADR-0213). nil when
 			// this worker was given no address, which changes nothing else.
 			var reporter *adMockReporter
 			if mock != nil {

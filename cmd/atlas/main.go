@@ -954,7 +954,7 @@ func runWorker(args []string) error {
 	kinds := splitList(*connectors)
 	// The connectors are built from the environment alone, and one of them has to know
 	// this worker's own id: a mock AD directory is reported to the Console under it
-	// (ADR-draft-ad-mock-directory-in-the-console). --id is therefore read back out of
+	// (ADR-0213). --id is therefore read back out of
 	// the environment rather than threaded through as a parameter, so an external
 	// worker that sets ATLAS_WORKER_ID by hand and one started with --id look the same
 	// from in there.

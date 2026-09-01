@@ -681,7 +681,7 @@ func (s *Server) adWorkerEnv() []string {
 			}
 			// And where to report the forest it ends up holding, so an operator can
 			// see it in Operations rather than reconstruct it from the worker's log
-			// (ADR-draft-ad-mock-directory-in-the-console). Only when the mockup is
+			// (ADR-0213). Only when the mockup is
 			// on: a worker writing to a real directory has nothing to show here, and
 			// a "mock directory" view fed by a live one would be the worst possible
 			// thing for this screen to be.
@@ -773,7 +773,7 @@ const (
 	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
 	// adMockViewURLEnv is where a mock worker posts the forest it holds: this
 	// server's own API, so the Console shows a directory that exists only in the
-	// worker's memory (ADR-draft-ad-mock-directory-in-the-console). It is the mail
+	// worker's memory (ADR-0213). It is the mail
 	// outbox's shape — the worker sends, because a server cannot dial into every
 	// network a worker sits in.
 	adMockViewURLEnv = "ATLAS_AD_MOCK_VIEW_URL"

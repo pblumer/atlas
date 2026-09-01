@@ -195,7 +195,7 @@ var (
 	// the Workers console shows it.
 	ADMockPerformed = newEvent("ad_mock.performed")
 	// ADMockReportFailed is a mock worker that could not deliver its directory to the
-	// Atlas whose Console shows it (ADR-draft-ad-mock-directory-in-the-console). A
+	// Atlas whose Console shows it (ADR-0213). A
 	// warning, never a job failure: the operation it describes has already happened,
 	// so what is lost is one refresh of a view that the next operation sends again.
 	ADMockReportFailed = newEvent("ad_mock.report_failed")
