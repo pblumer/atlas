@@ -24,11 +24,13 @@ import (
 
 // reportSink is an Atlas standing in for the one a mock worker reports to.
 type reportSink struct {
-	mu   sync.Mutex
-	got  []ad.MockSnapshot
-	auth []string
-	code int
-	srv  *httptest.Server
+	mu     sync.Mutex
+	got    []ad.MockSnapshot
+	auth   []string
+	code   int
+	refuse int // refuse this many more reports before answering as code says
+	ok     int // reports answered 2xx
+	srv    *httptest.Server
 }
 
 func newReportSink(t *testing.T) *reportSink {
@@ -44,6 +46,13 @@ func newReportSink(t *testing.T) *reportSink {
 		s.got = append(s.got, snap)
 		s.auth = append(s.auth, r.Header.Get("Authorization"))
 		code := s.code
+		if s.refuse > 0 {
+			s.refuse--
+			code = http.StatusServiceUnavailable
+		}
+		if code/100 == 2 {
+			s.ok++
+		}
 		s.mu.Unlock()
 		w.WriteHeader(code)
 	}))
@@ -76,6 +85,21 @@ func (s *reportSink) fail() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.code = http.StatusInternalServerError
+}
+
+// failTimes refuses the next n reports and accepts everything after them — a server
+// whose listener is not up yet, and then is.
+func (s *reportSink) failTimes(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = n
+}
+
+// accepted is how many reports the sink answered 2xx.
+func (s *reportSink) accepted() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ok
 }
 
 func (s *reportSink) recover() {
@@ -146,6 +170,54 @@ func TestADMockReportsTheForestAfterAJob(t *testing.T) {
 	}
 }
 
+// shortStartupBackoff makes the startup retry fast enough for a test, and puts the
+// real one back afterwards.
+func shortStartupBackoff(t *testing.T) {
+	t.Helper()
+	real := adMockStartupBackoff
+	adMockStartupBackoff = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { adMockStartupBackoff = real })
+}
+
+// The startup report survives the cold start it was most likely to meet. A supervised
+// worker is spawned by the server it reports to, so it comes up while that server is
+// still opening its listener — every worker's first job poll fails the same way, and
+// the poll retries. This one has to as well, or the state the startup report exists to
+// show ("mock mode is on, nothing dialled yet") is missing in exactly the case it was
+// written for. Observed live: a redeployed instance logged ad_mock.report_failed at
+// startup and the view stayed empty until the first AD job.
+func TestADMockRetriesTheStartupReportUntilTheServerAnswers(t *testing.T) {
+	shortStartupBackoff(t)
+	sink := newReportSink(t)
+	sink.failTimes(2) // the listener is not up yet, twice over
+	if _, err := BuiltinConnectors(mockEnv(sink, nil), "ad"); err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+
+	sink.wait(t, 3) // two refusals and the one that lands
+	if got := sink.accepted(); got != 1 {
+		t.Fatalf("accepted reports = %d, want the retry to have landed one", got)
+	}
+}
+
+// It gives up rather than retrying forever: past the backoff the first AD job reports
+// the whole directory anyway, and a job cannot arrive before the server is up.
+func TestADMockStopsRetryingTheStartupReport(t *testing.T) {
+	shortStartupBackoff(t)
+	sink := newReportSink(t)
+	sink.fail()
+	if _, err := BuiltinConnectors(mockEnv(sink, nil), "ad"); err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+
+	want := len(adMockStartupBackoff) + 1 // the first attempt, then one per backoff step
+	sink.wait(t, want)
+	time.Sleep(20 * time.Millisecond) // long enough for another attempt, were one coming
+	if got := len(sink.snapshots()); got != want {
+		t.Errorf("attempts = %d, want it to stop at %d", got, want)
+	}
+}
+
 // Mock mode is reported before any job runs. Forests exist only once dialled, so a
 // worker that has leased nothing holds no directory — and "mock mode is on, 1 starting
 // entry, nothing dialled yet" is exactly what the operator who just switched it on
@@ -209,6 +281,7 @@ func TestADMockResendsAfterAFailedReport(t *testing.T) {
 // view is an observation of it, and a worker that failed jobs because a Console could
 // not be reached would be worse than one with no view at all.
 func TestADMockJobSucceedsWhenTheReportFails(t *testing.T) {
+	shortStartupBackoff(t)
 	sink := newReportSink(t)
 	sink.fail()
 	built, err := BuiltinConnectors(mockEnv(sink, nil), "ad")

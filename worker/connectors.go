@@ -153,9 +153,10 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				// Once at startup, so the view can say "mock mode, 12 starting
 				// entries, nothing dialled yet" instead of showing an empty page to
 				// somebody who has just switched the mockup on. Off this goroutine:
-				// a worker must start whether or not its server is answering yet, and
-				// the next report catches the view up regardless.
-				go reporter.report(context.Background())
+				// a worker must start whether or not its server is answering yet — and
+				// a supervised one is started *by* that server, so it retries while the
+				// listener comes up rather than giving the view up for lost.
+				go reporter.reportAtStartup(context.Background())
 			}
 			secret := adSecretFromEnv(env)
 			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
