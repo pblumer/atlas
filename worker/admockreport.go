@@ -69,6 +69,15 @@ type adMockReporter struct {
 	dir    *ad.MockDirectory
 	client *http.Client
 
+	// startupBackoff is captured when the reporter is built, rather than read from
+	// [adMockStartupBackoff] where it is used. reportAtStartup runs on a goroutine
+	// nothing waits for — a worker must come up whether or not its server is
+	// answering yet — so a test that shrinks the package variable and restores it on
+	// t.Cleanup was writing it while that goroutine was still reading it. Capturing
+	// removes the shared mutable state instead of synchronizing it: the goroutine
+	// reads a field written once, before it started.
+	startupBackoff []time.Duration
+
 	mu   sync.Mutex
 	sent uint64
 	ever bool
@@ -83,11 +92,12 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 		return nil
 	}
 	return &adMockReporter{
-		url:    url,
-		token:  strings.TrimSpace(env("ATLAS_TOKEN")),
-		worker: strings.TrimSpace(env(WorkerIDEnv)),
-		dir:    dir,
-		client: nettimeout.HTTPClient(),
+		url:            url,
+		token:          strings.TrimSpace(env("ATLAS_TOKEN")),
+		worker:         strings.TrimSpace(env(WorkerIDEnv)),
+		dir:            dir,
+		client:         nettimeout.HTTPClient(),
+		startupBackoff: adMockStartupBackoff,
 	}
 }
 
@@ -104,7 +114,9 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 // arrive before the server is up, and the job's own report carries the whole directory
 // anyway.
 //
-// A var, not a const, so a test can shrink it.
+// A var, not a const, so a test can shrink it — which it does before the reporter is
+// built, because each reporter captures it (see adMockReporter.startupBackoff) rather
+// than reading it from the goroutine that retries.
 var adMockStartupBackoff = []time.Duration{
 	250 * time.Millisecond, 500 * time.Millisecond, time.Second,
 	2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second,
@@ -141,11 +153,11 @@ func (r *adMockReporter) reportAtStartup(ctx context.Context) {
 		if err = r.send(ctx); err == nil {
 			return
 		}
-		if attempt >= len(adMockStartupBackoff) {
+		if attempt >= len(r.startupBackoff) {
 			r.warn(err)
 			return
 		}
-		timer := time.NewTimer(adMockStartupBackoff[attempt])
+		timer := time.NewTimer(r.startupBackoff[attempt])
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
