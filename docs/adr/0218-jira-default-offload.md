@@ -1,4 +1,4 @@
-# ADR-DRAFT: Jira runs on a worker by default
+# ADR-0218: Jira runs on a worker by default
 
 - **Status:** Proposed
 - **Date:** 2026-09-01

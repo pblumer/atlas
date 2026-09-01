@@ -244,7 +244,7 @@ func TestRemedyIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
 	})
 }
 
-// Jira is offloaded by default (ADR-draft-jira-default-offload), which is only safe
+// Jira is offloaded by default (ADR-0218), which is only safe
 // because the engine hands the supervised worker the site and the credential it cannot
 // read for itself — the same condition mail and Remedy are defaulted on. Defaulting it
 // without that would move every Jira task to a worker with no site to file against.

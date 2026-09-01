@@ -200,7 +200,7 @@ _Changed_ / _Removed_ for each version.
 
 - **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
   Jira task is leased by a supervised worker instead of served inside the engine
-  ([ADR-draft-jira-default-offload](docs/adr/draft-jira-default-offload.md)). The engine
+  ([ADR-0218](docs/adr/0218-jira-default-offload.md)). The engine
   hands that worker the site URL and the vault credential at spawn, so nothing needs
   configuring — the same handover mail and Remedy get. It appears in Operations → Workers
   as a process with a pid, a log and a restart button, which is where an operator looks

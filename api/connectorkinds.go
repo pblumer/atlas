@@ -429,7 +429,7 @@ var offloadableKinds = map[string][]int32{
 // worker and the handover (remedyWorkerEnv), which leaves no reason for a ticket create,
 // three round trips to somebody else's ITSM host, to keep happening on the loop.
 //
-// Jira is the fifth, and it is Remedy's way exactly (ADR-draft-jira-default-offload).
+// Jira is the fifth, and it is Remedy's way exactly (ADR-0218).
 // A managed kind whose site address and Atlassian credential live in the connector store
 // and the vault, excluded only for as long as there was nothing to hand them to;
 // ADR-0201's follow-ups built the worker and jiraWorkerEnv built the handover. What

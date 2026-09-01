@@ -271,6 +271,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0215](0215-modeler-playground.md) | The Modeler Playground — batch simulation and analysis of a draft | Proposed |
 | [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Proposed |
 | [0217](0217-openapi-mock-server.md) | A mock REST API served from an OpenAPI document | Accepted |
+| [0218](0218-jira-default-offload.md) | Jira runs on a worker by default | Proposed |
 
 ## Status values
 

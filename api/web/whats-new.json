@@ -293,8 +293,8 @@
         "de": "Jira-Aufgaben liefen bisher in der Engine. Unter Operations → Workers — der Seite, deren ganzes Thema ist, wer die Arbeit macht — war ein funktionierender Jira-Konnektor deshalb überhaupt nicht zu sehen; sichtbar wurde er erst, wenn etwas schiefging. Atlas startet jetzt selbst einen Jira-Worker und übergibt ihm Adresse und Anmeldung beim Start, es ist also nichts einzurichten: Er steht neben den Mail- und Remedy-Workern, mit Log und Neustart-Knopf. Beachten Sie, dass sich das beim Update ändert — die Arbeit verlässt die Engine beim nächsten Start, und die Jira-Site muss vom Worker aus erreichbar sein. Der Betrieb in der Engine bleibt als Rückweg verfügbar."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0218",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0218-jira-default-offload.md"
       },
       "tags": [
         "Workers",
