@@ -25,6 +25,9 @@ type serviceFixture struct {
 	// calling a binding handler. catalogErr makes the resolver fail instead.
 	catalog    Catalog
 	catalogErr error
+	// facts is what the observation projection reads; factsErr makes it fail.
+	facts    Facts
+	factsErr error
 }
 
 // errStub is the failure a test injects when it needs the catalog to fail.
@@ -56,6 +59,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		func() (string, error) { return testModelID, nil },
 		func() time.Time { return time.Unix(1_700_000_000, 0) },
 		func(*http.Request) (Catalog, error) { return fx.catalog, fx.catalogErr },
+		func(*http.Request) (Facts, error) { return fx.facts, fx.factsErr },
 	)
 	return fx
 }

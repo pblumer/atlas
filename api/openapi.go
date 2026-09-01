@@ -476,6 +476,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/panorama/models/{id}/c4", s.panorama.HandleC4, apiOp{
 			summary: "Project a Panorama model into C4, reporting what the mapping cannot express (ADR-0211)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("C4 projection", tObject())}},
+		// The observation projection (ADR-0189 §6): the same bindings, read for what
+		// the instance is doing rather than for names. It writes nothing — the stored
+		// document is never mutated by observing it — and it is a separate route from
+		// the model so a caller who wants the drawing does not pay for a scan of
+		// every live instance.
+		{"GET", "/api/v1/panorama/models/{id}/observations", s.panorama.HandleObservations, apiOp{
+			summary: "Observe what a Panorama model's bound Atlas resources are currently doing (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Observation document", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
 			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Resolved Atlas bindings", tObject())}},

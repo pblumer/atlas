@@ -620,6 +620,22 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-props-empty b { color: var(--text); }
 .panorama-props-empty p { font-size: 12px; line-height: 1.5; }
 .panorama-selection-icon { font-size: 28px; color: var(--accent); margin-bottom: 8px; }
+/* Observations in the properties panel (ADR-0189 §6). The severity is a bar on
+   the left edge and a word, never a recoloured element: ArchiMate layer colours
+   carry semantics, and overwriting them with health is what the record forbids. */
+.panorama-obs {
+  border-left: 3px solid var(--border-strong); padding: 6px 0 6px 9px;
+  margin: 0 0 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.panorama-obs:last-of-type { margin-bottom: 0; }
+.panorama-obs-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panorama-obs p { margin: 0; color: var(--muted); }
+.panorama-obs code { font-size: 11px; overflow-wrap: anywhere; }
+.panorama-obs-detail { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; }
+.panorama-sev-critical { border-left-color: var(--danger); }
+.panorama-sev-attention { border-left-color: var(--warn); }
+.panorama-sev-ok { border-left-color: var(--ok); }
+.panorama-unwatched { font-style: italic; }
 .panorama-kv { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: start; margin: 8px 0; font-size: 12px; }
 .panorama-kv span { color: var(--muted); }
 .panorama-kv b, .panorama-kv code { min-width: 0; overflow-wrap: anywhere; }
