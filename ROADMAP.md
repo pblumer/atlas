@@ -247,6 +247,19 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
+  For trying such a task out before the API it calls exists — or without pointing a
+  draft at the real one — `atlas mock-openapi --spec petstore.yaml` serves a mock REST
+  API from an OpenAPI 3 document ([ADR-draft-openapi-mock-server](docs/adr/draft-openapi-mock-server.md),
+  package `connector/rest/openapimock`): it compiles every operation at startup, answers
+  with the document's own examples where it states them and deterministic values
+  generated from its schemas where it does not, lets a caller ask for a stated error
+  path with `Prefer: code=404`, and refuses a status or example the document does not
+  describe rather than substituting one. Only the URL's host changes in the model.
+  `GET /__mock/calls` is the journal of what a run actually did and `GET /__mock/report`
+  is that journal in the Mockups envelope
+  ([ADR-draft-mockups-are-one-view](docs/adr/draft-mockups-are-one-view.md)). Request
+  validation against the schemas, stateful collections, and posting the report once the
+  Mockups route exists are follow-ups.
   **BMC Remedy is another Worker Type in the catalog**
   ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
   `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on

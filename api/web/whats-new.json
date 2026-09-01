@@ -2,6 +2,28 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "mock-any-rest-api-from-its-openapi-document",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Try a REST task before the API behind it exists",
+        "de": "Einen REST-Task ausprobieren, bevor es die API dahinter gibt"
+      },
+      "summary": {
+        "en": "A REST task names the address it calls, so trying a process out meant calling the real system — often one that is production, or not built yet. Hand Atlas the API's OpenAPI file instead: `atlas mock-openapi --spec petstore.yaml` stands up a fake version of that API in one command, answering with the example responses the file itself contains. Only the address in your task changes; everything else about the model stays as it will run for real. A caller can ask the fake API for a specific error to walk the failure path, and it refuses anything the file does not describe rather than inventing an answer. `/__mock/calls` shows exactly what your process sent it.",
+        "de": "Ein REST-Task trägt die Adresse, die er aufruft, im Modell — einen Prozess auszuprobieren hiess deshalb bisher, das echte System aufzurufen, das oft produktiv ist oder noch gar nicht existiert. Stattdessen genügt jetzt die OpenAPI-Datei der Schnittstelle: `atlas mock-openapi --spec petstore.yaml` stellt mit einem Befehl eine Attrappe dieser API hin, die mit den Beispielantworten aus der Datei selbst antwortet. Im Modell ändert sich nur die Adresse; alles andere bleibt so, wie es später wirklich läuft. Wer will, kann die Attrappe gezielt um einen Fehler bitten, um den Fehlerpfad durchzuspielen — und sie verweigert alles, was die Datei nicht beschreibt, statt sich eine Antwort auszudenken. Unter `/__mock/calls` steht, was der Prozess tatsächlich geschickt hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ]
+    },
+    {
       "id": "see-the-mock-active-directory",
       "version": "Unreleased",
       "date": null,
@@ -337,27 +359,6 @@
       "link": {
         "label": "ADR-0201",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
-      },
-      "tags": [
-        "Connectors"
-      ]
-    },
-    {
-      "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "RSS and Atom scraping works again outside the engine",
-        "de": "RSS- und Atom-Scraping funktioniert wieder ausserhalb der Engine"
-      },
-      "summary": {
-        "en": "A scrape task set to a feed format lost that setting on its way to the worker that runs it, so it fetched the feed as a web page and then failed on a CSS selector nobody had entered. Because scraping runs outside the engine by default, that was every feed task. The setting and the item limit now arrive, and the headlines come back as entries with title, link, description and date.",
-        "de": "Ein Scraping-Task mit Feed-Format hat diese Einstellung auf dem Weg zum ausführenden Worker verloren — er hat den Feed dann als Webseite geholt und ist an einem CSS-Selektor gescheitert, den niemand eingetragen hatte. Weil Scraping standardmässig ausserhalb der Engine läuft, betraf das jeden Feed-Task. Einstellung und Anzahlbegrenzung kommen jetzt an, und die Schlagzeilen landen als Einträge mit Titel, Link, Beschreibung und Datum."
-      },
-      "link": {
-        "label": "ADR-0190",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0190-webscrape-feed-extraction.md"
       },
       "tags": [
         "Connectors"

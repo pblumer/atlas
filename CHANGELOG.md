@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Mock any REST API from its OpenAPI document.** `atlas mock-openapi --spec
+  petstore.yaml` serves the paths a document describes, so a process with a REST
+  connector task can be run end to end before the API it calls exists — or without
+  pointing a draft at the real one
+  ([ADR-draft-openapi-mock-server](docs/adr/draft-openapi-mock-server.md)).
+
+  Where `atlas mock-remedy` hand-implements the endpoints of one Worker Type, this
+  serves whatever a document describes, and only the URL's host changes in the model.
+  A response is the document's own `example` where it states one, the first of its
+  named `examples` where it states those, and otherwise a value generated from the
+  schema — the same bytes on every run, so a demo is reproducible and a test can assert
+  on a body. A caller asks for a stated error path with `Prefer: code=404` or picks a
+  named example with `Prefer: example=rex`.
+
+  It refuses rather than improvises: a `$ref` it cannot resolve fails at startup in the
+  terminal that launched it, and a status the document does not describe is a 400 that
+  names what is on offer — a test written against the 404 path must not quietly pass on
+  a 200. What it does *not* do is validate: a request body is recorded, never checked,
+  and nothing is stateful.
+
+  `GET /__mock/calls` is the journal of what a run actually did — method, path,
+  operation, status, the `X-Request-ID` a job carries, and the body it sent — and
+  `GET /__mock/report` is that journal in the envelope the Console's Mockups view takes
+  ([ADR-draft-mockups-are-one-view](docs/adr/draft-mockups-are-one-view.md)), so this
+  mockup reports where the others are moving rather than becoming a fourth place to
+  look.
+
 - **See the mock Active Directory.** An AD worker running in mockup mode now reports
   the forests it holds, and Operations › **Mock directory** shows them: one card
   per worker, one tree per LDAP URL, every entry with its attributes, and the operation
