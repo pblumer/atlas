@@ -345,6 +345,14 @@ type Server struct {
 	// nothing here was ever sent, so nothing survives a restart.
 	mailOutbox *mail.Outbox
 
+	// adMockView is what this server knows about the mock Active Directories its
+	// workers hold (ADR-draft-ad-mock-directory-in-the-console). A mock forest lives in
+	// the worker's memory and is reported here, so Operations can show it; like the
+	// preview outbox it holds its own lock (a worker posts off the run loop while an
+	// HTTP read serves the view) and is deliberately not durable — nothing it describes
+	// exists anywhere but in a worker's memory either.
+	adMockView *ad.MockView
+
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
 	// SharePoint connector tasks (ADR-0141), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth
@@ -1053,6 +1061,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		deploys:     ds,
 		jobTypes:    jobTypes,
 		workers:     newWorkerRegistry(nil),
+		// Created unconditionally, not with a connector registry: AD is worker-only
+		// (ADR-0206), so this server never holds a mock
+		// directory of its own and is only ever the place the workers' reports land.
+		adMockView:  ad.NewMockView(0),
 		jobWaiters:  newJobWaiters(),
 		drafts:      drafts,
 		forms:       forms,

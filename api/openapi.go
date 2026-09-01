@@ -756,6 +756,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/mail/outbox", s.handleClearMailOutbox, apiOp{
 			summary: "Empty the preview mail outbox", tag: "Connectors", role: RoleOperator, status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/ad/mock-directory", s.handleADMockDirectory, apiOp{
+			summary: "Show the mock Active Directories this server's workers hold — one forest per LDAP URL, with what a mockup run put in them", tag: "Connectors", role: RoleAdmin,
+			resp: jsonBody("Mock directories", schemaObj(map[string]any{"workers": tArray()}))}},
+		{"POST", "/api/v1/ad/mock-directory", s.handleReportADMockDirectory, apiOp{
+			summary: "Report a mock directory (used by an AD worker running in mockup mode)", tag: "Connectors", role: RoleOperator,
+			req: jsonBody("Mock directory", tObject()), status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
