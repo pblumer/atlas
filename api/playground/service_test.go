@@ -614,6 +614,9 @@ func TestASessionClosedUnderneathARequestIsNotFound(t *testing.T) {
 		"message":  call(t, svc.HandlePublishMessage, http.MethodPost, `{"name":"m"}`, id),
 		"readCase": call(t, svc.HandleCase, http.MethodGet, "", map[string]string{"id": sess.ID, "caseKey": "1"}),
 		"complete": call(t, svc.HandleCompleteTask, http.MethodPost, "", map[string]string{"id": sess.ID, "jobKey": "1"}),
+		"generate": call(t, svc.HandleGeneratePreview, http.MethodPost, `{"count":1}`, id),
+		"generated run": call(t, svc.HandleStartRun, http.MethodPost,
+			`{"generate":{"count":1,"fields":[{"name":"n","kind":"int","max":9}]}}`, id),
 	} {
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404 (body %s)", name, rec.Code, rec.Body)

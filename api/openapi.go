@@ -739,8 +739,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read a Playground run's element and sequence-flow token counts, including the paths it never took",
 			tag:     "Playground", role: RoleModeler, resp: jsonBody("Heat map", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs", s.playground.HandleStartRun, apiOp{
-			summary: "Start a Playground batch over a dataset sent inline", tag: "Playground", role: RoleModeler,
-			req: jsonBody("Cases and arrival profile", tObject()), resp: jsonBody("Run status", tObject())}},
+			summary: "Start a Playground batch over a dataset listed inline or described field by field", tag: "Playground", role: RoleModeler,
+			req: jsonBody("Cases or a dataset description, and an arrival profile", tObject()), resp: jsonBody("Run status", tObject())}},
+		{"POST", "/api/v1/playground/sessions/{id}/generate", s.playground.HandleGeneratePreview, apiOp{
+			summary: "Preview the first cases a Playground dataset description would produce", tag: "Playground", role: RoleModeler,
+			req: jsonBody("A dataset description", tObject()), resp: jsonBody("The first generated cases", tObject())}},
 		{"POST", "/api/v1/playground/sessions/{id}/runs/csv", s.playground.HandleStartRunFromCSV, apiOp{
 			summary: "Start a Playground batch over an uploaded CSV, one case per row", tag: "Playground", role: RoleModeler,
 			resp: jsonBody("Run status", tObject())}},

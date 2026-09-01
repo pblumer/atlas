@@ -98,11 +98,17 @@ func (a arrivalReq) toArrival() (playground.Arrival, error) {
 	return out, nil
 }
 
-// startRunReq starts a batch over a dataset given inline.
+// startRunReq starts a batch over a dataset given inline: either listed case by
+// case, or described and drawn from that description.
 type startRunReq struct {
 	// Cases is one entry per case: the start variables it begins with.
-	Cases   []map[string]any `json:"cases"`
-	Arrival arrivalReq       `json:"arrival"`
+	Cases []map[string]any `json:"cases"`
+	// Generate describes the dataset instead of listing it. Exactly one of the two
+	// is used: a request carrying both says two different things about what is
+	// about to run, and picking one of them silently is how a run ends up meaning
+	// something other than what was asked.
+	Generate *generateReq `json:"generate,omitempty"`
+	Arrival  arrivalReq   `json:"arrival"`
 }
 
 type runStatusResp struct {
@@ -185,17 +191,33 @@ type resultsResp struct {
 	Rows   []caseRowResp `json:"rows"`
 }
 
-// HandleStartRun starts a batch over a dataset sent inline.
+// HandleStartRun starts a batch over a dataset sent inline — listed, or described
+// and drawn here.
 func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 	var req startRunReq
 	if !decode(w, r, maxModelBytes, &req) {
 		return
 	}
-	plan, ok := s.planFrom(w, req.Cases, req.Arrival)
+	sess, ok := s.session(w, r)
 	if !ok {
 		return
 	}
-	s.startRun(w, r, plan)
+	cases := req.Cases
+	if req.Generate != nil {
+		if len(req.Cases) > 0 {
+			httpapi.Error(w, http.StatusBadRequest,
+				"a run is driven by a list of cases or by a description of them, not by both")
+			return
+		}
+		if cases, ok = s.generatedCases(w, sess, *req.Generate); !ok {
+			return
+		}
+	}
+	plan, ok := s.planFrom(w, cases, req.Arrival)
+	if !ok {
+		return
+	}
+	s.startRunOn(w, sess, plan)
 }
 
 // HandleStartRunFromCSV starts a batch over an uploaded CSV, one case per row.
@@ -247,7 +269,11 @@ func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	s.startRun(w, r, plan)
+	sess, ok := s.session(w, r)
+	if !ok {
+		return
+	}
+	s.startRunOn(w, sess, plan)
 }
 
 // rowsFromCSV turns an uploaded file into one row object per line, using the
@@ -298,13 +324,9 @@ func (s *Service) planFrom(w http.ResponseWriter, cases []map[string]any, a arri
 	return plan, true
 }
 
-// startRun hands the plan to the session and answers with the batch's first
+// startRunOn hands the plan to the session and answers with the batch's first
 // status. It answers 202: the run outlives the request that started it.
-func (s *Service) startRun(w http.ResponseWriter, r *http.Request, plan playground.Plan) {
-	sess, ok := s.session(w, r)
-	if !ok {
-		return
-	}
+func (s *Service) startRunOn(w http.ResponseWriter, sess *playground.Session, plan playground.Plan) {
 	if err := sess.StartRun(plan); err != nil {
 		if playground.ErrClosedSession(err) {
 			httpapi.Error(w, http.StatusNotFound, "the playground session has been closed")
