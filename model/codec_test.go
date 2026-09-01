@@ -387,3 +387,47 @@ func TestAppendRecordNoAlloc(t *testing.T) {
 		t.Errorf("AppendRecord allocated %v times per run, want 0", allocs)
 	}
 }
+
+// TestVariableProducerRoundTrip covers the write-attribution field: the element
+// instance that produced a variable rides on the record, so history can answer "which
+// task wrote this" without inferring it from a diff of two snapshots
+// (ADR-draft-variable-write-attribution).
+func TestVariableProducerRoundTrip(t *testing.T) {
+	producer := NewKey(1, 42)
+	buf := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "newTicket", Kind: VarString, Text: "PAT-9", ProducerKey: producer,
+	})
+	got, err := DecodeValue(VTVariable, buf)
+	if err != nil {
+		t.Fatalf("DecodeValue: %v", err)
+	}
+	v := got.(*VariableValue)
+	if v.ProducerKey != producer {
+		t.Errorf("ProducerKey = %d, want %d", v.ProducerKey, producer)
+	}
+	if v.Name != "newTicket" || v.Text != "PAT-9" || v.Kind != VarString {
+		t.Errorf("value = %+v, want the name/kind/text unchanged by the appended field", v)
+	}
+}
+
+// TestVariableProducerAppendCompatible pins the on-disk compatibility of that field:
+// a record written before it exists ends after the text, and must decode as "no
+// element is known to have written this" rather than failing the read of history that
+// is already on disk. It also pins the reset, since DecodeValueInto reuses the value.
+func TestVariableProducerAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "tickets", Kind: VarNumber, Text: "4", ProducerKey: NewKey(1, 7),
+	})
+	legacy := full[:len(full)-8] // exactly what the old encoder would have written
+
+	v := VariableValue{ProducerKey: NewKey(1, 99)} // reused: carries someone else's producer
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.ProducerKey != 0 {
+		t.Errorf("ProducerKey = %d, want 0 — a pre-attribution record names no producer", v.ProducerKey)
+	}
+	if v.Name != "tickets" || v.Text != "4" || v.Kind != VarNumber {
+		t.Errorf("value = %+v, want the older record's fields read back intact", v)
+	}
+}

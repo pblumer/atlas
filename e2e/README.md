@@ -138,6 +138,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   capped incident page says its counts are a lower bound, and a variable-search hit that is
   parked is flagged apart from an equally "active" one.
 
+- **`io-card.spec.mjs`** (ADR-0161 / [ADR-draft-variable-write-attribution](../docs/adr/draft-variable-write-attribution.md)):
+  the **in/out card on the diagram**, on the shape that made it lie — a parallel fork whose
+  two branches each write one variable, so each branch's *snapshot* holds both. Each branch
+  must claim only what it wrote, a gateway that produced nothing must get no card at all,
+  and an instance recorded before the engine attributed writes must fall back to the old
+  difference *and say so* on the section rather than presenting it as the element's own
+  work. Drives the real `mountInstanceReplay` against a mock `api` serving both shapes of
+  timeline (`?legacy=1` for the unattributed one).
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram

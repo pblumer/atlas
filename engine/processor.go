@@ -826,6 +826,15 @@ func (p *Processor) processOne(cmd Command) {
 		return // unknown command: rejected (not persisted)
 	}
 	p.ctx = ProcessingContext{cmd: cmd, tx: p.tx, p: p, lastPos: cmd.SourcePos}
+	// An element command names its element instance in Key, so every variable the
+	// element's own behavior writes — its io-mappings, a script's result, a loop's
+	// promoted output — is attributed to it for free, with no lookup on the hot path
+	// (ADR-draft-variable-write-attribution). The handlers that write on behalf of a
+	// different element (a job's outputs, a correlated message's payload) set it
+	// themselves.
+	if cmd.ValueType == model.VTElementInstance {
+		p.ctx.producer = cmd.Key
+	}
 	h(&p.ctx)
 }
 

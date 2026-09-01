@@ -407,6 +407,18 @@ type VariableValue struct {
 	Kind     VarKind
 	Bool     bool
 	Text     string // number canonical string or string contents; empty otherwise
+	// ProducerKey names the element instance whose processing wrote this value: the
+	// task whose job returned it, the activity whose io-mapping or script produced it,
+	// the catch event the message payload arrived on. It is the fact that says *who
+	// wrote this*, which no diff of two variable snapshots can recover — on two
+	// parallel branches both branches see both writes, so both appear to have made
+	// them (ADR-draft-variable-write-attribution).
+	//
+	// 0 means no element wrote it: the instance's start variables, an operator's
+	// override (ADR-0098 records that one), or a record written before attribution
+	// existed. Stamped at command time and frozen into the event, never recomputed on
+	// replay (I6). Append-compatible: an old record ends after Text and decodes to 0.
+	ProducerKey uint64
 }
 
 func (*VariableValue) ValueType() ValueType { return VTVariable }
@@ -420,7 +432,8 @@ func (v *VariableValue) encode(dst []byte) []byte {
 	} else {
 		dst = append(dst, 0)
 	}
-	return appendString(dst, v.Text)
+	dst = appendString(dst, v.Text)
+	return binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -439,11 +452,17 @@ func (v *VariableValue) decode(src []byte) error {
 	}
 	v.Kind = VarKind(rest[0])
 	v.Bool = rest[1] != 0
-	text, _, err := readString(rest[2:])
+	text, tail, err := readString(rest[2:])
 	if err != nil {
 		return err
 	}
 	v.Text = text
+	// ProducerKey is an appended field: a record written before it ends after the text
+	// and leaves it zero — "no element is known to have written this".
+	v.ProducerKey = 0
+	if len(tail) >= 8 {
+		v.ProducerKey = binary.LittleEndian.Uint64(tail)
+	}
 	return nil
 }
 
