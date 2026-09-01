@@ -68,6 +68,11 @@ type adMockReporter struct {
 	worker string
 	dir    *ad.MockDirectory
 	client *http.Client
+	// backoff is this reporter's own copy of the startup schedule, taken when it was
+	// built. The startup report runs on a goroutine that outlives the call that
+	// started it — and, in a test binary, the test that started it — so reading the
+	// package variable from there is a read racing whatever the next test does to it.
+	backoff []time.Duration
 
 	mu   sync.Mutex
 	sent uint64
@@ -83,11 +88,12 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 		return nil
 	}
 	return &adMockReporter{
-		url:    url,
-		token:  strings.TrimSpace(env("ATLAS_TOKEN")),
-		worker: strings.TrimSpace(env(WorkerIDEnv)),
-		dir:    dir,
-		client: nettimeout.HTTPClient(),
+		url:     url,
+		token:   strings.TrimSpace(env("ATLAS_TOKEN")),
+		worker:  strings.TrimSpace(env(WorkerIDEnv)),
+		dir:     dir,
+		client:  nettimeout.HTTPClient(),
+		backoff: adMockStartupBackoff,
 	}
 }
 
@@ -104,7 +110,8 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 // arrive before the server is up, and the job's own report carries the whole directory
 // anyway.
 //
-// A var, not a const, so a test can shrink it.
+// A var, not a const, so a test can shrink it — each reporter copies it when it is
+// built, so shrinking it touches nothing already running.
 var adMockStartupBackoff = []time.Duration{
 	250 * time.Millisecond, 500 * time.Millisecond, time.Second,
 	2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second,
@@ -141,11 +148,11 @@ func (r *adMockReporter) reportAtStartup(ctx context.Context) {
 		if err = r.send(ctx); err == nil {
 			return
 		}
-		if attempt >= len(adMockStartupBackoff) {
+		if attempt >= len(r.backoff) {
 			r.warn(err)
 			return
 		}
-		timer := time.NewTimer(adMockStartupBackoff[attempt])
+		timer := time.NewTimer(r.backoff[attempt])
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
