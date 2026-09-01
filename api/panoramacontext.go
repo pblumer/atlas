@@ -6,13 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/promquery"
 )
 
 // Panorama's historical context adapters (ADR-0189 P5b).
@@ -35,8 +39,12 @@ import (
 //     record forbids labelling by process id, instance key, or any other value the
 //     data can invent, because one such label turns a metric into unboundedly many
 //     series. A metrics store can therefore answer about a *node* and never about
-//     one process. Its adapter arrives with P5b-ii; until then it reports
-//     not-configured, which is true of this build.
+//     one process — and it identifies that node the only way it knows one, by the
+//     scrape target it came from. Atlas derives that from a deployment target's base
+//     URL; for the server itself it cannot derive it at all, because how this
+//     process appears in somebody's Prometheus is their scrape configuration. That
+//     one is configured, and left unset the local runtime is honestly
+//     unidentifiable rather than silently matched to the wrong series.
 //
 // Each of those is reported as its own state rather than as an absence of data,
 // because they send an operator to entirely different places.
@@ -70,6 +78,11 @@ type contextTarget struct {
 	// truncated reports that more definition keys matched than the query names, so
 	// the counts it returns are a floor rather than a total.
 	truncated bool
+	// instance is how the metrics store labels the node this value names, and
+	// metricReason is why there is none. Exactly one of the two is set for a value a
+	// metrics store could speak about at all.
+	instance     string
+	metricReason string
 }
 
 // collectContext answers one element's context queries, in the same two phases the
@@ -115,6 +128,14 @@ func (s *Server) resolveContextTargets(r *http.Request, queries []panorama.Conte
 // Run-loop goroutine only.
 func (s *Server) resolveContextTarget(r *http.Request, projs map[string]project, query panorama.ContextQuery) contextTarget {
 	target := contextTarget{query: query}
+	// The metrics side resolves first and independently of the log side: they
+	// identify a thing in different ways, and a value one of them cannot name is
+	// often one the other can. It is done before the switch rather than after
+	// because several of those branches return early, and a metrics row whose
+	// reason went missing because the log side answered first is exactly the empty
+	// answer this whole surface exists to avoid.
+	target.instance, target.metricReason = s.metricInstanceFor(query)
+
 	switch query.Key {
 	case panorama.KeyProcessID:
 		target.keys, target.truncated = s.definitionKeys(r, projs, func(d *deployment) bool {
@@ -148,6 +169,97 @@ func (s *Server) resolveContextTarget(r *http.Request, projs map[string]project,
 		target.reason = contextUnidentifiableReason(query.Key)
 	}
 	return target
+}
+
+// metricInstanceFor resolves how the metrics store labels the node a bound value
+// names, or the reason there is none.
+//
+// A metrics store identifies a node by its scrape target, so this answers only for
+// the two kinds that name a node — and for those, only when Atlas actually knows an
+// address. Guessing one would answer a question about somebody else's process while
+// looking exactly like an answer about this one.
+//
+// Run-loop goroutine only.
+func (s *Server) metricInstanceFor(query panorama.ContextQuery) (instance, reason string) {
+	switch query.Key {
+	case panorama.KeyDeploymentTargetID:
+		targets, err := s.targets.LoadAll()
+		if err != nil {
+			return "", "The deployment targets could not be read, so the address the " +
+				"metrics store would know this node by is unknown here."
+		}
+		for _, t := range targets {
+			if t.ID != query.Value {
+				continue
+			}
+			if host := hostOf(t.BaseURL); host != "" {
+				return host, ""
+			}
+			return "", "This deployment target's base URL names no host, so there is " +
+				"no scrape address to match on."
+		}
+		return "", "No deployment target with this id is configured here, so there is " +
+			"no address the metrics store would know it by."
+	case panorama.KeyRuntimeID:
+		// This server's own runtime. Atlas cannot derive how it is scraped — that is
+		// the operator's configuration, not Atlas's — so it is configured, and left
+		// unset this says so rather than matching whatever series is nearest.
+		node, err := s.nodeIdentity()
+		if err == nil && node.ID == query.Value {
+			if instance := strings.TrimSpace(s.metricsQueryCfg.Instance); instance != "" {
+				return instance, ""
+			}
+			return "", "This is the server answering, and it does not know how it " +
+				"appears in the metrics store. Set --metrics-instance to the scrape " +
+				"target it is known by there."
+		}
+		// Another node. It is reachable only through the deployment target that
+		// resolved it, which is where its address is.
+		if host := s.hostOfRuntime(query.Value); host != "" {
+			return host, ""
+		}
+		return "", "No deployment target here has reported this runtime, so Atlas " +
+			"knows no address the metrics store would identify it by."
+	}
+	return "", "Atlas's metrics carry no per-element labels by design, so a metrics " +
+		"store can answer about a node and never about one process, application, " +
+		"connector or release."
+}
+
+// hostOfRuntime finds the address of a peer that reported this runtime id, from the
+// descriptors the observation projection has already fetched (ADR-0189 P4c).
+//
+// It reads only what a previous observation cached: this must not become a reason
+// to contact peers, because the context route is scoped to one element and asking
+// the whole landscape to resolve one label would be the fan-out it exists to avoid.
+//
+// Run-loop goroutine only.
+func (s *Server) hostOfRuntime(runtimeID string) string {
+	targets, err := s.targets.LoadAll()
+	if err != nil {
+		return ""
+	}
+	for _, t := range targets {
+		observed, ok := s.remoteNodes.get(t.ID)
+		if !ok || observed.descriptor.ID != runtimeID {
+			continue
+		}
+		if host := hostOf(t.BaseURL); host != "" {
+			return host
+		}
+	}
+	return ""
+}
+
+// hostOf is the host a base URL names, without its port. The port is dropped
+// because a scrape target's port is the metrics listener's, which is rarely the
+// API's — matching on it would find nothing and look like an empty store.
+func hostOf(baseURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }
 
 // contextUnidentifiableReason says why the event log cannot name a thing of this
@@ -228,34 +340,127 @@ func (s *Server) askContextStores(ctx context.Context, targets []contextTarget) 
 func (s *Server) contextResultsFor(ctx context.Context, target contextTarget) []panorama.ContextResult {
 	return []panorama.ContextResult{
 		s.eventContext(ctx, target),
-		s.metricContext(target),
+		s.metricContext(ctx, target),
 	}
 }
 
-// metricContext is the metrics store's answer, which in this build is always the
-// same one: no adapter is wired. It is reported rather than omitted so the panel
-// says which stores exist and which were asked, and so wiring one later changes an
-// answer rather than adding a row that was never there.
-func (s *Server) metricContext(target contextTarget) panorama.ContextResult {
+// metricMeasures are what one node query returns, in the order the panel shows
+// them. Every expression aggregates, so each reduces to one series — a per-series
+// breakdown would be the per-element labels ADR-0142 forbids, arriving through the
+// query instead of through the metric.
+//
+// The counters are asked with increase() rather than rate() so a bucket's value is
+// a count over that bucket, exactly like the event log's buckets, and the window
+// total is their sum. The gauge is asked with max_over_time, and its total is the
+// peak rather than a sum — which is why Measure carries a total at all.
+var metricMeasures = []struct {
+	name, label, expr string
+	gauge             bool
+}{
+	{name: "commandsProcessed", label: "Commands processed",
+		expr: `sum(increase(atlas_commands_processed_total{%s}[%s]))`},
+	{name: "jobsFailed", label: "Jobs failed",
+		expr: `sum(increase(atlas_jobs_failed_total{%s}[%s]))`},
+	{name: "jobsWaiting", label: "Jobs waiting (peak)",
+		expr: `max(max_over_time(atlas_open_jobs{%s}[%s]))`, gauge: true},
+}
+
+// metricContext is the metrics store's answer about one bound value.
+//
+// It answers about a node and never about one process, and that is ADR-0142's rule
+// rather than this adapter's limitation: a label whose values the data can invent
+// turns one metric into unboundedly many series, so Atlas emits none. A value that
+// names no node is reported unidentifiable, which sends a reader to the event log
+// instead of to a series that must not exist.
+func (s *Server) metricContext(ctx context.Context, target contextTarget) panorama.ContextResult {
 	result := panorama.ContextResult{
 		Source: panorama.ContextSourceMetrics,
 		Key:    target.query.Key, Value: target.query.Value,
-		State: panorama.ContextNotConfigured,
-		Reason: "No metrics store is wired to this server, so nothing was asked. " +
-			"Metrics answer about a node rather than about one process.",
 	}
-	// Even with a store wired, most kinds could not be asked. Saying so now keeps the
-	// distinction visible before the adapter exists, rather than turning it into a
-	// surprise when it does.
-	switch target.query.Key {
-	case panorama.KeyRuntimeID, panorama.KeyDeploymentTargetID:
+	if !s.metricsQueryCfg.Enabled() {
+		result.State = panorama.ContextNotConfigured
+		result.Reason = "No metrics store is wired to this server, so nothing was asked. " +
+			"Point --metrics-url at one to give this question somewhere to look."
+		return result
+	}
+	if target.instance == "" {
+		// Phase one already knows there is no node to ask about, and why.
+		result.State, result.Reason = panorama.ContextUnidentifiable, target.metricReason
+		return result
+	}
+
+	window := target.query.Window
+	step := panorama.BucketSeconds(window)
+	matcher := `instance=~"^` + promquery.EscapeLabelValue(regexp.QuoteMeta(target.instance)) + `(:[0-9]+)?$"`
+	rang := strconv.FormatInt(step, 10) + "s"
+
+	ctx, cancel := context.WithTimeout(ctx, contextQueryTimeout)
+	defer cancel()
+
+	var (
+		measures []panorama.Measure
+		any      bool
+	)
+	for _, want := range metricMeasures {
+		samples, err := s.metricQuerier().QueryRange(ctx,
+			fmt.Sprintf(want.expr, matcher, rang), window.From, window.To, step)
+		switch {
+		case errors.Is(err, promquery.ErrQueryRefused):
+			result.State = panorama.ContextRefused
+			result.Reason = "The metrics store declined the query. Its credentials here " +
+				"may not carry read access."
+			return result
+		case err != nil:
+			result.State = panorama.ContextUnreachable
+			result.Reason = "The metrics store could not be asked, so nothing is known " +
+				"about this window — which is not the same as nothing having happened."
+			return result
+		}
+		measure := panorama.Measure{
+			Name: want.name, Label: want.label, Buckets: []panorama.Bucket{},
+		}
+		for _, sample := range samples {
+			if sample.At < window.From || sample.At > window.To {
+				continue
+			}
+			measure.Buckets = append(measure.Buckets,
+				panorama.Bucket{At: sample.At, Value: sample.Value})
+			// A counter's window total is the sum of its buckets; a gauge's is its
+			// peak, because adding two readings of a queue depth measures nothing.
+			switch {
+			case want.gauge:
+				measure.Total = max(measure.Total, sample.Value)
+			default:
+				measure.Total += sample.Value
+			}
+		}
+		if len(measure.Buckets) > 0 {
+			any = true
+		}
+		measures = append(measures, measure)
+	}
+
+	result.Measures = measures
+	result.Detail = map[string]string{"instance": target.instance}
+	switch {
+	case !any:
+		result.State = panorama.ContextEmpty
+		result.Reason = "The metrics store holds no Atlas series for this node in the " +
+			"window asked about. It may not be scraping it, or may have aged the " +
+			"window out."
 	default:
-		result.State = panorama.ContextUnidentifiable
-		result.Reason = "Atlas's metrics carry no per-element labels by design, so a " +
-			"metrics store can answer about a node and never about one process, " +
-			"application, connector or release."
+		result.State = panorama.ContextAvailable
 	}
 	return result
+}
+
+// metricQuerier is the client the node queries go through, built per call because
+// it is stateless. A test replaces it wholesale.
+func (s *Server) metricQuerier() promquery.Querier {
+	if s.metricsQuery != nil {
+		return s.metricsQuery
+	}
+	return promquery.NewHTTPClient(s.metricsQueryCfg)
 }
 
 // eventContext is the exported event log's answer about one value.

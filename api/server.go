@@ -76,6 +76,7 @@ import (
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/playground"
+	"github.com/pblumer/atlas/promquery"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
@@ -412,8 +413,15 @@ type Server struct {
 	// reads the exported event log through (ADR-0189 P5b), so a test drives the
 	// adapter without a live cluster. Nil in production, where a client is built
 	// from osExportCfg per call.
-	eventSearch  opensearch.Searcher
-	exporterPoll time.Duration
+	eventSearch opensearch.Searcher
+	// metricsQueryCfg is the Prometheus-compatible store Panorama's historical
+	// context reads node metrics from (ADR-0189 P5b-ii). It is read-only and
+	// separate from the exposition Atlas serves at /metrics: this is somebody
+	// else's server, holding what they scraped. Enabled only when a URL is set.
+	// metricsQuery, when non-nil, replaces the client for a test.
+	metricsQueryCfg promquery.Config
+	metricsQuery    promquery.Querier
+	exporterPoll    time.Duration
 	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
 	// drives each export pass explicitly rather than racing a wall-clock cadence.
 	// exporterTicked, when non-nil, receives once after each triggered pass completes,
@@ -743,6 +751,15 @@ func WithScriptWorker(jobType int32, exec script.Exec) Option {
 // and index live in server config, never in a model.
 func WithOpenSearchExporter(cfg opensearch.Config) Option {
 	return func(s *Server) { s.osExportCfg = cfg }
+}
+
+// WithMetricsQuery points Panorama's historical context at a Prometheus-compatible
+// store (ADR-0189 P5b-ii). It is read-only and unrelated to the /metrics endpoint
+// Atlas serves: this is where somebody else keeps what they scraped. An empty URL
+// leaves the metrics half of every context answer reported as not-configured,
+// which is then true of the server rather than a guess about the store.
+func WithMetricsQuery(cfg promquery.Config) Option {
+	return func(s *Server) { s.metricsQueryCfg = cfg }
 }
 
 // WithOpenSearchExportInterval sets how often the exporter polls the log for newly

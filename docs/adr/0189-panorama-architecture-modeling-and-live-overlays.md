@@ -78,7 +78,14 @@
 > - Metrics (ADR-0142) carry no per-element labels *by design*: that record forbids
 >   labelling by process id, instance key, or any other value the data can invent,
 >   because one such label turns a metric into unboundedly many series. A metrics
->   store therefore answers about a node and never about one process.
+>   store therefore answers about a node and never about one process — and it
+>   identifies that node the only way it knows one, by the scrape target the series
+>   came from. Atlas derives that from a deployment target's base URL. For the
+>   server itself it cannot derive it at all, because how this process appears in
+>   somebody's Prometheus is their scrape configuration; that one is configured, and
+>   left unset the local runtime is reported unidentifiable rather than silently
+>   matched to whichever series is nearest. Guessing it would answer a question
+>   about a different process while looking exactly like an answer about this one.
 >
 > Neither limit is a gap to close later, so neither is reported as an absence of
 > data. A source's answer for one bound value is one of six states —

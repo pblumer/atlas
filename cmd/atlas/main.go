@@ -42,6 +42,7 @@ import (
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/mimimport"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/promquery"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 	"github.com/pblumer/atlas/wal"
@@ -264,6 +265,11 @@ func runServe(args []string) error {
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
+	// The read side of the exposition above, and a different server: this is where
+	// somebody else keeps what they scraped. Panorama queries it for a node's recent
+	// history (ADR-0189 P5b-ii) and stores none of the answer.
+	metricsURL := fs.String("metrics-url", os.Getenv("ATLAS_METRICS_URL"), "base URL of a Prometheus-compatible store to read node history from for Panorama's architecture views (ADR-0189); empty disables it, and the metrics half of every answer then reports itself not-configured. Read-only and unrelated to --metrics, which is what this server exposes. Credentials come from ATLAS_METRICS_USERNAME/ATLAS_METRICS_PASSWORD")
+	metricsInstance := fs.String("metrics-instance", os.Getenv("ATLAS_METRICS_INSTANCE"), "how this node appears in --metrics-url's `instance` label, e.g. atlas-01.internal. Atlas cannot derive it: a scrape target is your configuration, and guessing would answer about a different process while looking exactly like an answer about this one. Left empty, a Panorama element bound to this server's own runtime reports itself unidentifiable and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -273,6 +279,12 @@ func runServe(args []string) error {
 		Username: os.Getenv("ATLAS_OPENSEARCH_USERNAME"),
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
+	}
+	metricsCfg := promquery.Config{
+		URL:      strings.TrimSpace(*metricsURL),
+		Username: os.Getenv("ATLAS_METRICS_USERNAME"),
+		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
+		Instance: strings.TrimSpace(*metricsInstance),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
 	trace := tracing.Config{
@@ -292,7 +304,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -369,7 +381,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -490,6 +502,13 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
 		logging.Info(logging.ExporterEnabled, "opensearch exporter enabled",
 			slog.String("index", osExport.Index), slog.String("url", osExport.URL))
+	}
+	// Read a node's recent history back from a metrics store for Panorama's
+	// architecture views (ADR-0189 P5b-ii). Read-only, and a different server from
+	// the exposition above: nothing is copied here, each answer is queried when
+	// somebody asks for it.
+	if metricsQuery.Enabled() {
+		apiOpts = append(apiOpts, api.WithMetricsQuery(metricsQuery))
 	}
 	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
 	// The cadence and batch apply either way: retention also runs for a process that

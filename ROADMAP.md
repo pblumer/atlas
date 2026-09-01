@@ -1034,10 +1034,18 @@ for the derived whole-instance mesh above them.
   the metrics store already says what it is before its adapter exists. Scoped to one
   element and to an allowlist of windows, because each bound value costs a query
   against a system that did not agree to be browsed; and
-  **b-ii)** the Prometheus adapter. Open. Metrics carry no per-element labels by
-  design (ADR-0142 forbids labelling by anything the data can invent), so it will
-  answer about a *node* through the runtime and deployment-target bindings and never
-  about one process — which is why (b-i) does not wait for it.
+  **b-ii)** the metrics adapter, over a Prometheus-compatible store. Complete. It
+  answers about a *node* through the runtime and deployment-target bindings and
+  never about one process, because ADR-0142 forbids labelling a metric by anything
+  the data can invent — which is why (b-i) did not wait for it. A node is
+  identified the only way a metrics store knows one, by the scrape target its
+  series came from: derived from a deployment target's base URL, and for this
+  server configured with `--metrics-instance`, because how this process appears in
+  somebody's Prometheus is their scrape configuration and guessing it would answer
+  about a different process while looking exactly like an answer about this one.
+  Counters are asked with `increase()` so a bucket is a count and the window total
+  is their sum; the queue-depth gauge is asked with `max_over_time()` and its total
+  is the peak, because adding two readings of a queue depth measures nothing.
 
 ## Milestone A — Modeler & authoring experience 🔲
 

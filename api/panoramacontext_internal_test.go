@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/opensearch"
+	"github.com/pblumer/atlas/promquery"
 )
 
 // stubSearcher stands in for a cluster. It records the query it was handed, so the
@@ -31,13 +33,33 @@ func (s *stubSearcher) Search(_ context.Context, index string, query []byte) ([]
 }
 
 // contextServer is a server with an application, two deployed versions of one
-// process, and an event log configured.
+// process, a deployment target, a node identity, and an event log configured — the
+// wiring every context lookup reads, because resolving one query now consults both
+// the log side and the metrics side.
 func contextServer(t *testing.T, searcher opensearch.Searcher) *Server {
 	t.Helper()
 	s := storesFor(t)
 	if err := s.projects.Save(project{ID: "proj-abc", Name: "Billing"}); err != nil {
 		t.Fatalf("save project: %v", err)
 	}
+	dir := t.TempDir()
+	settings, err := newSettingsStore(filepath.Join(dir, "settings"))
+	if err != nil {
+		t.Fatalf("newSettingsStore: %v", err)
+	}
+	if _, err := ensureNodeIdentity(settings); err != nil {
+		t.Fatalf("ensureNodeIdentity: %v", err)
+	}
+	targets, err := newTargetStore(filepath.Join(dir, "targets"))
+	if err != nil {
+		t.Fatalf("newTargetStore: %v", err)
+	}
+	if err := targets.Save(deploymentTarget{
+		ID: "t-prod", Name: "Production", BaseURL: "https://prod.example.com:8443",
+	}); err != nil {
+		t.Fatalf("save target: %v", err)
+	}
+	s.settings, s.targets, s.remoteNodes = settings, targets, newRemoteNodeCache()
 	s.order = []uint64{11, 12, 13}
 	s.deployments = map[uint64]*deployment{
 		11: {Key: 11, ProcessID: "ship", Version: 1, ProjectID: "proj-abc"},
@@ -47,6 +69,28 @@ func contextServer(t *testing.T, searcher opensearch.Searcher) *Server {
 	s.versions = map[string]int32{"ship": 2, "other": 1}
 	s.osExportCfg = opensearch.Config{URL: "http://events.invalid", Index: "atlas-events"}
 	s.eventSearch = searcher
+	return s
+}
+
+// stubQuerier stands in for a metrics store, recording the expressions it was
+// handed so the tests assert what was actually asked.
+type stubQuerier struct {
+	samples []promquery.Sample
+	err     error
+	asked   []string
+}
+
+func (q *stubQuerier) QueryRange(_ context.Context, expr string, _, _, _ int64) ([]promquery.Sample, error) {
+	q.asked = append(q.asked, expr)
+	return q.samples, q.err
+}
+
+// metricServer is a contextServer with a metrics store wired.
+func metricServer(t *testing.T, querier promquery.Querier) *Server {
+	t.Helper()
+	s := contextServer(t, &stubSearcher{})
+	s.metricsQueryCfg = promquery.Config{URL: "http://metrics.invalid"}
+	s.metricsQuery = querier
 	return s
 }
 
@@ -273,24 +317,165 @@ func TestEventContextCannotIdentifyWhatTheLogDoesNotName(t *testing.T) {
 	}
 }
 
-// TestMetricContextIsHonestBeforeItsAdapterExists. Metrics carry no per-element
-// labels by design (ADR-0142), so the store answers about a node and never about
-// one process. Saying so now keeps the distinction visible rather than turning it
-// into a surprise when the adapter lands.
-func TestMetricContextIsHonestBeforeItsAdapterExists(t *testing.T) {
-	s := contextServer(t, &stubSearcher{})
+// TestMetricContextAnswersAboutNodesAndNothingElse. That is ADR-0142's rule rather
+// than this adapter's limitation: a label whose values the data can invent turns
+// one metric into unboundedly many series, so Atlas emits none — and a metrics
+// store therefore identifies a node and never one process.
+func TestMetricContextAnswersAboutNodesAndNothingElse(t *testing.T) {
+	stub := &stubQuerier{samples: []promquery.Sample{
+		{At: 1_699_996_400, Value: 4}, {At: 1_699_996_460, Value: 6},
+	}}
+	s := metricServer(t, stub)
 
-	node := s.metricContext(resolve(t, s, panorama.KeyRuntimeID, "node-1"))
-	if node.State != panorama.ContextNotConfigured {
-		t.Errorf("a node = %+v, want not-configured on a build with no metrics adapter", node)
+	got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+	if got.State != panorama.ContextAvailable || got.Source != panorama.ContextSourceMetrics {
+		t.Fatalf("a deployment target = %+v", got)
 	}
-	process := s.metricContext(resolve(t, s, panorama.KeyProcessID, "ship"))
-	if process.State != panorama.ContextUnidentifiable {
-		t.Errorf("a process = %+v, want unidentifiable rather than absent data", process)
+	if len(got.Measures) != len(metricMeasures) {
+		t.Fatalf("measures = %+v, want all three the adapter claims", got.Measures)
 	}
-	if !strings.Contains(process.Reason, "no per-element labels") {
-		t.Errorf("reason = %q", process.Reason)
+	// A counter's window total is the sum of its buckets; a gauge's is its peak,
+	// because adding two readings of a queue depth measures nothing.
+	if got.Measures[0].Total != 10 {
+		t.Errorf("the counter total = %v, want the buckets summed", got.Measures[0].Total)
 	}
+	if got.Measures[2].Total != 6 {
+		t.Errorf("the gauge total = %v, want the peak rather than a sum", got.Measures[2].Total)
+	}
+	if got.Detail["instance"] != "prod.example.com" {
+		t.Errorf("detail = %+v, want the node it actually matched on", got.Detail)
+	}
+
+	// Everything that is not a node is unidentifiable, and the reason names the rule
+	// rather than apologising — a reader must not go looking for a series that must
+	// not exist.
+	for _, key := range []string{
+		panorama.KeyProcessID, panorama.KeyApplicationID,
+		panorama.KeyConnectorID, panorama.KeyReleaseID,
+	} {
+		got := s.metricContext(context.Background(), resolve(t, s, key, "v"))
+		if got.State != panorama.ContextUnidentifiable {
+			t.Errorf("%s: state = %q, want unidentifiable rather than absent data", key, got.State)
+		}
+		if !strings.Contains(got.Reason, "no per-element labels") {
+			t.Errorf("%s: reason = %q", key, got.Reason)
+		}
+	}
+}
+
+// TestMetricContextWillNotGuessTheLocalNodesScrapeAddress. How this process appears
+// in somebody's Prometheus is their scrape configuration, not Atlas's. Guessing it
+// would answer a question about a different process while looking exactly like an
+// answer about this one, so unset means unidentifiable — and the reason names the
+// flag that fixes it.
+func TestMetricContextWillNotGuessTheLocalNodesScrapeAddress(t *testing.T) {
+	stub := &stubQuerier{samples: []promquery.Sample{{At: 1_699_996_400, Value: 1}}}
+	s := metricServer(t, stub)
+	node, err := s.nodeIdentity()
+	if err != nil {
+		t.Fatalf("nodeIdentity: %v", err)
+	}
+
+	got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyRuntimeID, node.ID))
+	if got.State != panorama.ContextUnidentifiable {
+		t.Fatalf("the local runtime = %+v, want unidentifiable rather than a guess", got)
+	}
+	if !strings.Contains(got.Reason, "--metrics-instance") {
+		t.Errorf("reason = %q, want it to name what would fix this", got.Reason)
+	}
+	if len(stub.asked) != 0 {
+		t.Errorf("it queried the store with no address to match on: %v", stub.asked)
+	}
+
+	// Told how it is scraped, it answers.
+	s.metricsQueryCfg.Instance = "atlas-01.internal"
+	got = s.metricContext(context.Background(), resolve(t, s, panorama.KeyRuntimeID, node.ID))
+	if got.State != panorama.ContextAvailable {
+		t.Fatalf("with an instance configured = %+v", got)
+	}
+	if !strings.Contains(stub.asked[0], `atlas-01\\.internal`) {
+		t.Errorf("query = %q, want the configured instance", stub.asked[0])
+	}
+}
+
+// TestMetricContextMatchesTheNodeAndNothingNearIt. The matcher is anchored and the
+// host is regex-quoted: a dotted hostname is otherwise a pattern that matches other
+// hosts, and answering about the wrong node looks exactly like answering about the
+// right one.
+func TestMetricContextMatchesTheNodeAndNothingNearIt(t *testing.T) {
+	stub := &stubQuerier{samples: []promquery.Sample{{At: 1_699_996_400, Value: 1}}}
+	s := metricServer(t, stub)
+
+	s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+	if len(stub.asked) != len(metricMeasures) {
+		t.Fatalf("asked %d times, want one query per measure", len(stub.asked))
+	}
+	query := stub.asked[0]
+	for _, want := range []string{`instance=~"^`, `prod\\.example\\.com`, `(:[0-9]+)?$"`, "atlas_"} {
+		if !strings.Contains(query, want) {
+			t.Errorf("query %q does not contain %q", query, want)
+		}
+	}
+	// Every expression aggregates, so it reduces to one series: a per-series
+	// breakdown would be the per-element labels ADR-0142 forbids, arriving through
+	// the query instead of through the metric.
+	for _, q := range stub.asked {
+		if !strings.HasPrefix(q, "sum(") && !strings.HasPrefix(q, "max(") {
+			t.Errorf("query %q does not aggregate", q)
+		}
+	}
+}
+
+// TestMetricContextSeparatesEveryWayOfNotAnswering, exactly as the event log does.
+func TestMetricContextSeparatesEveryWayOfNotAnswering(t *testing.T) {
+	t.Run("no store wired", func(t *testing.T) {
+		s := metricServer(t, &stubQuerier{})
+		s.metricsQueryCfg = promquery.Config{}
+		got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+		if got.State != panorama.ContextNotConfigured {
+			t.Errorf("state = %q", got.State)
+		}
+		if !strings.Contains(got.Reason, "--metrics-url") {
+			t.Errorf("reason = %q, want it to name what would fix this", got.Reason)
+		}
+	})
+
+	t.Run("refused", func(t *testing.T) {
+		s := metricServer(t, &stubQuerier{err: promquery.ErrQueryRefused})
+		got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+		if got.State != panorama.ContextRefused {
+			t.Errorf("state = %q, want a refusal told apart from an outage", got.State)
+		}
+	})
+
+	t.Run("unreachable", func(t *testing.T) {
+		s := metricServer(t, &stubQuerier{err: errors.New("dial: no route")})
+		got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+		if got.State != panorama.ContextUnreachable {
+			t.Errorf("state = %q", got.State)
+		}
+	})
+
+	// Asked, answered, and holding nothing. The store may not be scraping this node
+	// at all, which the reason says rather than leaving it to be inferred.
+	t.Run("empty", func(t *testing.T) {
+		s := metricServer(t, &stubQuerier{})
+		got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-prod"))
+		if got.State != panorama.ContextEmpty {
+			t.Errorf("state = %q", got.State)
+		}
+		if !strings.Contains(got.Reason, "not be scraping") {
+			t.Errorf("reason = %q", got.Reason)
+		}
+	})
+
+	t.Run("target that is not configured here", func(t *testing.T) {
+		s := metricServer(t, &stubQuerier{samples: []promquery.Sample{{At: 1, Value: 1}}})
+		got := s.metricContext(context.Background(), resolve(t, s, panorama.KeyDeploymentTargetID, "t-nope"))
+		if got.State != panorama.ContextUnidentifiable {
+			t.Errorf("state = %q", got.State)
+		}
+	})
 }
 
 // TestCollectContextAsksEverySourceAboutEveryValue. Both sources answer for every
@@ -330,6 +515,51 @@ func TestCollectContextAsksEverySourceAboutEveryValue(t *testing.T) {
 	}
 	if seen["node-1/"+panorama.ContextSourceMetrics] != panorama.ContextNotConfigured {
 		t.Errorf("the metrics store's answer about a node = %q", seen["node-1/"+panorama.ContextSourceMetrics])
+	}
+}
+
+// TestCollectContextReachesBothStores. The two adapters identify a thing in
+// different ways, so a value one cannot name is often one the other can — and an
+// element that binds both gets a real answer from each rather than one answer and
+// a silence.
+func TestCollectContextReachesBothStores(t *testing.T) {
+	events := &stubSearcher{body: aggregationBody(t, 3, 3)}
+	s := contextServer(t, events)
+	metrics := &stubQuerier{samples: []promquery.Sample{{At: 1_699_996_400, Value: 2}}}
+	s.metricsQueryCfg = promquery.Config{URL: "http://metrics.invalid"}
+	s.metricsQuery = metrics
+
+	quit := make(chan struct{})
+	s.quit, s.runLoop = quit, runloop.New(quit)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); s.runLoop.Run() }()
+	t.Cleanup(func() { close(quit); wg.Wait() })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	results, err := s.collectContext(req, []panorama.ContextQuery{
+		{Key: panorama.KeyProcessID, Value: "ship", Window: testWindow()},
+		{Key: panorama.KeyDeploymentTargetID, Value: "t-prod", Window: testWindow()},
+	})
+	if err != nil {
+		t.Fatalf("collectContext: %v", err)
+	}
+	seen := map[string]string{}
+	for _, result := range results {
+		seen[result.Value+"/"+result.Source] = result.State
+	}
+	// Each store answers about the kind it can identify, and says so about the kind
+	// it cannot — which is the whole shape of this surface in one assertion.
+	want := map[string]string{
+		"ship/" + panorama.ContextSourceEvents:    panorama.ContextAvailable,
+		"ship/" + panorama.ContextSourceMetrics:   panorama.ContextUnidentifiable,
+		"t-prod/" + panorama.ContextSourceEvents:  panorama.ContextUnidentifiable,
+		"t-prod/" + panorama.ContextSourceMetrics: panorama.ContextAvailable,
+	}
+	for key, state := range want {
+		if seen[key] != state {
+			t.Errorf("%s = %q, want %q", key, seen[key], state)
+		}
 	}
 }
 
