@@ -175,9 +175,14 @@ func (j *Journal) Record(modelID string, doc ObservationDocument) ObservationDoc
 		j.started[modelID] = doc.ObservedAt
 	}
 	previous, known := j.state[modelID]
+	// current is what this read saw, and at is the observation each key came from,
+	// so a transition can be journalled with the reason belonging to *that* value
+	// rather than to whichever one the document happened to list first.
 	current := make(map[string]string, len(doc.Observations))
+	at := make(map[string]Observation, len(doc.Observations))
 	for _, o := range doc.Observations {
 		current[driftKey(o)] = o.State
+		at[driftKey(o)] = o
 	}
 
 	if known {
@@ -189,16 +194,11 @@ func (j *Journal) Record(modelID string, doc ObservationDocument) ObservationDoc
 			if !seen || was == current[key] {
 				continue
 			}
-			for _, o := range doc.Observations {
-				if driftKey(o) != key {
-					continue
-				}
-				j.append(modelID, DriftEntry{
-					ElementID: o.ElementID, Key: o.Key, Value: o.Value,
-					From: was, To: o.State, Reason: o.Reason, At: doc.ObservedAt,
-				})
-				break
-			}
+			o := at[key]
+			j.append(modelID, DriftEntry{
+				ElementID: o.ElementID, Key: o.Key, Value: o.Value,
+				From: was, To: o.State, Reason: o.Reason, At: doc.ObservedAt,
+			})
 		}
 	}
 	j.state[modelID] = current

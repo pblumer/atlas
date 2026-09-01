@@ -111,6 +111,49 @@ func TestJournalEnrichesTheObservationItRecorded(t *testing.T) {
 	}
 }
 
+// TestJournalAttributesEachChangeToItsOwnValue. A model binds many values, and
+// most reads move one of them. Each entry has to carry the reason belonging to
+// *that* value — an entry that borrowed the sentence from whichever observation
+// the document listed first would send somebody to the wrong resource.
+func TestJournalAttributesEachChangeToItsOwnValue(t *testing.T) {
+	two := func(at int64, first, second string) ObservationDocument {
+		return ObservationDocument{ObservedAt: at, Observations: []Observation{
+			{ElementID: "e-a", Key: KeyApplicationID, Value: "app-1",
+				State: first, Reason: "app-1 is " + first},
+			{ElementID: "e-b", Key: KeyProcessID, Value: "proc-2",
+				State: second, Reason: "proc-2 is " + second},
+		}}
+	}
+	j := NewJournal()
+	j.Record("m1", two(100, StateHealthy, StateHealthy))
+	j.Record("m1", two(200, StateHealthy, StateDegraded))
+
+	doc := j.Document("m1")
+	if len(doc.Entries) != 1 {
+		t.Fatalf("one of two values moved and the journal holds %+v", doc.Entries)
+	}
+	entry := doc.Entries[0]
+	if entry.ElementID != "e-b" || entry.Value != "proc-2" || entry.Key != KeyProcessID {
+		t.Errorf("entry = %+v, want the value that actually moved", entry)
+	}
+	if entry.Reason != "proc-2 is "+StateDegraded {
+		t.Errorf("reason = %q, want the sentence belonging to the value that moved", entry.Reason)
+	}
+
+	// Both moving in one read journals both, in a stable order rather than in map
+	// order: two servers reading the same landscape should produce the same page.
+	j.Record("m1", two(300, StateNotReady, StateHealthy))
+	doc = j.Document("m1")
+	if len(doc.Entries) != 3 {
+		t.Fatalf("two more changes journalled %+v", doc.Entries)
+	}
+	// Newest first, and within one read sorted by key: e-a before e-b, so e-b is
+	// the more recent of the pair and comes first.
+	if doc.Entries[0].ElementID != "e-b" || doc.Entries[1].ElementID != "e-a" {
+		t.Errorf("one read journalled its changes in an unstable order: %+v", doc.Entries)
+	}
+}
+
 // TestJournalSpeaksFromWhenItStartedWatching. "Nobody looked" and "somebody looked
 // and nothing changed" are different answers, and `since` is the only field that
 // tells them apart: a model that has been read carries the moment that reading
