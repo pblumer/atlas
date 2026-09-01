@@ -516,32 +516,32 @@ const CONNECTORS = [
   },
   {
     id: "clio", name: "clio", kind: "Event store",
-    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored via the clio Event Store Connector service-task type.",
+    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored on a service task with the clio Event Store Worker Type.",
     refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
-    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
+    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored on a service task with the REST Outbound Worker Type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored on a service task with the E-Mail Outbound Worker Type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
     id: "sharepoint", name: "SharePoint", kind: "List item",
-    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored on a service task with the SharePoint Worker Type.",
     refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
     id: "jira", name: "Jira", kind: "Issue tracker",
-    desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored via the Jira Connector service-task type.",
+    desc: "Performs one Atlassian Jira operation from a service task off the processor loop via the REST API: create an issue, read one, update it, move it through its workflow, comment on it, assign it, or search with JQL. The operation and its values are model-authored (FEEL-capable) and what Jira returned is written into a result variable; the site URL and the credential bundle — {email, apiToken} for Jira Cloud or {token} for a Data Center personal access token — are managed below and resolved from the vault. Authored on a service task with the Jira Worker Type.",
     refs: "ADR-0041 · ADR-0201", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
-    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
+    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
   {

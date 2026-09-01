@@ -1,12 +1,13 @@
-// End-to-end coverage for the shape of the connector picker's rows (api/web/editor.js).
+// End-to-end coverage for the shape of the Worker Type picker's rows (api/web/editor.js).
 //
-// The picker lists nineteen kinds. Each used to be a two-line card — name, then its
-// description underneath — which put a single choice across four screens of scrolling,
-// and every second name ended in the word "Connector", which in a list of connectors
-// separates nothing while pushing apart the words that do. A row is now one line: the
-// name without that shared suffix, the placement badge parked at the right edge, and the
-// description moved to the row's tooltip. The kind an author has actually chosen still
-// spells its description out, because that is the one being read rather than scanned.
+// The picker lists nineteen Worker Types. Each used to be a two-line card — name, then
+// its description underneath — which put a single choice across four screens of
+// scrolling, and every second name ended in the word "Connector", which separates
+// nothing while pushing apart the words that do (and, since ADR-0203, names the wrong
+// concept). A row is now one line: the name, which no longer carries that suffix, the
+// placement badge parked at the right edge, and the description moved to the row's
+// tooltip. The Worker Type an author has actually chosen still spells its description
+// out, because that is the one being read rather than scanned.
 //
 // These tests hold that shape, and hold the two things it must not cost: the full name
 // is still what search matches on, and the badge is still there, on its own line.
@@ -21,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.__mount());
   await page.locator('[data-tab="implement"]').click();
   await page.evaluate(() => window.__select("Activity_rest"));
-  await page.locator(".pgroup-head", { hasText: "Type" }).click();
+  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
 });
 
 const rows = (page) => page.locator(".stkind-row");
@@ -47,7 +48,7 @@ test("a kind is one line: the description is the row's tooltip", async ({ page }
 
 test("choosing another kind moves the spelled-out description with it", async ({ page }) => {
   await page.locator(".stkind-row[data-kind='mail']").click();
-  await page.locator(".pgroup-head", { hasText: "Type" }).click();
+  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
   await expect(page.locator(".stkind-row-on")).toHaveAttribute("data-kind", "mail");
   await expect(page.locator(".stkind-desc")).toHaveCount(1);
   await expect(page.locator(".stkind-row[data-kind='rest'] .stkind-desc")).toHaveCount(0);
