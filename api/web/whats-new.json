@@ -2,6 +2,49 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "see-the-mock-active-directory",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the mock Active Directory",
+        "de": "Das simulierte Active Directory ansehen"
+      },
+      "summary": {
+        "en": "Mockup mode lets an Active Directory process run without a domain controller, but until now the directory it wrote to was invisible: the account a joiner created could only be found by reading the worker's log, and the starting entries on the Active Directory card — the template every forest begins from, never written back — were the natural place to look for it and never had it. Operations › Mock directory now shows the directory itself: one card per worker, one tree per LDAP URL, every entry with its attributes, and underneath it the list of operations the mockup performed. It refreshes while you click through a process. Nothing about it is permanent — restarting the worker empties its forests and they start from the seed again — and no password is ever shown, because the mockup stores none.",
+        "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
+      },
+      "link": {
+        "label": "ADR-0213",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0213-ad-mock-directory-in-the-console.md"
+      },
+      "tags": [
+        "Operations",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Organization › Workers → the Active Directory card → switch on “Serve Active Directory tasks against a mockup” and save. The AD worker restarts.",
+          "Optionally paste or upload starting entries (LDIF or DSML) on the same card — a leaver needs an account to disable.",
+          "Run a process with an Active Directory task, or start one from Tasks › Start.",
+          "Open Operations › Mock directory: the worker's forests are there, with the entry the task just created."
+        ],
+        "de": [
+          "Organisation › Workers → Karte «Active Directory» → «Serve Active Directory tasks against a mockup» einschalten und speichern. Der AD-Worker startet neu.",
+          "Optional auf derselben Karte einen Startbestand einfügen oder hochladen (LDIF oder DSML) — ein Leaver braucht ein Konto, das er deaktivieren kann.",
+          "Einen Prozess mit einer Active-Directory-Aufgabe starten, etwa über Aufgaben › Start.",
+          "Betrieb › Mock directory öffnen: Dort stehen die Verzeichnisse des Workers, mit dem Eintrag, den die Aufgabe gerade angelegt hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Mock directory",
+          "de": "Mock directory öffnen"
+        },
+        "route": "#/operations/ad-mock"
+      }
+    },
+    {
       "id": "atlas-can-terminate-tls-itself",
       "version": "Unreleased",
       "date": null,
@@ -319,35 +362,6 @@
       "tags": [
         "Connectors"
       ]
-    },
-    {
-      "id": "an-ad-task-naming-a-console-configured-directory-reached-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An AD task that names a configured directory now reaches it",
-        "de": "Ein AD-Task, der ein eingerichtetes Verzeichnis nennt, erreicht es jetzt"
-      },
-      "summary": {
-        "en": "If a task pointed at an Active Directory you had set up under Workers — by its name, instead of writing the server address into the model — the name was lost on the way to the worker, and the task failed with \"empty url\". It arrives now. The Modeler also stopped dropping that name when you opened such a task and pressed Save.",
-        "de": "Wenn ein Task auf ein Active Directory zeigte, das Sie unter Workers eingerichtet hatten — über dessen Namen, statt die Serveradresse ins Modell zu schreiben — ging der Name auf dem Weg zum Worker verloren, und der Task scheiterte mit „empty url\". Er kommt jetzt an. Und der Modeler wirft den Namen nicht mehr weg, wenn Sie so einen Task öffnen und speichern."
-      },
-      "link": {
-        "label": "ADR-0206",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0206-ad-as-a-console-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console"
-      }
     }
   ]
 }

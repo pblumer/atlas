@@ -141,12 +141,30 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			if err != nil {
 				return Connectors{}, err
 			}
+			// A mock forest is memory, and until now it was memory nobody could look
+			// at: the operator is in the Console and the directory is in here. The
+			// reporter closes that gap by posting what this worker holds to the Atlas
+			// that shows it (ADR-0213). nil when
+			// this worker was given no address, which changes nothing else.
+			var reporter *adMockReporter
 			if mock != nil {
 				announceADMock(mock, env(adMockSeedEnv))
+				reporter = newADMockReporter(env, mock)
+				// Once at startup, so the view can say "mock mode, 12 starting
+				// entries, nothing dialled yet" instead of showing an empty page to
+				// somebody who has just switched the mockup on. Off this goroutine:
+				// a worker must start whether or not its server is answering yet, and
+				// the next report catches the view up regardless.
+				go reporter.report(context.Background())
 			}
 			secret := adSecretFromEnv(env)
 			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunADJob(ctx, j, dialer, secret, dirs)
+				out, err := RunADJob(ctx, j, dialer, secret, dirs)
+				// Reported either way. A job that failed half way through a modify
+				// changed the directory too, and that is precisely the state somebody
+				// goes looking for.
+				reporter.report(ctx)
+				return out, err
 			})
 		case "entra":
 			reg, names, err := entraRegistryFromEnv(env)

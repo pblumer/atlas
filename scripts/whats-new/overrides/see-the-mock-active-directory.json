@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Operations",
+    "Workers"
+  ],
+  "title": {
+    "en": "See the mock Active Directory",
+    "de": "Das simulierte Active Directory ansehen"
+  },
+  "summary": {
+    "en": "Mockup mode lets an Active Directory process run without a domain controller, but until now the directory it wrote to was invisible: the account a joiner created could only be found by reading the worker's log, and the starting entries on the Active Directory card — the template every forest begins from, never written back — were the natural place to look for it and never had it. Operations › Mock directory now shows the directory itself: one card per worker, one tree per LDAP URL, every entry with its attributes, and underneath it the list of operations the mockup performed. It refreshes while you click through a process. Nothing about it is permanent — restarting the worker empties its forests and they start from the seed again — and no password is ever shown, because the mockup stores none.",
+    "de": "Im Mockup-Modus läuft ein Active-Directory-Prozess ohne Domain Controller — nur war das Verzeichnis, in das er schrieb, bisher unsichtbar: Das Konto, das ein Joiner angelegt hat, ließ sich nur im Log des Workers finden, und der Startbestand auf der Karte «Active Directory» — die Vorlage, aus der jedes Verzeichnis beginnt und die nie zurückgeschrieben wird — war der naheliegende Ort, an dem es nie stand. Betrieb › Mock directory zeigt jetzt das Verzeichnis selbst: pro Worker eine Karte, pro LDAP-URL ein Baum, zu jedem Eintrag seine Attribute und darunter die ausgeführten Operationen. Die Ansicht aktualisiert sich, während Sie einen Prozess durchklicken. Dauerhaft ist nichts davon — ein Neustart des Workers leert seine Verzeichnisse, und sie beginnen wieder beim Startbestand — und ein Passwort erscheint nie, weil das Mockup keines speichert."
+  },
+  "tutorial": {
+    "en": [
+      "Organization › Workers → the Active Directory card → switch on “Serve Active Directory tasks against a mockup” and save. The AD worker restarts.",
+      "Optionally paste or upload starting entries (LDIF or DSML) on the same card — a leaver needs an account to disable.",
+      "Run a process with an Active Directory task, or start one from Tasks › Start.",
+      "Open Operations › Mock directory: the worker's forests are there, with the entry the task just created."
+    ],
+    "de": [
+      "Organisation › Workers → Karte «Active Directory» → «Serve Active Directory tasks against a mockup» einschalten und speichern. Der AD-Worker startet neu.",
+      "Optional auf derselben Karte einen Startbestand einfügen oder hochladen (LDIF oder DSML) — ein Leaver braucht ein Konto, das er deaktivieren kann.",
+      "Einen Prozess mit einer Active-Directory-Aufgabe starten, etwa über Aufgaben › Start.",
+      "Betrieb › Mock directory öffnen: Dort stehen die Verzeichnisse des Workers, mit dem Eintrag, den die Aufgabe gerade angelegt hat."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Mock directory",
+      "de": "Mock directory öffnen"
+    },
+    "route": "#/operations/ad-mock"
+  }
+}

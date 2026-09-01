@@ -490,6 +490,7 @@ const TOPNAV = {
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
     { name: "Workers", route: "#/operations/workers", role: "operator" },
     { name: "Outbox", route: "#/operations/outbox", role: "operator" },
+    { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
@@ -1678,7 +1679,9 @@ async function viewConsoleConnectors() {
         <div class="muted" style="font-size:13px; margin-bottom:6px">Starting entries (optional) — the
         accounts and groups a process expects to find. A joiner creates its own account and needs none;
         a leaver has nothing to disable in an empty directory. Atlas keeps this and hands it to the
-        worker, so there is no file path to type and nothing to place on the worker's host.</div>
+        worker, so there is no file path to type and nothing to place on the worker's host.
+        This is where every forest <i>starts</i> and is never written back: what a mockup run has
+        actually put in one is under <a href="#/operations/ad-mock">Operations &rsaquo; Mock directory</a>.</div>
         <div class="between" style="gap:10px; flex-wrap:wrap">
           <span id="admock-seed-state" data-seed-name="${esc(adMock.seedName || "")}" style="font-size:13px">${
             adMock.hasSeed
@@ -5440,6 +5443,177 @@ async function viewMailOutbox() {
   await load();
 }
 
+// viewADMockDirectory is the Operations "Mock directory" view: what the Active
+// Directory workers running in mockup mode actually hold
+// (ADR-0213).
+//
+// It is here because the Console used to show two things about a mocked directory and
+// neither of them was the directory. The seed card under Organization > Workers holds
+// the entries every forest *starts* from and is never written back, so an account a
+// joiner created was not in it — reasonably mistaken for the directory all the same,
+// since it was the only directory-shaped thing on screen. The other was the worker's
+// log, one line per operation, which says what was asked for and not what is there.
+//
+// So this view is the directory: one card per worker, one tree per forest, the
+// attributes of every entry, and the operation journal underneath. None of it is
+// durable on either side — the forest dies with its worker, the report dies with this
+// server — which the page says in as many words, because a view that looks like a
+// database is how a mockup gets trusted with something it should not be.
+async function viewADMockDirectory() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="between">
+      <h1>Mock directory</h1>
+      <span class="row" style="gap:12px; align-items:center">
+        <label class="field inline" style="margin:0"><input type="checkbox" id="admockdir-follow" checked> Auto-refresh</label>
+        <button class="btn neutral" id="admockdir-refresh" title="Reload what the workers have reported">Refresh</button>
+      </span>
+    </div>
+    <p class="muted">What the Active Directory workers in <b>mockup mode</b> hold right now — the
+    forests they simulate in their own memory, one per LDAP URL a task dialled. Nothing here
+    reached a domain controller. It is not the <b>starting entries</b> under Organization &rsaquo;
+    Workers: those are what every forest begins from and are never written back, so an account a
+    process created appears here and not there. A worker restart empties its forests and they
+    start from the seed again.</p>
+    <div id="admockdir-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("admockdir-list");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+
+  // splitDN breaks a DN into its RDNs, honouring the backslash escape — "cn=Meier\,
+  // Ada,ou=users" is two components and not three, and a tree that got that wrong
+  // would file an account under a container named after half its own name.
+  const splitDN = (dn) => {
+    const out = [];
+    let cur = "";
+    for (let i = 0; i < dn.length; i++) {
+      const ch = dn[i];
+      if (ch === "\\" && i + 1 < dn.length) { cur += ch + dn[++i]; continue; }
+      if (ch === ",") { out.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur.trim());
+    return out.filter((p) => p !== "");
+  };
+
+  // treeOf builds the containment tree from the DNs alone: the mock accepts an entry
+  // whose parent does not exist (it has no schema and demanding a seeded OU chain
+  // would cost every trial run a fixture), so a container is often implied by its
+  // children rather than being an entry of its own. Such a node renders as a plain
+  // label with no attributes, which is exactly what it is.
+  const treeOf = (entries) => {
+    const root = { children: new Map() };
+    for (const e of entries || []) {
+      const parts = splitDN(e.dn || "").reverse(); // dc=com, dc=example, ou=users, cn=Arno
+      let node = root;
+      for (const part of parts) {
+        const key = part.toLowerCase();
+        if (!node.children.has(key)) node.children.set(key, { rdn: part, children: new Map() });
+        node = node.children.get(key);
+      }
+      node.entry = e;
+    }
+    return root;
+  };
+
+  const attrTable = (attrs) => {
+    const names = Object.keys(attrs || {}).sort((a, b) => a.localeCompare(b));
+    if (!names.length) return `<p class="muted" style="margin:6px 0 0">No attributes.</p>`;
+    return `<table class="admock-attrs"><tbody>${names.map((n) => `<tr>
+      <th>${esc(n)}</th><td>${(attrs[n] || []).map((v) => `<code>${esc(v)}</code>`).join("<br>")}</td>
+    </tr>`).join("")}</tbody></table>`;
+  };
+
+  const renderNode = (node) => {
+    const kids = [...node.children.values()].sort((a, b) => a.rdn.localeCompare(b.rdn));
+    const inner = kids.length ? `<ul class="admock-tree">${kids.map(renderNode).join("")}</ul>` : "";
+    if (!node.entry) {
+      // Implied container: no entry of its own, so nothing to open.
+      return `<li><span class="admock-node muted">${esc(node.rdn)}</span>${inner}</li>`;
+    }
+    const attrs = node.entry.attributes || {};
+    const count = Object.keys(attrs).length;
+    return `<li><details class="admock-entry">
+        <summary><span class="admock-node">${esc(node.rdn)}</span>
+          <span class="muted">· ${count} attribute${count === 1 ? "" : "s"}</span></summary>
+        <div class="admock-detail">
+          <div class="muted admock-dn">${esc(node.entry.dn || "")}</div>
+          ${attrTable(attrs)}
+        </div>
+      </details>${inner}</li>`;
+  };
+
+  const renderForest = (f) => {
+    const entries = f.entries || [];
+    const tree = treeOf(entries);
+    const body = entries.length
+      ? `<ul class="admock-tree admock-root">${[...tree.children.values()]
+          .sort((a, b) => a.rdn.localeCompare(b.rdn)).map(renderNode).join("")}</ul>`
+      : `<p class="empty">This forest is empty — nothing has been created in it yet.</p>`;
+    return `<div class="admock-forest">
+      <div class="between">
+        <h3><code>${esc(f.url || "?")}</code></h3>
+        <span class="muted">${f.held || 0} entr${(f.held || 0) === 1 ? "y" : "ies"}</span>
+      </div>
+      ${f.truncated ? `<p class="muted">Showing the first ${entries.length} of ${f.held} —
+        a forest this large is past what this view carries.</p>` : ""}
+      ${body}
+    </div>`;
+  };
+
+  const renderWorker = (w) => {
+    const forests = w.forests || [];
+    const ops = w.operations || [];
+    return `<div class="card admock-worker">
+      <div class="between">
+        <h2>${esc(w.worker || "?")}</h2>
+        <span>
+          <span class="pill warn"><span class="dot"></span>mockup</span>
+          <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
+        </span>
+      </div>
+      <p class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
+      ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</p>
+      ${forests.length ? forests.map(renderForest).join("")
+        : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
+           no Active Directory task since it started — the first one creates the forest it names.</p>`}
+      ${ops.length ? `<details class="admock-ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
+        <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
+          <th>${esc(o.op || "")}</th>
+          <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
+        </tr>`).reverse().join("")}</tbody></table></details>` : ""}
+    </div>`;
+  };
+
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/ad/mock-directory");
+    } catch (e) {
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const workers = (data && data.workers) || [];
+    if (!workers.length) {
+      list.innerHTML = `<div class="card"><p class="empty">No worker has reported a mock directory.
+        Switch <b>Serve Active Directory tasks against a mockup</b> on under Organization &rsaquo;
+        Workers; the worker restarts and reports itself, and every AD task it then serves shows up
+        here.</p></div>`;
+      return;
+    }
+    list.innerHTML = workers.map(renderWorker).join("");
+  };
+
+  await load();
+  if (superseded(gen)) return;
+  document.getElementById("admockdir-refresh").addEventListener("click", load);
+  const follow = document.getElementById("admockdir-follow");
+  // Five seconds: a mockup run is something you watch while clicking through a
+  // process, and the read is a small in-memory list on a server that is not the
+  // engine's run loop.
+  const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
+  window.__atlasCleanup = () => clearInterval(timer);
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -7094,6 +7268,7 @@ async function route() {
     if (path === "#/operations/incidents") return await viewIncidents();
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
+    if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/landscape") return await viewPanoramaLandscape();

@@ -63,10 +63,10 @@ const mockCookiePrefix = "atlas-ad-mock:"
 // Detail is a short human-readable summary — attribute names and values — with any
 // password redacted.
 type MockOperation struct {
-	Seq    uint64
-	Op     string // bind, add, modify, modifydn, delete, dirsync, search
-	DN     string
-	Detail string
+	Seq    uint64 `json:"seq"`
+	Op     string `json:"op"` // bind, add, modify, modifydn, delete, dirsync, search
+	DN     string `json:"dn"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // MockDirectory is an in-memory Active Directory for mock mode. It implements

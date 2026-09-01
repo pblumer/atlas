@@ -812,6 +812,15 @@ func (s *Server) adWorkerEnv() []string {
 			if seed := s.settings.adSeedPath(a); seed != "" && a.Enabled {
 				env = append(env, adMockSeedEnv+"="+seed)
 			}
+			// And where to report the forest it ends up holding, so an operator can
+			// see it in Operations rather than reconstruct it from the worker's log
+			// (ADR-0213). Only when the mockup is
+			// on: a worker writing to a real directory has nothing to show here, and
+			// a "mock directory" view fed by a live one would be the worst possible
+			// thing for this screen to be.
+			if a.Enabled && s.superviseURL != "" {
+				env = append(env, adMockViewURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/ad/mock-directory")
+			}
 		}
 		// Directories an operator configured in the Console
 		// (ADR-0206), rendered under the names the worker
@@ -895,6 +904,12 @@ func adBindSecretRefs(cp *compiler.CompiledProcess) []string {
 const (
 	adMockEnv     = "ATLAS_AD_MOCK"
 	adMockSeedEnv = "ATLAS_AD_MOCK_SEED"
+	// adMockViewURLEnv is where a mock worker posts the forest it holds: this
+	// server's own API, so the Console shows a directory that exists only in the
+	// worker's memory (ADR-0213). It is the mail
+	// outbox's shape — the worker sends, because a server cannot dial into every
+	// network a worker sits in.
+	adMockViewURLEnv = "ATLAS_AD_MOCK_VIEW_URL"
 	// adDirEnvPrefix and adConnectorsEnv are where a supervised AD worker reads the
 	// directories an operator configured (ADR-0206) — the
 	// same names an operator sets by hand for an external worker, because there is no

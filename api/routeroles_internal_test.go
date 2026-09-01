@@ -57,6 +57,10 @@ var wantAdminRoutes = []string{
 	// What a worker did, in full: job payloads carry whatever the process carries.
 	"GET /api/v1/workers/{id}/history",
 	"GET /api/v1/workers/{id}/jobs",
+	// And what a mock AD worker holds. Invented entries, but shaped like a staff
+	// list — no more public than the seed file they started from, which is admin-only
+	// for the same reason (ADR-0202).
+	"GET /api/v1/ad/mock-directory",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",

@@ -286,3 +286,67 @@ test("a server that observes nothing still opens the model", async ({ page }) =>
   await expect(panel.locator(".panorama-obs")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
+
+// Runtime marks on the diagram (ADR-0189 §6, P4d). The record asks for borders,
+// badges and a text legend — and, in the same breath, for ArchiMate layer colours
+// to remain intact. A layer colour says whether an element is business,
+// application or technology; painting health over it would destroy one meaning to
+// show another.
+test("marks the diagram with what each element is doing, and never repaints it", async ({ page }) => {
+  installMock(page);
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await expect(page.locator(".panorama-canvas .djs-element").first()).toBeVisible();
+
+  // The application is healthy on one binding and unobserved on another, so it
+  // shows the worst *finding* — ok — rather than whichever answer came first.
+  const application = page.locator('.djs-element[data-element-id="n-app"]');
+  await expect(application).toHaveClass(/panorama-marked-ok/);
+  // The business process has a parked token: attention, with a glyph, because that
+  // is what somebody is scanning the diagram for.
+  const process = page.locator('.djs-element[data-element-id="n-bp"]');
+  await expect(process).toHaveClass(/panorama-marked-attention/);
+  await expect(process.locator(".panorama-mark-glyph")).toHaveText("•");
+
+  // The mark is a border drawn around the element and a badge beside it. Nothing
+  // touched the element's own fill — this is the assertion the whole design is
+  // arranged around.
+  await expect(process.locator(".panorama-mark-border")).toHaveCSS("fill", "none");
+  const fills = await page.evaluate(() => [...document.querySelectorAll(
+    '.djs-element[data-element-id="n-bp"] rect:not(.panorama-mark-border)')]
+    .map((r) => r.getAttribute("fill")).filter(Boolean));
+  for (const fill of fills) {
+    expect(fill).not.toMatch(/#c0392b|#b7791f|var\(--danger\)|var\(--warn\)/i);
+  }
+
+  // The finding joins the accessible name rather than replacing it: a screen
+  // reader has to hear what the element is before what it is doing.
+  const spoken = await process.getAttribute("aria-label");
+  expect(spoken).toContain("Attention");
+  expect(spoken).toContain("2 token(s) are parked");
+});
+
+// A mark nobody can decode is decoration, so the legend ships with the badges. It
+// lists only the classes on this diagram, and states what an *unmarked* element
+// means — the half a legend usually leaves out.
+test("the diagram's marks come with a legend that says what unmarked means", async ({ page }) => {
+  installMock(page);
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+
+  const legend = page.locator(".panorama-live-legend");
+  await expect(legend).toContainText("Attention");
+  await expect(legend).toContainText("OK");
+  await expect(legend).toContainText("binds nothing this server observes");
+  // Critical is not on this diagram, so it is not in the legend.
+  await expect(legend).not.toContainText("cannot do work");
+});
+
+// A server that observes nothing leaves the diagram unmarked and says so, rather
+// than showing a model where everything looks fine.
+test("a diagram with nothing observed is unmarked and says why", async ({ page }) => {
+  installMock(page, { observing: false });
+  await page.goto(`/index.html#/panorama/models/${modelId}`);
+  await expect(page.locator(".panorama-canvas .djs-element").first()).toBeVisible();
+
+  await expect(page.locator(".panorama-canvas-mark")).toHaveCount(0);
+  await expect(page.locator(".panorama-live-legend")).toHaveCount(0);
+});
