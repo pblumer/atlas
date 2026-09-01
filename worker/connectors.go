@@ -153,9 +153,10 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				// Once at startup, so the view can say "mock mode, 12 starting
 				// entries, nothing dialled yet" instead of showing an empty page to
 				// somebody who has just switched the mockup on. Off this goroutine:
-				// a worker must start whether or not its server is answering yet, and
-				// the next report catches the view up regardless.
-				go reporter.report(context.Background())
+				// a worker must start whether or not its server is answering yet — and
+				// a supervised one is started *by* that server, so it retries while the
+				// listener comes up rather than giving the view up for lost.
+				go reporter.reportAtStartup(context.Background())
 			}
 			secret := adSecretFromEnv(env)
 			built.Handlers[compiler.AdJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
@@ -200,6 +201,24 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.RemedyJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunRemedyJob(ctx, j, reg)
+			})
+		case "jira":
+			reg, names, err := jiraRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Jira, holding no site to file against. Not an error, for
+				// the reason mail's, Entra's and Remedy's identical branches above are
+				// not: this worker very likely serves other kinds, and a Jira site
+				// nobody has configured yet must park its tasks rather than take down
+				// the kinds that are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.JiraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunJiraJob(ctx, j, reg)
 			})
 		case "mssql", "mariadb", "postgres":
 			// The three SQL products (ADR-0173). Unlike the

@@ -96,6 +96,17 @@ func main() {
 		if err := runMockRemedy(args); err != nil {
 			fatal("atlas mock-remedy", err)
 		}
+	case "playground":
+		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
+			// A run that happened and did not meet its expectations leaves its own
+			// status: a CI job has to tell "the process no longer holds up" from "the
+			// server was unreachable", and it can only do that if the two differ. The
+			// checks are already printed, so there is nothing left to say.
+			if errors.Is(err, errScenarioFailed) {
+				os.Exit(exitScenarioFailed)
+			}
+			fatal("atlas playground", err)
+		}
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -138,6 +149,7 @@ Usage:
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy connector
+  atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.
@@ -947,7 +959,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, and remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Connectors instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in connector kinds this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN, entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Connectors instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the connector store, so it needs none of it set by hand")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

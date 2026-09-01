@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:atlas="http://atlas.dev/schema/1.0"
+             id="defs_rest_connector" targetNamespace="http://atlas/playground">
+  <process id="rest-connector" name="REST connector" isExecutable="true">
+    <documentation>Playground fixture for isolation: the task names a URL that must never be fetched. A sandbox registers no connectors at all, so the call cannot happen — the stub answers instead.</documentation>
+    <startEvent id="start" name="Start"/>
+    <serviceTask id="score" name="Fetch score">
+      <documentation>A REST connector task. In a sandbox its URL is inert: there is nothing registered that could dial it.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="GET" url="http://127.0.0.1:1/score" resultVariable="score"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="score"/>
+    <sequenceFlow id="f2" sourceRef="score" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="rest-connector">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_score" bpmnElement="score"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="440" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="440" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

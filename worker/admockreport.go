@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -90,6 +91,25 @@ func newADMockReporter(env func(string) string, dir *ad.MockDirectory) *adMockRe
 	}
 }
 
+// adMockStartupBackoff is how long the *startup* report waits between attempts. A
+// supervised worker is spawned by the very server it reports to, so it comes up while
+// that server is still opening its listener: the first attempt is refused as a matter
+// of course, exactly as every worker's first job poll is. The poll retries; this did
+// not, so a redeployed instance logged one ad_mock.report_failed and left the view
+// empty until the first AD job — missing precisely the state the startup report exists
+// to show.
+//
+// It runs to roughly half a minute in total, because the listener opens after recovery
+// and a large data directory replays for a while. Past that it gives up: a job cannot
+// arrive before the server is up, and the job's own report carries the whole directory
+// anyway.
+//
+// A var, not a const, so a test can shrink it.
+var adMockStartupBackoff = []time.Duration{
+	250 * time.Millisecond, 500 * time.Millisecond, time.Second,
+	2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second,
+}
+
 // report sends what the directory holds now, unless the last report already said it.
 // A nil reporter reports nothing, so the AD handler calls this the same way whether
 // this worker has a view to feed or not.
@@ -97,25 +117,69 @@ func (r *adMockReporter) report(ctx context.Context) {
 	if r == nil {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	version := r.dir.Version()
-	if r.ever && version == r.sent {
-		return
-	}
-	snap := r.dir.Snapshot(maxReportedEntries)
-	snap.Worker = r.worker
-	if err := r.post(ctx, snap); err != nil {
+	if err := r.send(ctx); err != nil {
 		// Warn and carry on. The operation is done and the job is fine; what is lost
 		// is one refresh of a view, and the next operation sends the whole directory
 		// again — so a Console that was unreachable for a while catches up by itself
 		// rather than staying wrong.
-		logging.Warn(logging.ADMockReportFailed,
-			"the mock directory could not be reported; the Console's view of it is behind",
-			slog.String("url", r.url), slog.String("error", err.Error()))
+		r.warn(err)
+	}
+}
+
+// reportAtStartup announces this worker before it has served anything, retrying while
+// the server it reports to is still coming up.
+//
+// The retries are quiet: one refusal during a cold start is the expected case, not news,
+// and a line per attempt would bury the warning that matters. Only giving up is logged,
+// once.
+func (r *adMockReporter) reportAtStartup(ctx context.Context) {
+	if r == nil {
 		return
 	}
+	var err error
+	for attempt := 0; ; attempt++ {
+		if err = r.send(ctx); err == nil {
+			return
+		}
+		if attempt >= len(adMockStartupBackoff) {
+			r.warn(err)
+			return
+		}
+		timer := time.NewTimer(adMockStartupBackoff[attempt])
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			r.warn(err)
+			return
+		}
+	}
+}
+
+// send posts what the directory holds now, or nothing at all when the last delivered
+// report already said it. A skipped send is a success: there is nothing to say.
+func (r *adMockReporter) send(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	version := r.dir.Version()
+	if r.ever && version == r.sent {
+		return nil
+	}
+	snap := r.dir.Snapshot(maxReportedEntries)
+	snap.Worker = r.worker
+	if err := r.post(ctx, snap); err != nil {
+		return err
+	}
 	r.sent, r.ever = version, true
+	return nil
+}
+
+// warn says the view is behind. It is a warning and never a job failure: the operation
+// it describes has already happened.
+func (r *adMockReporter) warn(err error) {
+	logging.Warn(logging.ADMockReportFailed,
+		"the mock directory could not be reported; the Console's view of it is behind",
+		slog.String("url", r.url), slog.String("error", err.Error()))
 }
 
 // post delivers one snapshot.

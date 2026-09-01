@@ -827,15 +827,45 @@ type ElementReplayValue struct {
 // ElementReplayHistory scans causal token lifecycle facts in deterministic order.
 func (s *Store) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v ElementReplayValue) error) error {
 	return s.scanPrefix(elementReplayInstancePrefix(piKey), func(k, raw []byte) error {
-		if len(raw) != 33 {
-			return fmt.Errorf("state: corrupt element replay value (%d bytes)", len(raw))
+		v, err := decodeElementReplay(raw)
+		if err != nil {
+			return err
 		}
-		return fn(timestampFromStepKey(k), positionFromStepKey(k), ElementReplayValue{
-			ElementID: int32(binary.BigEndian.Uint32(raw)), ElementInstanceKey: binary.BigEndian.Uint64(raw[4:]),
-			TokenID: binary.BigEndian.Uint64(raw[12:]), ParentTokenID: binary.BigEndian.Uint64(raw[20:]),
-			SourceFlowID: int32(binary.BigEndian.Uint32(raw[28:])), Action: raw[32],
-		})
+		return fn(timestampFromStepKey(k), positionFromStepKey(k), v)
 	})
+}
+
+// AllElementReplay scans every retained token-lifecycle fact in the store, in
+// instance order and in time order within an instance, naming the instance each
+// fact belongs to.
+//
+// ElementReplayHistory answers "what happened in this case"; this answers "what
+// happened at all", which is the question a whole-run analysis asks — how often
+// each element and each sequence flow carried a token. Doing it as one iteration
+// matters: a scan per case over fifty thousand cases is fifty thousand
+// iterators, and the caller wanted a single number per element.
+func (s *Store) AllElementReplay(fn func(piKey uint64, ts int64, pos uint64, v ElementReplayValue) error) error {
+	return s.scanPrefix([]byte{byte(cfElementReplay)}, func(k, raw []byte) error {
+		v, err := decodeElementReplay(raw)
+		if err != nil {
+			return err
+		}
+		return fn(instanceFromReplayKey(k), timestampFromStepKey(k), positionFromStepKey(k), v)
+	})
+}
+
+// decodeElementReplay reads one stored lifecycle fact. The width is checked
+// rather than decoded through model.DecodeValue because the record is a fixed
+// layout written by RecordElementReplay and nothing else.
+func decodeElementReplay(raw []byte) (ElementReplayValue, error) {
+	if len(raw) != 33 {
+		return ElementReplayValue{}, fmt.Errorf("state: corrupt element replay value (%d bytes)", len(raw))
+	}
+	return ElementReplayValue{
+		ElementID: int32(binary.BigEndian.Uint32(raw)), ElementInstanceKey: binary.BigEndian.Uint64(raw[4:]),
+		TokenID: binary.BigEndian.Uint64(raw[12:]), ParentTokenID: binary.BigEndian.Uint64(raw[20:]),
+		SourceFlowID: int32(binary.BigEndian.Uint32(raw[28:])), Action: raw[32],
+	}, nil
 }
 
 // VariableSnapshotHistory folds the retained variable changes of one scope (a

@@ -192,6 +192,28 @@
       }
     },
     {
+      "id": "the-jira-worker-type-runs-on-a-worker",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Jira tasks can run outside the engine now",
+        "de": "Jira-Tasks laufen jetzt auch ausserhalb der Engine"
+      },
+      "summary": {
+        "en": "Jira was listed as a kind you could move onto a worker, but no worker could actually serve it — moving it left every Jira task waiting for nobody. There is a real Jira worker now. It holds the site address and the Atlassian login in its own configuration, so it can work as an account the engine has never seen, and reach a Jira the engine cannot. A worker Atlas starts for you is handed all of that from Connectors and the vault, with nothing to set by hand. Running Jira inside the engine still works and is still the default.",
+        "de": "Jira war als Typ aufgeführt, den man auf einen Worker auslagern kann — nur konnte ihn kein Worker tatsächlich bedienen, und ausgelagert wartete jeder Jira-Task auf niemanden. Jetzt gibt es einen echten Jira-Worker. Er hält die Adresse der Jira-Instanz und die Atlassian-Anmeldung in seiner eigenen Konfiguration, kann also als Konto arbeiten, das die Engine nie gesehen hat, und ein Jira erreichen, an das die Engine nicht herankommt. Einem Worker, den Atlas selbst startet, wird das alles aus den Konnektoren und dem Tresor mitgegeben — von Hand ist nichts zu setzen. Jira in der Engine läuft weiterhin und bleibt die Voreinstellung."
+      },
+      "link": {
+        "label": "ADR-0168",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0168-connector-work-on-a-worker.md"
+      },
+      "tags": [
+        "Connectors",
+        "Workers"
+      ]
+    },
+    {
       "id": "new-atlas-mark",
       "version": "Unreleased",
       "date": null,
@@ -300,6 +322,27 @@
       }
     },
     {
+      "id": "a-jira-search-called-an-endpoint-jira-cloud-has-removed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Jira search works again on Jira Cloud",
+        "de": "Die Jira-Suche funktioniert wieder mit Jira Cloud"
+      },
+      "summary": {
+        "en": "Atlassian switched off the search endpoint this connector used, so a Jira task set to Search (JQL) failed against Jira Cloud with a bare \"gone\" from the server. The search now uses the endpoint Atlassian replaced it with, and asks for the same set of issue fields as before, so a model that reads the summary of a found issue keeps working unchanged. The other six Jira operations were never affected, and Jira Data Center is unaffected by the change altogether.",
+        "de": "Atlassian hat den Suchendpunkt abgeschaltet, den dieser Konnektor verwendet hat — eine Jira-Aufgabe mit der Operation Suche (JQL) scheiterte gegen Jira Cloud daher an einem blossen \"gone\" des Servers. Die Suche nutzt jetzt den Endpunkt, den Atlassian an dessen Stelle gesetzt hat, und fordert dieselben Vorgangsfelder an wie zuvor — ein Modell, das etwa den Titel eines gefundenen Vorgangs liest, funktioniert unverändert weiter. Die sechs übrigen Jira-Operationen waren nie betroffen, und Jira Data Center ist von der Änderung gar nicht berührt."
+      },
+      "link": {
+        "label": "ADR-0201",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
+      },
+      "tags": [
+        "Connectors"
+      ]
+    },
+    {
       "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
       "version": "Unreleased",
       "date": null,
@@ -319,64 +362,6 @@
       "tags": [
         "Connectors"
       ]
-    },
-    {
-      "id": "an-ad-task-naming-a-console-configured-directory-reached-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An AD task that names a configured directory now reaches it",
-        "de": "Ein AD-Task, der ein eingerichtetes Verzeichnis nennt, erreicht es jetzt"
-      },
-      "summary": {
-        "en": "If a task pointed at an Active Directory you had set up under Workers — by its name, instead of writing the server address into the model — the name was lost on the way to the worker, and the task failed with \"empty url\". It arrives now. The Modeler also stopped dropping that name when you opened such a task and pressed Save.",
-        "de": "Wenn ein Task auf ein Active Directory zeigte, das Sie unter Workers eingerichtet hatten — über dessen Namen, statt die Serveradresse ins Modell zu schreiben — ging der Name auf dem Weg zum Worker verloren, und der Task scheiterte mit „empty url\". Er kommt jetzt an. Und der Modeler wirft den Namen nicht mehr weg, wenn Sie so einen Task öffnen und speichern."
-      },
-      "link": {
-        "label": "ADR-0206",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0206-ad-as-a-console-connector.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "not-every-account-may-deploy-any-more",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Accounts now have roles, and not every account may deploy",
-        "de": "Konten haben jetzt Rollen — und nicht jedes Konto darf deployen"
-      },
-      "summary": {
-        "en": "Until now, being signed in was the whole answer: any account could deploy a model, cancel somebody's instances or run a script. Deploying is code execution, so that was the wrong default for anything but a workshop. Every endpoint now names the role it needs — admin, modeler, operator or user — and the server checks it before the request reaches anything, whether it arrives from a browser, an API token or an AI assistant over MCP. An account carries several roles; they are a list, not a ladder. Your upgrade takes nothing away: every existing account keeps modeler, operator and user, so everything except administration, and what you narrow afterwards stays narrow. New accounts get user. Grant the roles under Organization, where each one says what it lets the person do.",
-        "de": "Bisher war «angemeldet» die ganze Antwort: Jedes Konto konnte ein Modell deployen, fremde Instanzen abbrechen oder ein Skript ausführen. Deployen ist Codeausführung — für alles ausser einem Workshop war das die falsche Vorgabe. Jetzt nennt jeder Endpunkt die Rolle, die er verlangt — admin, modeler, operator oder user —, und der Server prüft sie, bevor die Anfrage irgendetwas erreicht: aus dem Browser, mit einem API-Token oder über MCP von einem KI-Assistenten. Ein Konto trägt mehrere Rollen; sie sind eine Liste, keine Rangfolge. Die Aktualisierung nimmt nichts weg: Jedes bestehende Konto behält modeler, operator und user — also alles ausser der Administration —, und was Sie danach enger stellen, bleibt eng. Neue Konten bekommen user. Vergeben werden die Rollen unter «Organization»; dort steht bei jeder, was sie erlaubt."
-      },
-      "link": {
-        "label": "ADR-0209",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0209-roles-per-endpoint-group.md"
-      },
-      "tags": [
-        "Security",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Organization",
-          "de": "Organization öffnen"
-        },
-        "route": "#/console/org"
-      }
     }
   ]
 }

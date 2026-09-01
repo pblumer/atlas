@@ -5532,7 +5532,10 @@ async function viewADMockDirectory() {
     }
     const attrs = node.entry.attributes || {};
     const count = Object.keys(attrs).length;
-    return `<li><details class="admock-entry">
+    // data-k is the entry's identity across renders: what you opened stays open when
+    // the view refreshes under you. The DN is unique within a forest, and the forest
+    // and worker are prefixed by the callers below.
+    return `<li><details class="admock-entry" data-k="e|${esc(node.entry.dn || "")}">
         <summary><span class="admock-node">${esc(node.rdn)}</span>
           <span class="muted">· ${count} attribute${count === 1 ? "" : "s"}</span></summary>
         <div class="admock-detail">
@@ -5549,7 +5552,7 @@ async function viewADMockDirectory() {
       ? `<ul class="admock-tree admock-root">${[...tree.children.values()]
           .sort((a, b) => a.rdn.localeCompare(b.rdn)).map(renderNode).join("")}</ul>`
       : `<p class="empty">This forest is empty — nothing has been created in it yet.</p>`;
-    return `<div class="admock-forest">
+    return `<div class="admock-forest" data-forest="${esc(f.url || "?")}">
       <div class="between">
         <h3><code>${esc(f.url || "?")}</code></h3>
         <span class="muted">${f.held || 0} entr${(f.held || 0) === 1 ? "y" : "ies"}</span>
@@ -5563,35 +5566,75 @@ async function viewADMockDirectory() {
   const renderWorker = (w) => {
     const forests = w.forests || [];
     const ops = w.operations || [];
-    return `<div class="card admock-worker">
-      <div class="between">
-        <h2>${esc(w.worker || "?")}</h2>
-        <span>
-          <span class="pill warn"><span class="dot"></span>mockup</span>
-          <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
-        </span>
-      </div>
-      <p class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
-      ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</p>
-      ${forests.length ? forests.map(renderForest).join("")
-        : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
-           no Active Directory task since it started — the first one creates the forest it names.</p>`}
-      ${ops.length ? `<details class="admock-ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
-        <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
-          <th>${esc(o.op || "")}</th>
-          <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
-        </tr>`).reverse().join("")}</tbody></table></details>` : ""}
+    // The whole worker is one collapsible card: a mockup run against several forests
+    // is a lot of screen, and an operator watching two workers wants to put one away
+    // without losing it. Open by default — a card you have to open to learn there is
+    // anything in it is the state this view exists to end.
+    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}">
+      <details class="admock-card" data-k="card" open>
+        <summary>
+          <span class="admock-card-head">
+            <h2>${esc(w.worker || "?")}</h2>
+            <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
+            ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
+          </span>
+          <span class="admock-card-state">
+            <span class="pill warn"><span class="dot"></span>mockup</span>
+            <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
+          </span>
+        </summary>
+        ${forests.length ? forests.map(renderForest).join("")
+          : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
+             no Active Directory task since it started — the first one creates the forest it names.</p>`}
+        ${ops.length ? `<details class="admock-ops" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
+          <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
+            <th>${esc(o.op || "")}</th>
+            <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
+          </tr>`).reverse().join("")}</tbody></table></details>` : ""}
+      </details>
     </div>`;
   };
 
+  // openKeys is which entries the reader has expanded, addressed by worker, forest and
+  // DN rather than by position — a refresh must not close what somebody is reading, and
+  // an entry that moved because a sibling was created is still the same entry.
+  const keyOf = (d) => {
+    const w = d.closest("[data-worker]"), f = d.closest("[data-forest]");
+    return `${w ? w.dataset.worker : ""}|${f ? f.dataset.forest : ""}|${d.dataset.k || ""}`;
+  };
+  const foldState = () => {
+    const state = new Map();
+    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
+    return state;
+  };
+  // Both directions are remembered, which is why this is a map and not a set of open
+  // keys: a card is open by default, so "closed" is a decision too. A section the
+  // reader has never seen — a worker reporting for the first time — is not in the map
+  // and keeps whatever the markup says.
+  const refold = (state) => {
+    for (const d of list.querySelectorAll("details")) {
+      const was = state.get(keyOf(d));
+      if (was !== undefined) d.open = was;
+    }
+  };
+
+  // The last payload rendered. A poll that brings nothing new leaves the DOM alone
+  // entirely: the view refreshes every few seconds, and rebuilding an identical tree
+  // would cost the reader their place — and their open entries — for no news at all.
+  let rendered = null;
   const load = async () => {
     let data;
     try {
       data = await api("GET", "/api/v1/ad/mock-directory");
     } catch (e) {
+      rendered = null; // re-render once it answers again, whatever it says
       list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
       return;
     }
+    const fresh = JSON.stringify(data);
+    if (fresh === rendered) return;
+    const folds = foldState();
+    rendered = fresh;
     const workers = (data && data.workers) || [];
     if (!workers.length) {
       list.innerHTML = `<div class="card"><p class="empty">No worker has reported a mock directory.
@@ -5601,6 +5644,7 @@ async function viewADMockDirectory() {
       return;
     }
     list.innerHTML = workers.map(renderWorker).join("");
+    refold(folds);
   };
 
   await load();

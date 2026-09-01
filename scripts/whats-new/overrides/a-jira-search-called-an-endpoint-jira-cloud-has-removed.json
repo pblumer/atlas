@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Connectors"
+  ],
+  "title": {
+    "en": "Jira search works again on Jira Cloud",
+    "de": "Die Jira-Suche funktioniert wieder mit Jira Cloud"
+  },
+  "summary": {
+    "en": "Atlassian switched off the search endpoint this connector used, so a Jira task set to Search (JQL) failed against Jira Cloud with a bare \"gone\" from the server. The search now uses the endpoint Atlassian replaced it with, and asks for the same set of issue fields as before, so a model that reads the summary of a found issue keeps working unchanged. The other six Jira operations were never affected, and Jira Data Center is unaffected by the change altogether.",
+    "de": "Atlassian hat den Suchendpunkt abgeschaltet, den dieser Konnektor verwendet hat — eine Jira-Aufgabe mit der Operation Suche (JQL) scheiterte gegen Jira Cloud daher an einem blossen \"gone\" des Servers. Die Suche nutzt jetzt den Endpunkt, den Atlassian an dessen Stelle gesetzt hat, und fordert dieselben Vorgangsfelder an wie zuvor — ein Modell, das etwa den Titel eines gefundenen Vorgangs liest, funktioniert unverändert weiter. Die sechs übrigen Jira-Operationen waren nie betroffen, und Jira Data Center ist von der Änderung gar nicht berührt."
+  }
+}

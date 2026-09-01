@@ -76,6 +76,13 @@ func cloudClient(base string) *jira.HTTPClient {
 	return jira.NewHTTPClient(jira.Connector{BaseURL: base, Email: "bot@acme.example", APIToken: "t0ken"})
 }
 
+// dcClient is a Data Center connector: a bearer personal access token rather than a
+// Cloud {email, apiToken} bundle. The distinction decides how an assignee is addressed
+// and — since the Cloud search deprecation — which search endpoint is used.
+func dcClient(base string) *jira.HTTPClient {
+	return jira.NewHTTPClient(jira.Connector{BaseURL: base, Token: "pat"})
+}
+
 // Creating an issue POSTs Jira's nested field shape: the project and the issue type
 // wrapped in an object each, the summary and description plain, and the extra fields
 // merged in beside them with the JSON shape their FEEL value had.
@@ -300,8 +307,9 @@ func TestAssignIssue(t *testing.T) {
 
 // A search returns the issues themselves, not Jira's paging envelope: the envelope is
 // this connector's business, and a model that had to unwrap it would be modelling the
-// API rather than the work.
-func TestSearchPagesToTheCap(t *testing.T) {
+// API rather than the work. Data Center keeps the offset-paged endpoint, so this is
+// what it looks like there.
+func TestSearchOnDataCenterPagesToTheCap(t *testing.T) {
 	var seen []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -322,7 +330,7 @@ func TestSearchPagesToTheCap(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+	got, err := dcClient(srv.URL).Do(context.Background(), jira.Request{
 		Operation: "search", JQL: "project = OPS", MaxResults: 3,
 	})
 	if err != nil {
@@ -341,7 +349,7 @@ func TestSearchPagesToTheCap(t *testing.T) {
 }
 
 // An uncapped search follows Jira's paging to the end rather than stopping at one page.
-func TestSearchUncappedReadsEveryPage(t *testing.T) {
+func TestSearchOnDataCenterUncappedReadsEveryPage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		dec := json.NewDecoder(r.Body)
@@ -359,7 +367,7 @@ func TestSearchUncappedReadsEveryPage(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"startAt": startAt, "total": 5, "issues": issues})
 	}))
 	t.Cleanup(srv.Close)
-	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	got, err := dcClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
@@ -666,5 +674,108 @@ func TestOpNames(t *testing.T) {
 		if names[i-1] >= names[i] {
 			t.Fatalf("OpNames() = %v, want them sorted", names)
 		}
+	}
+}
+
+// On Jira Cloud a search goes to the token-paged /search/jql endpoint, not the
+// offset-paged /search Atlassian removed. It asks for navigable fields explicitly,
+// because the replacement returns none unless told to — a model reading
+// issue.fields.summary would otherwise get issues with nothing in them.
+func TestSearchOnCloudUsesTheJQLEndpoint(t *testing.T) {
+	var seen []call
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := call{method: r.Method, path: r.URL.Path}
+		dec := json.NewDecoder(r.Body)
+		dec.UseNumber()
+		_ = dec.Decode(&c.body)
+		seen = append(seen, c)
+		_, _ = w.Write([]byte(`{"issues":[{"key":"OPS-1"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 1 {
+		t.Fatalf("issues = %+v, want the one match", got)
+	}
+	if len(seen) != 1 {
+		t.Fatalf("requests = %d, want one", len(seen))
+	}
+	if seen[0].method != http.MethodPost || seen[0].path != "/rest/api/3/search/jql" {
+		t.Errorf("request = %s %s, want POST /rest/api/3/search/jql", seen[0].method, seen[0].path)
+	}
+	if seen[0].body["jql"] != "project = OPS" {
+		t.Errorf("jql = %v, want the authored query", seen[0].body["jql"])
+	}
+	if _, ok := seen[0].body["startAt"]; ok {
+		t.Errorf("body = %+v, want no startAt: the replacement endpoint pages by token", seen[0].body)
+	}
+	fields, _ := seen[0].body["fields"].([]any)
+	if len(fields) != 1 || fields[0] != "*navigable" {
+		t.Errorf("fields = %+v, want the navigable set asked for explicitly", seen[0].body["fields"])
+	}
+}
+
+// An uncapped Cloud search follows nextPageToken to the end, and the page without a
+// token is the last one.
+func TestSearchOnCloudPagesByToken(t *testing.T) {
+	var tokens []any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		dec := json.NewDecoder(r.Body)
+		dec.UseNumber()
+		_ = dec.Decode(&body)
+		tokens = append(tokens, body["nextPageToken"])
+		switch body["nextPageToken"] {
+		case nil:
+			_, _ = w.Write([]byte(`{"issues":[{"key":"OPS-1"},{"key":"OPS-2"}],"nextPageToken":"p2"}`))
+		case "p2":
+			_, _ = w.Write([]byte(`{"issues":[{"key":"OPS-3"}]}`))
+		default:
+			t.Errorf("unexpected page token %v", body["nextPageToken"])
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 3 {
+		t.Fatalf("issues = %+v, want all three across the two pages", got)
+	}
+	if len(tokens) != 2 || tokens[0] != nil || tokens[1] != "p2" {
+		t.Errorf("tokens = %+v, want the first page unkeyed and the second carrying p2", tokens)
+	}
+}
+
+// The cap is the model's statement about what may reach its result variable, so it is
+// applied to what arrived rather than trusted to the server.
+func TestSearchOnCloudPagesToTheCap(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body map[string]any
+		dec := json.NewDecoder(r.Body)
+		dec.UseNumber()
+		_ = dec.Decode(&body)
+		_, _ = w.Write([]byte(fmt.Sprintf(
+			`{"issues":[{"key":"OPS-%da"},{"key":"OPS-%db"}],"nextPageToken":"p%d"}`, calls, calls, calls+1)))
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{
+		Operation: "search", JQL: "project = OPS", MaxResults: 3,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 3 {
+		t.Fatalf("issues = %+v, want the cap of 3", got)
+	}
+	if calls != 2 {
+		t.Errorf("requests = %d, want two pages to reach the cap", calls)
 	}
 }

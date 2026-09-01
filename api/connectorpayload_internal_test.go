@@ -13,6 +13,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
@@ -392,6 +393,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 	}{
 		{"compiler.MailJobTypeIndex", mail.Job{}},
 		{"compiler.RemedyJobTypeIndex", remedy.Job{}},
+		{"compiler.JiraJobTypeIndex", jira.Job{}},
 		{"compiler.MsSqlJobTypeIndex", sqldb.Job{}},
 		{"compiler.AdJobTypeIndex", ad.Job{}},
 		{"compiler.EntraJobTypeIndex", entra.Job{}},

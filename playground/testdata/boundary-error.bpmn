@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_boundary_error" targetNamespace="http://atlas/playground">
+  <error id="Err_declined" errorCode="DECLINED" name="Declined"/>
+  <process id="boundary-error" name="Boundary error" isExecutable="true">
+    <documentation>Playground fixture: a business error path. A stub that throws DECLINED instead of completing is how an author exercises the branch without a real system declining anything.</documentation>
+    <startEvent id="start" name="Start"/>
+    <serviceTask id="call" name="Risky call">
+      <extensionElements>
+        <zeebe:taskDefinition type="call" retries="3"/>
+      </extensionElements>
+    </serviceTask>
+    <boundaryEvent id="on_declined" name="Declined" attachedToRef="call">
+      <errorEventDefinition errorRef="Err_declined"/>
+    </boundaryEvent>
+    <endEvent id="done" name="Done"/>
+    <endEvent id="handled" name="Handled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="call"/>
+    <sequenceFlow id="f2" sourceRef="call" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="on_declined" targetRef="handled"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="boundary-error">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_call" bpmnElement="call"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_on_declined" bpmnElement="on_declined"><dc:Bounds x="302" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_done" bpmnElement="done"><dc:Bounds x="460" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_handled" bpmnElement="handled"><dc:Bounds x="460" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="460" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="320" y="258"/><di:waypoint x="320" y="320"/><di:waypoint x="460" y="320"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

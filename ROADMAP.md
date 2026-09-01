@@ -286,9 +286,22 @@ The control-flow basics most real models use.
   (registry/client/worker) is wired into the single-binary run loop under the
   reserved Jira job type and authored via a first-class **Jira Connector** service-task
   type in the modeler. A transition may be named by the button a person reads in Jira (its
-  id is resolved first), a search follows Jira's paging to the model's cap, and an extra
-  issue field keeps the JSON shape its FEEL value had. Attachments, an out-of-process
-  worker for the type, and inbound webhook events are follow-ups.
+  id is resolved first), and an extra issue field keeps the JSON shape its FEEL value had.
+  A search follows the paging of whichever endpoint the product serves: Jira Cloud removed
+  the offset-paged `/rest/api/{2,3}/search` over 2025, so a Cloud search uses
+  `/rest/api/3/search/jql` and its opaque `nextPageToken` — the one call that leaves v2,
+  affordable because a search reads and ADF only governs writing — while Data Center keeps
+  the offset-paged endpoint the deprecation does not touch.
+  Like Remedy, the work also **runs on a worker** (ADR-0164/0168): the engine resolves the
+  task into plain values and `atlas worker --connector jira` performs it, holding the site
+  URL and the Atlassian credential in its own environment (`ATLAS_JIRA_CONNECTORS` plus per
+  name `_URL` and either `_EMAIL`/`_API_TOKEN` or `_TOKEN`) — handed to a supervised worker
+  out of the connector store and the vault at spawn, in exactly the one shape the engine
+  itself would have used. A worker can therefore operate as an Atlassian account the engine
+  has never held. Atlas does not supervise it by default; `--offload-connectors jira` opts
+  in, and the in-process handler remains as the fallback `--in-process-connectors` returns
+  to. Attachments and inbound events are follow-ups — for the inbound half see
+  [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -1081,6 +1094,82 @@ the hand-written Details panel one vertical slice at a time:
   non-durable partition seeded from the draft, external effects mocked, driven
   from the Modeler and overlaid with the existing runtime overlay. No JS token
   simulator — identical semantics to production by construction.
+
+**Playground** — a third Modeler tab beside Design and Implement
+([ADR-0215](docs/adr/0215-modeler-playground.md)), building on
+the Play-mode sandbox above and extending it from "step one instance" to "run a
+dataset of up to 50 000 cases":
+- ✅ **Sandbox session**: a sandbox over a draft *or* a deployed version — own
+  partition (from a reserved range), own single-writer goroutine, non-durable log,
+  virtual clock — driven as a session (free-run, pause, step, resume, TTL, owned by
+  the principal that opened it) rather than inside one request.
+  [`playground/`](playground/), [`api/playground/`](api/playground/).
+- ✅ **Interactive play**: a third Modeler tab beside Design and Implement, with two
+  ways of driving one sandbox. **Step**: start a case with start variables, step one
+  occurrence at a time or run it to rest, jump the clock, and answer the jobs waiting
+  for a person yourself — the run drawn onto the canvas in the runtime view's own
+  markers. **Batch**: a dataset, an arrival profile, a live progress bar, and the
+  report. Pools are configured against the tasks the author drew, read off the canvas
+  rather than retyped. [`api/web/playground.js`](api/web/playground.js).
+- ✅ **Data in**: a case list typed into the panel, or a CSV uploaded and parsed by
+  the ADR-0084/0139 row parsing against the file's own header. A per-field
+  generator ("300 cases with a random amount") is not there yet.
+- ✅ **Timing profile**: all at once, sequential, a fixed takt or a Poisson stream,
+  each confined to business hours — realized as an arrival plan over the sandbox's
+  **virtual clock**, computed up front from the seed so the stream is reproducible
+  input rather than something the run improvises.
+- ✅ **Stub and resource policy as run config, not model content**: per element a
+  duration band, an optional result, an optional failure probability with an incident
+  or a business error code — the ADR-0120 mockup vocabulary applied to an untouched
+  draft — plus named **resource pools** with a capacity and a calendar. Work started
+  before closing time carries on when the pool opens again, and elapsed time splits
+  into queue time and work time, which is what makes a bottleneck ranking more than
+  a restatement of the durations somebody typed in.
+- ✅ **Analysis aggregated in one pass** (the 50 000-case ceiling rules out one
+  object per case): outcome counts, the duration distribution, per-element run/wait/
+  work times, per-pool seat time, longest queue and calendar utilisation, and the
+  **timeline** — sixty slices of simulated time with arrivals, completions and work
+  in flight, folded out of the cases' own instants in the pass the report already
+  makes.
+- ✅ **Heat map and coverage**: per-element *and* per-sequence-flow token counts,
+  shaded onto the diagram, with the parts the data never reached drawn cold and
+  listed by name. Element counts come from the ADR-0080 visit counters; flows have
+  no counter of their own, so they are folded out of the ADR-0136 causal token
+  history in a single scan (24 ms over ten thousand cases).
+  [`playground/heatmap.go`](playground/heatmap.go).
+- ✅ **Bottleneck ranking**: elements ordered by the time cases spent *queueing* at
+  them, with work time beside it — the split is what makes it more than a
+  restatement of the durations somebody typed in.
+- ✅ **Results as data**: the per-case rows are read a page at a time out of the
+  sandbox's own store (inputs, end event, outputs, duration, incidents) and
+  downloaded whole as streamed CSV. The expectation verdict and the click from a
+  case into the replay view are not there yet.
+- ✅ **Expectations and a verdict**: what a run has to show — completions, incidents,
+  the three duration bounds, per-element visit bounds (coverage and outcome in one
+  statement), and a queue bound per pool. A verdict is what a Playground somebody
+  looks at cannot give: a number on a screen needs a reader to judge it.
+  [`playground/expect.go`](playground/expect.go).
+- ✅ **Saved scenarios**: stored against the diagram as literally the three requests
+  that make a run — open a session, start the batch, judge the report — so nothing
+  has to be kept in step with the endpoints, because it *is* them. The seed the
+  sandbox used is pinned into the stored request, which is what makes re-running one
+  give the same figures. [`api/playgroundscenarios.go`](api/playgroundscenarios.go).
+- ✅ **Baseline and comparison**: a run kept as the scenario's baseline, and the next
+  one set beside it — per-element waiting, queues, durations and outcomes, each with
+  the direction that counts as good. Utilisation is shown and deliberately left
+  unjudged. Kept only from a run that passed, since a failing baseline would hide the
+  failure from every run after it. [`playground/compare.go`](playground/compare.go).
+- ✅ **Runnable from CI**: `atlas playground --scenario <id>` replays the scenario's
+  own requests against a running Atlas, prints every check, and leaves exit status 3
+  on a missed expectation — distinct from a generic failure, so a build can tell "the
+  process no longer holds up" from "the server was unreachable". `--compare` and
+  `--keep-baseline` do the same against the stored baseline; `--file` runs one from a
+  JSON file being reviewed in a pull request.
+  [`cmd/atlas/playgroundrun.go`](cmd/atlas/playgroundrun.go).
+- 🔲 **Still open**: a per-field data generator ("300 cases with a random amount"),
+  the click from a results row into the replay view, and saving a scenario from a
+  CSV-driven run — its rows are parsed on the server, so the browser has nothing to
+  store.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
