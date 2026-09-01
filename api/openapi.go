@@ -505,6 +505,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read historical context for one element from the stores outside Atlas (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Historical context document", tObject())}},
+		// The authoring subset (ADR-0189 §2): the palette and the relationship matrix
+		// the canvas enforces. Served rather than duplicated in the browser, so the
+		// rule the canvas applies during a drag and the rule the server applies on
+		// write cannot disagree.
+		{"GET", "/api/v1/panorama/subset", s.panorama.HandleSubset, apiOp{
+			summary: "The ArchiMate element and relationship subset Atlas can author (ADR-0189)",
+			tag:     "Panorama", role: RoleModeler,
+			resp: jsonBody("Authoring subset and relationship matrix", tObject())}},
 		// Moving shapes on a view (ADR-0189 §2). Separate from the model update
 		// because it can do exactly one thing: the canvas sends what moved, never a
 		// document, so a browser's serialiser can never rewrite somebody's model.
