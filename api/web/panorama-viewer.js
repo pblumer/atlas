@@ -88,7 +88,74 @@ function bindingsHTML(item, resolution, canEdit) {
   return `<section class="psec"><h3>Atlas bindings</h3>${rows}</section>`;
 }
 
-function propertiesHTML(item, resolution, canEdit) {
+// SEVERITY_TEXT is how an observation's class reads in the panel. It matches the
+// landscape mesh's wording deliberately: the same finding, seen from the drawing
+// and from the derived graph, must not be described in two different vocabularies.
+const SEVERITY_TEXT = {
+  ok: "OK",
+  attention: "Attention",
+  critical: "Critical",
+  unknown: "Not watched",
+};
+
+// STATE_TEXT names the observation state under the class (ADR-0189 §6). The class
+// is a reading aid; the state is what somebody acts on, so both are shown.
+const STATE_TEXT = {
+  healthy: "healthy",
+  degraded: "degraded",
+  "not-ready": "not ready",
+  unreachable: "unreachable",
+  stale: "stale",
+  unbound: "nothing here observes it",
+};
+
+// liveHTML is what this element is *doing*, beside what it is (ADR-0189 §6).
+//
+// It is a section of the properties panel rather than an overlay on the diagram,
+// and that is the ADR's own constraint reaching the UI: ArchiMate layer colours
+// stay intact, so runtime state is carried by text and badges rather than by
+// recolouring an element's fill out from under its semantics.
+//
+// A model with no observations for the selected element says so. The alternative —
+// rendering nothing — reads as an element that is fine, and the difference between
+// "nothing is wrong" and "nothing is watching" is the one this whole projection
+// exists to keep.
+function liveHTML(item, observations) {
+  if (!item || !observations) return "";
+  const mine = (observations.observations || []).filter((o) => o.elementId === item.id);
+  if (!mine.length) {
+    return `<section class="psec"><h3>Live</h3>
+      <p class="muted">This element binds nothing, so there is nothing to observe.</p></section>`;
+  }
+  const rows = mine.map((o) => `<div class="panorama-obs panorama-sev-${esc(o.severity)}">
+      <div class="panorama-obs-head">
+        <b>${esc(SEVERITY_TEXT[o.severity] || o.severity)}</b>
+        <span class="muted">${esc(STATE_TEXT[o.state] || o.state)} · ${esc(o.source)}</span>
+      </div>
+      <code>${esc(o.key)} = ${esc(o.value)}</code>
+      ${o.reason ? `<p>${esc(o.reason)}</p>` : ""}
+      ${detailHTML(o.detail)}
+    </div>`).join("");
+  // What the view cannot see, stated beside what it can. Without it a model
+  // nothing observes renders as an architecture where everything is fine.
+  const unwatched = (observations.unavailable || []).map((u) => esc(STATE_TEXT[u.state] || u.state));
+  return `<section class="psec"><h3>Live</h3>${rows}
+    ${unwatched.length ? `<p class="muted panorama-unwatched">Not watched here: ${unwatched.join(", ")}.</p>` : ""}
+    <p class="muted">Read at ${esc(new Date((observations.observedAt || 0) * 1000).toLocaleTimeString())};
+    nothing here is stored on the model.</p></section>`;
+}
+
+// detailHTML renders the numbers behind the sentence — a version, a count — for a
+// reader who wants them. Sorted, because this is something people compare between
+// two servers.
+function detailHTML(detail) {
+  const entries = Object.entries(detail || {}).sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return "";
+  return `<div class="panorama-obs-detail">${entries
+    .map(([k, v]) => `<span><span class="muted">${esc(k)}</span> ${esc(v)}</span>`).join("")}</div>`;
+}
+
+function propertiesHTML(item, resolution, canEdit, observations) {
   if (!item) return `<div class="panorama-props-empty">
     <div class="panorama-selection-icon">◇</div>
     <b>Nothing selected</b>
@@ -106,7 +173,8 @@ function propertiesHTML(item, resolution, canEdit) {
         <div class="panorama-kv"><span>Target</span><code>${esc(item.target)}</code></div>` : ""}
     </section>
     ${item.documentation ? `<section class="psec"><h3>Documentation</h3><p>${esc(item.documentation)}</p></section>` : ""}
-    ${bindingsHTML(item, resolution, canEdit)}`;
+    ${bindingsHTML(item, resolution, canEdit)}
+    ${liveHTML(item, observations)}`;
 }
 
 // pickBinding is the picker ADR-0189 §4 asks for: a user selects from resources
@@ -215,7 +283,7 @@ function c4PanelHTML(projection) {
 
 export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.innerHTML = `<div class="card empty"><p class="muted">Loading architecture view…</p></div>`;
-  const [vendor, model, xml, applications, bindings] = await Promise.all([
+  const [vendor, model, xml, applications, bindings, observations] = await Promise.all([
     loadVendor(),
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}`),
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/xml`),
@@ -223,6 +291,11 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     // Bindings are additive: a model whose bindings cannot be read is still a
     // model worth opening, so this failure degrades the panel rather than the view.
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/bindings`).catch(() => null),
+    // Observations are additive in exactly the same way, and on a server that
+    // observes nothing this route refuses outright — a model is still worth
+    // opening either way, so the panel loses its Live section rather than the
+    // view losing the diagram.
+    api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/observations`).catch(() => null),
   ]);
   const parsed = vendor.parseOpenExchange(xml);
   const application = applications.find((item) => item.id === model.applicationId);
@@ -263,11 +336,12 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   // the model, so it needs the same rights as any other write to it.
   const canEdit = ["owner", "editor"].includes(application?.myRole);
   let resolution = bindings;
+  let live = observations;
   let revision = model.revision;
   let selected = null;
 
   const paintProperties = () => {
-    properties.innerHTML = propertiesHTML(selected, resolution, canEdit);
+    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live);
   };
 
   let viewer = null;

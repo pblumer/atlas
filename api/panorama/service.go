@@ -56,6 +56,10 @@ type Service struct {
 	newID   IDGenerator
 	now     Clock
 	catalog CatalogResolver
+	// facts supplies the runtime observations of ADR-0189 §6. Optional: a server
+	// that wires none serves the model and its bindings and refuses the
+	// observation route, rather than answering it with an empty landscape.
+	facts FactsResolver
 }
 
 // CountForApplicationOnLoop counts models owned by one application. It is a
@@ -87,8 +91,11 @@ func (s *Service) CountsByApplicationOnLoop() (map[string]int, error) {
 
 // New builds a Panorama service over a run-loop-owned store.
 func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenerator, now Clock,
-	catalog CatalogResolver) *Service {
-	return &Service{loop: loop, store: store, access: access, newID: newID, now: now, catalog: catalog}
+	catalog CatalogResolver, facts FactsResolver) *Service {
+	return &Service{
+		loop: loop, store: store, access: access, newID: newID, now: now,
+		catalog: catalog, facts: facts,
+	}
 }
 
 type createRequest struct {

@@ -958,13 +958,19 @@ for the derived whole-instance mesh above them.
   feature list derived from the routes actually mounted, behind a least-privilege
   `status` token scope. Complete; it also makes `atlas.runtimeId` resolve instead
   of reporting unsupported (P3);
-  **b)** the local observation projection, keyed by ArchiMate element id, with
-  source, status, `observedAt` and staleness per observation — which is what first
-  makes **stale** producible on the landscape mesh (P2.5c);
+  **b)** the local observation projection: a model's Atlas bindings resolved into
+  what this server currently sees of them — applications, processes, workers, this
+  runtime, and the desired-versus-observed comparison of a release against what is
+  deployed — each observation naming its source, state and `observedAt`, and the
+  document declaring what it cannot produce. Complete. It does **not** make *stale*
+  producible, and an earlier line here said it would: every fact is read while the
+  request is served, so nothing in it has a freshness contract to exceed. Staleness
+  and unreachability are both properties of a source outside this process, and both
+  arrive with (c);
   **c)** remote node descriptors and status through deployment-target bindings,
   resolved server-side off the run loop with bounded concurrency, deadlines,
   response-size limits and per-target error isolation — which is what first makes
-  **unreachable** producible; and
+  **unreachable** and **stale** producible; and
   **d)** observations on the ArchiMate canvas as borders and badges with a text
   legend, layer colors intact.
 - 🔲 **P5 — Landscape intelligence:** compare desired and observed deployments

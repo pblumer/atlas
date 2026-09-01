@@ -113,6 +113,13 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The observation projection (ADR-0189 §6). The facts in it are ones an agent
+	// already reaches directly — instances, incidents, deployments, releases — and
+	// what this route adds is the *correlation onto an architecture model*, which
+	// is a reading surface for a person rather than an authoring or runtime action.
+	// Its shape is also at contract version 1 and still settling, and an MCP tool is
+	// a public contract.
+	"GET /api/v1/panorama/models/{id}/observations": "an architecture reading surface over facts an agent already reaches directly; contract still settling",
 	"PUT /api/v1/node": "an operator naming this instance, not an agent action",
 	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
 	// a memory tail rather than a record. An agent debugging a run asks from the

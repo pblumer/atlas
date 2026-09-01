@@ -18,16 +18,20 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
 // is called in the legend. Restricted and unresolved are deliberately distinct —
 // "you may not see it" and "it is not deployed" are different findings, and a
 // picture that renders them alike answers the wrong question.
+// Radii carry rank as well as kind. At a few hundred nodes the eye sorts by size
+// before it reads anything, so an application has to be unmistakably the largest
+// thing on screen and a leaf unmistakably the smallest — otherwise every node
+// competes for attention and the picture reads as one texture.
 const KIND = {
-  application: { r: 26, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
-  process: { r: 18, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
+  application: { r: 30, fill: "var(--accent-soft)", stroke: "var(--accent)", label: "Application" },
+  process: { r: 17, fill: "var(--surface)", stroke: "var(--border-strong)", label: "Process" },
   // --ok is a fixed green rather than a shade of the configurable accent, so its
   // soft companion is a literal here too. There is no --ok-soft at :root, and
   // defining one would change the one other rule that already asks for it.
-  worker: { r: 15, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
-  decision: { r: 15, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
-  restricted: { r: 14, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
-  unresolved: { r: 14, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
+  worker: { r: 12, fill: "#e8f5ec", stroke: "var(--ok)", label: "Worker" },
+  decision: { r: 12, fill: "var(--accent-soft)", stroke: "var(--accent-hover)", label: "Decision" },
+  restricted: { r: 11, fill: "var(--bg)", stroke: "var(--muted)", label: "Restricted — outside your access", dashed: true },
+  unresolved: { r: 11, fill: "var(--warn-soft)", stroke: "var(--warn)", label: "Unresolved — nothing here provides it", dashed: true },
 };
 
 // PROVENANCE describes how a node is known (ADR-0211 §2). It is rendered on every
@@ -68,6 +72,44 @@ const STATE_TEXT = {
   unbound: "unbound — nothing observes it",
 };
 
+// LABEL_ALWAYS_BELOW is the graph size under which every node keeps its name on
+// screen. Above it, only the anchors do (see labelPolicy).
+//
+// The number is where clutter starts rather than a round guess: at the default
+// frame a name is about 90px wide and a node needs roughly 110px of clear space
+// around it to own one, which is about 25 nodes before labels begin overlapping
+// each other and the edges between them.
+const LABEL_ALWAYS_BELOW = 26;
+
+// labelPolicy decides which names are painted without being asked for.
+//
+// The problem it solves is that a few hundred names on one canvas is not a
+// landscape, it is a wall of text with circles behind it — the picture stops
+// carrying its own structure. Hiding them all is the obvious fix and the wrong
+// one: colour and size say *what kind* of thing a node is, and nothing says
+// *which* one, so a viewer would have to hover every node to find anything.
+//
+// So the rule is neither all nor none:
+//
+//   - Applications always keep their name. There are few of them, they are the
+//     largest things on screen, and they are what somebody navigates by — "where
+//     is Billing" is the first question asked of this view.
+//   - A small graph keeps every name. Under LABEL_ALWAYS_BELOW there is room, and
+//     hiding names there would be pure loss with nothing bought.
+//   - Everything else shows its name on hover and on keyboard focus, which the
+//     stylesheet does with no re-render, and the selected node keeps it while it
+//     is selected.
+//
+// Search covers the case none of that does: typing a name filters the graph, and
+// a filtered graph is usually small enough that every name comes back.
+function labelPolicy(graph) {
+  const dense = graph.nodes.length >= LABEL_ALWAYS_BELOW;
+  return {
+    dense,
+    shows: (node) => !dense || node.kind === "application",
+  };
+}
+
 // mulberry32 is a small seeded PRNG. The seed is fixed so the initial scatter —
 // and therefore the settled layout — is identical on every load of the same graph.
 function mulberry32(seed) {
@@ -107,7 +149,14 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
     .map((e) => [index.get(e.from), index.get(e.to)])
     .filter(([a, b]) => a !== undefined && b !== undefined);
 
-  const repulsion = 5200, spring = 0.012, rest = 110, damping = 0.85;
+  // Repulsion scales with the graph so density stays roughly constant instead of
+  // rising with node count — the "Klüngel" a fixed constant produces, where fifty
+  // nodes are comfortable and three hundred are one dark blob.
+  const repulsion = 5200 * Math.max(1, Math.sqrt(nodes.length / 40));
+  const spring = 0.012, rest = 130, damping = 0.85;
+  // Every node's own footprint, so the separation pass below knows what "touching"
+  // means for this pair rather than assuming one radius for all of them.
+  const radii = nodes.map((n) => (KIND[n.kind] || KIND.process).r);
   for (let step = 0; step < iterations; step++) {
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -119,6 +168,18 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
         const d = Math.sqrt(d2);
         const fx = (dx / d) * force, fy = (dy / d) * force;
         a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+
+        // Separation. Repulsion alone is a soft force that a spring can overpower,
+        // so two nodes joined by an edge will happily sit on top of each other —
+        // which is the one arrangement that makes a picture unreadable rather than
+        // merely tight. This pushes overlapping circles apart directly, and it is
+        // in the same pass because that pass already visits every pair.
+        const room = radii[i] + radii[j] + 10;
+        if (d < room) {
+          const push = (room - d) * 0.5;
+          a.x += (dx / d) * push; a.y += (dy / d) * push;
+          b.x -= (dx / d) * push; b.y -= (dy / d) * push;
+        }
       }
     }
     for (const [ai, bi] of links) {
@@ -147,7 +208,11 @@ function layout(nodes, edges, { width, height, iterations = 220 } = {}) {
 // LABEL_MARGIN is the room a node needs around its own centre. It is asymmetric
 // because a node's label is: the text hangs below the circle (dy = r + 14) and is
 // centred, so the bottom and the sides carry more than the top does.
-const LABEL_MARGIN = { top: 30, right: 58, bottom: 50, left: 58 };
+//
+// It is smaller than the widest label because most labels are hidden until hovered
+// (see labelPolicy), and reserving room for text that is not on screen is how the
+// picture ends up smaller than the space it was given.
+const LABEL_MARGIN = { top: 26, right: 46, bottom: 42, left: 46 };
 
 // fitToFrame maps the settled graph onto the frame so it fills it, leaving only the
 // margin a label needs. The scale is uniform: stretching the axes independently
@@ -440,8 +505,9 @@ function legendHTML(graph, layoutMs) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, highlight, frame) {
+function renderGraph(graph, layoutMs, highlight, frame, selected) {
   const { width, height } = frame;
+  const labels = labelPolicy(graph);
   const nodes = graph.nodes.map((n) => ({ ...n }));
   const ms = layout(nodes, graph.edges, { width, height }) + layoutMs;
   const at = new Map(nodes.map((n) => [n.id, n]));
@@ -479,16 +545,19 @@ function renderGraph(graph, layoutMs, highlight, frame) {
            <text text-anchor="middle" dy="3.5" class="mesh-badge-glyph">${esc(sev.glyph)}</text>
          </g>`
       : "";
+    // A name is painted when the policy says so, when this node is selected, or —
+    // through the stylesheet, with no re-render — while it is hovered or focused.
+    const named = labels.shows(n) || n.id === selected;
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
-      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${state}"
+      class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${state}"
       data-node-id="${esc(n.id)}" data-severity="${esc(n.severity || "unknown")}"
       tabindex="0" role="button" aria-label="${esc(nodeTitle(n))}">
       ${prov.ring ? `<circle r="${style.r + 4}" fill="none" stroke="${style.stroke}" stroke-width="1" opacity="0.55"/>` : ""}
-      <circle r="${style.r}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
+      <circle class="mesh-body" r="${style.r}" fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}"
         stroke-width="${sev.stroke ? 3 : 2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}/>
       ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}
-      <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}">${label}</text>
+      <text class="mesh-label" text-anchor="middle" dy="${style.r + 14}"><tspan class="mesh-label-ink">${label}</tspan></text>
       <title>${esc(nodeTitle(n))}</title></g>`;
   }).join("");
 
@@ -674,7 +743,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const highlight = result ? new Set(result.nodes) : null;
 
     measure();
-    const { ms, svg } = renderGraph(shown, 0, highlight, frame);
+    const { ms, svg } = renderGraph(shown, 0, highlight, frame, selected);
     surface.innerHTML = shown.nodes.length
       ? svg
       : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
