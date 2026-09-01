@@ -365,6 +365,75 @@ function contextHTML(ctx, loading) {
   </section>`;
 }
 
+// paletteHTML is what may be created, grouped by ArchiMate layer.
+//
+// It is built from the subset the server served, not from a list in this file. A
+// palette that offered an element type the server will not write is a promise the
+// server breaks, and the only way to be sure it cannot happen is to have one list.
+//
+// The subset's own limits are shown with it, under a fold. ADR-0189 forbids
+// claiming complete ArchiMate 3.2 authoring, and a palette is the one thing
+// somebody reads without reading anything else.
+function paletteHTML(subset, canEdit) {
+  if (!canEdit) return "";
+  if (!subset || !Array.isArray(subset.elements)) {
+    // The subset could not be read, so nothing is offered. Offering a guess would
+    // be offering what the server may refuse.
+    return `<p class="muted panorama-palette-empty">The palette could not be loaded.</p>`;
+  }
+  const byLayer = new Map();
+  for (const kind of subset.elements) {
+    if (!byLayer.has(kind.layer)) byLayer.set(kind.layer, []);
+    byLayer.get(kind.layer).push(kind);
+  }
+  const groups = [...byLayer].map(([layer, kinds]) => `
+    <div class="panorama-palette-group">
+      <h4>${esc(layer)}</h4>
+      ${kinds.map((kind) => `<button class="panorama-palette-item" type="button"
+        data-add-type="${esc(kind.type)}" title="${esc(kind.label)}">${esc(kind.label)}</button>`).join("")}
+    </div>`).join("");
+  const limits = (subset.limits || []).map((l) =>
+    `<li><b>${esc(l.limit)}</b> — ${esc(l.reason)}</li>`).join("");
+  return `<h3>Add</h3>${groups}
+    <details class="panorama-subset-limits"><summary>What can be authored</summary>
+      <ul>${limits}</ul></details>`;
+}
+
+// connectHTML offers the relationships that may be drawn from the selected element
+// to the others on this view.
+//
+// Every entry comes from the served matrix, so the menu contains only choices the
+// write path accepts — somebody authoring a model should meet ArchiMate's rules by
+// seeing what is offered, not by being refused after the fact.
+function connectHTML(item, subset, views, canEdit) {
+  if (!canEdit || !item || item.kind === "relationship" || !subset) return "";
+  const others = (views || []).filter((other) => other.id !== item.id);
+  if (!others.length) {
+    return `<section class="psec"><h3>Connect</h3>
+      <p class="muted">Nothing else is on this view yet.</p></section>`;
+  }
+  const rows = others.map((other) => {
+    const allowed = (subset.matrix || {})[`${item.type}>${other.type}`] || [];
+    if (!allowed.length) {
+      // The subset says nothing may be drawn between these two. Shown rather than
+      // hidden, so the absence is a statement instead of a gap.
+      return `<div class="panorama-connect-row">
+        <span>${esc(other.name || other.id)}</span>
+        <span class="muted">nothing may be drawn</span></div>`;
+    }
+    return `<div class="panorama-connect-row">
+      <span>${esc(other.name || other.id)}</span>
+      <select data-connect-to="${esc(other.id)}" aria-label="Relationship to ${esc(other.name || other.id)}">
+        ${allowed.map((type) => `<option value="${esc(type)}">${esc(type)}</option>`).join("")}
+      </select>
+      <button class="btn ghost small" data-connect="${esc(other.id)}">Draw</button>
+    </div>`;
+  }).join("");
+  return `<section class="psec"><h3>Connect</h3>${rows}
+    <p class="muted">Only relationships ArchiMate permits between these elements are offered.</p>
+  </section>`;
+}
+
 // detailHTML renders the numbers behind the sentence — a version, a count — for a
 // reader who wants them. Sorted, because this is something people compare between
 // two servers.
@@ -375,7 +444,7 @@ function detailHTML(detail) {
     .map(([k, v]) => `<span><span class="muted">${esc(k)}</span> ${esc(v)}</span>`).join("")}</div>`;
 }
 
-function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctxLoading) {
+function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctxLoading, subset, onView) {
   if (!item) return `<div class="panorama-props-empty">
     <div class="panorama-selection-icon">◇</div>
     <b>Nothing selected</b>
@@ -396,6 +465,7 @@ function propertiesHTML(item, resolution, canEdit, observations, drift, ctx, ctx
     ${bindingsHTML(item, resolution, canEdit)}
     ${liveHTML(item, observations)}
     ${driftHTML(drift, item)}
+    ${connectHTML(item, subset, onView, canEdit)}
     ${item.kind === "relationship" ? "" : contextHTML(ctx, ctxLoading)}`;
 }
 
@@ -597,7 +667,7 @@ function view0Count(observations) {
 
 export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.innerHTML = `<div class="card empty"><p class="muted">Loading architecture view…</p></div>`;
-  const [vendor, model, xml, applications, bindings, observations] = await Promise.all([
+  const [vendor, model, xml, applications, bindings, observations, subset] = await Promise.all([
     loadVendor(),
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}`),
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/xml`),
@@ -610,6 +680,10 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     // opening either way, so the panel loses its Live section rather than the
     // view losing the diagram.
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/observations`).catch(() => null),
+    // What may be authored. It is a property of the build rather than of this
+    // model, and the palette and connect menu are both built from it — so the
+    // canvas can only ever offer what the write path accepts.
+    api("GET", "/api/v1/panorama/subset").catch(() => null),
   ]);
   let parsed = vendor.parseOpenExchange(xml);
   const application = applications.find((item) => item.id === model.applicationId);
@@ -628,17 +702,18 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       <button class="btn ghost small" data-tool="c4" aria-pressed="false">C4 projection</button>
       <a class="btn ghost small" href="/api/v1/panorama/models/${encodeURIComponent(id)}/xml">Export XML</a>
     </div>
-    <div class="panorama-tools" aria-label="Canvas controls">
-      <button class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-      <button class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
-      <button class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
-      <span class="panorama-tool-sep" aria-hidden="true"></span>
-      <button class="icon-btn" data-tool="undo" title="Undo" aria-label="Undo" disabled>↺</button>
-      <button class="icon-btn" data-tool="redo" title="Redo" aria-label="Redo" disabled>↻</button>
-      <button class="btn small" data-tool="save" disabled>Save layout</button>
-    </div>
     <div class="editor-body">
+      <div class="panorama-palette" aria-label="Add an element"></div>
       <div class="panorama-stage">
+        <div class="panorama-tools" aria-label="Canvas controls">
+          <button class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+          <span class="panorama-tool-sep" aria-hidden="true"></span>
+          <button class="icon-btn" data-tool="undo" title="Undo" aria-label="Undo" disabled>↺</button>
+          <button class="icon-btn" data-tool="redo" title="Redo" aria-label="Redo" disabled>↻</button>
+          <button class="btn small" data-tool="save" disabled>Save layout</button>
+        </div>
         <div class="panorama-canvas" role="tabpanel" aria-label="ArchiMate diagram"></div>
         <div class="panorama-live-legend-slot" aria-label="What the runtime marks mean"></div>
       </div>
@@ -698,6 +773,15 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   window.addEventListener("beforeunload", guard);
   let selected = null;
 
+  // elementsOnView is what the connect menu may offer to draw to: the elements this
+  // view actually shows. A relationship to something that is not on the view would
+  // be a line from nowhere, which the server refuses — so it is not offered.
+  const elementsOnView = () => {
+    const view = currentView();
+    if (!view) return [];
+    return view.shapes.map((shape) => shape.semantic).filter(Boolean);
+  };
+
   // currentView is the view the tabs say is open, which is what a save has to
   // re-render after re-reading the document.
   const currentView = () =>
@@ -710,11 +794,35 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   let ctx = null;
   let ctxLoading = false;
   const paintProperties = () => {
-    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live, drift, ctx, ctxLoading);
+    properties.innerHTML = propertiesHTML(selected, resolution, canEdit, live, drift, ctx, ctxLoading, subset, elementsOnView());
   };
 
   // The lookup is a button rather than an automatic fetch: every bound value costs
   // a query against a system that did not agree to be browsed.
+  // Drawing a relationship from the panel. The menu already offered only what the
+  // subset permits, so a refusal here means the document moved underneath — which
+  // is worth showing rather than swallowing.
+  properties.addEventListener("click", async (event) => {
+    const draw = event.target.closest("[data-connect]");
+    if (!draw || !selected) return;
+    const target = draw.dataset.connect;
+    const choice = properties.querySelector(`[data-connect-to="${CSS.escape(target)}"]`);
+    if (!choice) return;
+    try {
+      const made = await api("POST",
+        `/api/v1/panorama/models/${encodeURIComponent(id)}/relationships`,
+        {
+          expectedRevision: revision, type: choice.value,
+          source: selected.id, target, viewId: currentView()?.id,
+        });
+      revision = made.revision;
+      await reload();
+      toast(`${choice.value} drawn.`);
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+
   properties.addEventListener("click", async (event) => {
     if (!event.target.closest('[data-tool="context"]') || !selected) return;
     const forElement = selected.id;
@@ -836,6 +944,42 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => viewer?.zoom(1.2));
   container.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => viewer?.zoom(1 / 1.2));
   container.querySelector('[data-tool="fit"]').addEventListener("click", () => viewer?.fit());
+  // reload re-reads the document after the server has changed it. The canvas never
+  // creates content itself, so this is how what was written becomes what is drawn —
+  // and it is why there can never be a shape on screen the document does not have.
+  async function reload() {
+    const fresh = await api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/xml`);
+    parsed = vendor.parseOpenExchange(fresh);
+    select(currentView());
+    paintProperties();
+    paintEditState();
+  }
+
+  // The palette writes through the server and re-reads. A new element lands at a
+  // fixed spot on the canvas rather than where a pointer was: this is a click, not
+  // a drag, and pretending otherwise would put boxes where nobody aimed.
+  const palette = container.querySelector(".panorama-palette");
+  palette.innerHTML = paletteHTML(subset, canEdit);
+  palette.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-add-type]");
+    if (!button) return;
+    const type = button.dataset.addType;
+    const name = window.prompt(`Name for the new ${type}`, type);
+    if (name === null) return;
+    try {
+      const made = await api("POST", `/api/v1/panorama/models/${encodeURIComponent(id)}/elements`,
+        {
+          expectedRevision: revision, type, name,
+          viewId: currentView()?.id, x: 60, y: 60, w: 170, h: 70,
+        });
+      revision = made.revision;
+      await reload();
+      toast(`${type} added.`);
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+
   undoButton.addEventListener("click", () => { viewer?.undo(); paintEditState(); });
   redoButton.addEventListener("click", () => { viewer?.redo(); paintEditState(); });
 
