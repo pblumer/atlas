@@ -128,24 +128,28 @@ func TestObserveNeverDropsABoundValue(t *testing.T) {
 	}
 }
 
-// TestObserveDeclaresWhatItCannotObserve, from the same list the landscape mesh
-// publishes. Two surfaces disagreeing about what is unwatched would be worse than
-// either of them being silent.
-func TestObserveDeclaresWhatItCannotObserve(t *testing.T) {
+// TestObserveDeclaresItCanSeeEverything is the claim this document now makes, and
+// it is a claim rather than an omission: the projection asks peer servers, so every
+// one of ADR-0189 §6's states is reachable in it, and the empty list says so out
+// loud where a reader can hold the code to it.
+//
+// The landscape mesh still declares two, because it draws no deployment targets and
+// therefore contacts nothing. The two lists are deliberately not the same list:
+// they were identical only while neither surface could reach anything, and merging
+// them would make one of them lie the moment the other gained a capability.
+func TestObserveDeclaresItCanSeeEverything(t *testing.T) {
 	doc := Observe(BindingSet{}, Facts{}, observedAt)
 
-	declared := map[string]bool{}
-	for _, u := range doc.Unavailable {
-		declared[u.State] = true
+	if len(doc.Unavailable) != 0 {
+		t.Errorf("the document declares %#v unavailable; it reaches peers, so it can produce all of them",
+			doc.Unavailable)
 	}
-	for _, state := range []string{StateUnreachable, StateStale} {
-		if !declared[state] {
-			t.Errorf("state %q is not declared unavailable: %#v", state, doc.Unavailable)
-		}
+	if doc.Unavailable == nil {
+		t.Error("unavailable is null rather than an empty list; the claim is only legible if it is there")
 	}
-	if len(doc.Unavailable) != len(unobservable) {
-		t.Errorf("the document and the mesh declare different lists: %d vs %d",
-			len(doc.Unavailable), len(unobservable))
+	// And the mesh still has two, from its own list.
+	if len(unobservable) != 2 {
+		t.Errorf("the mesh declares %d unavailable states, want unreachable and stale", len(unobservable))
 	}
 	// An empty model still answers with collections rather than nulls: the renderer
 	// iterates them.

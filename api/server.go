@@ -230,6 +230,14 @@ type Server struct {
 	// panorama is the application-owned ArchiMate model library (ADR-0189),
 	// isolated as a per-area service under ADR-0147.
 	panorama *panorama.Service
+	// remoteNodes is what peer Atlas servers last said about themselves
+	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
+	// loop, because it is written by goroutines waiting on the network and putting
+	// it behind the single writer would mean holding that writer across a remote
+	// call. Set once before Handler is mounted; the map inside is mutated under its
+	// own mutex thereafter.
+	remoteNodes *remoteNodeCache
+
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
 	// model library above because declared intent and derived fact must not share
@@ -1036,6 +1044,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:        proc,
 		store:       store,
 		dataDir:     dataDir,
+		remoteNodes: newRemoteNodeCache(),
 		quit:        quit,
 		runLoop:     runloop.New(quit),
 		deployments: map[uint64]*deployment{},

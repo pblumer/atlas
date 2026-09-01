@@ -1,14 +1,29 @@
 package panorama
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
+// ErrShuttingDown is what a [FactsResolver] returns when it could not take its
+// run-loop turn because the server is closing. It is a sentinel rather than a
+// message because the handler has to answer 503 rather than 500 for it: a document
+// built from facts nobody gathered would report every element as unobserved, and
+// "the server is going away" is a different thing to tell a caller than "something
+// broke".
+var ErrShuttingDown = errors.New("panorama: server is shutting down")
+
 // FactsResolver supplies the runtime facts an observation document is projected
-// from, already filtered for this caller. Like [CatalogResolver] it runs on the
-// API run loop and must not call Loop.Do recursively.
+// from, already filtered for this caller.
+//
+// Unlike [CatalogResolver] it is called *off* the run loop, and takes its own loop
+// turns for the parts that need one. That inversion is deliberate: gathering these
+// facts includes asking peer servers (ADR-0189 §6), and holding the single writer
+// for the duration of a network call is the one thing every other request on this
+// server is waiting for it not to do (invariant I3). A resolver whose on-loop half
+// could not run returns [ErrShuttingDown].
 type FactsResolver func(r *http.Request) (Facts, error)
 
 // HandleObservations projects a model's Atlas bindings onto what this server
@@ -37,21 +52,16 @@ func (s *Service) HandleObservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		facts Facts
-		ran   bool
-		opErr error
-	)
-	s.loop.Do(func() { ran = true; facts, opErr = s.facts(r) })
-	// The loop declines to run anything once it is closing, which would leave every
-	// fact absent and every element reported as unobserved — a model that looks
-	// dead rather than one that was not read. Same guard as bindings and the mesh.
-	if !ran {
+	facts, err := s.facts(r)
+	switch {
+	case errors.Is(err, ErrShuttingDown):
+		// The resolver could not take its loop turn. Every fact would be absent and
+		// every element reported as unobserved — a model that looks dead rather than
+		// one that was not read.
 		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
 		return
-	}
-	if opErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "collect observations: "+opErr.Error())
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "collect observations: "+err.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, Observe(set, facts, s.now().Unix()))

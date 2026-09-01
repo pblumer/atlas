@@ -31,6 +31,10 @@ const (
 	SourceWorkers     = "workers"
 	SourceReleases    = "releases"
 	SourceNode        = "node"
+	// SourceRemote is a peer Atlas that was asked. It is named apart from the local
+	// sources because it is the only one that can be out of date or out of reach,
+	// and a reader deciding how much to trust a row needs to know which it is.
+	SourceRemote = "remote"
 	// SourceNone marks a binding no source on this server can say anything about.
 	// It is a source in the payload precisely so that the absence is attributable:
 	// "nobody looked" and "somebody looked and found nothing" are different
@@ -135,9 +139,11 @@ type ObservationDocument struct {
 	ObservedAt   int64              `json:"observedAt"`
 	Observations []Observation      `json:"observations"`
 	Summary      ObservationSummary `json:"summary"`
-	// Unavailable names the observation states this build cannot produce at all.
-	// It is the same list the landscape mesh publishes, from the same place, so the
-	// two surfaces cannot disagree about what is unwatched.
+	// Unavailable names the observation states this document cannot produce at all.
+	// It is empty now that peers are asked: every one of ADR-0189 §6's states is
+	// reachable here. The field stays, because an empty list is a claim somebody
+	// can check — and because the landscape mesh, which draws no deployment
+	// targets, still has two it cannot produce and publishes them in the same shape.
 	Unavailable []UnavailableState `json:"unavailable"`
 	// Problems are the extractor's, carried through exactly as binding resolution
 	// carries them: a declaration that was refused is as much a finding as one that
@@ -156,7 +162,7 @@ func Observe(set BindingSet, facts Facts, observedAt int64) ObservationDocument 
 		ContractVersion: set.ContractVersion,
 		ObservedAt:      observedAt,
 		Observations:    []Observation{},
-		Unavailable:     unobservable,
+		Unavailable:     unobservableInDocument,
 		Problems:        []Problem{},
 	}
 	if doc.ContractVersion == 0 {

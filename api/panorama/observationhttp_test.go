@@ -44,8 +44,9 @@ func TestObservationsRouteAnswersFromTheServersFacts(t *testing.T) {
 	if doc.ObservedAt == 0 || doc.ContractVersion == 0 {
 		t.Fatalf("document header = %+v", doc)
 	}
-	if len(doc.Unavailable) == 0 {
-		t.Error("the document does not say what it cannot observe")
+	// Nothing is out of this document's reach, and the empty list is how it says so.
+	if len(doc.Unavailable) != 0 {
+		t.Errorf("the document declares %#v unavailable", doc.Unavailable)
 	}
 
 	// Reading the live view must not change the stored document. That is ADR-0189's
@@ -107,25 +108,29 @@ func TestObservationsRefuseWhenNothingObserves(t *testing.T) {
 	}
 }
 
-// TestObservationsRefuseAClosingServer: runloop.Do declines to run anything once
-// the loop is closing, which would leave every fact absent and the whole model
-// reported as unobserved. A document that says "nothing is running here" because
-// the server was shutting down is the most damaging thing this route could say.
+// TestObservationsRefuseAClosingServer. The resolver takes its own run-loop turn
+// now, because part of what it gathers waits on the network — so "the loop
+// declined to run" is a condition it reports rather than one this handler can
+// observe, and [ErrShuttingDown] is that report.
+//
+// The distinction is worth a status of its own: a document built from facts nobody
+// gathered says every element is unobserved, which reads as an architecture where
+// nothing is running. "The server is going away" and "something broke" are also
+// different things to tell a caller, which is why this is 503 and not 500.
 func TestObservationsRefuseAClosingServer(t *testing.T) {
 	fx := newServiceFixture(t)
 	id := createObservedModel(t, fx)
-	// Same service, same store, but a loop that will not run the collector.
-	closing := New(stoppedLoop(), fx.store, fx.service.access, fx.service.newID, fx.service.now,
-		fx.service.catalog, func(*http.Request) (Facts, error) {
-			t.Error("the collector ran on a closed loop; this test no longer covers what it claims")
-			return Facts{}, nil
-		})
+	fx.factsErr = ErrShuttingDown
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/models/"+id+"/observations", nil)
-	req.SetPathValue("id", id)
-	body := invoke(t, closing.HandleObservations, req, http.StatusServiceUnavailable).Body.String()
+	body := observe(t, fx, id, http.StatusServiceUnavailable).Body.String()
 	if !strings.Contains(body, "shutting down") {
 		t.Errorf("body = %s, want it to say the server is shutting down", body)
+	}
+	// And an ordinary failure is still a 500: the sentinel must not swallow the
+	// difference it exists to draw.
+	fx.factsErr = errors.New("the instance table is on fire")
+	if body := observe(t, fx, id, http.StatusInternalServerError).Body.String(); !strings.Contains(body, "on fire") {
+		t.Errorf("body = %s, want the underlying failure", body)
 	}
 }
 

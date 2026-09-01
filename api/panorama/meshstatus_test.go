@@ -60,8 +60,10 @@ func TestGraphDeclaresWhatItCannotObserve(t *testing.T) {
 		if declared[state] == "" {
 			t.Fatalf("state %q is not declared unavailable: %#v", state, g.Status.Unavailable)
 		}
-		if !strings.Contains(declared[state], "P4") {
-			t.Errorf("%q gives no reason a reader can act on: %q", state, declared[state])
+		// The reason has to point somewhere. Saying "this cannot be known" is only
+		// half an answer when it *can* be known one surface over.
+		if !strings.Contains(declared[state], "observation projection") {
+			t.Errorf("%q says it cannot be produced but not where it can: %q", state, declared[state])
 		}
 	}
 	// A state the server does produce must not be listed: declaring a capability
