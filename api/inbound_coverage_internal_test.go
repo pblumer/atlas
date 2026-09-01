@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/connector/clio"
+	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
@@ -20,10 +21,10 @@ import (
 // event-id → dedup-seq parse, and the source-id format.
 func TestEventVarsAndKeys(t *testing.T) {
 	// eventVars seeds every body field plus the reserved envelope fields.
-	vars := eventVars(clio.InboundEvent{
+	vars := eventVars(clioFields(clio.InboundEvent{
 		ID: "7", Subject: "/employees/E-123456", Type: "employee.created",
 		Data: map[string]any{"s": "hi", "n": 42.0, "b": true, "obj": map[string]any{"a": 1}, "z": nil},
-	})
+	}))
 	kinds := map[string]model.VarKind{}
 	text := map[string]string{}
 	for _, v := range vars {
@@ -44,17 +45,17 @@ func TestEventVarsAndKeys(t *testing.T) {
 		t.Errorf("envelope eventType/eventId = %q/%q, want employee.created and 7", text["eventType"], text["eventId"])
 	}
 
-	if got := correlationKeyOf(nil, clio.InboundEvent{}); got != "" {
+	if got := correlationKeyOf(nil, clioFields(clio.InboundEvent{})); got != "" {
 		t.Errorf("keyless correlationKeyOf = %q, want empty", got)
 	}
 	orderKey, err := expr.CompileAuto("orderId")
 	if err != nil {
 		t.Fatalf("CompileAuto: %v", err)
 	}
-	if got := correlationKeyOf(orderKey, clio.InboundEvent{Data: map[string]any{}}); got != "" {
+	if got := correlationKeyOf(orderKey, clioFields(clio.InboundEvent{Data: map[string]any{}})); got != "" {
 		t.Errorf("missing-field correlationKeyOf = %q, want empty (null propagates)", got)
 	}
-	if got := correlationKeyOf(orderKey, clio.InboundEvent{Data: map[string]any{"orderId": "o-9"}}); got != "o-9" {
+	if got := correlationKeyOf(orderKey, clioFields(clio.InboundEvent{Data: map[string]any{"orderId": "o-9"}})); got != "o-9" {
 		t.Errorf("correlationKeyOf = %q, want o-9", got)
 	}
 	// The reported use case: a correlation key of subjectTail derives E-123456 from
@@ -63,21 +64,29 @@ func TestEventVarsAndKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileAuto: %v", err)
 	}
-	if got := correlationKeyOf(tailKey, clio.InboundEvent{Subject: "/employees/E-123456"}); got != "E-123456" {
+	if got := correlationKeyOf(tailKey, clioFields(clio.InboundEvent{Subject: "/employees/E-123456"})); got != "E-123456" {
 		t.Errorf("subjectTail correlationKeyOf = %q, want E-123456", got)
 	}
 
 	// A clio event id is a decimal per-partition sequence → the engine dedup seq.
-	if got := inboundSeq("42"); got != 42 {
-		t.Errorf("inboundSeq(42) = %d, want 42", got)
+	if got := clioSeq("42"); got != 42 {
+		t.Errorf("clioSeq(42) = %d, want 42", got)
 	}
-	if got := inboundSeq("not-a-number"); got != 0 {
-		t.Errorf("inboundSeq(garbage) = %d, want 0 (skipped)", got)
+	if got := clioSeq("not-a-number"); got != 0 {
+		t.Errorf("clioSeq(garbage) = %d, want 0 (skipped)", got)
 	}
 
-	sub := inboundSubscription{ConnectorID: "c1", WatchedSubject: "orders/new"}
-	if got := inboundSourceID(sub); got != "clio:c1:orders/new" {
+	// A clio watch keeps one mark for the whole subject, and the string must stay
+	// byte-identical: reshaping it would reset every existing watch's high-water mark
+	// and replay its backlog as new process starts.
+	sub := inboundSubscription{ID: "w1", ConnectorID: "c1", WatchedSubject: "orders/new"}
+	if got := inboundSourceID("clio", sub, ""); got != "clio:c1:orders/new" {
 		t.Errorf("inboundSourceID = %q, want clio:c1:orders/new", got)
+	}
+	// A source that hands over an event-level mark key gets one mark per event
+	// subject instead — for Jira, per issue (ADR-0214).
+	if got := inboundSourceID("jira", sub, "10042"); got != "jira:c1:w1:10042" {
+		t.Errorf("inboundSourceID = %q, want jira:c1:w1:10042", got)
 	}
 }
 
@@ -297,5 +306,34 @@ func TestInboundSubStoreLoadAllReadError(t *testing.T) {
 	}
 	if _, err := st.LoadAll(); err == nil {
 		t.Error("loadAll over an unreadable record: want error")
+	}
+}
+
+// A jira watch resolves through the same path as a clio one: the connector's kind is
+// the discriminator, so what changes is which reader the watch gets, not the record's
+// shape (ADR-0214). A kind with no inbound half is skipped rather than handed a reader
+// it has no use for.
+func TestResolveInboundSubsPicksTheReaderByConnectorKind(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
+	srv.jiraRegistry.Replace(map[string]jira.Client{"acme": &fakeJiraClient{}})
+	srv.do(func() {
+		_ = srv.connectors.Save(connector{ID: "j", Name: "acme", Kind: connectorKindJira, Endpoint: "https://acme.atlassian.net", Enabled: true, CreatedAt: 1})
+		_ = srv.connectors.Save(connector{ID: "j-unheld", Name: "other", Kind: connectorKindJira, Endpoint: "https://x", Enabled: true, CreatedAt: 2})
+		_ = srv.connectors.Save(connector{ID: "m", Name: "smtp", Kind: connectorKindMail, Endpoint: "smtp:587", Enabled: true, CreatedAt: 3})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "w-jira", ConnectorID: "j", JQL: "project = OPS", CursorField: "created", MessageName: "m", Enabled: true, CreatedAt: 1})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "w-unheld", ConnectorID: "j-unheld", JQL: "project = X", MessageName: "m", Enabled: true, CreatedAt: 2})
+		_ = srv.inboundSubs.Save(inboundSubscription{ID: "w-mail", ConnectorID: "m", JQL: "project = Y", MessageName: "m", Enabled: true, CreatedAt: 3})
+	})
+	var subs []pendingSub
+	srv.do(func() { subs = srv.resolveInboundSubs() })
+
+	if len(subs) != 1 {
+		t.Fatalf("resolved %d watches, want only the one whose jira connector has a live client: %+v", len(subs), subs)
+	}
+	if subs[0].rec.ID != "w-jira" || subs[0].kind != connectorKindJira {
+		t.Errorf("resolved %q of kind %q, want w-jira of kind jira", subs[0].rec.ID, subs[0].kind)
+	}
+	if _, ok := subs[0].source.(jiraSource); !ok {
+		t.Errorf("reader = %T, want a jiraSource", subs[0].source)
 	}
 }

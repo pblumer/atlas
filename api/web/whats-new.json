@@ -2,6 +2,50 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "a-jira-issue-can-start-a-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A new Jira ticket can start a process",
+        "de": "Ein neues Jira-Ticket kann einen Prozess starten"
+      },
+      "summary": {
+        "en": "Until now a process could write to Jira but never hear from it. A Jira connector now has an Events tab: give it a Jira query and a message name, and every issue the query finds starts the processes waiting for that message — and wakes the instances waiting on it. Atlas asks Jira on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a project with years of tickets does not start a process for each of them. The process receives the issue key, project, type, summary, status and reporter, and the whole issue for anything else. Watching changed tickets instead of new ones is the same setting, moved one field over.",
+        "de": "Bisher konnte ein Prozess nach Jira schreiben, aber nie von Jira hören. Ein Jira-Konnektor hat jetzt einen Reiter „Events\": Sie hinterlegen eine Jira-Abfrage und einen Nachrichtennamen, und jeder gefundene Vorgang startet die Prozesse, die auf diese Nachricht warten — und weckt die Instanzen, die daran hängen. Atlas fragt Jira in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf ein Projekt mit jahrelanger Historie zu richten startet nicht pro Alt-Ticket einen Prozess. Der Prozess bekommt Vorgangsschlüssel, Projekt, Typ, Titel, Status und Melder — und den ganzen Vorgang für alles Weitere. Geänderte statt neuer Tickets zu überwachen ist dieselbe Einstellung, ein Feld weiter."
+      },
+      "link": {
+        "label": "ADR-0214",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0214-jira-inbound-issue-watch.md"
+      },
+      "tags": [
+        "Connectors",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-jira-kind-can-be-supervised",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas can run the Jira worker for you again",
+        "de": "Atlas kann den Jira-Worker wieder selbst betreiben"
+      },
+      "summary": {
+        "en": "Asking Atlas to run a Jira worker did not start one — it stopped the server from starting at all, with a message saying there is no such kind. Jira could therefore only be served by a worker you launched yourself, never by one Atlas supervises, which is the one the Workers view shows; so it looked like a worker that simply was not there. It starts now, and a check was added so the next connector cannot ship in the same state.",
+        "de": "Atlas zu bitten, einen Jira-Worker zu betreiben, startete keinen — es verhinderte, dass der Server überhaupt startet, mit der Meldung, es gebe diese Art nicht. Jira konnte deshalb nur von einem Worker bedient werden, den Sie selbst starten, nie von einem, den Atlas beaufsichtigt — und genau den zeigt die Worker-Ansicht. Es sah also aus wie ein Worker, den es schlicht nicht gibt. Er startet jetzt, und eine Prüfung sorgt dafür, dass der nächste Konnektor nicht im selben Zustand ausgeliefert wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Connectors"
+      ]
+    },
+    {
       "id": "see-the-mock-active-directory",
       "version": "Unreleased",
       "date": null,
@@ -320,48 +364,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "a-jira-search-called-an-endpoint-jira-cloud-has-removed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Jira search works again on Jira Cloud",
-        "de": "Die Jira-Suche funktioniert wieder mit Jira Cloud"
-      },
-      "summary": {
-        "en": "Atlassian switched off the search endpoint this connector used, so a Jira task set to Search (JQL) failed against Jira Cloud with a bare \"gone\" from the server. The search now uses the endpoint Atlassian replaced it with, and asks for the same set of issue fields as before, so a model that reads the summary of a found issue keeps working unchanged. The other six Jira operations were never affected, and Jira Data Center is unaffected by the change altogether.",
-        "de": "Atlassian hat den Suchendpunkt abgeschaltet, den dieser Konnektor verwendet hat — eine Jira-Aufgabe mit der Operation Suche (JQL) scheiterte gegen Jira Cloud daher an einem blossen \"gone\" des Servers. Die Suche nutzt jetzt den Endpunkt, den Atlassian an dessen Stelle gesetzt hat, und fordert dieselben Vorgangsfelder an wie zuvor — ein Modell, das etwa den Titel eines gefundenen Vorgangs liest, funktioniert unverändert weiter. Die sechs übrigen Jira-Operationen waren nie betroffen, und Jira Data Center ist von der Änderung gar nicht berührt."
-      },
-      "link": {
-        "label": "ADR-0201",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0201-jira-connector.md"
-      },
-      "tags": [
-        "Connectors"
-      ]
-    },
-    {
-      "id": "a-feed-scrape-reached-its-worker-without-knowing-it-was-a-fe",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "RSS and Atom scraping works again outside the engine",
-        "de": "RSS- und Atom-Scraping funktioniert wieder ausserhalb der Engine"
-      },
-      "summary": {
-        "en": "A scrape task set to a feed format lost that setting on its way to the worker that runs it, so it fetched the feed as a web page and then failed on a CSS selector nobody had entered. Because scraping runs outside the engine by default, that was every feed task. The setting and the item limit now arrive, and the headlines come back as entries with title, link, description and date.",
-        "de": "Ein Scraping-Task mit Feed-Format hat diese Einstellung auf dem Weg zum ausführenden Worker verloren — er hat den Feed dann als Webseite geholt und ist an einem CSS-Selektor gescheitert, den niemand eingetragen hatte. Weil Scraping standardmässig ausserhalb der Engine läuft, betraf das jeden Feed-Task. Einstellung und Anzahlbegrenzung kommen jetzt an, und die Schlagzeilen landen als Einträge mit Titel, Link, Beschreibung und Datum."
-      },
-      "link": {
-        "label": "ADR-0190",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0190-webscrape-feed-extraction.md"
-      },
-      "tags": [
-        "Connectors"
-      ]
     }
   ]
 }

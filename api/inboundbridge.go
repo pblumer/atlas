@@ -2,11 +2,9 @@ package api
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
@@ -41,12 +39,13 @@ func (s *Server) inboundBridge(every time.Duration) {
 	}
 }
 
-// pendingSub is one enabled subscription resolved for a poll: its record, the clio
-// client for its connector, and its compiled correlation-key expression (nil when
-// the subscription is keyless).
+// pendingSub is one enabled subscription resolved for a poll: its record, the reader
+// for its connector's kind, that kind's name (which composes the engine's source id),
+// and its compiled correlation-key expression (nil when the subscription is keyless).
 type pendingSub struct {
 	rec    inboundSubscription
-	client clio.Client
+	kind   string
+	source inboundSource
 	key    *expr.Compiled
 }
 
@@ -61,37 +60,41 @@ func (s *Server) pollInbound(ctx context.Context) {
 	var subs []pendingSub
 	s.do(func() { subs = s.resolveInboundSubs() })
 
+	now := s.inboundNow()
 	for _, sb := range subs {
+		if !inboundDue(sb.rec, now) {
+			continue // this watch has its own cadence and it has not elapsed
+		}
+		subID := sb.rec.ID
+		s.do(func() { s.markInboundPolled(subID, now.Unix()) })
 		if sb.rec.StartFromTip && !sb.rec.Primed {
 			s.primeInbound(ctx, sb) // skip the backlog to the tip, publishing nothing
 			continue
 		}
-		events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
-			Subject:   sb.rec.WatchedSubject,
-			AfterID:   sb.rec.LastEventID,
-			Recursive: sb.rec.Recursive,
-			Limit:     s.inboundBatch,
-		})
+		events, cursor, err := sb.source.Read(ctx, sb.rec, s.inboundBatch)
 		if err != nil || len(events) == 0 {
 			continue // transient read failure or nothing new; retry next tick
 		}
 		// Compute correlation keys and payloads off the run loop.
 		type pub struct {
-			seq  uint64
-			key  string
-			vars []model.VariableValue
+			sourceID string
+			seq      uint64
+			key      string
+			vars     []model.VariableValue
 		}
 		pubs := make([]pub, len(events))
 		for i, ev := range events {
-			pubs[i] = pub{seq: inboundSeq(ev.ID), key: correlationKeyOf(sb.key, ev), vars: eventVars(ev)}
+			pubs[i] = pub{
+				sourceID: inboundSourceID(sb.kind, sb.rec, ev.MarkKey),
+				seq:      ev.Seq,
+				key:      correlationKeyOf(sb.key, ev.Fields),
+				vars:     eventVars(ev.Fields),
+			}
 		}
-		sourceID := inboundSourceID(sb.rec)
-		lastID := events[len(events)-1].ID
 		name := sb.rec.MessageName
-		subID := sb.rec.ID
 		s.do(func() {
 			for _, p := range pubs {
-				s.proc.PublishInbound(sourceID, p.seq, name, p.key, p.vars...)
+				s.proc.PublishInbound(p.sourceID, p.seq, name, p.key, p.vars...)
 			}
 		})
 		// A correlated message can start or advance an instance straight into a
@@ -101,8 +104,46 @@ func (s *Server) pollInbound(ctx context.Context) {
 		if err := s.drive(); err != nil {
 			continue
 		}
-		s.do(func() { s.advanceInboundCursor(subID, lastID) })
+		if cursor != "" {
+			s.do(func() { s.advanceInboundCursor(subID, cursor) })
+		}
 	}
+}
+
+// inboundNow is the clock the bridge paces watches by, injectable so a test does not
+// have to wait out a cadence.
+func (s *Server) inboundNow() time.Time {
+	if s.inboundClock != nil {
+		return s.inboundClock()
+	}
+	return time.Now()
+}
+
+// inboundDue reports whether a watch's own cadence has elapsed. A watch with no cadence
+// of its own is read on every tick, which is what every clio subscription did before
+// this existed and still does.
+//
+// The cadence is per watch rather than per bridge because the two sources want opposite
+// things from it: a clio read is local and cheap, and a two-second tick is the latency
+// budget it was chosen for; a Jira site rate-limits per site, and spending that budget
+// on empty answers every two seconds is not what it is for.
+func inboundDue(rec inboundSubscription, now time.Time) bool {
+	if rec.PollSeconds <= 0 {
+		return true
+	}
+	return now.Unix()-rec.LastPolledAt >= int64(rec.PollSeconds)
+}
+
+// markInboundPolled records when a watch was last read, so its cadence advances even
+// when the read fails or finds nothing. It runs on the run loop (the store's owner) and
+// a save failure is ignored: the value only paces, and losing it re-reads early.
+func (s *Server) markInboundPolled(subID string, at int64) {
+	rec, ok, err := s.inboundSubs.Get(subID)
+	if err != nil || !ok {
+		return
+	}
+	rec.LastPolledAt = at
+	_ = s.inboundSubs.Save(rec)
 }
 
 // inboundPrimeBatch is the page size the priming path reads while skipping a
@@ -120,22 +161,12 @@ const inboundPrimeBatch = 4096
 // primed, after which pollInbound publishes new events normally. Publishing nothing
 // here means a lost cursor update is harmless — a re-prime simply skips again.
 func (s *Server) primeInbound(ctx context.Context, sb pendingSub) {
-	events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
-		Subject:   sb.rec.WatchedSubject,
-		AfterID:   sb.rec.LastEventID,
-		Recursive: sb.rec.Recursive,
-		Limit:     inboundPrimeBatch,
-	})
+	cursor, done, err := sb.source.Prime(ctx, sb.rec)
 	if err != nil {
 		return // transient read failure; retry next tick
 	}
-	var lastID string
-	if len(events) > 0 {
-		lastID = events[len(events)-1].ID
-	}
-	caughtUp := len(events) < inboundPrimeBatch // a short (or empty) page reached the tip
 	subID := sb.rec.ID
-	s.do(func() { s.markInboundPrimed(subID, lastID, caughtUp) })
+	s.do(func() { s.markInboundPrimed(subID, cursor, done) })
 }
 
 // markInboundPrimed persists one priming step: it advances the resume cursor to the
@@ -177,12 +208,28 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			continue
 		}
 		c, ok := byID[r.ConnectorID]
-		if !ok || !c.Enabled || c.Kind != connectorKindClio {
+		if !ok || !c.Enabled {
 			continue
 		}
-		client, ok := s.clioRegistry.Client(c.Name)
-		if !ok {
-			continue
+		// The connector's kind is the discriminator: a watch record carries no kind of
+		// its own, so a clio subscription written before jira watches existed needs no
+		// migration to keep meaning what it meant (ADR-0214).
+		var src inboundSource
+		switch c.Kind {
+		case connectorKindClio:
+			client, ok := s.clioRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			src = clioSource{client: client}
+		case connectorKindJira:
+			client, ok := s.jiraRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			src = jiraSource{client: client, now: s.inboundNow}
+		default:
+			continue // a kind with no inbound half; its connector is outbound only
 		}
 		var compiled *expr.Compiled
 		if strings.TrimSpace(r.CorrelationKey) != "" {
@@ -192,7 +239,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 		}
-		out = append(out, pendingSub{rec: r, client: client, key: compiled})
+		out = append(out, pendingSub{rec: r, kind: c.Kind, source: src, key: compiled})
 	}
 	return out
 }
@@ -210,63 +257,32 @@ func (s *Server) advanceInboundCursor(subID, lastEventID string) {
 	_ = s.inboundSubs.Save(rec)
 }
 
-// inboundSourceID is the opaque per-source key the engine deduplicates on: a clio
-// connector plus the watched subject. The engine never interprets it (ADR-0075).
-func inboundSourceID(r inboundSubscription) string {
-	return "clio:" + r.ConnectorID + ":" + r.WatchedSubject
-}
-
-// inboundSeq parses a clio event id — a per-partition monotonic sequence rendered
-// as a decimal string — into the uint64 the engine deduplicates on (ADR-0075).
-// clio events carry no separate `seq` field; the id itself is the order. A
-// non-numeric id (not a real clio event) yields 0, which the engine treats as
-// already-applied and skips, so a garbled line can never double-start a process.
-func inboundSeq(id string) uint64 {
-	n, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return 0
+// inboundSourceID is the opaque key the engine deduplicates on. The engine never
+// interprets it (ADR-0075); what varies is how wide a scope one key covers.
+//
+// A clio watch keeps one key for the whole subject — byte-identical to what it has
+// always been, which is not cosmetic: reshaping that string would reset every existing
+// watch's high-water mark and replay its backlog as new process starts.
+//
+// A source that hands over an event-level mark key gets one key per *event subject*
+// instead — for Jira, per issue. That is what lets a source whose order is a query's be
+// correct: two issues never share a mark, so no delivery order can make one suppress
+// the other, and the cursor is then free to lag and re-read (ADR-0214).
+func inboundSourceID(kind string, r inboundSubscription, markKey string) string {
+	if markKey == "" {
+		return kind + ":" + r.ConnectorID + ":" + r.WatchedSubject
 	}
-	return n
+	return kind + ":" + r.ConnectorID + ":" + r.ID + ":" + markKey
 }
 
-// eventFields is the binding environment a clio event exposes to correlation-key
-// expressions and as seeded process variables: the event body, plus four reserved
-// envelope fields the body cannot see on its own. subjectTail is the last
-// '/'-segment of the subject — "E-123456" for "/employees/E-123456" — so a watch
-// on a parent subject can key on the child id. The envelope fields take precedence
-// over a body field of the same name, so a subscription can always rely on them.
-func eventFields(ev clio.InboundEvent) map[string]any {
-	fields := make(map[string]any, len(ev.Data)+4)
-	for k, v := range ev.Data {
-		fields[k] = v
-	}
-	fields["subject"] = ev.Subject
-	fields["subjectTail"] = subjectTail(ev.Subject)
-	fields["eventType"] = ev.Type
-	fields["eventId"] = ev.ID
-	return fields
-}
-
-// subjectTail returns the last '/'-separated segment of a clio subject (trailing
-// slashes ignored): the leaf id an event is scoped to.
-func subjectTail(subject string) string {
-	trimmed := strings.TrimRight(subject, "/")
-	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
-		return trimmed[i+1:]
-	}
-	return trimmed
-}
-
-// correlationKeyOf evaluates a subscription's compiled correlation key over a clio
-// event's fields (body plus reserved envelope fields), returning the key as a
-// string. A nil expression (keyless subscription) yields ""; a failed evaluation
-// (e.g. a missing field) also yields "" so the message publishes keyless rather
-// than being dropped.
-func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
+// correlationKeyOf evaluates a subscription's compiled correlation key over an event's
+// fields, returning the key as a string. A nil expression (keyless subscription) yields
+// ""; a failed evaluation (e.g. a missing field) also yields "" so the message publishes
+// keyless rather than being dropped.
+func correlationKeyOf(compiled *expr.Compiled, fields map[string]any) string {
 	if compiled == nil {
 		return ""
 	}
-	fields := eventFields(ev)
 	binds := make(map[string]expr.Value, len(compiled.Inputs()))
 	for _, name := range compiled.Inputs() {
 		if v, ok := fields[name]; ok {
@@ -281,14 +297,13 @@ func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
 	return text
 }
 
-// eventVars turns a clio event's fields (body plus reserved envelope fields) into
-// the payload variables carried into the woken/started instances, canonicalized
-// through expr so each round-trips on replay exactly like any other variable. The
-// envelope fields (subject, subjectTail, eventType, eventId) let a process read the
-// event's subject and derive keys from it — e.g. a message-start correlation key of
-// subjectTail.
-func eventVars(ev clio.InboundEvent) []model.VariableValue {
-	fields := eventFields(ev)
+// eventVars turns an event's fields into the payload variables carried into the
+// woken/started instances, canonicalized through expr so each round-trips on replay
+// exactly like any other variable. The envelope fields each source adds (subject and
+// subjectTail for clio, issueKey and the issue itself for Jira) are what let a process
+// read what the event was about and derive keys from it — e.g. a message-start
+// correlation key of subjectTail, or of issueKey.
+func eventVars(fields map[string]any) []model.VariableValue {
 	out := make([]model.VariableValue, 0, len(fields))
 	for name, raw := range fields {
 		kind, b, text := expr.Classify(expr.FromJSON(raw))

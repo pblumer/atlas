@@ -84,6 +84,10 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		CorrelationKey string `json:"correlationKey"`
 		Enabled        *bool  `json:"enabled"`
 		StartFromTip   *bool  `json:"startFromTip"`
+		JQL            string `json:"jql"`
+		CursorField    string `json:"cursorField"`
+		LagSeconds     int    `json:"lagSeconds"`
+		PollSeconds    int    `json:"pollSeconds"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -92,8 +96,8 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	subject := strings.TrimSpace(p.WatchedSubject)
 	messageName := strings.TrimSpace(p.MessageName)
 	corr := feelExpr(p.CorrelationKey)
-	if messageName == "" || subject == "" {
-		httpapi.Error(w, http.StatusBadRequest, "messageName and watchedSubject are required")
+	if messageName == "" {
+		httpapi.Error(w, http.StatusBadRequest, "messageName is required")
 		return
 	}
 	if corr != "" {
@@ -101,6 +105,27 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
 			return
 		}
+	}
+	// What the rest of the shape must be depends on the connector's kind, and the kind
+	// is in the store — so it is read before the record is built rather than checked
+	// after it (ADR-0214).
+	var (
+		kind    string
+		kindErr error
+	)
+	s.do(func() {
+		conn, ok, e := s.connectors.Get(connID)
+		if e != nil {
+			kindErr = e
+			return
+		}
+		if ok {
+			kind = conn.Kind
+		}
+	})
+	if kindErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read connector: "+kindErr.Error())
+		return
 	}
 	id, err := newID()
 	if err != nil {
@@ -122,22 +147,20 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		ID: id, ConnectorID: connID, WatchedSubject: subject, Recursive: p.Recursive,
 		MessageName: messageName, CorrelationKey: corr, Enabled: enabled,
 		StartFromTip: startFromTip, CreatedAt: time.Now().Unix(),
+		JQL:         strings.TrimSpace(p.JQL),
+		CursorField: strings.TrimSpace(p.CursorField),
+		LagSeconds:  p.LagSeconds,
+		PollSeconds: p.PollSeconds,
+	}
+	if msg := validateInboundWatch(kind, &rec); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
 	}
 	var (
-		notClio bool
 		claimed bool
 		saveErr error
 	)
 	s.do(func() {
-		conn, ok, e := s.connectors.Get(connID)
-		if e != nil {
-			saveErr = e
-			return
-		}
-		if !ok || conn.Kind != connectorKindClio {
-			notClio = true
-			return
-		}
 		// The claim on a message name, from the other side (ADR-0205): pointing this
 		// connector at a name some definition the claimant cannot reach already
 		// listens for would deliver their events to it, silently.
@@ -147,9 +170,6 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		saveErr = s.inboundSubs.Save(rec)
 	})
 	switch {
-	case notClio:
-		httpapi.Error(w, http.StatusBadRequest, "no clio connector with that id")
-		return
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
 		return

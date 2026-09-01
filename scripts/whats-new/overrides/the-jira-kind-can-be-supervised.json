@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Workers",
+    "Connectors"
+  ],
+  "title": {
+    "en": "Atlas can run the Jira worker for you again",
+    "de": "Atlas kann den Jira-Worker wieder selbst betreiben"
+  },
+  "summary": {
+    "en": "Asking Atlas to run a Jira worker did not start one — it stopped the server from starting at all, with a message saying there is no such kind. Jira could therefore only be served by a worker you launched yourself, never by one Atlas supervises, which is the one the Workers view shows; so it looked like a worker that simply was not there. It starts now, and a check was added so the next connector cannot ship in the same state.",
+    "de": "Atlas zu bitten, einen Jira-Worker zu betreiben, startete keinen — es verhinderte, dass der Server überhaupt startet, mit der Meldung, es gebe diese Art nicht. Jira konnte deshalb nur von einem Worker bedient werden, den Sie selbst starten, nie von einem, den Atlas beaufsichtigt — und genau den zeigt die Worker-Ansicht. Es sah also aus wie ein Worker, den es schlicht nicht gibt. Er startet jetzt, und eine Prüfung sorgt dafür, dass der nächste Konnektor nicht im selben Zustand ausgeliefert wird."
+  }
+}

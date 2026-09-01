@@ -2920,7 +2920,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "jql", label: "JQL", placeholder: "project = OPS AND status = \"To Do\"", fx: true,
         showIf: (v) => v.operation === "search",
-        hint: "The Jira query the search runs, written exactly as in Jira's own search box. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
+        hint: "The Jira query the search runs, written exactly as in Jira's own search box. It must restrict what it matches — Jira Cloud refuses an unbounded query outright, so a query that only sorts (order by created DESC) comes back as HTTP 400; name at least a project, an assignee or a label. May be a FEEL expression (fx), so a process can search for what it is actually about — e.g. =\"project = OPS AND reporter = \" + melder.",
       },
       {
         key: "maxResults", label: "Maximum issues", placeholder: "50",
