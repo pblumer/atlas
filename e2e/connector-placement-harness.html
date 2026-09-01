@@ -145,7 +145,7 @@
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         if (method === "GET" && /\/processes$/.test(url)) return [];
         if (method === "GET" && /\/drafts$/.test(url)) return [];
-        if (method === "GET" && /\/connectors$/.test(url)) return [];
+        if (method === "GET" && /\/(connectors|configured-workers)$/.test(url)) return [];
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
         return {};
