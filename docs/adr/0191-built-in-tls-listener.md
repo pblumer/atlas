@@ -121,11 +121,17 @@
 > unchanged: this record removes the cryptographic reason to run a proxy, not the
 > authorization one, and `docs/install.md` § 8 says so in those words.
 >
-> **Still not covered**, beyond what the record already excludes: `atlas mcp --server
-> https://…`, the stdio adapter, takes no `--tls-ca`. It is a client of a remote Atlas
-> like the others, but it runs on a person's own machine, where the host trust store is
-> the ordinary answer and usually already carries the company CA. If that turns out to
-> be wrong, it is the same flag in a third place.
+> **Still not covered**, beyond what the record already excludes: nothing of the client
+> side. The acceptance left `atlas mcp --server https://…`, the stdio adapter, without
+> `--tls-ca` — it runs on a person's own machine, where the host trust store is the
+> ordinary answer and usually already carries the company CA — and said that if that
+> turned out to be wrong it was the same flag in a third place. It was, and it is:
+> `atlas mcp --tls-ca` (or `ATLAS_TLS_CA`) now trusts an operator's bundle in addition
+> to the host's, through `mcp.WithTLSRoots`, with the same two properties as the other
+> two: added rather than replacing, and no way to skip verification. A bundle that
+> cannot be read stops the adapter at startup, so the agent driving it sees a process
+> that did not start rather than every tool call failing for a reason nothing in the
+> answer explains.
 
 ## Context and problem statement
 

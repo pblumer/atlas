@@ -736,7 +736,22 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 	// because it is the same need.
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"),
 		"bearer token, when the server requires authentication (or ATLAS_TOKEN)")
+	// The adapter is a client of a remote Atlas like the promotion path and
+	// `atlas worker` are, so it hits the same wall: a server whose certificate an
+	// internal CA issued is refused, and there is deliberately no way to skip that
+	// (ADR-0191). Usually unnecessary — this runs on a person's own machine, whose
+	// trust store already carries the company CA — which is why it took a record's
+	// follow-up rather than the record itself.
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"),
+		"PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Never a way to skip verification: there is none (or ATLAS_TLS_CA)")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Before the first tool call, so a bundle that cannot be read stops a process
+	// the agent can see did not start, rather than failing every call for a reason
+	// nothing in the answer explains.
+	roots, err := trustPool(*tlsCA)
+	if err != nil {
 		return err
 	}
 	// Trimmed because a token exported from a shell profile or read out of a file
@@ -749,9 +764,10 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 	// tool returns 401" and "no token was set" are the same incident, and an
 	// operator should not have to guess that.
 	logging.Info(logging.MCPProxying, "proxying MCP over stdio",
-		slog.String("server", *server), slog.Bool("authenticated", bearer != ""))
+		slog.String("server", *server), slog.Bool("authenticated", bearer != ""),
+		slog.Bool("extra_ca", roots != nil))
 
-	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer)))
+	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots)))
 	return s.Serve(in, out)
 }
 
