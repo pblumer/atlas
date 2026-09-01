@@ -1,6 +1,6 @@
 # ADR-0189: Panorama architecture modeling and live operational overlays
 
-- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, and its historical context is a query rather than a copy; see the amendment notes below)
+- **Status:** Accepted (amended 2026-08-31 — a derived landscape mesh sits above these drawn views, and takes impact analysis out of P5; amended 2026-09-01 — P5's "over time" is a journal of transitions, not a store of samples, its historical context is a query rather than a copy, and arranging a view splices the document rather than re-serialising it; see the amendment notes below)
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 
@@ -57,6 +57,34 @@
 >
 > §6's seven states and its rule that layer fills are never recolored are unaffected: a
 > transition is a pair of those states, and it is rendered as text beside a finding.
+
+> **Amendment (2026-09-01): arranging a view splices the document.** §2 requires
+> that unsupported-but-standard content round-trips without loss. Authoring makes
+> that concrete for the first time, and the shape of the answer is the binding
+> writer's: the server rewrites the four geometry attributes of the shapes that
+> moved and reads nothing else, so comments, indentation, attribute order,
+> namespace prefixes and any part of the schema Panorama does not model survive
+> being edited.
+>
+> The corollary is that **the browser never writes the document.** The canvas
+> parsed one to draw it and could serialise it back in a line — but a browser's
+> `XMLSerializer` normalises, so that line would rewrite somebody's model every
+> time a box was nudged. The canvas therefore sends what it actually knows, which
+> is a list of moved shapes, on a route that can move a shape and do nothing else
+> whatever is posted to it.
+>
+> Two rules follow from the same principle, that the canvas must not offer what it
+> cannot honestly do:
+>
+> - **An editable canvas loads editing; a reader's does not.** Not a disabled
+>   toolbar — a diagram-js with no modeling behaviour in it, so a reader's drag
+>   pans the view rather than being refused.
+> - **An explicit rules provider permits only what a slice implements.** With no
+>   rules provider diagram-js allows everything, including operations that would
+>   change the canvas and never reach the document. Creating elements and drawing
+>   relationships arrive with their own slice and their own semantic rules; until
+>   then they are refused, because an edit that cannot be saved is worse than one
+>   that cannot be made.
 
 > **Amendment (2026-09-01): P5's historical context is a query, never a copy.** The
 > options above rejected "copy all remote metrics and logs into a Panorama-specific

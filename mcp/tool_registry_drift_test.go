@@ -243,6 +243,12 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/panorama/models/{id}":     "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"DELETE /api/v1/panorama/models/{id}":  "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
 	"GET /api/v1/panorama/models/{id}/xml": "Panorama MCP authoring contract is deferred beyond the P1 HTTP model library",
+	// Where the boxes sit on a view is a person's spatial judgement about what is
+	// legible, not a fact an agent can improve. A tool for it would let one rearrange
+	// somebody's diagram with no way to see whether the result reads better — and
+	// the arrangement is the one part of the document that carries no semantics for
+	// an agent to reason about in the first place.
+	"PUT /api/v1/panorama/models/{id}/layout": "how a diagram is arranged is a human judgement about legibility, with no semantics for an agent to act on",
 	// The derived landscape mesh (ADR-0211) is read-only and would make an obvious
 	// agent tool — "what depends on this connector" is exactly the question. It is
 	// omitted for now because its payload shape is still moving: P2.5 adds node and

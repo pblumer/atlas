@@ -611,7 +611,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     // view losing the diagram.
     api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/observations`).catch(() => null),
   ]);
-  const parsed = vendor.parseOpenExchange(xml);
+  let parsed = vendor.parseOpenExchange(xml);
   const application = applications.find((item) => item.id === model.applicationId);
 
   container.innerHTML = `<div class="editor live panorama-editor">
@@ -624,7 +624,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
         ${parsed.views.map((item, index) => `<button class="panorama-view-tab${index === 0 ? " active" : ""}" role="tab" aria-selected="${index === 0}" data-view="${esc(item.id)}">${esc(item.name)}</button>`).join("")}
       </div>
       <span class="spacer"></span>
-      <span class="panorama-status"><span class="panorama-lock" aria-hidden="true">▣</span> Read only</span>
+      <span class="panorama-status"></span>
       <button class="btn ghost small" data-tool="c4" aria-pressed="false">C4 projection</button>
       <a class="btn ghost small" href="/api/v1/panorama/models/${encodeURIComponent(id)}/xml">Export XML</a>
     </div>
@@ -632,6 +632,10 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       <button class="icon-btn" data-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
       <button class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
       <button class="icon-btn" data-tool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+      <span class="panorama-tool-sep" aria-hidden="true"></span>
+      <button class="icon-btn" data-tool="undo" title="Undo" aria-label="Undo" disabled>↺</button>
+      <button class="icon-btn" data-tool="redo" title="Redo" aria-label="Redo" disabled>↻</button>
+      <button class="btn small" data-tool="save" disabled>Save layout</button>
     </div>
     <div class="editor-body">
       <div class="panorama-stage">
@@ -662,7 +666,43 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   const drift = await api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/drift`)
     .catch(() => null);
   let revision = model.revision;
+  const status = container.querySelector(".panorama-status");
+  const undoButton = container.querySelector('[data-tool="undo"]');
+  const redoButton = container.querySelector('[data-tool="redo"]');
+  const saveButton = container.querySelector('[data-tool="save"]');
+
+  // paintEditState is what the toolbar says about unsaved work. It reads the
+  // canvas rather than counting drags, because dragging a box away and back is not
+  // a change and a counter would call it one — and then save a revision that moved
+  // nothing, conflicting every other open editor for it.
+  function paintEditState() {
+    if (!canEdit) {
+      status.innerHTML = `<span class="panorama-lock" aria-hidden="true">▣</span> Read only`;
+      return;
+    }
+    const pending = viewer ? viewer.moved().length : 0;
+    undoButton.disabled = !viewer?.canUndo();
+    redoButton.disabled = !viewer?.canRedo();
+    saveButton.disabled = pending === 0;
+    status.textContent = pending
+      ? `${pending} shape${pending === 1 ? "" : "s"} moved`
+      : "No unsaved changes";
+    status.classList.toggle("panorama-dirty", pending > 0);
+  }
+
+  // Leaving with work in progress is the one thing the canvas cannot undo for
+  // somebody, so it is the one thing worth interrupting a navigation for.
+  const guard = (event) => {
+    if (canEdit && viewer && viewer.moved().length) event.preventDefault();
+  };
+  window.addEventListener("beforeunload", guard);
   let selected = null;
+
+  // currentView is the view the tabs say is open, which is what a save has to
+  // re-render after re-reading the document.
+  const currentView = () =>
+    parsed.views.find((v) => v.id === container.querySelector(".panorama-view-tab.active")?.dataset.view)
+    || parsed.views[0];
 
   // Context is per element and fetched on demand, so it is cleared whenever the
   // selection moves: showing one element's history under another's name would be
@@ -697,12 +737,14 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       canvas.innerHTML = `<div class="panorama-no-view"><div>◇</div><h2>No diagram views</h2><p>This model contains reusable ArchiMate elements, but no Diagram view yet.</p></div>`;
       return;
     }
-    if (!viewer) viewer = new vendor.Viewer(canvas, (item) => {
-      selected = item;
-      ctx = null;
-      ctxLoading = false;
-      paintProperties();
-    });
+    if (!viewer) {
+      viewer = new vendor.Viewer(canvas, (item) => {
+        selected = item;
+        ctx = null;
+        ctxLoading = false;
+        paintProperties();
+      }, { editable: canEdit, onChange: paintEditState });
+    }
     viewer.render(diagramView);
     // The renderer adds its shapes synchronously, so the DOM is there to decorate
     // the moment render returns. Re-marking on every view switch is not an
@@ -712,6 +754,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     legend.innerHTML = canvasLegendHTML(live, marked);
   };
   select(parsed.views[0]);
+  paintEditState();
 
   container.querySelectorAll(".panorama-view-tab").forEach((button) => button.addEventListener("click", () => {
     container.querySelectorAll(".panorama-view-tab").forEach((tab) => {
@@ -722,6 +765,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
     selected = null;
     paintProperties();
     select(parsed.views.find((item) => item.id === button.dataset.view));
+    paintEditState();
   }));
   // Binding edits are delegated from the panel, which is re-rendered on every
   // selection: a listener bound to a button would not survive the next repaint.
@@ -772,8 +816,7 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
       c4Open = false;
       c4Button.setAttribute("aria-pressed", "false");
       canvas.querySelector(".c4-panel")?.remove();
-      select(parsed.views.find((v) => v.id === container.querySelector(".panorama-view-tab.active")?.dataset.view)
-        || parsed.views[0]);
+      select(currentView());
       return;
     }
     let projection;
@@ -793,6 +836,34 @@ export async function mountPanoramaViewer(container, { api, toast, id }) {
   container.querySelector('[data-tool="zoom-in"]').addEventListener("click", () => viewer?.zoom(1.2));
   container.querySelector('[data-tool="zoom-out"]').addEventListener("click", () => viewer?.zoom(1 / 1.2));
   container.querySelector('[data-tool="fit"]').addEventListener("click", () => viewer?.fit());
+  undoButton.addEventListener("click", () => { viewer?.undo(); paintEditState(); });
+  redoButton.addEventListener("click", () => { viewer?.redo(); paintEditState(); });
+
+  // Saving sends the shapes that moved, not the document. The canvas has a parsed
+  // copy and could serialise it, but a browser's XMLSerializer normalises — and
+  // ADR-0189 §2 requires that nothing outside the edit changes. The server splices
+  // four numbers per shape instead, so a comment somebody left in their model
+  // survives being nudged.
+  saveButton.addEventListener("click", async () => {
+    const changes = viewer?.moved() || [];
+    if (!changes.length) return;
+    saveButton.disabled = true;
+    try {
+      const updated = await api("PUT", `/api/v1/panorama/models/${encodeURIComponent(id)}/layout`,
+        { expectedRevision: revision, changes });
+      revision = updated.revision;
+      // Re-read the view so the canvas's baseline is the document again. Without it
+      // the next save would resend shapes that are already stored, and a second
+      // editor's conflict would be reported against work that had landed.
+      const xml = await api("GET", `/api/v1/panorama/models/${encodeURIComponent(id)}/xml`);
+      parsed = vendor.parseOpenExchange(xml);
+      select(currentView());
+      toast(`Layout saved (revision ${revision}).`);
+    } catch (e) {
+      toast(e.message);
+    }
+    paintEditState();
+  });
 
   window.__atlasCleanup = () => {
     viewer?.destroy();

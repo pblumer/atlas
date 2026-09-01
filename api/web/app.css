@@ -693,6 +693,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .panorama-drift-limits ul { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
 .panorama-drift-limits b { color: var(--text); }
 .panorama-obs-since { font-size: 11px; }
+/* The authoring toolbar (ADR-0189 §2). The status is the one place that says
+   whether there is unsaved work, so it changes colour rather than only wording:
+   "no unsaved changes" and "three shapes moved" must not read alike at a glance. */
+.panorama-tool-sep {
+  width: 1px; align-self: stretch; margin: 2px 4px; background: var(--border-strong);
+}
+.panorama-status.panorama-dirty { color: var(--warn); font-weight: 600; }
 /* Historical context from stores outside Atlas (ADR-0189 P5b). A bar strip, not a
    chart: a smooth line with axes would promise a continuity that a query against
    somebody else's retention does not have, and this stays a correlation surface. */
