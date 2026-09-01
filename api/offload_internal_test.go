@@ -244,6 +244,31 @@ func TestRemedyIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
 	})
 }
 
+// Jira is offloaded by default (ADR-draft-jira-default-offload), which is only safe
+// because the engine hands the supervised worker the site and the credential it cannot
+// read for itself — the same condition mail and Remedy are defaulted on. Defaulting it
+// without that would move every Jira task to a worker with no site to file against.
+//
+// The in-process handler stays, because a default that cannot be turned back is not a
+// default: --in-process-connectors jira is the way back.
+func TestJiraIsOffloadedByDefaultAndKeepsItsInProcessFallback(t *testing.T) {
+	if !slices.Contains(DefaultOffloadedKinds(), connectorKindJira) {
+		t.Error("jira is not offloaded by default; its work runs on the engine's own loop, " +
+			"and the Workers view shows nobody doing it")
+	}
+	if _, handed := (&Server{}).provisionedConnectorKinds()[connectorKindJira]; !handed {
+		t.Error("jira is defaulted but its site and credential are not handed to the " +
+			"supervised worker; every Jira task would park on a worker holding no instance")
+	}
+	srv := newServerWithOptions(t)
+	srv.do(func() {
+		if !srv.jobRunner.Handles(compiler.JiraJobTypeIndex) {
+			t.Error("a server that was not told to offload jira has no in-process handler for it, " +
+				"so --in-process-connectors would leave the kind served by nobody")
+		}
+	})
+}
+
 // TestPullingARemedyJobResolvesTheTaskAndCarriesNoCredential is the engine's half of
 // ADR-0106's move onto a worker, checked where the engine hands the work over.
 //

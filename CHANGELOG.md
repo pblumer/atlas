@@ -198,6 +198,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Jira runs on a worker by default.** `DefaultOffloadedKinds` now includes `jira`, so a
+  Jira task is leased by a supervised worker instead of served inside the engine
+  ([ADR-draft-jira-default-offload](docs/adr/draft-jira-default-offload.md)). The engine
+  hands that worker the site URL and the vault credential at spawn, so nothing needs
+  configuring — the same handover mail and Remedy get. It appears in Operations → Workers
+  as a process with a pid, a log and a restart button, which is where an operator looks
+  for it; served in-process it was a folded-away row in Job types, visible only when
+  something was wrong with it. **This changes behaviour on upgrade**: the work moves out
+  of the engine on the next start, and a Jira site reachable from the engine must be
+  reachable from the worker. `--in-process-connectors jira` is the way back, and the
+  in-process handler stays for it.
+
 - **New Atlas mark.** The logo and the favicon are now a white peak carrying a
   cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`
   letter tile the Console showed in its top bar, drawer, login screen, handbook,
