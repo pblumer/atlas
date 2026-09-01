@@ -681,6 +681,12 @@ func TestAnUnreadableSandboxIsReportedAsAFault(t *testing.T) {
 		"run":     call(t, svc.HandleRun, http.MethodPost, "", id),
 		"clock":   call(t, svc.HandleAdvanceClock, http.MethodPost, `{"millis":1000}`, id),
 		"message": call(t, svc.HandlePublishMessage, http.MethodPost, `{"name":"m"}`, id),
+		// A verdict and a comparison fold the report, so a report that cannot be read
+		// is a verdict nobody should act on. "Passed" over numbers the sandbox could
+		// not produce is worse than any error.
+		"heatmap": call(t, svc.HandleHeatMap, http.MethodGet, "", id),
+		"verdict": call(t, svc.HandleVerdict, http.MethodPost, `{"minCompleted":1}`, id),
+		"compare": call(t, svc.HandleCompare, http.MethodPost, `{"baseline":{"cases":1}}`, id),
 	} {
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("%s: status = %d, want 500 (body %s)", name, rec.Code, rec.Body)

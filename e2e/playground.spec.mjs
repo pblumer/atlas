@@ -174,10 +174,10 @@ test("a batch runs, is polled to a stop, and reports what it did", async ({ page
   await expect(page.locator("#pg-hint")).toContainText("report is in the panel");
 
   // The bottleneck ranking puts the queue first: review waited, score did not.
-  const rows = page.locator(".pg-table").first().locator("tbody tr");
+  const rows = page.locator(".pg-bottlenecks tbody tr");
   await expect(rows.first()).toContainText("review");
   await expect(rows.first()).toContainText("3h");
-  await expect(page.locator(".pg-table").nth(1)).toContainText("clerks");
+  await expect(page.locator(".pg-pools")).toContainText("clerks");
 
   // And the run over time is drawn rather than described.
   await expect(page.locator(".pg-chart")).toBeVisible();
@@ -247,5 +247,131 @@ test("stopping a batch leaves what it did readable", async ({ page }) => {
 
   await expect(page.locator(".pg-run-line")).toContainText("of 3 finished");
   await expect(page.locator(".pg-facts").first()).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("a run is judged, and the verdict names what it missed", async ({ page }) => {
+  await switchToBatch(page);
+  // The two boxes an author ticks are the two a build exits on.
+  await expect(page.locator("#pg-x-finish")).toBeChecked();
+  await expect(page.locator("#pg-x-inc")).toBeChecked();
+  await page.locator("#pg-x-p90").fill("2");
+  await page.locator("#pg-x-reach").fill("review, score");
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-verdict")).toBeVisible();
+
+  // What the panel asked for is what the checkboxes said, resolved against the
+  // run that happened: "every case finishes" is the cases this run had.
+  const judged = (await calls(page)).find((c) => /\/verdict$/.test(c.url));
+  expect(judged.body).toEqual({
+    minCompleted: 3,
+    maxIncidents: 0,
+    maxP90Millis: 7200000,
+    minVisits: { review: 1, score: 1 },
+  });
+
+  // The verdict is a badge first and a table second, and a failed check is marked.
+  await expect(page.locator(".pg-verdict")).toHaveText("failed");
+  await expect(page.locator(".pg-verdict")).toHaveClass(/bad/);
+  await expect(page.locator("tr.pg-bad")).toContainText("queue at clerks");
+  await expect(page.locator("tr.pg-bad")).toContainText("at most 5");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a saved scenario is opened, and it replaces the sandbox", async ({ page }) => {
+  await page.locator('.etabs button[data-tab="playground"]').click();
+  // The diagram's saved runs are offered before a sandbox exists, because a
+  // scenario carries the policy a sandbox is opened with.
+  await expect(page.locator("#pg-scenario-pick")).toBeVisible();
+  await page.locator("#pg-scenario-pick").selectOption("nightly");
+  await page.locator("#pg-scenario-open").click();
+
+  // It opened a session with the scenario's own request, not with the panel's.
+  await expect(page.locator("#pg-batch")).toBeVisible();
+  const opened = (await calls(page)).filter((c) => /\/playground\/sessions$/.test(c.url) && c.method === "POST");
+  expect(opened).toHaveLength(1);
+  expect(opened[0].body.seed).toBe(4711);
+  expect(opened[0].body.stubs.poolOf).toEqual({ review: "clerks" });
+
+  // And the panel is filled in from it: the dataset, the timing, the targets.
+  await expect(page.locator("#pg-cases")).toContainText("5000");
+  await expect(page.locator("#pg-arrival")).toHaveValue("every");
+  await expect(page.locator("#pg-arrival-n")).toHaveValue("15");
+  await expect(page.locator("#pg-x-p90")).toHaveValue("2");
+  await expect(page.locator("#pg-x-reach")).toHaveValue("review");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a run is saved as the scenario it was, requests and all", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-cases").fill('[{"amount":10}]');
+  await page.locator("#pg-x-p90").fill("4");
+  await page.locator("#pg-scenario-name").fill("Smoke test");
+  await page.locator("#pg-scenario-save").click();
+
+  const saved = (await calls(page)).find((c) => c.method === "POST" && /\/playground\/scenarios$/.test(c.url));
+  expect(saved.body.name).toBe("Smoke test");
+  expect(saved.body.processId).toBe("credit");
+  // What is stored is the three requests that make the run — the same bodies the
+  // endpoints take, which is why nothing here can drift from them.
+  expect(saved.body.spec.open.source).toBe("xml");
+  // The seed the sandbox actually used is written down. Without it the scenario
+  // would be re-seeded from the clock on every open, and a run saved as
+  // reproducible would come back with different numbers.
+  expect(saved.body.spec.open.seed).toBe(4711);
+  expect(saved.body.spec.run.cases).toEqual([{ amount: 10 }]);
+  expect(saved.body.spec.expect.maxP90Millis).toBe(14400000);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a run is set beside the baseline, and only what moved is shown", async ({ page }) => {
+  await page.locator('.etabs button[data-tab="playground"]').click();
+  await page.locator("#pg-scenario-pick").selectOption("nightly");
+  await page.locator("#pg-scenario-open").click();
+  await expect(page.locator("#pg-batch")).toBeVisible();
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-verdict")).toBeVisible();
+
+  // The comparison used the baseline the scenario carries, not one the panel made up.
+  const compared = (await calls(page)).find((c) => /\/compare$/.test(c.url));
+  expect(compared.body.baseline.pools.clerks.maxQueue).toBe(9);
+
+  // Three of the four measures moved; the one that did not is left out, because a
+  // table of unchanged numbers is where the ones that did move go to hide.
+  await expect(page.locator(".pg-deltas tbody tr")).toHaveCount(3);
+  await expect(page.locator(".pg-worse")).toHaveText("12");
+  await expect(page.locator(".pg-better")).toHaveText("2h");
+  // Utilisation moved but has no good direction, so it carries neither colour.
+  const util = page.locator(".pg-deltas tr").filter({ hasText: "utilisation at clerks" });
+  await expect(util).toBeVisible();
+  await expect(util.locator(".pg-better, .pg-worse")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a failing run cannot be kept as the baseline", async ({ page }) => {
+  await page.locator('.etabs button[data-tab="playground"]').click();
+  await page.locator("#pg-scenario-pick").selectOption("nightly");
+  await page.locator("#pg-scenario-open").click();
+  await page.locator("#pg-batch").click();
+  await expect(page.locator(".pg-verdict")).toHaveText("failed");
+
+  // The control is there — this run belongs to a scenario — and refuses, because a
+  // failing baseline would hide the failure from every run after it.
+  const keep = page.locator("#pg-keep-baseline");
+  await expect(keep).toBeVisible();
+  await expect(keep).toBeDisabled();
+  expect((await calls(page)).filter((c) => /\/baseline$/.test(c.url))).toHaveLength(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a CSV run says why it cannot be saved as a scenario", async ({ page }) => {
+  await switchToBatch(page);
+  await page.locator("#pg-csv").setInputFiles({
+    name: "rows.csv", mimeType: "text/csv", buffer: Buffer.from("kunde\nA\n"),
+  });
+  // No name box and no Save: the rows are on the server, parsed by the same code a
+  // real import uses, and are not in the browser to store.
+  await expect(page.locator("#pg-scenario-save")).toHaveCount(0);
+  await expect(page.locator("#pg-panel")).toContainText("cannot be saved as a scenario");
   expect(page.__errors).toEqual([]);
 });

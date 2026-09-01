@@ -3314,6 +3314,26 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .pg-actions { display: flex; gap: 6px; margin: 12px 8px; }
 
+/* A verdict is the one thing on this panel somebody reads first, so it is a badge
+   beside the heading rather than a line inside a table they have to find. */
+.pg-verdict {
+  padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+}
+.pg-verdict.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.pg-verdict.bad { color: var(--danger); background: var(--danger-soft); }
+.pg-table tr.pg-bad td { color: var(--danger); }
+.pg-table td:first-child { width: 14px; }
+/* The check and delta tables carry a label and two numbers in a narrow panel. The
+   label wraps and the numbers do not: a "got" column cut off mid-value is the one
+   thing on this table nobody can do without. */
+.pg-checks td:nth-child(2), .pg-deltas td:first-child { white-space: normal; width: 99%; }
+.pg-checks td:nth-child(3), .pg-checks td:nth-child(4),
+.pg-deltas td:nth-child(2), .pg-deltas td:nth-child(3) { text-align: right; }
+/* A comparison colours only the side that moved, and only where moving has a
+   direction: utilisation falls for two opposite reasons and gets neither colour. */
+.pg-better { color: var(--ok); font-weight: 600; }
+.pg-worse { color: var(--danger); font-weight: 600; }
+
 /* ---- Heat map on the canvas ----
    Six levels: pg-heat-0 is "no token ever came here", which is a different
    statement from "came here least" and has to look different — dashed and pale,

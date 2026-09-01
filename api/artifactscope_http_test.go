@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -256,4 +257,115 @@ func TestArtifactScopeFormsAndRefs(t *testing.T) {
 	if code, _ := cReq(t, bob, ts, "DELETE", "/api/v1/forms/f1", ""); code != http.StatusNotFound {
 		t.Fatalf("bob delete scoped form = %d, want 404", code)
 	}
+}
+
+// A saved Playground scenario is a design-time artifact, so it inherits its
+// project's scope like a draft or a form (ADR-0071,
+// ADR-draft-modeler-playground). It carries a dataset and a set of targets
+// somebody chose, which is exactly the kind of thing that must not be readable —
+// or quietly editable — by everyone with an account.
+func TestPlaygroundScenarioScope(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	login(t, admin, ts, "admin", "password1")
+	cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1","roles":["modeler","operator","user"]}`)
+	_, bb := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"bob","password":"password1","roles":["modeler","operator","user"]}`)
+	bobID := idOf(t, bb)
+	alice, bob := newClient(t), newClient(t)
+	login(t, alice, ts, "alice", "password1")
+	login(t, bob, ts, "bob", "password1")
+
+	names := func(c *http.Client) []string {
+		_, body := cReq(t, c, ts, "GET", "/api/v1/playground/scenarios", "")
+		var list []struct {
+			ID          string `json:"id"`
+			HasBaseline bool   `json:"hasBaseline"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			t.Fatalf("decode scenarios: %v (%s)", err, body)
+		}
+		out := []string{}
+		for _, s := range list {
+			out = append(out, s.ID)
+		}
+		return out
+	}
+	spec := `{"open":{"source":"draft","ref":"p"},"run":{"cases":[{"n":1}]}}`
+	save := func(c *http.Client, id, project string) (int, []byte) {
+		body := `{"id":"` + id + `","name":"` + id + `","processId":"p"` +
+			(map[bool]string{true: `,"projectId":"` + project + `"`}[project != ""]) + `,"spec":` + spec + `}`
+		return cReq(t, c, ts, "POST", "/api/v1/playground/scenarios", body)
+	}
+
+	_, pbody := cReq(t, alice, ts, "POST", "/api/v1/projects", `{"name":"Secret"}`)
+	pid := decodeProject(t, pbody).ID
+	if code, b := save(alice, "scoped", pid); code != http.StatusOK {
+		t.Fatalf("alice save scoped = %d %s", code, b)
+	}
+	if code, b := save(alice, "loose", ""); code != http.StatusOK {
+		t.Fatalf("alice save ungrouped = %d %s", code, b)
+	}
+
+	// Bob sees neither: not the one in a project he is not in, and not Alice's
+	// personal ungrouped one.
+	for _, id := range names(bob) {
+		if id == "scoped" || id == "loose" {
+			t.Fatalf("bob can see alice's %q scenario", id)
+		}
+	}
+	if got := names(alice); len(got) != 2 {
+		t.Fatalf("alice sees %v, want both of her own", got)
+	}
+	// Reading, deleting and keeping a baseline on a hidden one are all 404 rather
+	// than 403: a refusal that confirms the scenario exists is a refusal that leaks.
+	for _, tc := range []struct{ method, path, body string }{
+		{"GET", "/api/v1/playground/scenarios/scoped", ""},
+		{"DELETE", "/api/v1/playground/scenarios/scoped", ""},
+		{"PUT", "/api/v1/playground/scenarios/scoped/baseline", `{"cases":1}`},
+	} {
+		if code, _ := cReq(t, bob, ts, tc.method, tc.path, tc.body); code != http.StatusNotFound {
+			t.Errorf("bob %s %s = %d, want 404", tc.method, tc.path, code)
+		}
+	}
+	// Nor can he file one into her project.
+	if code, _ := save(bob, "intrude", pid); code == http.StatusOK {
+		t.Error("bob filed a scenario into a project he cannot edit")
+	}
+
+	// A viewer may read it and may not change it — a baseline is a write.
+	cReq(t, alice, ts, "PUT", "/api/v1/projects/"+pid+"/members/"+bobID, `{"role":"viewer"}`)
+	if code, _ := cReq(t, bob, ts, "GET", "/api/v1/playground/scenarios/scoped", ""); code != http.StatusOK {
+		t.Error("a viewer cannot read the scenario they were shared")
+	}
+	if code, _ := cReq(t, bob, ts, "PUT", "/api/v1/playground/scenarios/scoped/baseline", `{"cases":1}`); code != http.StatusForbidden {
+		t.Error("a viewer kept a baseline, which is a write")
+	}
+
+	// An editor may. And once a baseline is kept, the listing says so without
+	// carrying the report itself.
+	cReq(t, alice, ts, "PUT", "/api/v1/projects/"+pid+"/members/"+bobID, `{"role":"editor"}`)
+	if code, b := cReq(t, bob, ts, "PUT", "/api/v1/playground/scenarios/scoped/baseline",
+		`{"cases":1,"completed":1}`); code != http.StatusOK {
+		t.Fatalf("editor keep baseline = %d %s", code, b)
+	}
+	_, listing := cReq(t, bob, ts, "GET", "/api/v1/playground/scenarios", "")
+	if !json.Valid(listing) || !containsAll(string(listing), `"hasBaseline":true`) {
+		t.Errorf("the listing does not report the baseline: %s", listing)
+	}
+	if containsAll(string(listing), `"completed"`) {
+		t.Errorf("the listing carries the baseline report itself: %s", listing)
+	}
+	if code, _ := cReq(t, bob, ts, "DELETE", "/api/v1/playground/scenarios/scoped", ""); code != http.StatusOK {
+		t.Error("an editor cannot delete the scenario they may write")
+	}
+}
+
+// containsAll is a substring check spelled to read as an assertion.
+func containsAll(haystack string, needles ...string) bool {
+	for _, n := range needles {
+		if !strings.Contains(haystack, n) {
+			return false
+		}
+	}
+	return true
 }

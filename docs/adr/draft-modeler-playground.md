@@ -187,6 +187,56 @@ this would put a field on a structure every deployment builds; a flow travels na
 by the two elements it joins instead, which the only client there is — one holding
 the diagram — resolves against its own registry.
 
+### From a screen somebody reads to a check something runs
+
+A report answers "how did that go?" and needs a person to judge it. Two things
+turn it into an answer a machine can act on, and both are pure functions of the
+report — no sandbox, no clock — so either can be applied to a stored run long
+after the sandbox that produced it is gone.
+
+**Expectations** state what the run has to show: completions, incidents, the three
+duration bounds, per-element visit bounds, and a queue bound per pool. Coverage and
+outcome turn out to be the same statement about the same counter — "the approval
+branch must be exercised" is a minimum of one, "the error branch must stay rare" is
+a maximum — so they share one field rather than two features. Every expectation is
+optional and an omitted one is not checked; the two places where zero is itself the
+target ("no incidents at all", "this queue must never form") are a pointer and a map
+entry, because a zero value that silently asserts something is how an expectation
+fails a run nobody aimed it at.
+
+**A comparison** answers what one report cannot however complete it is: did that
+change help? It carries the raw numbers and the direction that counts as good, so a
+reader does not have to know that more completions is progress and a longer p90 is
+not. Utilisation is reported and deliberately left unjudged — a pool that fell from
+99 % to 62 % has room now, or the work stopped arriving, and the same number cannot
+tell you which.
+
+**A scenario is the three requests that make a run** — open a session, start the
+batch, judge the report — stored as the bodies those endpoints already take. The
+alternative was a parallel set of structures describing a stub policy, an arrival
+profile and a set of expectations a second time. This cannot drift from the
+endpoints, because it *is* them: a client that can run a scenario is one that can
+replay three requests, which is exactly what the CI runner does and exactly what
+the Modeler does with the same record. The design-time store keeps it opaque for the
+reason a form's schema is opaque to it (ADR-0028): storage has no business
+understanding a stub policy.
+
+The **baseline** — one kept report — is what the next run is measured against. It is
+recorded by a call of its own, because editing what a scenario runs must not throw
+away the run it is compared with, and only from a run that passed: a baseline is the
+thing to beat, so keeping a failing one would hide the failure from every run after
+it.
+
+**A published seed has to survive the client that reads it.** The session response
+carries its seed precisely so a caller can write it down and repeat the run, and the
+first one was a clock in nanoseconds — around 1.8 × 10¹⁸, past the 2⁵³ a JSON number
+holds without rounding. Every browser that read one back got a different number, so
+a scenario saved as reproducible came back with different figures and nothing said
+why. A generated seed is now bounded to what a JSON number carries exactly; fifty-
+three bits of clock is every bit as good a seed. Anything else this API hands out
+for a client to hand back has the same obligation, or travels as a string the way an
+instance key does.
+
 ### Scope decided
 
 Four questions were open when this record was first drafted; all four are decided

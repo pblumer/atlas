@@ -377,3 +377,49 @@ func TestAMalformedScenarioIsRefusedAtSaveTime(t *testing.T) {
 		t.Errorf("a baseline for a scenario that does not exist = %d, want 404", code)
 	}
 }
+
+// Scenarios list most recently saved first, which is the order somebody who just
+// saved one expects to find it in.
+func TestScenariosListNewestFirst(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/drafts", playgroundBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("save draft = %d, body %s", code, body)
+	}
+	spec := `{"open":{"source":"draft","ref":"approval"},"run":{"cases":[{"n":1}]}}`
+	for _, id := range []string{"older", "newer"} {
+		if code, b := doReq(t, ts, http.MethodPost, "/api/v1/playground/scenarios",
+			`{"id":"`+id+`","name":"`+id+`","processId":"approval","spec":`+spec+`}`, "application/json"); code != http.StatusOK {
+			t.Fatalf("save %s = %d %s", id, code, b)
+		}
+		// The store orders by a whole-second timestamp, so the two saves have to land
+		// in different seconds for the order to be a statement about anything.
+		time.Sleep(1100 * time.Millisecond)
+	}
+	_, body := doReq(t, ts, http.MethodGet, "/api/v1/playground/scenarios", "", "")
+	var list []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(list) != 2 || list[0].ID != "newer" {
+		t.Errorf("list = %+v, want the most recently saved first", list)
+	}
+}
+
+// A baseline is a report, and something that is not one is refused. A stored
+// baseline nothing can compare against is a comparison that fails much later, for
+// a reason the log will not carry.
+func TestABaselineThatIsNotAReportIsRefused(t *testing.T) {
+	ts := newTestServer(t)
+	doReq(t, ts, http.MethodPost, "/api/v1/drafts", playgroundBPMN, "application/xml")
+	spec := `{"open":{"source":"draft","ref":"approval"},"run":{"cases":[{"n":1}]}}`
+	doReq(t, ts, http.MethodPost, "/api/v1/playground/scenarios",
+		`{"id":"s","name":"s","processId":"approval","spec":`+spec+`}`, "application/json")
+
+	for _, body := range []string{`[1,2,3]`, `"a string"`, `{`} {
+		if code, b := doReq(t, ts, http.MethodPut, "/api/v1/playground/scenarios/s/baseline", body, "application/json"); code != http.StatusBadRequest {
+			t.Errorf("baseline %q = %d, want 400; body %s", body, code, b)
+		}
+	}
+}

@@ -173,6 +173,20 @@ export function attachPlayground(root, { api, toast, modeler }) {
     heat: null,      // the heat map, once a run has produced one
     showHeat: false,
     polling: 0,
+    // What the run has to show, and what it showed. Expectations turn a report
+    // somebody reads into a verdict something can act on — the same ones the
+    // `atlas playground` runner exits a build on.
+    expect: { allFinish: true, noIncidents: true, p90Hours: "", mustReach: "", queue: {} },
+    verdict: null,
+    comparison: null,
+    // The saved scenarios of this diagram, and the one this session came from.
+    // A scenario carries the stub and pool policy, which is fixed for a sandbox's
+    // life, so loading one replaces the sandbox rather than editing it.
+    scenarios: [],
+    scenarioId: "",
+    scenarioName: "",
+    baseline: null,
+    pickedScenario: "",
   };
   // Overlay handles we added, so a redraw removes ours and leaves anything else
   // on the canvas alone.
@@ -236,12 +250,16 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const { xml } = await modeler.saveXML({ format: true });
     const sel = el("pg-dur");
     const stubLabel = sel.options[sel.selectedIndex].text;
-    const s = await api("POST", "/api/v1/playground/sessions", {
+    // Kept, because a scenario is the request that made the sandbox: saving one
+    // later must store the policy this run actually used, not the boxes as they
+    // stand by then.
+    state.openRequest = {
       source: "xml",
       xml,
       startTime: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
       stubs: stubPolicy(),
-    });
+    };
+    const s = await api("POST", "/api/v1/playground/sessions", state.openRequest);
     state.session = { id: s.id, processId: s.processId, seed: s.seed, stubLabel };
     state.simTime = s.simTime;
     state.caseKey = "";
@@ -265,6 +283,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.report = null;
     state.heat = null;
     state.showHeat = false;
+    state.verdict = null;
+    state.comparison = null;
+    state.openRequest = null;
     clearCanvas();
   }
 
@@ -311,6 +332,47 @@ export function attachPlayground(root, { api, toast, modeler }) {
     }
   }
 
+  // runBody is the batch request this panel would send: the dataset and the
+  // arrival profile. It is one function so that what is run and what is saved as a
+  // scenario cannot differ.
+  function runBody() {
+    return { cases: parseJSON(state.cases, "the dataset"), arrival: arrivalBody() };
+  }
+
+  // expectBody is what the run has to show, in the shape the verdict endpoint
+  // takes. "Every case finishes" is resolved against the run that actually
+  // happened rather than against the dataset in the box, so it means the same
+  // thing for a list typed in and for a file the server parsed.
+  function expectBody() {
+    const e = {};
+    const cases = (state.run && state.run.cases) || 0;
+    if (state.expect.allFinish && cases > 0) e.minCompleted = cases;
+    if (state.expect.noIncidents) e.maxIncidents = 0;
+    const hours = Number(state.expect.p90Hours);
+    if (hours > 0) e.maxP90Millis = Math.round(hours * 3_600_000);
+    const reach = String(state.expect.mustReach || "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (reach.length) {
+      e.minVisits = {};
+      for (const id of reach) e.minVisits[id] = 1;
+    }
+    const queue = {};
+    for (const [pool, v] of Object.entries(state.expect.queue || {})) {
+      if (String(v).trim() !== "" && Number(v) >= 0) queue[pool] = Number(v);
+    }
+    if (Object.keys(queue).length) e.maxQueue = queue;
+    return e;
+  }
+
+  // expectFromBody is expectBody read back, so a saved scenario fills the same
+  // boxes it was built from.
+  function expectFromBody(e) {
+    const out = { allFinish: !!e.minCompleted, noIncidents: e.maxIncidents === 0,
+      p90Hours: e.maxP90Millis ? String(e.maxP90Millis / 3_600_000) : "",
+      mustReach: Object.keys(e.minVisits || {}).join(", "), queue: {} };
+    for (const [pool, v] of Object.entries(e.maxQueue || {})) out.queue[pool] = String(v);
+    return out;
+  }
+
   // arrivalBody is the timing half of a batch request.
   function arrivalBody() {
     const a = { mode: state.arrival };
@@ -328,6 +390,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.report = null;
     state.heat = null;
     state.showHeat = false;
+    state.verdict = null;
+    state.comparison = null;
     if (state.csv) {
       const form = new FormData();
       form.append("file", state.csv);
@@ -337,11 +401,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
       if (!res.ok) throw new Error((data && data.error) || res.statusText);
       state.run = data;
     } else {
-      const cases = parseJSON(state.cases, "the dataset");
-      if (!Array.isArray(cases) || !cases.length) {
+      const body = runBody();
+      if (!Array.isArray(body.cases) || !body.cases.length) {
         throw new Error("the dataset is a list of cases, and it needs at least one");
       }
-      state.run = await api("POST", path("/runs"), { cases, arrival: arrivalBody() });
+      state.run = await api("POST", path("/runs"), body);
     }
     startPolling();
   }
@@ -389,11 +453,115 @@ export function attachPlayground(root, { api, toast, modeler }) {
       state.heat = heat;
       state.simTime = report.simEnd || state.simTime;
       state.showHeat = true;
+      // The verdict is asked for after the report because "every case finishes"
+      // means the cases this run had, which is a thing only the finished run knows.
+      state.verdict = await api("POST", path("/verdict"), expectBody());
+      if (state.baseline) {
+        state.comparison = await api("POST", path("/compare"), { baseline: state.baseline });
+      }
       drawCanvas();
     } catch (e) {
       toast(`read the report: ${e.message}`, "err");
     }
     render();
+  }
+
+  // ---- scenarios ------------------------------------------------------------
+
+  // diagramProcessId is which diagram a scenario belongs to. The session knows it
+  // once one is open; before that the canvas does, which is what lets the setup
+  // view offer the scenarios of the diagram on screen.
+  function diagramProcessId() {
+    if (state.session) return state.session.processId;
+    try {
+      return modeler.get("canvas").getRootElement().businessObject.id || "";
+    } catch { return ""; }
+  }
+
+  async function loadScenarios() {
+    const pid = diagramProcessId();
+    if (!pid) { state.scenarios = []; return; }
+    state.scenarios = await api("GET", `/api/v1/playground/scenarios?processId=${encodeURIComponent(pid)}`) || [];
+  }
+
+  // openScenario replaces the sandbox with one the scenario describes, and fills
+  // the panel in from it. It replaces rather than edits because the stub and pool
+  // policy is fixed for a sandbox's life: a run is only comparable with another
+  // run if the policy behind them is the same.
+  async function openScenario(id) {
+    const sc = await api("GET", `/api/v1/playground/scenarios/${encodeURIComponent(id)}`);
+    if (state.session) await stop();
+    const s = await api("POST", "/api/v1/playground/sessions", sc.spec.open);
+    state.session = { id: s.id, processId: s.processId, seed: s.seed, stubLabel: "from the scenario" };
+    state.simTime = s.simTime;
+    state.mode = "batch";
+    state.scenarioId = sc.id;
+    state.scenarioName = sc.name;
+    state.baseline = sc.baseline || null;
+    state.pickedScenario = sc.id;
+    state.csv = null;
+    state.cases = JSON.stringify((sc.spec.run && sc.spec.run.cases) || [], null, 1);
+    const arrival = (sc.spec.run && sc.spec.run.arrival) || {};
+    state.arrival = arrival.mode || "allAtOnce";
+    if (arrival.intervalMillis) state.arrivalN = Math.round(arrival.intervalMillis / 60000);
+    if (arrival.perHour) state.arrivalN = arrival.perHour;
+    state.expect = expectFromBody(sc.spec.expect || {});
+    state.run = null;
+    state.report = null;
+    state.heat = null;
+    state.verdict = null;
+    state.comparison = null;
+    await refresh();
+  }
+
+  // saveScenario stores the run this panel would start, so somebody else — or a
+  // build — can run exactly it. What is stored is the requests themselves, which
+  // is why there is nothing here that has to be kept in step with the endpoints.
+  async function saveScenario() {
+    if (state.csv) {
+      throw new Error("a run from an uploaded CSV cannot be saved as a scenario: its rows are parsed on the server and are not in the browser to store");
+    }
+    const name = (state.scenarioName || "").trim();
+    if (!name) throw new Error("give the scenario a name");
+    const id = state.scenarioId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    // The seed the sandbox actually used is pinned into what is stored. Without it
+    // the scenario would be re-seeded from the clock every time it is opened, and a
+    // "reproducible" run would come back with different numbers — which is the one
+    // thing a saved scenario exists to prevent. The open response carries the seed
+    // precisely so it can be written down.
+    const open = { ...(state.openRequest || {}), seed: state.session.seed };
+    const saved = await api("POST", "/api/v1/playground/scenarios", {
+      id, name, processId: diagramProcessId(),
+      spec: { open, run: runBody(), expect: expectBody() },
+    });
+    state.scenarioId = saved.id;
+    state.pickedScenario = saved.id;
+    await loadScenarios();
+    toast(`Saved the scenario "${saved.name}".`, "ok");
+  }
+
+  async function deleteScenario() {
+    if (!state.scenarioId) return;
+    await api("DELETE", `/api/v1/playground/scenarios/${encodeURIComponent(state.scenarioId)}`);
+    state.scenarioId = "";
+    state.pickedScenario = "";
+    state.baseline = null;
+    await loadScenarios();
+  }
+
+  // keepBaseline records this run as what the next one is measured against. Only
+  // a run that passed: a baseline is the thing to beat, so keeping a failing one
+  // would hide the failure from every run after it.
+  async function keepBaseline() {
+    if (!state.scenarioId || !state.report) return;
+    if (state.verdict && !state.verdict.passed) {
+      throw new Error("this run did not pass, and a failing baseline would hide the failure from every run after it");
+    }
+    await api("PUT", `/api/v1/playground/scenarios/${encodeURIComponent(state.scenarioId)}/baseline`, state.report);
+    state.baseline = state.report;
+    state.comparison = null;
+    await loadScenarios();
+    toast("Kept as this scenario's baseline.", "ok");
   }
 
   // refresh re-reads what the Step view shows. One round trip per view; the
@@ -556,6 +724,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       <p class="muted">Runs the diagram on screen with the real compiler and the real
         processor, on a clock the sandbox owns — a three-day timer takes no time at all.
         Nothing is deployed and no connector can be called: the sandbox has none.</p>
+      ${scenarioPickerHTML()}
       <div class="pg-sec"><b>Resources</b> <span class="muted">optional</span></div>
       ${tasks.length
         ? `${rows}<label class="pg-check"><input type="checkbox" id="pg-hours" ${state.hours ? "checked" : ""} />
@@ -563,6 +732,112 @@ export function attachPlayground(root, { api, toast, modeler }) {
         : `<p class="muted">The diagram has no tasks to put a pool on.</p>`}
       <p class="muted">Without a pool every case is worked the moment it arrives, and the
         report's waiting time is zero by construction.</p>`;
+  }
+
+  // scenarioPickerHTML offers this diagram's saved runs. Opening one replaces the
+  // sandbox, because the stub and pool policy travels with it and that policy is
+  // fixed for a sandbox's life — which is also why the picker lives here, before
+  // one is open, rather than beside the dataset.
+  function scenarioPickerHTML() {
+    if (!state.scenarios.length) return "";
+    const opts = state.scenarios.map((sc) =>
+      `<option value="${esc(sc.id)}"${sc.id === state.pickedScenario ? " selected" : ""}>${esc(sc.name)}${
+        sc.hasBaseline ? " · has a baseline" : ""}</option>`).join("");
+    return `
+      <div class="pg-sec"><b>Saved scenarios</b> <span class="muted">${state.scenarios.length}</span></div>
+      <div class="pg-timing">
+        <select id="pg-scenario-pick"><option value="">pick one…</option>${opts}</select>
+        <button class="btn neutral small" id="pg-scenario-open">Open</button>
+      </div>
+      <p class="muted">A scenario carries its own stub and pool policy, so opening one
+        starts a fresh sandbox with it.</p>`;
+  }
+
+  // expectHTML is what the run has to show. It is the same set the `atlas
+  // playground` runner exits a build on, which is the point: what an author checks
+  // by eye here is what a build checks without them.
+  function expectHTML() {
+    const pools = Object.values(state.pools)
+      .map((c) => (c.pool || "").trim()).filter(Boolean);
+    const seen = new Set();
+    const queueRows = pools.filter((p) => !seen.has(p) && seen.add(p)).map((p) => `
+      <div class="pg-timing"><span class="muted" style="flex:1">queue at ${esc(p)} at most</span>
+        <input type="number" min="0" step="1" data-queue="${esc(p)}" value="${esc(state.expect.queue[p] || "")}" /></div>`).join("");
+    return `
+      <div class="pg-sec"><b>Expectations</b> <span class="muted">optional</span></div>
+      <label class="pg-check"><input type="checkbox" id="pg-x-finish" ${state.expect.allFinish ? "checked" : ""} />
+        every case finishes</label>
+      <label class="pg-check"><input type="checkbox" id="pg-x-inc" ${state.expect.noIncidents ? "checked" : ""} />
+        no incidents</label>
+      <div class="pg-timing"><span class="muted" style="flex:1">p90 under</span>
+        <input type="number" min="0" step="0.5" id="pg-x-p90" value="${esc(state.expect.p90Hours)}" />
+        <span class="muted">hours</span></div>
+      <label class="field"><span>Must reach (element ids, comma separated)</span>
+        <textarea id="pg-x-reach" rows="1" spellcheck="false">${esc(state.expect.mustReach)}</textarea></label>
+      ${queueRows}`;
+  }
+
+  // scenarioSaveHTML is how a run becomes repeatable by somebody who is not here.
+  function scenarioSaveHTML() {
+    if (state.csv) {
+      return `<div class="pg-sec"><b>Scenario</b></div>
+        <p class="muted">A run from an uploaded CSV cannot be saved as a scenario: its
+          rows are parsed on the server, by the same code a real import uses, and are
+          not in the browser to store.</p>`;
+    }
+    return `
+      <div class="pg-sec"><b>Scenario</b>
+        <span class="muted">${state.scenarioId ? esc(state.scenarioId) : "unsaved"}</span></div>
+      <div class="pg-timing">
+        <input type="text" id="pg-scenario-name" placeholder="name it" value="${esc(state.scenarioName)}" style="flex:1" />
+        <button class="btn neutral small" id="pg-scenario-save">Save</button>
+        ${state.scenarioId ? `<button class="btn neutral small" id="pg-scenario-delete">Delete</button>` : ""}
+      </div>
+      ${state.baseline
+        ? `<p class="muted">A baseline is stored: the next run is set beside it.</p>`
+        : `<p class="muted">Run it, then keep the run as a baseline to compare the next one against.</p>`}`;
+  }
+
+  // verdictHTML is the run judged. A verdict with no checks is a pass, and says so
+  // quietly: "I have not said what I expect yet" must not read as a problem.
+  function verdictHTML() {
+    const v = state.verdict;
+    if (!v) return "";
+    if (!v.checks || !v.checks.length) {
+      return `<div class="pg-sec"><b>Verdict</b></div>
+        <p class="muted">Nothing was expected of this run, so there was nothing to check.</p>`;
+    }
+    return `
+      <div class="pg-sec"><b>Verdict</b>
+        <span class="pg-verdict ${v.passed ? "ok" : "bad"}">${v.passed ? "passed" : "failed"}</span></div>
+      <table class="pg-table pg-checks"><tbody>${v.checks.map((c) => `<tr class="${c.passed ? "" : "pg-bad"}">
+        <td>${c.passed ? "&#10003;" : "&#10007;"}</td><td>${esc(c.name)}</td>
+        <td class="muted">${esc(c.want)}</td><td>${esc(c.got)}</td></tr>`).join("")}</tbody></table>
+      ${state.scenarioId ? `<div class="pg-actions">
+        <button class="btn neutral small" id="pg-keep-baseline"${v.passed ? "" : " disabled"}
+          title="${v.passed ? "Keep this run as what the next one is measured against"
+            : "A failing baseline would hide the failure from every run after it"}">Keep as baseline</button>
+      </div>` : ""}`;
+  }
+
+  // comparisonHTML is this run beside the stored baseline. Only what moved: a
+  // table of unchanged numbers is where the two that did move go to hide.
+  function comparisonHTML() {
+    const c = state.comparison;
+    if (!c || !c.deltas) return "";
+    const moved = c.deltas.filter((d) => d.before !== d.after);
+    if (!moved.length) {
+      return `<div class="pg-sec"><b>Against the baseline</b></div>
+        <p class="muted">Nothing moved. Same dataset, same policy, same seed — the run is reproducible.</p>`;
+    }
+    const cell = (unit, v) => unit === "millis" ? fmtDur(v) : unit === "percent" ? `${v}%` : String(v);
+    return `
+      <div class="pg-sec"><b>Against the baseline</b> <span class="muted">${moved.length} changed</span></div>
+      <table class="pg-table pg-deltas"><tbody>${moved.map((d) => `<tr>
+        <td>${esc(d.name)}</td>
+        <td class="muted">${esc(cell(d.unit, d.before))}</td>
+        <td class="${d.better ? "pg-better" : d.worse ? "pg-worse" : ""}">${esc(cell(d.unit, d.after))}</td>
+      </tr>`).join("")}</tbody></table>`;
   }
 
   // batchHTML is the dataset, the timing, and what came back.
@@ -587,7 +862,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
         ${param ? `<input type="number" min="1" step="1" id="pg-arrival-n" value="${esc(state.arrivalN)}" />
                    <span class="muted">${esc(param)}</span>` : ""}
       </div>
+      ${expectHTML()}
+      ${scenarioSaveHTML()}
       ${runStatusHTML()}
+      ${verdictHTML()}
+      ${comparisonHTML()}
       ${reportHTML()}`;
   }
 
@@ -648,14 +927,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
       </div>
       ${bottlenecks.length ? `
         <div class="pg-sec"><b>Bottlenecks</b> <span class="muted">by total waiting</span></div>
-        <table class="pg-table"><thead><tr><th>element</th><th>runs</th><th>waiting</th><th>longest</th><th>work</th></tr></thead>
+        <table class="pg-table pg-bottlenecks"><thead><tr><th>element</th><th>runs</th><th>waiting</th><th>longest</th><th>work</th></tr></thead>
         <tbody>${bottlenecks.map((b) => `<tr>
           <td class="mono">${esc(b.id)}</td><td>${b.runs}</td>
           <td>${esc(fmtDur(b.waitMillis))}</td><td>${esc(fmtDur(b.maxWaitMillis))}</td>
           <td>${esc(fmtDur(b.workMillis))}</td></tr>`).join("")}</tbody></table>` : ""}
       ${pools.length ? `
         <div class="pg-sec"><b>Pools</b></div>
-        <table class="pg-table"><thead><tr><th>pool</th><th>seats</th><th>used</th><th>served</th><th>longest queue</th></tr></thead>
+        <table class="pg-table pg-pools"><thead><tr><th>pool</th><th>seats</th><th>used</th><th>served</th><th>longest queue</th></tr></thead>
         <tbody>${pools.map(([name, p]) => `<tr>
           <td class="mono">${esc(name)}</td><td>${p.capacity}</td>
           <td>${p.utilisationPercent}%</td><td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
@@ -811,6 +1090,23 @@ export function attachPlayground(root, { api, toast, modeler }) {
       render();
       return;
     }
+    if (e.target.closest("#pg-scenario-open")) {
+      const id = panel.querySelector("#pg-scenario-pick")?.value;
+      if (id) guard("open the scenario", () => openScenario(id));
+      return;
+    }
+    if (e.target.closest("#pg-scenario-save")) {
+      guard("save the scenario", saveScenario);
+      return;
+    }
+    if (e.target.closest("#pg-scenario-delete")) {
+      guard("delete the scenario", deleteScenario);
+      return;
+    }
+    if (e.target.closest("#pg-keep-baseline")) {
+      guard("keep the baseline", keepBaseline);
+      return;
+    }
     if (e.target.closest("#pg-csv-out")) {
       // A plain same-origin navigation, so the session cookie authenticates it,
       // exactly as the Console's downloads do — and the file is streamed rather
@@ -830,6 +1126,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (t.id === "pg-outputs") state.outputs = t.value;
     if (t.id === "pg-cases") state.cases = t.value;
     if (t.id === "pg-arrival-n") state.arrivalN = t.value;
+    if (t.id === "pg-x-p90") state.expect.p90Hours = t.value;
+    if (t.id === "pg-x-reach") state.expect.mustReach = t.value;
+    if (t.id === "pg-scenario-name") state.scenarioName = t.value;
+    if (t.dataset.queue != null) state.expect.queue[t.dataset.queue] = t.value;
     if (t.dataset.pool != null) {
       state.pools[t.dataset.pool] = { ...state.pools[t.dataset.pool], pool: t.value };
     }
@@ -841,6 +1141,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
   panel.addEventListener("change", (e) => {
     const t = e.target;
     if (t.id === "pg-hours") state.hours = t.checked;
+    if (t.id === "pg-x-finish") state.expect.allFinish = t.checked;
+    if (t.id === "pg-x-inc") state.expect.noIncidents = t.checked;
+    if (t.id === "pg-scenario-pick") state.pickedScenario = t.value;
     if (t.id === "pg-arrival") { state.arrival = t.value; render(); }
     if (t.id === "pg-csv" && t.files && t.files[0]) { state.csv = t.files[0]; render(); }
   });
@@ -857,8 +1160,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
     bar.hidden = !on;
     panel.hidden = !on;
     editor.classList.toggle("pg-active", on);
-    if (on) { render(); drawCanvas(); }
-    else clearCanvas();
+    if (on) {
+      render();
+      drawCanvas();
+      // The saved scenarios of the diagram on screen, read when the tab is opened
+      // rather than when the editor mounts: most visits to a diagram never come
+      // here, and a listing nobody looks at is a request nobody needed.
+      loadScenarios().then(render).catch(() => { /* a listing that fails leaves the panel usable */ });
+    } else clearCanvas();
   }
 
   render();

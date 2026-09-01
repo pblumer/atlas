@@ -260,6 +260,8 @@ func TestBatchRoutesOnAnUnknownSession(t *testing.T) {
 		"report":  svc.HandleReport,
 		"results": svc.HandleResults,
 		"csv":     svc.HandleResultsCSV,
+		"verdict": svc.HandleVerdict,
+		"compare": svc.HandleCompare,
 	} {
 		t.Run(name, func(t *testing.T) {
 			rec := call(t, h, http.MethodPost, `{"cases":[{}]}`, vals)

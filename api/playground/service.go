@@ -29,6 +29,12 @@ import (
 	"github.com/pblumer/atlas/playground"
 )
 
+// maxExactJSONInt is the largest integer a JSON number carries without rounding:
+// 2^53 - 1, the limit of a float64 mantissa. Anything this API hands out for a
+// client to hand back has to fit in it, or survive as a string the way an instance
+// key does.
+const maxExactJSONInt = 1<<53 - 1
+
 // maxModelBytes caps an inline model in an open request. A BPMN diagram is text;
 // this is a sanity bound on the request body, not a tuning knob.
 const maxModelBytes = 8 << 20 // 8 MiB
@@ -205,7 +211,13 @@ func (s *Service) HandleOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	seed := req.Seed
 	if seed == 0 {
-		seed = time.Now().UnixNano()
+		// Bounded to what a JSON number holds exactly. The seed is published so a
+		// caller can write it down and repeat the run, and a clock in nanoseconds is
+		// around 1.8e18 — past the 2^53 a double represents without rounding. Every
+		// browser reading it back got a *different* number, so a run saved as
+		// reproducible came back with different figures and nothing said why.
+		// Fifty-three bits of clock is still every bit as good a seed.
+		seed = time.Now().UnixNano() & maxExactJSONInt
 	}
 	stubs, err := s.stubSet(req)
 	if err != nil {

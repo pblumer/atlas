@@ -91,6 +91,42 @@
           ],
         },
       };
+      // The scenario half: one saved run, its stored baseline, and the verdict the
+      // server would return for it. Enough to prove the panel stores what it runs
+      // and shows back what it is told.
+      let scenarios = [{ id: "nightly", name: "Nightly load", processId: "credit",
+                         savedAt: 1, hasBaseline: true }];
+      const SCENARIO = {
+        id: "nightly", name: "Nightly load", processId: "credit", savedAt: 1,
+        spec: {
+          open: { source: "xml", xml: "<stored/>", seed: 4711,
+                  stubs: { human: { minMillis: 3600000, maxMillis: 3600000 },
+                           pools: { clerks: { capacity: 2 } }, poolOf: { review: "clerks" } } },
+          run: { cases: [{ amount: 10 }, { amount: 5000 }], arrival: { mode: "every", intervalMillis: 900000 } },
+          expect: { minCompleted: 2, maxIncidents: 0, maxP90Millis: 7200000,
+                    minVisits: { review: 1 }, maxQueue: { clerks: 5 } },
+        },
+        baseline: { cases: 3, completed: 3, incidents: 0, maxInFlight: 3,
+          duration: { count: 3, minMillis: 3600000, p50Millis: 7200000, p90Millis: 10800000,
+                      maxMillis: 10800000, meanMillis: 7200000 },
+          elements: { review: { runs: 3, workMillis: 10800000, waitMillis: 36000000, maxWaitMillis: 14400000 } },
+          pools: { clerks: { capacity: 1, served: 3, busyMillis: 10800000,
+                             availableMillis: 10800000, maxQueue: 9, utilisationPercent: 100 } },
+          visits: {} },
+        baselineAt: 1,
+      };
+      const VERDICT = { passed: false, checks: [
+        { name: "cases completed", want: "at least 3", got: "3 of 3", passed: true },
+        { name: "incidents", want: "at most 0", got: "0", passed: true },
+        { name: "queue at clerks", want: "at most 5", got: "9", passed: false },
+      ] };
+      const COMPARISON = { deltas: [
+        { name: "cases completed", unit: "count", before: 3, after: 3, better: false, worse: false },
+        { name: "p90 duration", unit: "millis", before: 10800000, after: 7200000, better: true, worse: false },
+        { name: "queue at clerks", unit: "count", before: 9, after: 12, better: false, worse: true },
+        { name: "utilisation at clerks", unit: "percent", before: 100, after: 62, better: false, worse: false },
+      ] };
+
       // One flow the data never took, so the coverage list has something to say.
       const HEATMAP = {
         maxCount: 3,
@@ -149,6 +185,16 @@
         if (method === "GET" && /\/runs$/.test(url)) return runStatus();
         if (method === "GET" && /\/report$/.test(url)) return REPORT;
         if (method === "GET" && /\/heatmap$/.test(url)) return HEATMAP;
+        if (method === "POST" && /\/verdict$/.test(url)) return VERDICT;
+        if (method === "POST" && /\/compare$/.test(url)) return COMPARISON;
+        if (method === "GET" && /\/playground\/scenarios\?/.test(url)) return scenarios;
+        if (method === "GET" && /\/playground\/scenarios\/[\w-]+$/.test(url)) return SCENARIO;
+        if (method === "POST" && /\/playground\/scenarios$/.test(url)) {
+          scenarios = [{ id: body.id, name: body.name, processId: body.processId, savedAt: 2, hasBaseline: false }];
+          return scenarios[0];
+        }
+        if (method === "PUT" && /\/baseline$/.test(url)) return { id: "nightly", hasBaseline: true };
+        if (method === "DELETE" && /\/playground\/scenarios\//.test(url)) { scenarios = []; return { deleted: true }; }
         if (method === "DELETE" && /\/playground\/sessions\//.test(url)) return { closed: true };
         return {};
       };

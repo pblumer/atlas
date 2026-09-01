@@ -1028,8 +1028,32 @@ dataset of up to 50 000 cases":
   sandbox's own store (inputs, end event, outputs, duration, incidents) and
   downloaded whole as streamed CSV. The expectation verdict and the click from a
   case into the replay view are not there yet.
-- 🔲 **Saved scenarios**: (dataset, config, seed) stored against the draft so a run
-  is reproducible, comparable against the previous run, and later runnable from CI.
+- ✅ **Expectations and a verdict**: what a run has to show — completions, incidents,
+  the three duration bounds, per-element visit bounds (coverage and outcome in one
+  statement), and a queue bound per pool. A verdict is what a Playground somebody
+  looks at cannot give: a number on a screen needs a reader to judge it.
+  [`playground/expect.go`](playground/expect.go).
+- ✅ **Saved scenarios**: stored against the diagram as literally the three requests
+  that make a run — open a session, start the batch, judge the report — so nothing
+  has to be kept in step with the endpoints, because it *is* them. The seed the
+  sandbox used is pinned into the stored request, which is what makes re-running one
+  give the same figures. [`api/playgroundscenarios.go`](api/playgroundscenarios.go).
+- ✅ **Baseline and comparison**: a run kept as the scenario's baseline, and the next
+  one set beside it — per-element waiting, queues, durations and outcomes, each with
+  the direction that counts as good. Utilisation is shown and deliberately left
+  unjudged. Kept only from a run that passed, since a failing baseline would hide the
+  failure from every run after it. [`playground/compare.go`](playground/compare.go).
+- ✅ **Runnable from CI**: `atlas playground --scenario <id>` replays the scenario's
+  own requests against a running Atlas, prints every check, and leaves exit status 3
+  on a missed expectation — distinct from a generic failure, so a build can tell "the
+  process no longer holds up" from "the server was unreachable". `--compare` and
+  `--keep-baseline` do the same against the stored baseline; `--file` runs one from a
+  JSON file being reviewed in a pull request.
+  [`cmd/atlas/playgroundrun.go`](cmd/atlas/playgroundrun.go).
+- 🔲 **Still open**: a per-field data generator ("300 cases with a random amount"),
+  the click from a results row into the replay view, and saving a scenario from a
+  CSV-driven run — its rows are parsed on the server, so the browser has nothing to
+  store.
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)

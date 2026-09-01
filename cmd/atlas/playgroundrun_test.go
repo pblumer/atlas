@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -322,4 +323,233 @@ func TestTheTwoHalvesOfTheOutputAgreeOnPrecision(t *testing.T) {
 	if got := renderMeasure("count", 41); got != "41" {
 		t.Errorf("a count rendered as %q", got)
 	}
+}
+
+// The comparison is only worth printing when something moved, so the printing of
+// a move needs a run that made one. A scenario with a different pool size against
+// the same baseline is exactly the change somebody runs this to see.
+func TestTheRunnerPrintsWhichWayEachMeasureMoved(t *testing.T) {
+	ts, _ := liveServer(t)
+	// Two seats, then one: the same dataset takes longer and queues more.
+	roomy := `{
+		"open": {"source":"draft","ref":"approval","seed":7,
+			"stubs":{"human":{"minMillis":3600000,"maxMillis":3600000},
+				"pools":{"clerks":{"capacity":2}},"poolOf":{"approve":"clerks"}}},
+		"run": {"cases":[{"n":1},{"n":2},{"n":3},{"n":4}]},
+		"expect": {"minCompleted":4}
+	}`
+	saveScenario(t, ts, "capacity", roomy)
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "capacity", "--keep-baseline"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("baseline run: %v", err)
+	}
+
+	saveScenario(t, ts, "capacity", strings.Replace(roomy, `"capacity":2`, `"capacity":1`, 1))
+	var out bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "capacity", "--compare"}, &out); err != nil {
+		t.Fatalf("second run: %v\n%s", err, out.String())
+	}
+	got := out.String()
+	_, comparison, found := strings.Cut(got, "against the baseline:")
+	if !found {
+		t.Fatalf("no comparison printed:\n%s", got)
+	}
+	// Halving the pool makes cases wait: the queue and the slowest case both moved
+	// the wrong way, and the runner says which way that is.
+	if !strings.Contains(comparison, "!!") {
+		t.Errorf("halving the pool moved nothing the wrong way:\n%s", got)
+	}
+	if !strings.Contains(comparison, "queue at clerks") {
+		t.Errorf("the queue did not appear in the comparison:\n%s", got)
+	}
+	// A measure that did not move is left out of the *comparison* — it is still in
+	// the checks above it, which is a different question. A table of unchanged
+	// numbers is where the ones that did move go to hide.
+	if strings.Contains(comparison, "cases completed") {
+		t.Errorf("an unchanged measure was printed in the comparison:\n%s", got)
+	}
+
+	// And the other way round. Keeping the cramped run as the new baseline and then
+	// restoring the seat moves the same measures the good way, which the runner
+	// marks differently: a comparison that could only report bad news would be a
+	// regression detector, not a comparison.
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "capacity", "--keep-baseline"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("re-baseline: %v", err)
+	}
+	saveScenario(t, ts, "capacity", roomy)
+	var better bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "capacity", "--compare"}, &better); err != nil {
+		t.Fatalf("third run: %v\n%s", err, better.String())
+	}
+	_, improved, _ := strings.Cut(better.String(), "against the baseline:")
+	if !strings.Contains(improved, "->") {
+		t.Errorf("restoring the seat moved nothing the good way:\n%s", better.String())
+	}
+	if strings.Contains(improved, "!!") {
+		t.Errorf("restoring the seat moved something the wrong way:\n%s", better.String())
+	}
+}
+
+// A scenario that expects nothing still runs, and says so rather than printing an
+// empty verdict somebody has to interpret.
+func TestAScenarioWithNoExpectationsSaysSo(t *testing.T) {
+	ts, _ := liveServer(t)
+	saveScenario(t, ts, "smoke", `{
+		"open": {"source":"draft","ref":"approval","seed":7,
+			"stubs":{"human":{"minMillis":60000,"maxMillis":60000}}},
+		"run": {"cases":[{"n":1}]}
+	}`)
+
+	var out bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "smoke"}, &out); err != nil {
+		t.Fatalf("run: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "no expectations to check") {
+		t.Errorf("a scenario with no expectations did not say so:\n%s", out.String())
+	}
+}
+
+// Asking to compare before anything has been kept is an ordinary state, not an
+// error: it is the first run of a new scenario, and it says what to do next.
+func TestComparingWithNoBaselineYetSaysWhatToDo(t *testing.T) {
+	ts, _ := liveServer(t)
+	saveScenario(t, ts, "fresh", scenarioSpecJSON)
+
+	var out bytes.Buffer
+	if err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "fresh", "--compare"}, &out); err != nil {
+		t.Fatalf("run: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "--keep-baseline") {
+		t.Errorf("the runner did not say how to set a baseline:\n%s", out.String())
+	}
+}
+
+// A file that is not a scenario is refused with the path in the message: a CI log
+// that says only "invalid character" costs somebody an afternoon.
+func TestAFileThatIsNotAScenarioIsRefusedByName(t *testing.T) {
+	ts, _ := liveServer(t)
+	path := filepath.Join(t.TempDir(), "notes.json")
+	if err := os.WriteFile(path, []byte("this is not JSON"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	err := runPlaygroundScenario([]string{"--server", ts.URL, "--file", path}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "notes.json") {
+		t.Errorf("err = %v, want the file named in it", err)
+	}
+}
+
+// The runner carries a credential when it is given one: a server with --auth
+// refuses every call without it, and "the scenario is missing" is what that looks
+// like from the outside if the header never goes out.
+func TestTheRunnerSendsItsToken(t *testing.T) {
+	var auth string
+	upstream, _ := liveServer(t)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := r.Header.Get("Authorization"); h != "" {
+			auth = h
+		}
+		req, _ := http.NewRequest(r.Method, upstream.URL+r.URL.RequestURI(), r.Body)
+		req.Header = r.Header.Clone()
+		resp, err := upstream.Client().Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	t.Cleanup(proxy.Close)
+	saveScenario(t, upstream, "nightly", scenarioSpecJSON)
+
+	if err := runPlaygroundScenario(
+		[]string{"--server", proxy.URL, "--scenario", "nightly", "--token", "  sekrit\n"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// Trimmed, because a token read out of a file or a shell export routinely
+	// carries a newline and a bearer sent with one is refused for a reason nothing
+	// in the 401 explains.
+	if auth != "Bearer sekrit" {
+		t.Errorf("Authorization = %q, want the trimmed bearer", auth)
+	}
+}
+
+// scriptedServer answers the runner from a table keyed by the tail of the path,
+// so the ways a run can go wrong that a healthy Atlas will not produce on demand
+// can still be exercised deliberately. Anything unscripted answers an empty
+// object, which is enough for the calls a case does not care about.
+func scriptedServer(t *testing.T, script map[string]string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for suffix, body := range script {
+			if strings.HasSuffix(r.URL.Path, suffix) {
+				_, _ = w.Write([]byte(body))
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`{"id":"s1","state":"finished","cases":1,"completed":1,"passed":true}`))
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// Every way the conversation with the server can go wrong is reported with enough
+// in it to act on. A CI log that says only "failed" costs somebody an afternoon,
+// and these are exactly the failures nobody is watching when they happen.
+func TestTheRunnerReportsWhatWentWrongWithTheServer(t *testing.T) {
+	t.Run("a server that is not there", func(t *testing.T) {
+		err := runPlaygroundScenario([]string{"--server", "http://127.0.0.1:1", "--scenario", "x"}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "/api/v1/playground/scenarios/x") {
+			t.Errorf("err = %v, want the request that could not be made", err)
+		}
+	})
+
+	t.Run("an answer that is not JSON", func(t *testing.T) {
+		ts := scriptedServer(t, map[string]string{"/scenarios/x": "not json at all"})
+		err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "x"}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "decode response") {
+			t.Errorf("err = %v, want the decode named", err)
+		}
+	})
+
+	t.Run("a session with no id", func(t *testing.T) {
+		ts := scriptedServer(t, map[string]string{
+			"/scenarios/x":         `{"spec":{"open":{},"run":{}}}`,
+			"/playground/sessions": `{}`,
+		})
+		err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "x"}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "without an id") {
+			t.Errorf("err = %v, want the missing id named", err)
+		}
+	})
+
+	t.Run("a run the server gives up on", func(t *testing.T) {
+		ts := scriptedServer(t, map[string]string{
+			"/scenarios/x": `{"spec":{"open":{},"run":{}}}`,
+			"/runs":        `{"state":"failed","error":"the sandbox could not be read"}`,
+		})
+		var out bytes.Buffer
+		err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "x"}, &out)
+		if err == nil || !strings.Contains(err.Error(), "the sandbox could not be read") {
+			t.Errorf("err = %v, want the server's own reason", err)
+		}
+		// It is a failure of the run, not of the expectations: the two leave
+		// different statuses, and only one of them means the process changed.
+		if errors.Is(err, errScenarioFailed) {
+			t.Error("a run that could not finish was reported as a missed expectation")
+		}
+	})
+
+	t.Run("a batch that never stops", func(t *testing.T) {
+		ts := scriptedServer(t, map[string]string{
+			"/scenarios/x": `{"spec":{"open":{},"run":{}}}`,
+			"/runs":        `{"state":"running","cases":9,"completed":1}`,
+		})
+		err := runPlaygroundScenario([]string{"--server", ts.URL, "--scenario", "x", "--timeout", "1ns"}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "still running") {
+			t.Errorf("err = %v, want the deadline named", err)
+		}
+		if !strings.Contains(err.Error(), "1 of 9") {
+			t.Errorf("err = %v, want how far it got", err)
+		}
+	})
 }

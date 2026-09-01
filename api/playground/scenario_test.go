@@ -135,3 +135,62 @@ func TestAScenarioIsCheckedForShape(t *testing.T) {
 		})
 	}
 }
+
+// The seed is published so a caller can write it down and repeat the run. A
+// number a JSON client cannot carry back exactly is not a seed anybody can use:
+// a clock in nanoseconds is around 1.8e18, past the 2^53 a double holds without
+// rounding, so every browser that read one back got a different number — and a
+// scenario saved as reproducible came back with different figures.
+func TestAGeneratedSeedSurvivesAJSONRoundTrip(t *testing.T) {
+	svc := newService(t)
+	const maxExact = int64(1)<<53 - 1
+
+	for i := 0; i < 5; i++ {
+		var sess sessionResp
+		decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+			`{"source":"xml","xml":`+jsonString(userTaskXML)+`}`, nil), &sess)
+		if sess.Seed <= 0 || sess.Seed > maxExact {
+			t.Fatalf("seed = %d, want a positive number a JSON client carries exactly (at most %d)", sess.Seed, maxExact)
+		}
+		// The round trip a browser makes: through a float64 and back.
+		if back := int64(float64(sess.Seed)); back != sess.Seed {
+			t.Errorf("seed %d came back as %d after a trip through a JSON number", sess.Seed, back)
+		}
+		// Released before the next one: a registry bounds how many sandboxes may
+		// exist at once, and this test is about the seed, not about that bound.
+		call(t, svc.HandleClose, http.MethodDelete, "", map[string]string{"id": sess.ID})
+	}
+
+	// A seed the caller names is used as given: it is their number to choose, and
+	// clamping it would silently run something other than what they asked for.
+	var pinned sessionResp
+	decodeInto(t, call(t, svc.HandleOpen, http.MethodPost,
+		`{"source":"xml","xml":`+jsonString(userTaskXML)+`,"seed":4711}`, nil), &pinned)
+	if pinned.Seed != 4711 {
+		t.Errorf("seed = %d, want the 4711 the caller asked for", pinned.Seed)
+	}
+}
+
+// A malformed body is refused rather than read as an empty one. "I sent
+// expectations and they were ignored" and "I sent none" must not look alike: the
+// first is a scenario that silently checks nothing.
+func TestAMalformedJudgementOrComparisonIsRefused(t *testing.T) {
+	svc := newService(t)
+	vals := map[string]string{"id": openBatchSession(t, svc)}
+	call(t, svc.HandleStartRun, http.MethodPost, `{"cases":[{"n":1}]}`, vals)
+	waitForRun(t, svc, vals["id"], "finished")
+
+	for _, tc := range []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{"expectations", svc.HandleVerdict},
+		{"a baseline", svc.HandleCompare},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if rec := call(t, tc.handler, http.MethodPost, `{not json`, vals); rec.Code != http.StatusBadRequest {
+				t.Errorf("code = %d, want 400; body %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
