@@ -168,12 +168,21 @@ func (f Field) validate() error {
 
 // validateRange checks a numeric field's bounds, scaled by the steps one unit is
 // divided into.
+//
+// Both the bounds themselves and the distance between them have to stay inside
+// 2^53. The span is the obvious one — a range with more values than that cannot be
+// drawn without rounding. The bounds matter for their own reason: a whole-number
+// field bounded at 1e300 passes every other check here and then converts to an
+// int64 that Go does not define, so the run carries a number nobody asked for and
+// nothing said why.
 func (f Field) validateRange(perUnit float64) error {
 	if f.Max < f.Min {
 		return fmt.Errorf("playground: field %q has a maximum below its minimum: %v to %v", f.Name, f.Min, f.Max)
 	}
-	if (f.Max-f.Min)*perUnit >= maxDrawSteps {
-		return fmt.Errorf("playground: field %q spans more values than can be drawn exactly; narrow the range or ask for fewer decimals", f.Name)
+	if math.Abs(f.Min) >= maxDrawSteps || math.Abs(f.Max) >= maxDrawSteps || (f.Max-f.Min)*perUnit >= maxDrawSteps {
+		return fmt.Errorf("playground: field %q asks for numbers that cannot be drawn exactly: %v to %v. "+
+			"The limit is 2^53, what a number holds without rounding — narrow the range or ask for fewer decimals",
+			f.Name, f.Min, f.Max)
 	}
 	return nil
 }

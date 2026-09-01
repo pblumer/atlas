@@ -348,7 +348,13 @@ func TestADescriptionThatCannotBeDrawnFromIsRefused(t *testing.T) {
 		}}, "have to be whole"},
 		{"a range too wide to draw exactly", playground.Dataset{Count: 1, Fields: []playground.Field{
 			{Name: "n", Kind: playground.FieldInt, Min: 0, Max: 1e17},
-		}}, "than can be drawn exactly"},
+		}}, "cannot be drawn exactly"},
+		// A narrow range around a huge number: the span is fine, the bounds are not.
+		// This one used to pass every check and then convert to an int64 Go does not
+		// define, so the case ran with a number nobody asked for.
+		{"a bound past what a number holds", playground.Dataset{Count: 1, Fields: []playground.Field{
+			{Name: "n", Kind: playground.FieldInt, Min: 1e300, Max: 1e300},
+		}}, "cannot be drawn exactly"},
 		{"more decimals than a number carries", playground.Dataset{Count: 1, Fields: []playground.Field{
 			{Name: "n", Kind: playground.FieldDecimal, Min: 0, Max: 1, Decimals: 9},
 		}}, "decimal places"},
@@ -357,7 +363,7 @@ func TestADescriptionThatCannotBeDrawnFromIsRefused(t *testing.T) {
 		}}, "decimal places"},
 		{"decimals over a range too wide for them", playground.Dataset{Count: 1, Fields: []playground.Field{
 			{Name: "n", Kind: playground.FieldDecimal, Min: 0, Max: 1e12, Decimals: 6},
-		}}, "than can be drawn exactly"},
+		}}, "cannot be drawn exactly"},
 		{"a probability past certainty", playground.Dataset{Count: 1, Fields: []playground.Field{
 			{Name: "n", Kind: playground.FieldBool, PercentTrue: 101},
 		}}, "0 to 100"},
