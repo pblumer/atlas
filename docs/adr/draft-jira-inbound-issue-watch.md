@@ -55,16 +55,23 @@ answers `410 Gone` with "The requested API has been removed. Please migrate to t
 than `startAt`, and returns no issue fields unless an explicit `fields` array is
 passed. Data Center is unaffected — this is a Cloud change.
 
-Whether the replacement is also served under `/rest/api/2/` is the one thing to
-confirm before writing the migration, because ADR-0201 chose v2 deliberately: v3
-requires an Atlassian Document Format tree where v2 takes a string, and no model author
-should have to write ADF for one sentence. If `/search/jql` is v3-only, the search
-operation moves to v3 alone while the six others stay on v2 — which is tolerable
-precisely because a search *reads*. ADF only changes how a description or comment body
-is shaped, so the split costs nothing on the write path, and on the read path it means
-a `description` inside a searched issue arrives as a document tree rather than a
-string. That is a reason for the inbound envelope below to name the fields it exposes
+That migration is now made, and it settled two questions this record depended on.
+ADR-0201 chose v2 deliberately — v3 requires an Atlassian Document Format tree where v2
+takes a string, and no model author should have to write ADF for one sentence — so
+whether `/search/jql` is also served under `/rest/api/2/` looked like the deciding
+question. It is not: **v3 is correct whether or not v2 serves it**, so search alone
+moves to `/rest/api/3/search/jql` and the six write operations stay on v2. The split
+costs nothing on the write path precisely because a search *reads*; on the read path it
+means a `description` inside a returned issue arrives as a document tree rather than a
+string, which is a reason for the inbound envelope below to name the fields it exposes
 rather than flatten whatever came back.
+
+The second question was Data Center, and it is why this is a split rather than a
+replacement. The deprecation is a Cloud change; Data Center still serves the
+offset-paged `/rest/api/2/search` and does not necessarily serve `/search/jql` at all.
+Moving it too would have been a regression dressed as a migration, so the connector
+asks each product the way that product answers — a distinction it could already make,
+because the credential shape tells Cloud and Data Center apart (`cloud()`).
 
 That makes the shipped `search` operation broken on Cloud, independently of anything
 inbound, and it is a **prerequisite** for this record rather than a consequence of it:
@@ -109,21 +116,39 @@ engine would need the DSN, and a DSN is a credential." It was careful to add tha
 is the *only* thing wrong with that option — "the clio bridge's structure is right, and
 the worker-side reader copies it almost line for line."
 
-That objection does not apply to Jira **today**, because the Jira credential is already
-in the engine process. The Jira worker type is built in and served in-process: its
-`managedConnectorKind` entry carries a `newRegistry` and a `registerHandlers` and is
-not `workerOnly`, so the server builds the client and subscribes the handler itself,
-and the `{email, apiToken}` or `{token}` bundle is resolved from the vault by
-`jira.NewProviderClient` there. An inbound reader beside it adds no
-credential to any process that does not already hold it, and reuses the same registry,
-the same `jira.Client`, the same error mapper.
+That objection does not bite on Jira **today** — but for a reason that is itself a
+defect, and this record should say so plainly rather than lean on it.
 
-When ADR-0203 moves the Jira worker type out of process, the reader moves with it —
-into ADR-0187's `POST /api/v1/inbound/watches/lease` + `POST /api/v1/inbound/deliveries`
-protocol, unchanged in substance, because that protocol was designed as exactly this
-loop across an HTTP boundary. Building the reader now against the bridge and moving it
-later is strictly cheaper than blocking on a protocol that has no implementation
-(ADR-0187 is Proposed; neither endpoint exists in the tree).
+The Jira credential is already in the engine process. The kind's `managedConnectorKind`
+entry carries a `newRegistry` and a `registerHandlers` and is not `workerOnly`, it is
+absent from `DefaultOffloadedKinds()`, and `worker/connectors.go` has **no jira case at
+all**. So Jira does not merely default to running in the engine: there is no external
+Jira worker to run it anywhere else. `offloadableKinds` lists the kind, so
+`--offload-connectors jira` is accepted — and it would strip the in-process handler and
+leave nothing serving the job type. clio, temis and SharePoint sit in the same position,
+so this is a pattern rather than one connector's oversight; it is still not the intended
+shape, because ADR-0203's whole direction is that a worker type is an external worker
+like every other.
+
+The honest conclusion is therefore narrower than "the bridge is where this belongs". It
+is: **the inbound reader must not be what decides where the Jira credential lives.**
+Writing the reader against the bridge now costs nothing a later move will not recover,
+because ADR-0187 designed its `POST /api/v1/inbound/watches/lease` +
+`POST /api/v1/inbound/deliveries` protocol as exactly this loop across an HTTP boundary
+— it says the worker-side reader "copies it almost line for line". Blocking on that
+protocol instead means blocking on an implementation that does not exist (ADR-0187 is
+Proposed; neither endpoint is in the tree) *and* on giving Jira a real worker first.
+
+So the sequencing this record assumes, stated rather than implied:
+
+1. Jira gets a `worker/connectors.go` case and becomes an ordinary external worker
+   type. That is owed to ADR-0203 independently of anything inbound.
+2. The inbound reader is written against the bridge, where it is testable today.
+3. It moves onto that worker through ADR-0187's protocol once both exist.
+
+If step 1 lands before step 2 is written, step 2 belongs on the worker directly and
+Option 4 below becomes the better answer. That is a change of circumstance, not of
+mind.
 
 ### The cursor is not the mark
 
@@ -286,10 +311,13 @@ written with exactly this case in mind — its own framing is that inbound is cl
   Cloud.
 - **Follow-ups / risks to watch:** the webhook receiver (option 2) as the low-latency
   path once an installation is reachable — it does not replace this one, because
-  reachability is not universal. Moving the reader onto the Jira worker with ADR-0203,
-  through ADR-0187's leased-watch protocol. A retention sweep for per-issue marks. A
-  watch on `updated` for transitions and comments. And the rollout state of the Cloud
-  search deprecation should be confirmed against the target site rather than a date.
+  reachability is not universal. Giving Jira a `worker/connectors.go` case so it is an
+  ordinary external worker type, which is the prerequisite for moving the reader onto it
+  through ADR-0187's leased-watch protocol — a gap Jira shares with clio, temis and
+  SharePoint, all four advertised by `offloadableKinds` as movable with nothing able to
+  serve them. A retention sweep for per-issue marks. A watch on `updated` for
+  transitions and comments. And the rollout state of the Cloud search deprecation is
+  worth confirming against the target site rather than taken from a date here.
 
 ## Pros and cons of the options
 

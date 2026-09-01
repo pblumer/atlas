@@ -309,7 +309,7 @@ func TestSearchStopsOnAnEmptyPage(t *testing.T) {
 		_, _ = w.Write([]byte(`{"startAt":0,"total":99,"issues":[]}`))
 	}))
 	t.Cleanup(srv.Close)
-	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	got, err := dcClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestSearchStopsWithoutATotal(t *testing.T) {
 		_, _ = w.Write([]byte(`{"issues":[{"key":"OPS-1"}]}`))
 	}))
 	t.Cleanup(srv.Close)
-	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	got, err := dcClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
@@ -435,5 +435,32 @@ func TestRequestIDHeader(t *testing.T) {
 	}
 	if got != "4711" {
 		t.Errorf("X-Request-ID = %q, want the job key", got)
+	}
+}
+
+// A page token that does not advance cannot describe a *next* page, so the read ends
+// there. Without the guard a server answering with the same token forever would page
+// forever — the failure the offset path used the reported total to avoid, and which
+// the token-paged endpoint has no total to protect against.
+func TestSearchOnCloudStopsOnARepeatedToken(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls > 10 {
+			t.Fatal("the search paged past a token that never advanced")
+		}
+		_, _ = w.Write([]byte(`{"issues":[{"key":"OPS-1"}],"nextPageToken":"stuck"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := cloudClient(srv.URL).Do(context.Background(), jira.Request{Operation: "search", JQL: "project = OPS"})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if issues, _ := got.([]any); len(issues) != 2 {
+		t.Errorf("issues = %+v, want the two pages read before the token repeated", got)
+	}
+	if calls != 2 {
+		t.Errorf("requests = %d, want the read to stop once the token repeated", calls)
 	}
 }
