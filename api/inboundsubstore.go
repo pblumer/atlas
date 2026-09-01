@@ -31,6 +31,34 @@ type inboundSubscription struct {
 	// whole history. Primed records that the one-time skip has completed.
 	StartFromTip bool `json:"startFromTip"`
 	Primed       bool `json:"primed,omitempty"`
+
+	// The fields below belong to a jira watch (ADR-0214). Which set applies is decided
+	// by the *connector's* kind, not by a discriminator stored here: resolveInboundSubs
+	// already loads the connector record, so the kind it names is the discriminator and
+	// a record written before these existed needs no migration.
+
+	// JQL is the query a jira watch follows, written exactly as in Jira's own search
+	// box. It carries no ORDER BY — the bridge owns the ordering, because the cursor's
+	// progress depends on it — and the create endpoint refuses one that does.
+	JQL string `json:"jql,omitempty"`
+	// CursorField is the issue timestamp the watch follows and takes each event's
+	// sequence from: "created" (the default) for new issues, "updated" for changes.
+	// One field for both, deliberately: sequencing a new-issue watch on `updated`
+	// would let an edit inside the lag window start a second instance for a ticket
+	// already handled.
+	CursorField string `json:"cursorField,omitempty"`
+	// LagSeconds holds the cursor deliberately behind the newest issue seen, so an
+	// issue the search index publishes late is still inside the next window. 0 uses
+	// the default. Re-reading costs nothing: a jira event's mark is its own issue's.
+	LagSeconds int `json:"lagSeconds,omitempty"`
+	// PollSeconds is this watch's own cadence, 0 meaning the kind's default. The
+	// bridge's ticker is shared and fast; a Jira site rate-limits per site, and
+	// spending that budget on empty answers every two seconds is not what it is for.
+	PollSeconds int `json:"pollSeconds,omitempty"`
+	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
+	// PollSeconds a cadence rather than a wish, and like LastEventID it is
+	// best-effort: losing it re-reads, which the marks make harmless.
+	LastPolledAt int64 `json:"lastPolledAt,omitempty"`
 }
 
 // inboundSubStore is a durable store for inbound subscriptions, one JSON file per id

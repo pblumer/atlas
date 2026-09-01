@@ -40,7 +40,7 @@
       { "label": "Assignee (assign)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:assignee" },
         "description": "An accountId on Jira Cloud, a username on Data Center. Which one is decided by the connector's credential, not by this value." },
       { "label": "JQL (search)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:jql" },
-        "description": "The query, written exactly as in Jira's own search box." },
+        "description": "The query, written exactly as in Jira's own search box. It must restrict what it matches: Jira Cloud refuses an unbounded query, so one that only sorts is answered with an HTTP 400 rather than with every issue." },
       { "label": "Maximum issues (search)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxResults" },
         "description": "Caps what may reach the result variable; the connector pages up to it. Empty uses 50, 0 reads every match." },
       { "label": "Result variable (create/read/comment/search)", "type": "String", "value": "ticket", "binding": { "type": "property", "name": "atlas:resultVariable" },

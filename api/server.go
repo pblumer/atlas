@@ -394,6 +394,9 @@ type Server struct {
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
+	// test does not have to wait one out. nil means time.Now.
+	inboundClock func() time.Time
 	// inboundBatch caps how many clio events one poll of a subscription reads and
 	// republishes (the ReadEvents Limit). It bounds the burst a single poll can hand
 	// the run loop so a large backlog drains as bounded catch-up across ticks rather
@@ -1138,7 +1141,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
-		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
